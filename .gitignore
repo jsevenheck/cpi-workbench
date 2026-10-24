@@ -9,3 +9,4 @@ app/src-tauri/binaries/
 .idea/
 .vscode/
 engine/native/out/
+app/src-tauri/resources/

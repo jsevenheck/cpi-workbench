@@ -1,5 +1,5 @@
 import { call, openProject, availableProfiles, DEFAULT_PROFILE, type Profile, type ProfileInfo } from './engine';
-import type { Diagnostic, FileEntry, Row, XsltResult } from './types';
+import type { Diagnostic, FileEntry, GroovyResult, Row, XsltResult } from './types';
 
 export const SAMPLE_XSL = `<?xml version="1.0" encoding="UTF-8"?>
 <!-- Headers and exchange properties arrive as xsl:param with the same name, like in Cloud Integration.
@@ -37,7 +37,8 @@ export const app = $state({
   profiles: [] as ProfileInfo[],
   engineInfo: null as any,
   profile: DEFAULT_PROFILE as Profile,
-  tool: 'xslt' as 'xslt' | 'xsd' | 'xpath' | 'tests',
+  groovyProfile: 'groovy-1.x' as Profile,
+  tool: 'xslt' as 'xslt' | 'groovy' | 'xsd' | 'xpath' | 'tests',
   status: '',
   error: '',
   busy: false,
@@ -53,6 +54,60 @@ export const xslt = $state({
   paramPrecedence: 'header' as 'header' | 'property',
   missingParameter: 'default' as 'default' | 'error',
   result: null as XsltResult | null,
+  running: false,
+  live: true,
+  casePath: null as string | null,
+});
+
+export const SAMPLE_GROOVY_V1 = `import com.sap.gateway.ip.core.customdev.util.Message
+
+// Groovy Script step 1.x (Script API v1). Ctrl+Enter runs the script with the input message.
+def Message processData(Message message) {
+    def body = message.getBody(String)
+    def order = new XmlSlurper().parseText(body)
+
+    message.setHeader('OrderNumber', order.@id.text())
+    message.setProperty('ItemCount', order.Item.size())
+
+    def log = messageLogFactory.getMessageLog(message)
+    log?.setStringProperty('Order', order.@id.text())
+
+    println "Processing order \${order.@id}"
+    message.setBody(body.replace('<Order', '<ProcessedOrder').replace('</Order>', '</ProcessedOrder>'))
+    return message
+}
+`;
+
+export const SAMPLE_GROOVY_V2 = `import com.sap.it.script.v2.api.Message
+import groovy.xml.XmlSlurper
+
+// Groovy Script step 2.x (Groovy 4). Note: XmlSlurper now lives in groovy.xml.
+def Message processData(Message message) {
+    def body = message.getBody(String)
+    def order = new XmlSlurper().parseText(body)
+
+    message.setHeader('OrderNumber', order.@id.text())
+    message.setProperty('ItemCount', order.Item.size())
+
+    def log = messageLogFactory.getMessageLog(message)
+    log?.setStringProperty('Order', order.@id.text())
+
+    println "Processing order \${order.@id}"
+    message.setBody(body.replace('<Order', '<ProcessedOrder').replace('</Order>', '</ProcessedOrder>'))
+    return message
+}
+`;
+
+export const groovy = $state({
+  scriptPath: null as string | null,
+  script: SAMPLE_GROOVY_V1,
+  savedScript: SAMPLE_GROOVY_V1,
+  functionName: 'processData',
+  body: SAMPLE_INPUT,
+  headers: [] as Row[],
+  properties: [] as Row[],
+  bodyType: 'String' as 'String' | 'byte[]' | 'InputStream',
+  result: null as GroovyResult | null,
   running: false,
   live: true,
   casePath: null as string | null,
@@ -114,8 +169,11 @@ export async function init() {
     const { profiles, info } = await availableProfiles();
     app.profiles = profiles;
     app.engineInfo = info;
-    const first = profiles.find((p) => p.available);
-    if (first && !profiles.find((p) => p.id === app.profile)?.available) app.profile = first.id;
+    const firstXslt = profiles.find((p) => p.available && p.kind === 'xslt');
+    const firstGroovy = profiles.find((p) => p.available && p.kind === 'groovy');
+    if (firstXslt && !profiles.find((p) => p.id === app.profile)?.available) app.profile = firstXslt.id;
+    if (firstGroovy && !profiles.find((p) => p.id === app.groovyProfile)?.available) app.groovyProfile = firstGroovy.id;
+    if (!firstXslt && firstGroovy) app.tool = 'groovy';
     const saved = safeGet('cpiwb.project');
     if (saved) await open(saved).catch(() => undefined);
   } catch (e) {
@@ -146,6 +204,8 @@ export function closeProject() {
   safeSet('cpiwb.project', null);
   xslt.mappingPath = null;
   xslt.casePath = null;
+  groovy.scriptPath = null;
+  groovy.casePath = null;
 }
 
 export async function refreshFiles() {
@@ -174,6 +234,14 @@ export async function openFile(path: string) {
       xslt.savedMapping = content;
       xslt.casePath = null;
       app.tool = 'xslt';
+    } else if (lower.endsWith('.groovy') || lower.endsWith('.gsh')) {
+      groovy.scriptPath = path;
+      groovy.script = content;
+      groovy.savedScript = content;
+      groovy.casePath = null;
+      if (content.includes('com.sap.it.script.v2.api') && hasProfile('groovy-2.x')) app.groovyProfile = 'groovy-2.x';
+      else if (content.includes('com.sap.gateway.ip.core.customdev.util') && hasProfile('groovy-1.x')) app.groovyProfile = 'groovy-1.x';
+      app.tool = 'groovy';
     } else if (lower.endsWith('.xsd')) {
       xsd.schemaPath = path;
       xsd.schema = content;
@@ -182,6 +250,7 @@ export async function openFile(path: string) {
     } else {
       if (app.tool === 'xsd') xsd.body = content;
       else if (app.tool === 'xpath') xpath.body = content;
+      else if (app.tool === 'groovy') groovy.body = content;
       else xslt.body = content;
       app.status = `Loaded ${path} as input body`;
     }
@@ -206,6 +275,34 @@ export async function saveMapping(): Promise<boolean> {
   app.status = 'Saved ' + path;
   await refreshFiles();
   return true;
+}
+
+function hasProfile(id: Profile) {
+  return !!app.profiles.find((p) => p.id === id && p.available);
+}
+
+export async function saveScript(): Promise<boolean> {
+  if (!app.project) {
+    app.error = 'Open a project folder to save files.';
+    return false;
+  }
+  let path = groovy.scriptPath;
+  if (!path) {
+    path = (await ask('Save script as (path inside the project)', 'scripts/script.groovy'))?.value ?? null;
+    if (!path) return false;
+  }
+  await writeFile(path, groovy.script);
+  groovy.scriptPath = path;
+  groovy.savedScript = groovy.script;
+  app.status = 'Saved ' + path;
+  await refreshFiles();
+  return true;
+}
+
+/** Switching 1.x <-> 2.x swaps the untouched sample script to the matching API. */
+export function onGroovyProfileChange() {
+  if (groovy.script === SAMPLE_GROOVY_V1 && app.groovyProfile === 'groovy-2.x') groovy.script = groovy.savedScript = SAMPLE_GROOVY_V2;
+  if (groovy.script === SAMPLE_GROOVY_V2 && app.groovyProfile === 'groovy-1.x') groovy.script = groovy.savedScript = SAMPLE_GROOVY_V1;
 }
 
 export async function saveSchema(): Promise<boolean> {
@@ -240,6 +337,27 @@ export async function runXslt() {
     if (seq === runSeq) fail(e);
   } finally {
     if (seq === runSeq) xslt.running = false;
+  }
+}
+
+let groovySeq = 0;
+
+export async function runGroovy() {
+  const seq = ++groovySeq;
+  groovy.running = true;
+  app.error = '';
+  try {
+    const r = await call<GroovyResult>('groovy.run', {
+      script: { content: groovy.script, path: groovy.scriptPath ?? 'script.groovy' },
+      function: groovy.functionName || 'processData',
+      input: { body: groovy.body, headers: clean(groovy.headers), properties: clean(groovy.properties) },
+      options: { bodyType: groovy.bodyType },
+    }, app.groovyProfile);
+    if (seq === groovySeq) groovy.result = r;
+  } catch (e) {
+    if (seq === groovySeq) fail(e);
+  } finally {
+    if (seq === groovySeq) groovy.running = false;
   }
 }
 
@@ -323,19 +441,9 @@ export async function saveCase(name: string, withExpected: boolean) {
     tc.options = { paramPrecedence: xslt.paramPrecedence, missingParameter: xslt.missingParameter };
   }
   await writeFile(dir + '/input.xml', xslt.body);
-  if (withExpected && xslt.result?.ok && xslt.result.output) {
-    await writeFile(dir + '/expected-output.xml', xslt.result.output.body);
-    tc.expect = { body: { file: 'expected-output.xml' }, compare: xslt.result.outputMethod === 'xml' || !xslt.result.outputMethod ? 'xml' : 'text' };
-    const added = new Set([...(xslt.result.changes?.headers.added ?? []), ...(xslt.result.changes?.headers.changed ?? [])]);
-    const headers: Record<string, string> = {};
-    for (const h of xslt.result.output.headers) if (added.has(h.name)) headers[h.name] = h.value;
-    if (Object.keys(headers).length) tc.expect.headers = headers;
-    const addedP = new Set([...(xslt.result.changes?.properties.added ?? []), ...(xslt.result.changes?.properties.changed ?? [])]);
-    const props: Record<string, string> = {};
-    for (const p of xslt.result.output.properties) if (addedP.has(p.name)) props[p.name] = p.value;
-    if (Object.keys(props).length) tc.expect.properties = props;
-  } else if (withExpected && xslt.result && !xslt.result.ok) {
-    tc.expect = { ok: false };
+  if (withExpected) {
+    const compare = xslt.result?.outputMethod === 'xml' || !xslt.result?.outputMethod ? 'xml' : 'text';
+    tc.expect = await expectations(dir, xslt.result, compare);
   }
   await writeFile(dir + '/case.json', JSON.stringify(tc, null, 2) + '\n');
   xslt.casePath = dir + '/case.json';
@@ -343,11 +451,74 @@ export async function saveCase(name: string, withExpected: boolean) {
   await refreshFiles();
 }
 
+/** Expected body/headers/properties from the current result (only changed headers/properties). */
+async function expectations(dir: string, result: XsltResult | GroovyResult | null, compare: string): Promise<any> {
+  if (!result) return undefined;
+  if (!result.ok || !result.output) return { ok: false };
+  const ext = compare === 'xml' ? 'xml' : 'txt';
+  await writeFile(`${dir}/expected-output.${ext}`, result.output.body);
+  const expect: any = { body: { file: `expected-output.${ext}` }, compare };
+  const pick = (rows: Row[], ch?: { added: string[]; changed: string[] }) => {
+    const names = new Set([...(ch?.added ?? []), ...(ch?.changed ?? [])]);
+    const out: Record<string, string> = {};
+    for (const r of rows) if (names.has(r.name)) out[r.name] = r.value;
+    return Object.keys(out).length ? out : undefined;
+  };
+  expect.headers = pick(result.output.headers, result.changes?.headers);
+  expect.properties = pick(result.output.properties, result.changes?.properties);
+  return expect;
+}
+
+export async function saveGroovyCase(name: string, withExpected: boolean) {
+  if (!app.project) throw new Error('Open a project folder to save test cases.');
+  if (!groovy.scriptPath || groovy.script !== groovy.savedScript) {
+    if (!(await saveScript())) return;
+  }
+  const dir = 'tests/' + slug(name);
+  const tc: any = {
+    name,
+    step: 'groovy',
+    profile: app.groovyProfile,
+    script: relative(dir, groovy.scriptPath!),
+    input: { body: { file: 'input.xml' }, headers: clean(groovy.headers), properties: clean(groovy.properties) },
+  };
+  if (groovy.functionName && groovy.functionName !== 'processData') tc.function = groovy.functionName;
+  if (groovy.bodyType !== 'String') tc.options = { bodyType: groovy.bodyType };
+  await writeFile(dir + '/input.xml', groovy.body);
+  if (withExpected) {
+    const out = groovy.result?.output?.body ?? '';
+    tc.expect = await expectations(dir, groovy.result, out.trimStart().startsWith('<') ? 'xml' : 'text');
+  }
+  await writeFile(dir + '/case.json', JSON.stringify(tc, null, 2) + '\n');
+  groovy.casePath = dir + '/case.json';
+  app.status = 'Saved test case ' + dir;
+  await refreshFiles();
+}
+
+async function loadGroovyCase(path: string, dir: string, tc: any) {
+  const scriptPath = joinPath(dir, tc.script);
+  groovy.scriptPath = scriptPath;
+  groovy.script = await readFile(scriptPath);
+  groovy.savedScript = groovy.script;
+  const body = tc.input?.body;
+  groovy.body = typeof body === 'string' ? body : body?.file ? await readFile(joinPath(dir, body.file)) : body?.text ?? '';
+  groovy.headers = toRows(tc.input?.headers);
+  groovy.properties = toRows(tc.input?.properties);
+  groovy.functionName = tc.function ?? 'processData';
+  groovy.bodyType = tc.options?.bodyType ?? 'String';
+  if (tc.profile && hasProfile(tc.profile)) app.groovyProfile = tc.profile;
+  groovy.casePath = path;
+  app.tool = 'groovy';
+  app.status = 'Loaded test case ' + (tc.name ?? path);
+  await runGroovy();
+}
+
 export async function loadCase(path: string) {
   const tc = JSON.parse(await readFile(path));
   const dir = path.split('/').slice(0, -1).join('/');
+  if (tc.step === 'groovy') return loadGroovyCase(path, dir, tc);
   if ((tc.step ?? 'xslt') !== 'xslt') {
-    app.error = 'Only XSLT cases can be opened in the editor for now; run XSD cases from the test runner.';
+    app.error = 'XSD cases run in the test runner; they cannot be opened in an editor view yet.';
     return;
   }
   const mappingPath = joinPath(dir, tc.xslt);

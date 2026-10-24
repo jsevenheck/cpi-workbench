@@ -11,7 +11,12 @@ def Message processData(Message message) {
         java           : System.getProperty('java.version'),
         javaVendor     : System.getProperty('java.vendor'),
         groovy         : safe { GroovySystem.version },
-        camel          : safe { Class.forName('org.apache.camel.CamelContext').package?.implementationVersion ?: 'unknown' },
+        camel          : safe { Class.forName('org.apache.camel.CamelContext').package?.implementationVersion
+                                    ?: Class.forName('org.apache.camel.impl.DefaultCamelContext').getDeclaredConstructor().newInstance().version },
+        camelPom           : safe { ['camel-core', 'camel-api', 'camel-core-engine'].collect { a ->
+                                        def p = new Properties()
+                                        def stream = Class.forName('org.apache.camel.CamelContext').getResourceAsStream("/META-INF/maven/org.apache.camel/${a}/pom.properties")
+                                        if (stream) { p.load(stream); "${a} ${p.version}" } else null }.findAll() },
         saxon          : safe { Class.forName('net.sf.saxon.Version').getMethod('getProductTitle').invoke(null) },
         defaultCharset : java.nio.charset.Charset.defaultCharset().name(),
         timezone       : TimeZone.default.ID,
@@ -22,6 +27,13 @@ def Message processData(Message message) {
                                     .collect { it.name + '(' + it.parameterTypes*.simpleName.join(', ') + '): ' + it.returnType.simpleName }
                                     .unique().sort() },
         interfaces     : safe { message.class.interfaces*.name },
+        // Which optional Groovy modules / libraries the runtime offers (the simulator bundles
+        // groovy-xml, -json, -dateutil, -datetime, -templates, -nio for 2.x).
+        classesAvailable   : ['groovy.util.XmlSlurper', 'groovy.xml.XmlSlurper', 'groovy.json.JsonSlurper',
+                              'groovy.text.SimpleTemplateEngine', 'groovy.sql.Sql', 'groovy.yaml.YamlSlurper',
+                              'groovy.toml.TomlSlurper', 'groovy.ant.AntBuilder', 'org.apache.commons.lang3.StringUtils',
+                              'com.fasterxml.jackson.databind.ObjectMapper', 'org.apache.poi.ss.usermodel.Workbook']
+                              .collectEntries { name -> [(name): safe { Class.forName(name) != null }] },
         bindingVariables : safe { binding.variables.keySet().sort() },
     ]
     message.setBody(JsonOutput.prettyPrint(JsonOutput.toJson(info)))

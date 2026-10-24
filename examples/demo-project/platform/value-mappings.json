@@ -1,0 +1,6 @@
+[
+  { "sourceAgency": "Shop", "sourceIdentifier": "Customer", "sourceValue": "C-77",
+    "targetAgency": "S4", "targetIdentifier": "SoldTo", "targetValue": "0010000077" },
+  { "sourceAgency": "Shop", "sourceIdentifier": "Customer", "sourceValue": "C-1",
+    "targetAgency": "S4", "targetIdentifier": "SoldTo", "targetValue": "0010000001" }
+]

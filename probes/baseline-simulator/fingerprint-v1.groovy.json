@@ -1,0 +1,44 @@
+{
+    "probe": "fingerprint-v1",
+    "java": "21.0.12.1",
+    "javaVendor": "Ubuntu",
+    "javaVm": "OpenJDK 64-Bit Server VM",
+    "groovy": "2.4.21",
+    "camel": "unavailable: java.lang.NoClassDefFoundError",
+    "camelPom": [
+        "camel-core 2.24.3"
+    ],
+    "saxon": "unavailable: java.lang.ClassNotFoundException",
+    "defaultCharset": "UTF-8",
+    "timezone": "Etc/UTC",
+    "locale": "en_US",
+    "transformerFactory": "com.sun.org.apache.xalan.internal.xsltc.trax.TransformerFactoryImpl",
+    "xpathFactory": "com.sun.org.apache.xpath.internal.jaxp.XPathFactoryImpl",
+    "schemaFactory": "com.sun.org.apache.xerces.internal.jaxp.validation.XMLSchemaFactory",
+    "documentBuilder": "com.sun.org.apache.xerces.internal.jaxp.DocumentBuilderFactoryImpl",
+    "messageClass": "com.sap.gateway.ip.core.customdev.util.Message",
+    "bodyClass": "java.lang.String",
+    "classesAvailable": {
+        "groovy.util.XmlSlurper": true,
+        "groovy.xml.XmlSlurper": "unavailable: java.lang.ClassNotFoundException",
+        "groovy.json.JsonSlurper": true,
+        "groovy.text.SimpleTemplateEngine": true,
+        "groovy.sql.Sql": true,
+        "groovy.yaml.YamlSlurper": "unavailable: java.lang.ClassNotFoundException",
+        "groovy.toml.TomlSlurper": "unavailable: java.lang.ClassNotFoundException",
+        "groovy.ant.AntBuilder": "unavailable: java.lang.ClassNotFoundException",
+        "org.apache.commons.lang3.StringUtils": "unavailable: java.lang.ClassNotFoundException",
+        "com.fasterxml.jackson.databind.ObjectMapper": "unavailable: java.lang.ClassNotFoundException",
+        "org.apache.poi.ss.usermodel.Workbook": "unavailable: java.lang.ClassNotFoundException"
+    },
+    "bindingVariables": [
+        "messageLogFactory",
+        "out"
+    ],
+    "headerTypes": {
+        
+    },
+    "propertyTypes": {
+        
+    }
+}

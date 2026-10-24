@@ -1,6 +1,9 @@
-//! Supervises the engine processes. Each runtime profile (Saxon 9.9, Saxon 12, later Groovy) is a
-//! separate executable speaking newline-delimited JSON-RPC over stdin/stdout. Engines start lazily
-//! on first use and are restarted transparently after they exit (e.g. after a timed-out call).
+//! Supervises the engine processes. Each runtime profile is a separate process speaking
+//! newline-delimited JSON-RPC over stdin/stdout:
+//!   * XSLT profiles: native executables (no JVM),
+//!   * Groovy profiles: jars on a JRE (bundled `jre/` or the system Java 17+).
+//! Engines start lazily on first use, restart transparently after they exit (e.g. after a timed-out
+//! call) and JVM engines stop after a period of inactivity to give memory back.
 
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -8,28 +11,50 @@ use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
-/// Runtime profile id → engine executable base name.
-pub const PROFILES: &[(&str, &str)] = &[
-    ("saxon-he-9.9", "cpiwb-xml-he99"),
-    ("saxon-he-12", "cpiwb-xml-he12"),
+pub enum Kind {
+    Native,
+    Jar,
+}
+
+/// Runtime profile id → engine base name and kind.
+pub const PROFILES: &[(&str, &str, Kind)] = &[
+    ("saxon-he-9.9", "cpiwb-xml-he99", Kind::Native),
+    ("saxon-he-12", "cpiwb-xml-he12", Kind::Native),
+    ("groovy-1.x", "cpiwb-groovy-v1", Kind::Jar),
+    ("groovy-2.x", "cpiwb-groovy-v2", Kind::Jar),
 ];
+
+/// JVM engines that were not used for this long are stopped.
+pub const IDLE_LIMIT: Duration = Duration::from_secs(10 * 60);
 
 struct Process {
     child: Child,
-    stdin: ChildStdin,
+    stdin: Option<ChildStdin>,
     stdout: BufReader<ChildStdout>,
     next_id: u64,
+    last_used: Instant,
+    jvm: bool,
 }
 
 impl Drop for Process {
     fn drop(&mut self) {
+        // Closing stdin lets a JVM exit normally (and write its class-data archive); kill as fallback.
+        drop(self.stdin.take());
+        let deadline = Instant::now() + Duration::from_millis(if self.jvm { 3000 } else { 300 });
+        while Instant::now() < deadline {
+            if let Ok(Some(_)) = self.child.try_wait() {
+                return;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
         let _ = self.child.kill();
         let _ = self.child.wait();
     }
 }
 
-/// How to start an engine: a native executable, or a jar run on a JVM (development fallback).
+/// How to start an engine.
 #[derive(Clone, Debug)]
 pub enum Launch {
     Native(PathBuf),
@@ -39,6 +64,10 @@ pub enum Launch {
 #[derive(Default)]
 pub struct Engines {
     slots: Mutex<HashMap<String, Arc<Mutex<Option<Process>>>>>,
+    /// Bundled resources (installed app): jars and the JRE live here.
+    pub resource_dir: Mutex<Option<PathBuf>>,
+    /// Where JVM class-data archives (AppCDS) are kept for faster starts.
+    pub cache_dir: Mutex<Option<PathBuf>>,
 }
 
 impl Engines {
@@ -51,22 +80,44 @@ impl Engines {
         let slots = self.slots.lock().unwrap();
         for slot in slots.values() {
             if let Ok(mut p) = slot.lock() {
-                *p = None; // Drop kills the child
+                *p = None;
             }
         }
     }
 
+    /// Stops JVM engines that have been idle longer than `limit`.
+    pub fn stop_idle(&self, limit: Duration) {
+        let slots: Vec<_> = self.slots.lock().unwrap().values().cloned().collect();
+        for slot in slots {
+            if let Ok(mut guard) = slot.try_lock() {
+                let idle = guard.as_ref().map(|p| p.jvm && p.last_used.elapsed() > limit).unwrap_or(false);
+                if idle {
+                    *guard = None;
+                }
+            }
+        }
+    }
+
+    pub fn locate(&self, profile: &str) -> Option<Launch> {
+        locate(profile, self.resource_dir.lock().unwrap().as_deref())
+    }
+
+    pub fn available(&self) -> Vec<String> {
+        PROFILES.iter().filter(|(p, _, _)| self.locate(p).is_some()).map(|(p, _, _)| p.to_string()).collect()
+    }
+
     /// Sends one request and waits for its response. Blocking; call from a worker thread.
     pub fn call(&self, profile: &str, method: &str, params: Value) -> Result<Value, String> {
-        let launch = locate(profile).ok_or_else(|| format!(
-            "The engine for profile '{profile}' is not installed. Expected {} next to the application.",
-            exe_name(base_name(profile).unwrap_or("?"))))?;
+        let launch = self.locate(profile).ok_or_else(|| missing_message(profile))?;
         let slot = self.slot(profile);
         let mut guard = slot.lock().map_err(|_| "engine lock poisoned".to_string())?;
         if guard.is_none() {
-            *guard = Some(start(&launch)?);
+            let cache = self.cache_dir.lock().unwrap().clone();
+            *guard = Some(start(&launch, profile, cache.as_deref())?);
         }
-        let result = exchange(guard.as_mut().unwrap(), method, params);
+        let proc = guard.as_mut().unwrap();
+        proc.last_used = Instant::now();
+        let result = exchange(proc, method, params);
         match result {
             Ok(Exchange::Result(v)) => Ok(v),
             Ok(Exchange::Error { message, timeout }) => {
@@ -83,6 +134,17 @@ impl Engines {
     }
 }
 
+fn missing_message(profile: &str) -> String {
+    match PROFILES.iter().find(|(p, _, _)| *p == profile) {
+        Some((_, base, Kind::Native)) => format!(
+            "The engine for profile '{profile}' is not installed. Expected {} next to the application.", exe_name(base)),
+        Some((_, base, Kind::Jar)) => format!(
+            "The Groovy engine for '{profile}' is not available. It needs {base}.jar and a Java 17+ runtime \
+             (bundled jre/ folder, JAVA_HOME or java on PATH)."),
+        None => format!("Unknown profile '{profile}'"),
+    }
+}
+
 enum Exchange {
     Result(Value),
     Error { message: String, timeout: bool },
@@ -92,9 +154,10 @@ fn exchange(p: &mut Process, method: &str, params: Value) -> Result<Exchange, St
     p.next_id += 1;
     let id = p.next_id;
     let line = json!({ "id": id, "method": method, "params": params }).to_string();
-    p.stdin.write_all(line.as_bytes()).map_err(|e| e.to_string())?;
-    p.stdin.write_all(b"\n").map_err(|e| e.to_string())?;
-    p.stdin.flush().map_err(|e| e.to_string())?;
+    let stdin = p.stdin.as_mut().ok_or("engine stdin closed")?;
+    stdin.write_all(line.as_bytes()).map_err(|e| e.to_string())?;
+    stdin.write_all(b"\n").map_err(|e| e.to_string())?;
+    stdin.flush().map_err(|e| e.to_string())?;
     loop {
         let mut buf = String::new();
         let n = p.stdout.read_line(&mut buf).map_err(|e| e.to_string())?;
@@ -118,12 +181,26 @@ fn exchange(p: &mut Process, method: &str, params: Value) -> Result<Exchange, St
     }
 }
 
-fn start(launch: &Launch) -> Result<Process, String> {
+fn start(launch: &Launch, profile: &str, cache_dir: Option<&Path>) -> Result<Process, String> {
+    let jvm = matches!(launch, Launch::Jar { .. });
     let mut cmd = match launch {
         Launch::Native(path) => Command::new(path),
         Launch::Jar { java, jar } => {
             let mut c = Command::new(java);
-            c.arg("-XX:+UseSerialGC").arg("-Xshare:auto").arg("-jar").arg(jar);
+            c.arg("-XX:+UseSerialGC").arg("-Xmx512m").arg("-Xss4m").arg("-Xshare:auto")
+                // JVM log output must never reach stdout (the protocol channel).
+                .arg("-Xlog:disable").arg("-Xlog:all=warning:stderr");
+            // AppCDS: reuse the class-data archive of an earlier run, or create it on exit.
+            if let Some(dir) = cache_dir {
+                let _ = std::fs::create_dir_all(dir);
+                let archive = dir.join(format!("{profile}-{}.jsa", file_stamp(jar)));
+                if archive.is_file() {
+                    c.arg(format!("-XX:SharedArchiveFile={}", archive.display()));
+                } else {
+                    c.arg(format!("-XX:ArchiveClassesAtExit={}", archive.display()));
+                }
+            }
+            c.arg("-jar").arg(jar);
             c
         }
     };
@@ -144,7 +221,8 @@ fn start(launch: &Launch) -> Result<Process, String> {
     loop {
         let mut buf = String::new();
         if stdout.read_line(&mut buf).map_err(|e| e.to_string())? == 0 {
-            return Err(format!("Engine {launch:?} exited during start"));
+            let code = child.try_wait().ok().flatten().and_then(|s| s.code());
+            return Err(format!("Engine {launch:?} exited during start (exit code {code:?})"));
         }
         if let Ok(v) = serde_json::from_str::<Value>(buf.trim()) {
             if v.get("event").and_then(Value::as_str) == Some("ready") {
@@ -152,60 +230,96 @@ fn start(launch: &Launch) -> Result<Process, String> {
             }
         }
     }
-    Ok(Process { child, stdin, stdout, next_id: 0 })
+    Ok(Process { child, stdin: Some(stdin), stdout, next_id: 0, last_used: Instant::now(), jvm })
 }
 
-fn base_name(profile: &str) -> Option<&'static str> {
-    PROFILES.iter().find(|(p, _)| *p == profile).map(|(_, n)| *n)
+/// Size+mtime of the jar, so a new engine version gets a new class-data archive.
+fn file_stamp(path: &Path) -> String {
+    std::fs::metadata(path)
+        .map(|m| {
+            let t = m.modified().ok()
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
+            format!("{:x}-{:x}", m.len(), t)
+        })
+        .unwrap_or_else(|_| "0".into())
+}
+
+fn profile(profile: &str) -> Option<&'static (&'static str, &'static str, Kind)> {
+    PROFILES.iter().find(|(p, _, _)| *p == profile)
 }
 
 fn exe_name(base: &str) -> String {
     if cfg!(windows) { format!("{base}.exe") } else { base.to_string() }
 }
 
-/// Finds the engine for a profile: CPIWB_ENGINE_DIR, next to the app executable (bundled
-/// sidecar), or — when running from the source tree — the native build or the jar.
-pub fn locate(profile: &str) -> Option<Launch> {
-    let base = base_name(profile)?;
-    let exe = exe_name(base);
-    if let Ok(dir) = std::env::var("CPIWB_ENGINE_DIR") {
-        let p = Path::new(&dir).join(&exe);
-        if p.is_file() {
-            return Some(Launch::Native(p));
-        }
-    }
+/// Finds the engine for a profile.
+/// Native: CPIWB_ENGINE_DIR, next to the app executable (bundled sidecar), repository build.
+/// Jar: CPIWB_ENGINE_DIR, bundled resources, repository build — plus a Java runtime.
+pub fn locate(name: &str, resource_dir: Option<&Path>) -> Option<Launch> {
+    let (_, base, kind) = profile(name)?;
     let app_dir = std::env::current_exe().ok()?.parent()?.to_path_buf();
-    let bundled = app_dir.join(&exe);
-    if bundled.is_file() {
-        return Some(Launch::Native(bundled));
-    }
-    // Development: walk up to the repository root.
-    let id = base.trim_start_matches("cpiwb-xml-");
-    for dir in app_dir.ancestors() {
-        let native = dir.join("engine").join("native").join("out").join(&exe);
-        if native.is_file() {
-            return Some(Launch::Native(native));
+    let env_dir = std::env::var("CPIWB_ENGINE_DIR").ok().map(PathBuf::from);
+    match kind {
+        Kind::Native => {
+            let exe = exe_name(base);
+            for dir in env_dir.iter().chain(std::iter::once(&app_dir)) {
+                let p = dir.join(&exe);
+                if p.is_file() {
+                    return Some(Launch::Native(p));
+                }
+            }
+            let id = base.trim_start_matches("cpiwb-xml-");
+            for dir in app_dir.ancestors() {
+                let native = dir.join("engine").join("native").join("out").join(&exe);
+                if native.is_file() {
+                    return Some(Launch::Native(native));
+                }
+                let jar = dir.join("engine").join(format!("xml-{id}")).join("target").join(format!("{base}.jar"));
+                if jar.is_file() {
+                    return java_binary(resource_dir).map(|java| Launch::Jar { java, jar });
+                }
+            }
+            None
         }
-        let jar = dir.join("engine").join(format!("xml-{id}")).join("target").join(format!("{base}.jar"));
-        if jar.is_file() {
-            return Some(Launch::Jar { java: java_binary(), jar });
+        Kind::Jar => {
+            let file = format!("{base}.jar");
+            let mut candidates: Vec<PathBuf> = Vec::new();
+            if let Some(d) = &env_dir { candidates.push(d.join(&file)); }
+            if let Some(d) = resource_dir {
+                candidates.push(d.join(&file));
+                candidates.push(d.join("engines").join(&file));
+            }
+            candidates.push(app_dir.join(&file));
+            let id = base.trim_start_matches("cpiwb-groovy-");
+            for dir in app_dir.ancestors() {
+                candidates.push(dir.join("engine").join(format!("groovy-{id}")).join("target").join(&file));
+            }
+            let jar = candidates.into_iter().find(|p| p.is_file())?;
+            java_binary(resource_dir).map(|java| Launch::Jar { java, jar })
         }
     }
-    None
 }
 
-fn java_binary() -> PathBuf {
-    if let Ok(home) = std::env::var("JAVA_HOME") {
-        let p = Path::new(&home).join("bin").join(exe_name("java"));
+/// Bundled JRE first, then JAVA_HOME, then `java` on PATH (only if it runs).
+fn java_binary(resource_dir: Option<&Path>) -> Option<PathBuf> {
+    let java = exe_name("java");
+    if let Some(d) = resource_dir {
+        let p = d.join("jre").join("bin").join(&java);
         if p.is_file() {
-            return p;
+            return Some(p);
         }
     }
-    PathBuf::from(exe_name("java"))
-}
-
-pub fn available() -> Vec<String> {
-    PROFILES.iter().filter(|(p, _)| locate(p).is_some()).map(|(p, _)| p.to_string()).collect()
+    if let Ok(home) = std::env::var("JAVA_HOME") {
+        let p = Path::new(&home).join("bin").join(&java);
+        if p.is_file() {
+            return Some(p);
+        }
+    }
+    let ok = Command::new(&java).arg("-version").stdout(Stdio::null()).stderr(Stdio::null())
+        .status().map(|s| s.success()).unwrap_or(false);
+    if ok { Some(PathBuf::from(java)) } else { None }
 }
 
 #[cfg(test)]
@@ -214,26 +328,34 @@ mod tests {
 
     #[test]
     fn profile_names() {
-        assert_eq!(base_name("saxon-he-9.9"), Some("cpiwb-xml-he99"));
-        assert_eq!(base_name("nope"), None);
+        assert_eq!(profile("saxon-he-9.9").map(|p| p.1), Some("cpiwb-xml-he99"));
+        assert_eq!(profile("groovy-2.x").map(|p| p.1), Some("cpiwb-groovy-v2"));
+        assert!(profile("nope").is_none());
     }
 
-    /// Runs against a real engine when one is found (repository checkout with a build).
+    /// Runs against real engines when found (repository checkout with a build).
     #[test]
-    fn round_trip_when_engine_present() {
-        if locate("saxon-he-9.9").is_none() {
-            return;
-        }
+    fn round_trip_when_engines_present() {
         let engines = Engines::default();
-        let info = engines.call("saxon-he-9.9", "engine.info", json!({})).unwrap();
-        assert_eq!(info["profile"], "saxon-he-9.9");
-        let r = engines.call("saxon-he-9.9", "xslt.run", json!({
-            "xslt": {"content": "<xsl:stylesheet version='2.0' xmlns:xsl='http://www.w3.org/1999/XSL/Transform'><xsl:param name='h'/><xsl:output method='text'/><xsl:template match='/'><xsl:value-of select='$h'/></xsl:template></xsl:stylesheet>"},
-            "input": {"body": "<a/>", "headers": [{"name": "h", "value": "hello", "type": "String"}]}
-        })).unwrap();
-        assert_eq!(r["output"]["body"], "hello");
-        let err = engines.call("saxon-he-9.9", "no.such", json!({})).unwrap_err();
-        assert!(err.contains("Unknown method"));
+        if engines.locate("saxon-he-9.9").is_some() {
+            let info = engines.call("saxon-he-9.9", "engine.info", json!({})).unwrap();
+            assert_eq!(info["profile"], "saxon-he-9.9");
+            let r = engines.call("saxon-he-9.9", "xslt.run", json!({
+                "xslt": {"content": "<xsl:stylesheet version='2.0' xmlns:xsl='http://www.w3.org/1999/XSL/Transform'><xsl:param name='h'/><xsl:output method='text'/><xsl:template match='/'><xsl:value-of select='$h'/></xsl:template></xsl:stylesheet>"},
+                "input": {"body": "<a/>", "headers": [{"name": "h", "value": "hello", "type": "String"}]}
+            })).unwrap();
+            assert_eq!(r["output"]["body"], "hello");
+            let err = engines.call("saxon-he-9.9", "no.such", json!({})).unwrap_err();
+            assert!(err.contains("Unknown method"));
+        }
+        if engines.locate("groovy-1.x").is_some() {
+            let r = engines.call("groovy-1.x", "groovy.run", json!({
+                "script": {"content": "def processData(m) { m.setBody(m.getBody(String).reverse()); m }"},
+                "input": {"body": "abc"}
+            })).unwrap();
+            assert_eq!(r["output"]["body"], "cba", "{r}");
+        }
+        engines.stop_idle(Duration::from_secs(0));
         engines.shutdown();
     }
 }

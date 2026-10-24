@@ -1,10 +1,13 @@
 # CPI Workbench
 
-A lean, offline desktop app for testing **SAP Integration Suite (Cloud Integration)** mappings
-locally: enter a message (body, headers, exchange properties), run an **XSLT mapping** and see the
-resulting body, headers and properties immediately, without deploy → trace → monitor round trips.
+A lean, offline desktop app for testing **SAP Integration Suite (Cloud Integration)** mappings and
+scripts locally: enter a message (body, headers, exchange properties), run an **XSLT mapping** or a
+**Groovy script** and see the resulting body, headers, properties and log entries immediately,
+without deploy → trace → monitor round trips.
 
-The goal is to behave like the real CPI step, not like a generic XSLT tester:
+The goal is to behave like the real CPI step, not like a generic XSLT tester or Groovy console.
+
+**XSLT Mapping**
 
 * **Same engine family:** Saxon-HE **9.9** (the release line CPI runs, as Saxon-EE 9.9) or Saxon-HE 12.
 * **CPI parameter binding:** every global `xsl:param` gets the header or exchange property with
@@ -13,23 +16,43 @@ The goal is to behave like the real CPI step, not like a generic XSLT tester:
   output message, as in CPI.
 * Includes/imports resolve inside the project folder like iFlow resources; nothing leaves the machine.
 
-Groovy Script simulation (Script API v1 and v2) is the next phase — see [PLAN.md](PLAN.md).
+**Groovy Script**
+
+* **Same Groovy versions as CPI:** Groovy **2.4.21** for script step 1.x and **4.0.29** for 2.x, on Java 17.
+* **`Message` backed by a real Apache Camel exchange** (Camel 2.24 / 3.14), so `getBody(String)`,
+  `getBody(Reader)`, `getHeader(name, Integer)` and case-insensitive header names behave like CPI.
+* `messageLogFactory` with MPL properties, custom header properties and attachments;
+  `ITApiFactory` with **Secure Store** and **Value Mapping** mocks fed from `platform/*.json`.
+* Compile and runtime errors point to the script line; `println` output is captured.
+* Groovy 1.x → 2.x differences surface for real (e.g. `groovy.util.XmlSlurper` no longer exists in Groovy 4).
+
+See [PLAN.md](PLAN.md) for the research behind this and the open points.
 
 ![XSLT view](docs/screenshot-xslt.png)
+
+![Groovy view](docs/screenshot-groovy.png)
 
 ## What is in the box
 
 | Path | What |
 |---|---|
-| `engine/` | Java 17 engine: CPI XSLT step, XSD validation, XPath tester, test runner, CLI, JSON-RPC. Built twice: `xml-he99` (Saxon-HE 9.9.1-8) and `xml-he12` (Saxon-HE 12.9), then compiled to **native executables** with GraalVM (no JVM needed at runtime). |
+| `engine/` | Java 17 engines with a JSON-RPC interface, test runner and CLI. **XML:** CPI XSLT step, XSD validation, XPath — built against Saxon-HE 9.9.1-8 (`xml-he99`) and 12.9 (`xml-he12`) and compiled to **native executables** with GraalVM (no JVM at runtime). **Groovy:** `groovy-v1` (Groovy 2.4.21, Camel 2.24.3, Script API v1) and `groovy-v2` (Groovy 4.0.29, Camel 3.14.7, Script API v2) — run on a trimmed Java 17 runtime. |
 | `app/` | Desktop app: Tauri 2 (Rust) shell + Svelte/Monaco UI. Starts the engines as sidecar processes on demand. |
 | `examples/demo-project/` | Sample project: mapping with include, schema, test cases. |
 | `probes/` | Fingerprint and behaviour probes to run once on a real tenant, to verify the simulation. |
 | `PLAN.md` | Plan, research ledger, open questions. |
 
-Measured on a Linux x86-64 build machine (native engines): engine start-up to ready ≈ 10 ms,
-typical XSLT run < 1 ms when the stylesheet is cached, ≈ 60 MB peak RSS on a 270 KB input,
-executable 48 MB (Saxon 9.9) / 54 MB (Saxon 12), ≈ 16–18 MB compressed.
+Measured on a Linux x86-64 build machine:
+
+| | XSLT (native) | Groovy 1.x (JVM) | Groovy 2.x (JVM) |
+|---|---|---|---|
+| Engine start to ready | ≈ 10 ms | ≈ 220 ms (with AppCDS, 440 ms without) | ≈ 230 ms (410 ms without) |
+| First run | ≈ 10 ms | ≈ 170 ms | ≈ 420 ms |
+| Later runs (cached) | < 1 ms | ≈ 2 ms | ≈ 2 ms |
+| Peak memory | ≈ 60 MB (270 KB input) | ≈ 75 MB | ≈ 150 MB |
+| Size | 48 / 54 MB executables (≈ 16 / 18 MB compressed) | jars 14 + 12 MB, Java 17 runtime 75 MB (≈ 47 MB compressed) | |
+
+The Groovy runtime starts only when the Groovy tab is used and stops after 10 idle minutes.
 
 ## Using it
 
@@ -50,6 +73,8 @@ SmartScreen asks once ("More info" → "Run anyway"). The Windows installer inst
 ### Command line (CI-friendly)
 
 ```sh
+java -jar cpiwb-groovy-v1.jar run --script scripts/enrich.groovy --in input.xml -H SenderSystem=ERP
+java -jar cpiwb-groovy-v2.jar test examples/demo-project/tests
 cpiwb-xml xslt --xsl mappings/order.xsl --in input.xml -H SenderSystem=ERP -P Count=3:Integer
 cpiwb-xml validate --xsd schemas/order.xsd --in output.xml
 cpiwb-xml xpath --expr "//Item/@sku" --in input.xml --version 3.1
@@ -62,7 +87,13 @@ cpiwb-xml test examples/demo-project/tests        # exit code 1 if a case fails
 cpiwb-xml-he99 serve --http 7777 --ui app/dist    # then open http://127.0.0.1:7777
 ```
 
-Web mode runs one engine (one Saxon profile) and listens on localhost only.
+Web mode listens on localhost only. The engine serving the page handles files; add more engines with a URL parameter:
+
+```sh
+java -jar cpiwb-groovy-v1.jar serve --http 7778 &
+java -jar cpiwb-groovy-v2.jar serve --http 7779 &
+# open http://127.0.0.1:7777/?engines=groovy-1.x@http://127.0.0.1:7778,groovy-2.x@http://127.0.0.1:7779
+```
 
 ## Test cases
 
@@ -89,7 +120,8 @@ Web mode runs one engine (one Saxon profile) and listens on localhost only.
 }
 ```
 
-* `step`: `xslt` or `xsd` (`schema` instead of `xslt`; expect `valid`, `errorContains`).
+* `step`: `xslt`, `groovy` (`script` instead of `xslt`, optional `function`, `options.bodyType`: `String` / `InputStream` / `byte[]`) or `xsd` (`schema`; expect `valid`, `errorContains`).
+* Profiles: `saxon-he-9.9`, `saxon-he-12`, `groovy-1.x`, `groovy-2.x`.
 * Header/property types: `String`, `Integer`, `Long`, `Boolean`, `Double`, `Float`, `BigDecimal`, `Date` (ISO-8601), `byte[]` (Base64), `null`.
 * `compare`: `xml` (ignores formatting and namespace declarations), `text`, `trimmed`.
 * `expect.ok: false` asserts that the mapping fails.
@@ -106,11 +138,20 @@ Web mode runs one engine (one Saxon profile) and listens on localhost only.
 | Declared parameter without header/property | XSLT default is used; switchable to "error" — **to verify** (Q-X4) |
 | XSD validation | JDK validator, XML Schema 1.0 — CPI's validator **to verify** (Q-V1) |
 
+| Groovy versions | Groovy 2.4.21 / 4.0.29 as documented by SAP |
+| Java version | Java 17 (reported for 2.x); the 1.x Java version is **to verify** |
+| Camel version | 3.14.7 for 2.x (reported); 2.24.3 for 1.x is an **assumption** |
+| Script API v1 | Documented methods (body, headers, properties, attachments, sizes) |
+| Script API v2 | **Provisional**: same methods as v1 until SAP's v2 reference is available (probe `fingerprint-v2.groovy` lists the real methods) |
+| Platform APIs | Secure Store (user credentials), Value Mapping; others raise `UnsupportedInSimulator` |
+| Groovy modules on 2.x | xml, json, dateutil, datetime, templates, nio bundled — CPI's set **to verify** |
+
 Run the probes in `probes/` on a test tenant to turn the "to verify" items into facts.
 
 ## Building
 
-Requirements: JDK 17+ and Maven; GraalVM 21+ for native engines; Node 22; Rust (stable);
+Requirements: JDK 17+ and Maven; GraalVM 21+ for native engines; a JDK 17 with jmods for the
+Groovy runtime (`engine/groovy/build-jre.sh`); Node 22; Rust (stable);
 on Linux the WebKitGTK development packages (see `.github/workflows/build.yml`).
 
 ```sh
@@ -118,9 +159,11 @@ mvn -f engine/pom.xml verify                         # engine + tests for both S
 GRAALVM_HOME=/path/to/graalvm engine/native/build-native.sh   # native engines → engine/native/out
 python3 engine/native/workload.py engine/native/out/cpiwb-xml-he99 serve --stdio   # smoke test
 
+JAVA_HOME=/path/to/jdk17 engine/groovy/build-jre.sh /tmp/jre    # trimmed Java 17 for Groovy
+
 cd app
 npm ci
-node scripts/prepare-sidecars.mjs                    # copy engines to src-tauri/binaries
+CPIWB_JRE_DIR=/tmp/jre node scripts/prepare-sidecars.mjs   # stage engines + JRE for bundling
 npx tauri build                                      # installer for the current OS
 npx tauri dev                                        # development (UI hot reload)
 ```
@@ -134,5 +177,8 @@ and regenerate `saxon-generated/reflect-config.json` with `engine/native/GenRefl
 
 ## Licences of bundled components
 
-Saxon-HE: MPL-2.0 · Tauri, Monaco: MIT/Apache-2.0 · GraalVM Native Image runtime: GPLv2 with
-Classpath Exception. No SAP code or jars are included.
+Saxon-HE: MPL-2.0 · Groovy, Apache Camel: Apache-2.0 · Tauri, Monaco: MIT/Apache-2.0 ·
+OpenJDK runtime and GraalVM Native Image runtime: GPLv2 with Classpath Exception · JavaBeans
+Activation (javax.activation): CDDL/GPLv2+CE · test corpus from pizug/cpi-groovy-examples: MIT.
+No SAP code or jars are included; the `com.sap.*` classes in `engine/groovy` are clean-room
+simulations written from SAP's public documentation.

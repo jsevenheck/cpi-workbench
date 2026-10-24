@@ -12,7 +12,12 @@ def Message processData(Message message) {
         javaVendor         : System.getProperty('java.vendor'),
         javaVm             : System.getProperty('java.vm.name'),
         groovy             : safe { GroovySystem.version },
-        camel              : safe { Class.forName('org.apache.camel.CamelContext').package?.implementationVersion ?: 'unknown' },
+        camel              : safe { Class.forName('org.apache.camel.CamelContext').package?.implementationVersion
+                                        ?: Class.forName('org.apache.camel.impl.DefaultCamelContext').getDeclaredConstructor().newInstance().version },
+        camelPom           : safe { ['camel-core', 'camel-api', 'camel-core-engine'].collect { a ->
+                                        def p = new Properties()
+                                        def stream = Class.forName('org.apache.camel.CamelContext').getResourceAsStream("/META-INF/maven/org.apache.camel/${a}/pom.properties")
+                                        if (stream) { p.load(stream); "${a} ${p.version}" } else null }.findAll() },
         saxon              : safe { Class.forName('net.sf.saxon.Version').getMethod('getProductTitle').invoke(null) },
         defaultCharset     : java.nio.charset.Charset.defaultCharset().name(),
         timezone           : TimeZone.default.ID,
@@ -23,6 +28,13 @@ def Message processData(Message message) {
         documentBuilder    : safe { javax.xml.parsers.DocumentBuilderFactory.newInstance().class.name },
         messageClass       : message.class.name,
         bodyClass          : safe { message.getBody()?.class?.name },
+        // Which optional Groovy modules / libraries the runtime offers (the simulator bundles
+        // groovy-xml, -json, -dateutil, -datetime, -templates, -nio for 2.x).
+        classesAvailable   : ['groovy.util.XmlSlurper', 'groovy.xml.XmlSlurper', 'groovy.json.JsonSlurper',
+                              'groovy.text.SimpleTemplateEngine', 'groovy.sql.Sql', 'groovy.yaml.YamlSlurper',
+                              'groovy.toml.TomlSlurper', 'groovy.ant.AntBuilder', 'org.apache.commons.lang3.StringUtils',
+                              'com.fasterxml.jackson.databind.ObjectMapper', 'org.apache.poi.ss.usermodel.Workbook']
+                              .collectEntries { name -> [(name): safe { Class.forName(name) != null }] },
         bindingVariables   : safe { binding.variables.keySet().sort() },
         headerTypes        : safe { message.headers.collectEntries { k, v -> [(k): v?.class?.name] } },
         propertyTypes      : safe { message.properties.collectEntries { k, v -> [(k): v?.class?.name] } },

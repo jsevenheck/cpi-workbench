@@ -49,3 +49,24 @@ export interface FileEntry {
 }
 
 export const TYPES = ['String', 'Integer', 'Long', 'Boolean', 'Double', 'Float', 'BigDecimal', 'Date', 'byte[]', 'null'];
+
+export interface GroovyResult {
+  ok: boolean;
+  failedPhase?: 'compile' | 'runtime';
+  diagnostics: Diagnostic[];
+  output?: MessageOut & { bodyType: string };
+  changes?: { headers: Changes; properties: Changes };
+  attachments?: { name: string; contentType: string | null; size: number }[];
+  mpl: {
+    enabled: boolean;
+    properties: { name: string; type: string; value: string | null }[];
+    customHeaders: { name: string; value: string }[];
+    attachments: { name: string; mediaType: string; content: string }[];
+  };
+  apiCalls: { api: string; method: string; args: (string | null)[] }[];
+  console: string;
+  stackTrace?: string;
+  runMs?: number;
+  timing: { compileMs: number; cached: boolean; totalMs: number };
+  engine: { profile: string; groovy: string; camel: string; java: string; scriptApi: string };
+}

@@ -1,0 +1,39 @@
+{
+    "probe": "fingerprint-v2",
+    "java": "21.0.12.1",
+    "javaVendor": "Ubuntu",
+    "groovy": "4.0.29",
+    "camel": "3.14.7",
+    "camelPom": [
+        "camel-api 3.14.7",
+        "camel-core-engine 3.14.7"
+    ],
+    "saxon": "unavailable: java.lang.ClassNotFoundException",
+    "defaultCharset": "UTF-8",
+    "timezone": "Etc/UTC",
+    "locale": "en_US",
+    "messageClass": "com.sap.it.script.v2.api.Message",
+    "messageMethods": [
+        
+    ],
+    "interfaces": [
+        
+    ],
+    "classesAvailable": {
+        "groovy.util.XmlSlurper": "unavailable: java.lang.ClassNotFoundException",
+        "groovy.xml.XmlSlurper": true,
+        "groovy.json.JsonSlurper": true,
+        "groovy.text.SimpleTemplateEngine": true,
+        "groovy.sql.Sql": "unavailable: java.lang.ClassNotFoundException",
+        "groovy.yaml.YamlSlurper": "unavailable: java.lang.ClassNotFoundException",
+        "groovy.toml.TomlSlurper": "unavailable: java.lang.ClassNotFoundException",
+        "groovy.ant.AntBuilder": "unavailable: java.lang.ClassNotFoundException",
+        "org.apache.commons.lang3.StringUtils": "unavailable: java.lang.ClassNotFoundException",
+        "com.fasterxml.jackson.databind.ObjectMapper": "unavailable: java.lang.ClassNotFoundException",
+        "org.apache.poi.ss.usermodel.Workbook": "unavailable: java.lang.ClassNotFoundException"
+    },
+    "bindingVariables": [
+        "messageLogFactory",
+        "out"
+    ]
+}

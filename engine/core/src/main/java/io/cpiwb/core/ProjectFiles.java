@@ -36,8 +36,20 @@ public final class ProjectFiles {
     }
 
     private static void init(Path dir) throws IOException {
-        for (String sub : List.of("mappings", "schemas", "scripts", "tests")) {
+        for (String sub : List.of("mappings", "schemas", "scripts", "tests", "platform")) {
             Files.createDirectories(dir.resolve(sub));
+        }
+        // Mocked platform data for the Groovy simulator (secure store, value mappings).
+        Path creds = dir.resolve("platform/credentials.json");
+        if (!Files.exists(creds)) {
+            Files.writeString(creds, "{\n  \"EXAMPLE_ALIAS\": { \"username\": \"demo-user\", \"password\": \"demo-password\" }\n}\n",
+                    StandardCharsets.UTF_8);
+        }
+        Path vm = dir.resolve("platform/value-mappings.json");
+        if (!Files.exists(vm)) {
+            Files.writeString(vm, "[\n  { \"sourceAgency\": \"S4\", \"sourceIdentifier\": \"Plant\", \"sourceValue\": \"1000\",\n"
+                    + "    \"targetAgency\": \"Shop\", \"targetIdentifier\": \"Warehouse\", \"targetValue\": \"WH-A\" }\n]\n",
+                    StandardCharsets.UTF_8);
         }
         Path cfg = dir.resolve("cpi-workbench.json");
         if (!Files.exists(cfg)) {

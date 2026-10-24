@@ -2,34 +2,54 @@
   import { onMount } from 'svelte';
   import Sidebar from './components/Sidebar.svelte';
   import XsltView from './components/XsltView.svelte';
+  import GroovyView from './components/GroovyView.svelte';
   import XsdView from './components/XsdView.svelte';
   import XPathView from './components/XPathView.svelte';
   import TestsView from './components/TestsView.svelte';
   import Dialog from './components/Dialog.svelte';
-  import { app, xslt, init, runXslt, runXsd, runXpath } from './lib/store.svelte';
+  import { app, xslt, groovy, init, runXslt, runXsd, runXpath, runGroovy, onGroovyProfileChange } from './lib/store.svelte';
 
   onMount(async () => {
     await init();
-    if (app.tool === 'xslt' && !xslt.result) runXslt();
+    if (app.tool === 'xslt' && !xslt.result && hasKind('xslt')) runXslt();
+    if (app.tool === 'groovy' && !groovy.result && hasKind('groovy')) runGroovy();
   });
 
-  let profile = $derived(app.profiles.find((p) => p.id === app.profile));
+  function hasKind(kind: 'xslt' | 'groovy') {
+    return app.profiles.some((p) => p.kind === kind && p.available);
+  }
+
+  let kind = $derived<'xslt' | 'groovy'>(app.tool === 'groovy' ? 'groovy' : 'xslt');
+  let profile = $derived(app.profiles.find((p) => p.id === (kind === 'groovy' ? app.groovyProfile : app.profile)));
+  let kindProfiles = $derived(app.profiles.filter((p) => p.kind === kind));
 
   function run() {
     if (app.tool === 'xslt') runXslt();
+    else if (app.tool === 'groovy') runGroovy();
     else if (app.tool === 'xsd') runXsd();
     else if (app.tool === 'xpath') runXpath();
   }
 
   function onProfile() {
     if (app.tool === 'xslt') runXslt();
+    if (app.tool === 'groovy') {
+      onGroovyProfileChange();
+      runGroovy();
+    }
+  }
+
+  function selectTool(id: typeof app.tool) {
+    app.tool = id;
+    if (id === 'groovy' && !groovy.result && hasKind('groovy')) runGroovy();
+    if (id === 'xslt' && !xslt.result && hasKind('xslt')) runXslt();
   }
 
   const tools = [
-    { id: 'xslt', label: 'XSLT Mapping' },
-    { id: 'xsd', label: 'XSD Validation' },
-    { id: 'xpath', label: 'XPath' },
-    { id: 'tests', label: 'Tests' },
+    { id: 'xslt', label: 'XSLT Mapping', needs: 'xslt' },
+    { id: 'groovy', label: 'Groovy Script', needs: 'groovy' },
+    { id: 'xsd', label: 'XSD Validation', needs: 'xslt' },
+    { id: 'xpath', label: 'XPath', needs: 'xslt' },
+    { id: 'tests', label: 'Tests', needs: null },
   ] as const;
 </script>
 
@@ -38,22 +58,33 @@
     <div class="brand"><img src="./icon.svg" alt="" width="20" height="20" /> CPI Workbench</div>
     <div class="tools" role="tablist" aria-label="Tools">
       {#each tools as t}
-        <button role="tab" class:active={app.tool === t.id} onclick={() => (app.tool = t.id)}>{t.label}</button>
+        <button role="tab" class:active={app.tool === t.id} onclick={() => selectTool(t.id)}
+          disabled={app.profiles.length > 0 && t.needs !== null && !hasKind(t.needs)}
+          title={app.profiles.length > 0 && t.needs !== null && !hasKind(t.needs) ? 'The engine for this tool is not installed or not running' : ''}>{t.label}</button>
       {/each}
-      <button role="tab" disabled title="Groovy Script v1/v2 simulation is the next phase (see PLAN.md)">Groovy (next)</button>
     </div>
     <div class="spacer"></div>
     {#if app.tool !== 'tests'}
       <label class="profile" title={profile?.note ?? ''}>Runtime
-        <select bind:value={app.profile} onchange={onProfile} aria-label="Runtime profile">
-          {#each app.profiles as p}
+        {#if kind === 'groovy'}
+        <select bind:value={app.groovyProfile} onchange={onProfile} aria-label="Runtime profile">
+          {#each kindProfiles as p}
             <option value={p.id} disabled={!p.available}>{p.label}{p.available ? '' : ' (not installed)'}</option>
           {/each}
         </select>
+        {:else}
+        <select bind:value={app.profile} onchange={onProfile} aria-label="Runtime profile">
+          {#each kindProfiles as p}
+            <option value={p.id} disabled={!p.available}>{p.label}{p.available ? '' : ' (not installed)'}</option>
+          {/each}
+        </select>
+        {/if}
       </label>
     {/if}
     {#if app.tool === 'xslt'}
       <label class="live" title="Re-run on every change"><input type="checkbox" bind:checked={xslt.live} /> Live</label>
+    {:else if app.tool === 'groovy'}
+      <label class="live" title="Re-run on every change"><input type="checkbox" bind:checked={groovy.live} /> Live</label>
     {/if}
     {#if app.tool !== 'tests'}
       <button class="primary" onclick={run} title="Run (Ctrl+Enter)">▶ Run</button>
@@ -71,6 +102,7 @@
     <Sidebar />
     <main class="content">
       {#if app.tool === 'xslt'}<XsltView />
+      {:else if app.tool === 'groovy'}<GroovyView />
       {:else if app.tool === 'xsd'}<XsdView />
       {:else if app.tool === 'xpath'}<XPathView />
       {:else}<TestsView />{/if}
@@ -81,7 +113,7 @@
     <span>{app.status || 'Ready'}</span>
     <span class="spacer"></span>
     {#if app.engineInfo}
-      <span title="Engine">{app.engineInfo.nativeImage ? 'native' : 'JVM'} engine {app.engineInfo.version} · offline</span>
+      <span title="Engines">{app.profiles.filter((p) => p.available).length} engine(s) available · offline</span>
     {:else}
       <span class="err">engine not reachable</span>
     {/if}

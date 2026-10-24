@@ -1,6 +1,6 @@
 <script lang="ts">
   import { isDesktop, pickFolder } from '../lib/engine';
-  import { app, open, closeProject, openFile, refreshFiles, writeFile, ask, xslt, xsd } from '../lib/store.svelte';
+  import { app, open, closeProject, openFile, refreshFiles, writeFile, ask, xslt, xsd, groovy, SAMPLE_GROOVY_V1, SAMPLE_GROOVY_V2 } from '../lib/store.svelte';
 
   let dirInput = $state('');
   let filter = $state('');
@@ -20,11 +20,12 @@
     await open(app.project.root, true).catch((e) => (app.error = e.message));
   }
 
-  async function newFile(kind: 'xsl' | 'xsd') {
-    const def = kind === 'xsl' ? 'mappings/new-mapping.xsl' : 'schemas/new-schema.xsd';
-    const r = await ask(kind === 'xsl' ? 'New mapping (path)' : 'New schema (path)', def);
+  async function newFile(kind: 'xsl' | 'xsd' | 'groovy') {
+    const def = kind === 'xsl' ? 'mappings/new-mapping.xsl' : kind === 'xsd' ? 'schemas/new-schema.xsd' : 'scripts/new-script.groovy';
+    const r = await ask(kind === 'xsl' ? 'New mapping (path)' : kind === 'xsd' ? 'New schema (path)' : 'New Groovy script (path)', def);
     if (!r) return;
-    const content = kind === 'xsl'
+    const content = kind === 'groovy' ? (app.groovyProfile === 'groovy-2.x' ? SAMPLE_GROOVY_V2 : SAMPLE_GROOVY_V1)
+      : kind === 'xsl'
       ? `<?xml version="1.0" encoding="UTF-8"?>\n<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform"\n    xmlns:hci="http://sap.com/it/" exclude-result-prefixes="hci">\n  <xsl:param name="exchange"/>\n  <xsl:output method="xml" indent="yes"/>\n\n  <xsl:template match="/">\n    <xsl:copy-of select="."/>\n  </xsl:template>\n</xsl:stylesheet>\n`
       : `<?xml version="1.0" encoding="UTF-8"?>\n<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" elementFormDefault="qualified">\n  <xs:element name="Root" type="xs:string"/>\n</xs:schema>\n`;
     try {
@@ -46,7 +47,7 @@
       if (!g.has(top)) g.set(top, []);
       g.get(top)!.push(f.path);
     }
-    const order = ['mappings', 'schemas', 'tests', 'scripts'];
+    const order = ['mappings', 'scripts', 'schemas', 'tests', 'platform'];
     return [...g.entries()].sort((a, b) => (order.indexOf(a[0]) + 1 || 99) - (order.indexOf(b[0]) + 1 || 99) || a[0].localeCompare(b[0]));
   });
 
@@ -56,7 +57,8 @@
   }
 
   function isActive(path: string) {
-    return path === xslt.mappingPath || path === xsd.schemaPath || path === xslt.casePath;
+    return path === xslt.mappingPath || path === xsd.schemaPath || path === xslt.casePath
+      || path === groovy.scriptPath || path === groovy.casePath;
   }
 </script>
 
@@ -68,6 +70,7 @@
         <button class="small" onclick={() => refreshFiles()} title="Reload file list">↻</button>
         <button class="small" onclick={() => newFile('xsl')}>+ Mapping</button>
         <button class="small" onclick={() => newFile('xsd')}>+ Schema</button>
+        <button class="small" onclick={() => newFile('groovy')}>+ Script</button>
         <button class="small" onclick={initProject} title="Create mappings/, schemas/, tests/ and cpi-workbench.json">Init</button>
         <button class="small" onclick={closeProject} title="Close project">✕</button>
       </div>

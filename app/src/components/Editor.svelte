@@ -104,6 +104,9 @@
       applying = true;
       model.pushEditOperations([], [{ range: model.getFullModelRange(), text: v }], () => null);
       applying = false;
+      // New content (file loaded, new result): start at the left edge again.
+      editor?.setScrollLeft(0);
+      diff?.getModifiedEditor().setScrollLeft(0);
     }
   });
 

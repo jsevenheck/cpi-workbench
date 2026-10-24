@@ -20,7 +20,9 @@ jobs:
           python3 engine/native/workload.py java -jar engine/xml-he99/target/cpiwb-xml-he99.jar serve --stdio
           python3 engine/native/workload.py java -jar engine/xml-he12/target/cpiwb-xml-he12.jar serve --stdio
       - name: Demo project test cases
-        run: java -jar engine/xml-he99/target/cpiwb-xml-he99.jar test examples/demo-project/tests
+        run: |
+          java -jar engine/xml-he99/target/cpiwb-xml-he99.jar test examples/demo-project/tests
+          java -jar engine/groovy-v1/target/cpiwb-groovy-v1.jar test examples/demo-project/tests
 
   desktop:
     needs: engine-tests
@@ -35,6 +37,12 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        id: jdk17
+        with: { distribution: temurin, java-version: "17" }
+      - name: Java runtime for the Groovy engines (jlink, Java 17 like CPI)
+        shell: bash
+        run: JAVA_HOME="${{ steps.jdk17.outputs.path }}" engine/groovy/build-jre.sh "$RUNNER_TEMP/jre"
       - uses: graalvm/setup-graalvm@v1
         with:
           java-version: "21"
@@ -69,8 +77,9 @@ jobs:
         run: npm run check
       - name: Bundle desktop app
         working-directory: app
+        shell: bash
         run: |
-          node scripts/prepare-sidecars.mjs
+          CPIWB_JRE_DIR="$RUNNER_TEMP/jre" node scripts/prepare-sidecars.mjs
           npx tauri build
       - uses: actions/upload-artifact@v4
         with:
@@ -95,9 +104,13 @@ jobs:
       - run: mvn -B -f engine/pom.xml -DskipTests package
       - working-directory: app
         run: npm ci && npm run build && npm install --no-save playwright && npx playwright install --with-deps chromium
-      - name: Browser smoke test (web mode)
+      - name: Browser tests (web mode, XSLT + Groovy engines)
         run: |
           java -jar engine/xml-he99/target/cpiwb-xml-he99.jar serve --http 7777 --ui app/dist &
-          sleep 3
+          java -jar engine/groovy-v1/target/cpiwb-groovy-v1.jar serve --http 7778 &
+          java -jar engine/groovy-v2/target/cpiwb-groovy-v2.jar serve --http 7779 &
+          sleep 5
           cp -r examples/demo-project /tmp/demo-project
           node app/e2e/smoke.mjs /tmp/demo-project
+          rm -rf /tmp/demo-project && cp -r examples/demo-project /tmp/demo-project
+          node app/e2e/groovy.mjs /tmp/demo-project

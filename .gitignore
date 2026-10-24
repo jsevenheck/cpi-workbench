@@ -8,3 +8,4 @@ app/src-tauri/binaries/
 .DS_Store
 .idea/
 .vscode/
+engine/native/out/

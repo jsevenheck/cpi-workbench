@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<XsltFingerprint>
+   <Property name="xsl:version">3.0</Property>
+   <Property name="xsl:vendor">Saxonica</Property>
+   <Property name="xsl:vendor-url">http://www.saxonica.com/</Property>
+   <Property name="xsl:product-name">SAXON</Property>
+   <Property name="xsl:product-version">HE 9.9.1.8</Property>
+   <Property name="xsl:is-schema-aware">no</Property>
+   <Property name="xsl:supports-serialization">yes</Property>
+   <Property name="xsl:supports-backwards-compatibility">yes</Property>
+   <Property name="xsl:supports-namespace-axis">yes</Property>
+   <Property name="xsl:supports-streaming">no</Property>
+   <Property name="xsl:supports-dynamic-evaluation">no</Property>
+   <Property name="xsl:supports-higher-order-functions">no</Property>
+   <Property name="xsl:xpath-and-xquery-version"/>
+   <ImplicitTimezone>PT0S</ImplicitTimezone>
+   <DefaultCollation>http://www.w3.org/2005/xpath-functions/collation/codepoint</DefaultCollation>
+   <FormatDateGerman>[Language: en]5. March 2026</FormatDateGerman>
+   <FormatNumber>-1,234,567.89</FormatNumber>
+   <FunctionAvailable name="saxon:evaluate">false</FunctionAvailable>
+</XsltFingerprint>

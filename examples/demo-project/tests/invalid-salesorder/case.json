@@ -1,0 +1,9 @@
+{
+  "name": "XSD rejects a sales order without items",
+  "step": "xsd",
+  "schema": "../../schemas/salesorder.xsd",
+  "input": {
+    "body": "<SalesOrder><Header><ExternalReference>1</ExternalReference><SoldTo>C</SoldTo><CustomerGroup>01</CustomerGroup><ShippingCondition>01</ShippingCondition><Source>X</Source><OrderDate>20260101</OrderDate></Header><TotalNetAmount>0</TotalNetAmount></SalesOrder>"
+  },
+  "expect": { "valid": false, "errorContains": "Item" }
+}

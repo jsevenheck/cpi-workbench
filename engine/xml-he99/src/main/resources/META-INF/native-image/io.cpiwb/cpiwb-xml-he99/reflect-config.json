@@ -1,0 +1,253 @@
+[
+{
+  "name":"com.sun.org.apache.xerces.internal.impl.dv.xs.ExtendedSchemaDVFactoryImpl",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"com.sun.org.apache.xerces.internal.impl.dv.xs.SchemaDVFactoryImpl",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"com.sun.org.apache.xerces.internal.jaxp.SAXParserFactoryImpl",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"com.sun.org.apache.xpath.internal.functions.FuncBoolean",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"com.sun.org.apache.xpath.internal.functions.FuncCeiling",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"com.sun.org.apache.xpath.internal.functions.FuncConcat",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"com.sun.org.apache.xpath.internal.functions.FuncContains",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"com.sun.org.apache.xpath.internal.functions.FuncCount",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"com.sun.org.apache.xpath.internal.functions.FuncFalse",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"com.sun.org.apache.xpath.internal.functions.FuncFloor",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"com.sun.org.apache.xpath.internal.functions.FuncLast",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"com.sun.org.apache.xpath.internal.functions.FuncLocalPart",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"com.sun.org.apache.xpath.internal.functions.FuncNormalizeSpace",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"com.sun.org.apache.xpath.internal.functions.FuncNot",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"com.sun.org.apache.xpath.internal.functions.FuncNumber",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"com.sun.org.apache.xpath.internal.functions.FuncPosition",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"com.sun.org.apache.xpath.internal.functions.FuncQname",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"com.sun.org.apache.xpath.internal.functions.FuncRound",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"com.sun.org.apache.xpath.internal.functions.FuncStartsWith",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"com.sun.org.apache.xpath.internal.functions.FuncString",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"com.sun.org.apache.xpath.internal.functions.FuncStringLength",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"com.sun.org.apache.xpath.internal.functions.FuncSubstring",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"com.sun.org.apache.xpath.internal.functions.FuncSum",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"com.sun.org.apache.xpath.internal.functions.FuncTranslate",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"java.util.concurrent.atomic.AtomicMarkableReference",
+  "fields":[{"name":"pair"}]
+},
+{
+  "name":"net.sf.saxon.Configuration",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"net.sf.saxon.functions.Adjust_2",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"net.sf.saxon.functions.CodepointsToString",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"net.sf.saxon.functions.Compare",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"net.sf.saxon.functions.Count",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"net.sf.saxon.functions.CurrentGroup",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"net.sf.saxon.functions.CurrentGroupingKey",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"net.sf.saxon.functions.DistinctValues",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"net.sf.saxon.functions.DocAvailable",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"net.sf.saxon.functions.DynamicContextAccessor$CurrentDateTime",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"net.sf.saxon.functions.EncodeForUri",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"net.sf.saxon.functions.Error",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"net.sf.saxon.functions.EscapeHtmlUri",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"net.sf.saxon.functions.FormatDate",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"net.sf.saxon.functions.FormatNumber",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"net.sf.saxon.functions.Matches",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"net.sf.saxon.functions.NormalizeUnicode",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"net.sf.saxon.functions.ParseXml",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"net.sf.saxon.functions.RegexFunctionSansFlags",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"net.sf.saxon.functions.Replace",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"net.sf.saxon.functions.Reverse",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"net.sf.saxon.functions.Serialize",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"net.sf.saxon.functions.StringJoin",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"net.sf.saxon.functions.StringToCodepoints",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"net.sf.saxon.functions.String_1",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"net.sf.saxon.functions.Sum",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"net.sf.saxon.functions.Tokenize_1",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"net.sf.saxon.functions.Tokenize_3",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"net.sf.saxon.functions.Translate",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"net.sf.saxon.functions.UnparsedTextAvailable",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"net.sf.saxon.functions.UpperCase",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"net.sf.saxon.functions.registry.VendorFunctionSetHE$DynamicErrorInfoFn",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"net.sf.saxon.lib.StandardErrorListener",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"net.sf.saxon.ma.json.JsonToXMLFn",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"net.sf.saxon.ma.json.XMLToJsonFn",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"net.sf.saxon.ma.map.MapFunctionSet$MapGet",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"org.w3c.dom.Document"
+},
+{
+  "name":"sun.security.provider.SHA2$SHA256",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+}
+]

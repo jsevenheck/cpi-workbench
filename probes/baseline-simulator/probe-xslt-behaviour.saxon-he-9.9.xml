@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<XsltBehaviourProbe>
+   <SharedName>fromHeader</SharedName>
+   <HeaderOnly>h</HeaderOnly>
+   <PropertyOnly>p</PropertyOnly>
+   <Integer>count=1; value=41; integer=true; int=false; string=false; boolean=false; dateTime=false; untyped=false; node=false</Integer>
+   <Boolean>count=1; value=true; integer=false; int=false; string=false; boolean=true; dateTime=false; untyped=false; node=false</Boolean>
+   <Date>count=1; value=1970-01-01T00:00:00Z; integer=false; int=false; string=false; boolean=false; dateTime=true; untyped=false; node=false</Date>
+   <Bytes>count=2; value=65 66; integer=false; int=false; string=false; boolean=false; dateTime=false; untyped=false; node=false</Bytes>
+   <Missing>DEFAULT-USED</Missing>
+   <SetHeaderReturn>count=0; value=; integer=false; int=false; string=false; boolean=false; dateTime=false; untyped=false; node=false</SetHeaderReturn>
+   <ExchangeParam>count=1; value=Exchange; integer=false; int=false; string=false; boolean=false; dateTime=false; untyped=false; node=false</ExchangeParam>
+</XsltBehaviourProbe>

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<SalesOrder>
+   <Header>
+      <ExternalReference>WEB-1001</ExternalReference>
+      <SoldTo>C-77</SoldTo>
+      <CustomerGroup>02</CustomerGroup>
+      <ShippingCondition>01</ShippingCondition>
+      <Source>WEBSHOP</Source>
+      <OrderDate>20261001</OrderDate>
+   </Header>
+   <Item>
+      <Position>000010</Position>
+      <Material>M-100</Material>
+      <Quantity>2</Quantity>
+      <NetAmount>19.90</NetAmount>
+   </Item>
+   <Item>
+      <Position>000020</Position>
+      <Material>M-200</Material>
+      <Quantity>1</Quantity>
+      <NetAmount>120.00</NetAmount>
+   </Item>
+   <TotalNetAmount>139.90</TotalNetAmount>
+</SalesOrder>

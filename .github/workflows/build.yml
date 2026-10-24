@@ -1,0 +1,103 @@
+name: build
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  engine-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "17", cache: maven }
+      - name: Unit tests (Saxon 9.9 and Saxon 12 engines)
+        run: mvn -B -f engine/pom.xml verify
+      - name: Workload on the JVM engines
+        run: |
+          python3 engine/native/workload.py java -jar engine/xml-he99/target/cpiwb-xml-he99.jar serve --stdio
+          python3 engine/native/workload.py java -jar engine/xml-he12/target/cpiwb-xml-he12.jar serve --stdio
+      - name: Demo project test cases
+        run: java -jar engine/xml-he99/target/cpiwb-xml-he99.jar test examples/demo-project/tests
+
+  desktop:
+    needs: engine-tests
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+          - os: macos-14        # Apple Silicon
+          - os: macos-13        # Intel
+          - os: ubuntu-22.04
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: graalvm/setup-graalvm@v1
+        with:
+          java-version: "21"
+          distribution: graalvm-community
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          cache: maven
+      - name: Build engine jars
+        run: mvn -B -f engine/pom.xml -DskipTests package
+      - name: Build native engines
+        shell: bash
+        run: |
+          for id in he99 he12; do
+            native-image --no-fallback -march=compatibility -jar engine/xml-$id/target/cpiwb-xml-$id.jar -o engine/native/out/cpiwb-xml-$id
+          done
+      - name: Smoke-test native engines
+        shell: bash
+        run: |
+          ext=""; [ "$RUNNER_OS" = "Windows" ] && ext=".exe"
+          python3 engine/native/workload.py engine/native/out/cpiwb-xml-he99$ext serve --stdio
+          python3 engine/native/workload.py engine/native/out/cpiwb-xml-he12$ext serve --stdio
+      - uses: actions/setup-node@v4
+        with: { node-version: "22", cache: npm, cache-dependency-path: app/package-lock.json }
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Linux build dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
+      - name: Install UI dependencies
+        working-directory: app
+        run: npm ci
+      - name: Type-check UI
+        working-directory: app
+        run: npm run check
+      - name: Bundle desktop app
+        working-directory: app
+        run: |
+          node scripts/prepare-sidecars.mjs
+          npx tauri build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cpi-workbench-${{ matrix.os }}
+          path: |
+            app/src-tauri/target/release/bundle/**/*.msi
+            app/src-tauri/target/release/bundle/**/*.exe
+            app/src-tauri/target/release/bundle/**/*.dmg
+            app/src-tauri/target/release/bundle/**/*.AppImage
+            app/src-tauri/target/release/bundle/**/*.deb
+          if-no-files-found: warn
+
+  ui-e2e:
+    needs: engine-tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "17", cache: maven }
+      - uses: actions/setup-node@v4
+        with: { node-version: "22", cache: npm, cache-dependency-path: app/package-lock.json }
+      - run: mvn -B -f engine/pom.xml -DskipTests package
+      - working-directory: app
+        run: npm ci && npm run build && npm install --no-save playwright && npx playwright install --with-deps chromium
+      - name: Browser smoke test (web mode)
+        run: |
+          java -jar engine/xml-he99/target/cpiwb-xml-he99.jar serve --http 7777 --ui app/dist &
+          sleep 3
+          cp -r examples/demo-project /tmp/demo-project
+          node app/e2e/smoke.mjs /tmp/demo-project

@@ -1,0 +1,17 @@
+{
+  "name": "Standard order",
+  "step": "xslt",
+  "profile": "saxon-he-9.9",
+  "xslt": "../../mappings/order-to-salesorder.xsl",
+  "input": {
+    "body": { "file": "input.xml" },
+    "headers": [ { "name": "SenderSystem", "value": "WEBSHOP", "type": "String" } ],
+    "properties": [ { "name": "CustomerGroup", "value": "02", "type": "String" } ]
+  },
+  "expect": {
+    "body": { "file": "expected-output.xml" },
+    "compare": "xml",
+    "headers": { "SAP_ApplicationID": "WEB-1001" },
+    "properties": { "ItemCount": "2" }
+  }
+}

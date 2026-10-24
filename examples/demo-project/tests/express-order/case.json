@@ -1,0 +1,12 @@
+{
+  "name": "Express order without sender header (parameter defaults)",
+  "step": "xslt",
+  "xslt": "../../mappings/order-to-salesorder.xsl",
+  "input": {
+    "body": "<Order number=\"WEB-1002\" date=\"2026-10-02\"><Customer id=\"C-1\"/><Shipping code=\"EXPRESS\"/><Items><Item sku=\"x-1\" qty=\"3\" price=\"1.5\"/></Items></Order>"
+  },
+  "expect": {
+    "body": { "text": "<SalesOrder><Header><ExternalReference>WEB-1002</ExternalReference><SoldTo>C-1</SoldTo><CustomerGroup>01</CustomerGroup><ShippingCondition>02</ShippingCondition><Source>UNKNOWN</Source><OrderDate>20261002</OrderDate></Header><Item><Position>000010</Position><Material>X-1</Material><Quantity>3</Quantity><NetAmount>4.50</NetAmount></Item><TotalNetAmount>4.50</TotalNetAmount></SalesOrder>" },
+    "properties": { "ItemCount": "1" }
+  }
+}

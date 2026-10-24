@@ -4,7 +4,7 @@ Status: **Draft v2 for review**. Nothing is implemented yet. Please review the o
 
 Working name: **CPI Workbench** (placeholder; rename freely).
 
-Changes in v2: native (non-Java) XSLT/XSD engines researched and adopted (§2, §3, §5); Rust/Tauri confirmed as the shell, Java confined to Groovy only; a research method based on REA's evidence rules added (§2.1, Appendix A).
+Changes in v2: native (non-Java) XSLT/XSD engines researched and adopted (§2, §3, §5); Rust/Tauri confirmed as the shell, Java confined to Groovy only; a research method based on REA's evidence rules added (§2.1, Appendix A). Footprint and performance design with modular packs and target budgets added (§3.3).
 
 ---
 
@@ -106,6 +106,52 @@ Key properties:
 - Groovy v1 and v2 run in **separate worker processes**: no leakage between Groovy 2 and 4; v1 can use a different Java version if calibration shows that (F4); a runaway script (endless loop, `System.exit`, OOM) kills only its worker.
 - Workers stay warm, so runs after the first one take milliseconds.
 
+### 3.3 Footprint and performance (design principle: lean by default)
+
+The JVM is accepted where there is no alternative (Groovy), but everything around it is built to keep the app small enough that anyone can install and run it locally, including on locked-down corporate laptops.
+
+**Modular delivery — pay only for what you use**
+
+| Module | Contents | Needed for |
+|---|---|---|
+| **Base app** (always) | Tauri shell, UI, go-xslt engine | XSLT, XSD, XPath |
+| **Saxon pack** (optional) | SaxonC-HE native library | Saxon-identical XSLT results, engine comparison |
+| **Groovy pack** (optional) | Trimmed JRE + Groovy 2.4.21 / 4.0.29 + Camel + API shims | Groovy simulation |
+
+Packs are downloaded on first use and cached, or installed from an **all-in-one offline installer** for machines without internet access or behind strict proxies. Base app and packs install **per user without admin rights** (Tauri's NSIS installer supports a current-user install on Windows; a portable ZIP is planned as well).
+
+**Keeping the JVM small**
+- Custom runtime built with `jlink`, containing only the modules Groovy, Camel and our shim need (determined with `jdeps`; Groovy uses `java.beans`, so `java.desktop` is probably unavoidable — to be measured), plus `--strip-debug --no-header-files --no-man-pages` and compression.
+- One shared JRE for v1 and v2 if calibration shows both run on the same Java version (F3/F4); a second JRE only if v1 really needs Java 8/11.
+- Maven artifacts trimmed to what is used (no Groovy modules like `groovy-swing`, `groovy-sql` unless a script needs them; extra Groovy modules can be added per project).
+
+**Keeping the JVM fast**
+- **Lazy start**: no JVM until the first Groovy run; XSLT-only users never start one.
+- **Warm workers** with **idle shutdown** (default 10 min, configurable) to give memory back.
+- **Class Data Sharing (AppCDS)** archive generated on first start, which reduces later JVM startup time.
+- **Compiled-script cache**: a script is compiled once per content hash and profile; re-runs with new input skip compilation.
+- Low-footprint JVM flags by default (`-XX:+UseSerialGC`, modest max heap such as 512 MB, configurable per project for large payloads).
+
+**Keeping the UI and IPC fast**
+- Large bodies are never pushed through JSON-RPC: above a threshold (e.g. 1 MB) the shell passes a temp-file path, and the UI shows large documents in a virtualized viewer instead of a full Monaco model.
+- XML engines run off the UI thread; long runs can be cancelled.
+- Windows uses the system WebView2 (preinstalled on current Windows 10/11); macOS uses the system WKWebView — no bundled browser engine.
+
+**Performance budgets** — these are *targets* to be checked in the spikes, not measurements:
+
+| Metric | Target |
+|---|---|
+| Base installer | ≤ 40 MB |
+| Groovy pack download | ≤ 70 MB |
+| App start to usable UI | ≤ 1 s |
+| Idle memory, no JVM running | ≤ 150 MB |
+| XSLT run, 1 MB input, typical mapping | ≤ 200 ms |
+| First Groovy run (cold JVM, with CDS) | ≤ 2 s |
+| Groovy re-run (warm, cached script) | ≤ 100 ms |
+| Memory of a warm Groovy worker | ≤ 250 MB |
+
+If a target cannot be met, the spike report says by how much and why, and we decide together whether to accept it.
+
 ---
 
 ## 4. Groovy Script Simulator
@@ -171,8 +217,8 @@ Anything not simulated throws a clear `UnsupportedInSimulator` error naming the 
 
 | Engine | Java? | Why | Limitations |
 |---|---|---|---|
-| **SaxonC-HE** (default for fidelity) | No (GraalVM native lib) | Same Saxon code base as CPI → same implementation-defined behaviour | Version 12/13 vs. CPI's reported 9.9 (F8); no schema awareness/streaming (EE features); integration via C FFI is untested (F14) |
-| **go-xslt** (second engine) | No (pure Go binary) | Small, fast, Apache-2.0, supports streaming, schema-awareness and XSD 1.1 — features that SaxonC-HE lacks but CPI's Saxon-EE has | Independent implementation → may differ from Saxon in edge cases; pre-1.0, single maintainer, no PRs accepted; extension functions Unknown (F12) |
+| **SaxonC-HE** (Saxon pack, reference for fidelity) | No (GraalVM native lib) | Same Saxon code base as CPI → same implementation-defined behaviour | Version 12/13 vs. CPI's reported 9.9 (F8); no schema awareness/streaming (EE features); integration via C FFI is untested (F14) |
+| **go-xslt** (base app, always available) | No (pure Go binary) | Small, fast, Apache-2.0, supports streaming, schema-awareness and XSD 1.1 — features that SaxonC-HE lacks but CPI's Saxon-EE has | Independent implementation → may differ from Saxon in edge cases; pre-1.0, single maintainer, no PRs accepted; extension functions Unknown (F12) |
 | Saxon-EE (bring-your-own, optional) | Yes (uses the Groovy JRE) | Closest to CPI if you own a licence | Commercial; nothing EE is shipped |
 
 **Engine comparison mode:** run one test on both native engines and diff the outputs. Agreement gives high confidence; a difference points to an edge case worth checking on the tenant. Because CPI is Saxon, a SaxonC-HE result is treated as the reference unless the stylesheet uses EE-only features, where go-xslt is the better proxy.
@@ -226,8 +272,7 @@ A versioned JSON file describing one CPI runtime:
 Shipped defaults: `cpi-groovy-1x`, `cpi-groovy-2x`, `cpi-xslt-saxonc-he`, `cpi-xslt-go-xslt`.
 
 ### 8.2 Dependency delivery
-- **Bundled**: everything in the installer — offline from the first run, bigger download.
-- **Fetched once**: base installer contains shell + native XML engines; JRE and Groovy jars are downloaded on first Groovy use and cached; offline afterwards.
+See §3.3: base app plus optional Saxon and Groovy packs, either downloaded once on first use (offline afterwards) or installed from the all-in-one offline installer.
 
 ### 8.3 Isolation and safety
 Each run: fresh exchange, configurable timeout (default 10 s), memory cap per worker, captured stdout/stderr. XML engines: no network, file access limited to the project folder (go-xslt has this by default, F10). Groovy: network allowed by default (CPI scripts may make HTTP calls), with an "offline sandbox" toggle.
@@ -275,7 +320,7 @@ my-project/
 
 | Phase | Scope | Result |
 |---|---|---|
-| **0 — Spikes** (risk first) | (a) Tauri ⇄ go-xslt sidecar round trip; (b) SaxonC-HE via Rust FFI on Windows + macOS (build, size, licence); (c) `cpi:setHeader` driver-stylesheet trick on both engines; (d) Groovy 2.4.21 on Java 17 vs. 8 with the v1 shim; (e) Groovy 4.0.29 + Camel 3.14 exchange wrapper; (f) installer size with and without JRE | Go/no-go per engine, measured sizes and startup times |
+| **0 — Spikes** (risk first) | (a) Tauri ⇄ go-xslt sidecar round trip; (b) SaxonC-HE via Rust FFI on Windows + macOS (build, size, licence); (c) `cpi:setHeader` driver-stylesheet trick on both engines; (d) Groovy 2.4.21 on Java 17 vs. 8 with the v1 shim; (e) Groovy 4.0.29 + Camel 3.14 exchange wrapper; (f) measure every budget in §3.3 (installer and pack sizes, `jlink` module set, cold/warm Groovy start with and without AppCDS, idle memory) on Windows and macOS | Go/no-go per engine, measured numbers against the §3.3 budgets |
 | **1 — MVP XSLT + XSD** (no Java) | XSLT simulator (params, `cpi:` functions, includes), XSD validation, XPath tester, engine comparison, save/load test cases | Usable daily for mappings |
 | **2 — Groovy** | Groovy v1 + v2 simulator, typed headers/properties, MPL view, console, errors, diff | Covers both mapping types |
 | **3 — Productivity** | Platform API mocks, compatibility linting, run-under-both-profiles, CLI runner, tenant calibration + probe cases | Regression testing, v1→v2 migration support |
@@ -290,7 +335,7 @@ Testing strategy: golden-file tests for every simulated API; a corpus of real CP
 ## 12. Open questions for you
 
 1. **Shell**: OK with Rust/Tauri + web UI (my recommendation), or Go + Wails?
-2. **Installer**: bundle everything (offline from first run, larger) or fetch the Groovy runtime on first use?
+2. **Packs and budgets**: OK with the modular delivery (base app + optional Saxon and Groovy packs, plus an all-in-one offline installer) and the target budgets in §3.3? Should SaxonC-HE be in the base app instead of a pack (better XSLT fidelity, but a larger base installer — its size is still unknown)?
 3. **Tenant calibration**: can you run the fingerprint and probe iFlows (§8.4) on a test tenant? This is the biggest lever for fidelity.
 4. **Script API v2**: can you provide the SAP API docs or the Script API jar for v2, so the method list (F6) is exact? I could not reach help.sap.com from this environment.
 5. **LinkedIn post**: is the tool you saw `tim-riep/go-xslt` (F11)? If it is a different one, please send the name or link.

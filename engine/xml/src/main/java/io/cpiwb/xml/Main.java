@@ -1,5 +1,7 @@
 package io.cpiwb.xml;
 
+import io.cpiwb.core.Cli;
+import io.cpiwb.core.Cli.Args;
 import io.cpiwb.core.Json;
 import io.cpiwb.core.RpcServer;
 
@@ -80,29 +82,9 @@ public final class Main {
     private static Map<String, Object> input(Args a) throws Exception {
         Map<String, Object> in = new LinkedHashMap<>();
         in.put("body", a.get("--in") == null ? "" : Files.readString(Path.of(a.get("--in")), StandardCharsets.UTF_8));
-        in.put("headers", typed(a.all("-H")));
-        in.put("properties", typed(a.all("-P")));
+        in.put("headers", Cli.typed(a.all("-H")));
+        in.put("properties", Cli.typed(a.all("-P")));
         return in;
-    }
-
-    private static List<Object> typed(List<String> specs) {
-        List<Object> out = new ArrayList<>();
-        for (String s : specs) {
-            int eq = s.indexOf('=');
-            if (eq < 1) {
-                throw new IllegalArgumentException("Expected name=value but got '" + s + "'");
-            }
-            String name = s.substring(0, eq);
-            String value = s.substring(eq + 1);
-            String type = "String";
-            int colon = value.lastIndexOf(':');
-            if (colon > 0 && io.cpiwb.core.TypedValue.TYPES.contains(value.substring(colon + 1))) {
-                type = value.substring(colon + 1);
-                value = value.substring(0, colon);
-            }
-            out.add(Json.o().with("name", name).with("value", value).with("type", type));
-        }
-        return out;
     }
 
     private static Path project(Args a, Path file) {
@@ -124,7 +106,7 @@ public final class Main {
         if (a.has("--json")) {
             System.out.println(Json.write(r));
         } else {
-            printDiagnostics(r);
+            Cli.printDiagnostics(r);
             for (Object m : Json.arr(r, "messages")) {
                 System.err.println("[xsl:message] " + ((Map<String, Object>) m).get("text"));
             }
@@ -157,7 +139,7 @@ public final class Main {
         if (a.has("--json")) {
             System.out.println(Json.write(r));
         } else {
-            printDiagnostics(r);
+            Cli.printDiagnostics(r);
             System.out.println(Json.bool(r, "valid", false) ? "valid" : "INVALID");
         }
         return Json.bool(r, "valid", false) ? 0 : 1;
@@ -177,7 +159,7 @@ public final class Main {
         if (a.has("--json")) {
             System.out.println(Json.write(r));
         } else {
-            printDiagnostics(r);
+            Cli.printDiagnostics(r);
             for (Object o : Json.arr(r, "items")) {
                 System.out.println(((Map<String, Object>) o).get("value"));
             }
@@ -189,102 +171,7 @@ public final class Main {
     private static int test(XmlEngine engine, Args a) throws Exception {
         String path = a.positional(1);
         Map<String, Object> r = engine.runTests(Path.of(path == null ? "tests" : path));
-        if (a.has("--json")) {
-            System.out.println(Json.write(r));
-        } else {
-            for (Object o : Json.arr(r, "results")) {
-                Map<String, Object> c = (Map<String, Object>) o;
-                System.out.printf("%-8s %s (%s ms)%n", c.get("status").toString().toUpperCase(), c.get("name"), c.get("ms"));
-                for (Object m : (List<Object>) c.get("messages")) {
-                    System.out.println("         " + m);
-                }
-            }
-            System.out.printf("%n%s passed, %s failed, %s skipped%n", r.get("passed"), r.get("failed"), r.get("skipped"));
-        }
-        return ((Number) r.get("failed")).intValue() == 0 ? 0 : 1;
+        return Cli.printTestResults(r, a.has("--json"));
     }
 
-    @SuppressWarnings("unchecked")
-    private static void printDiagnostics(Map<String, Object> r) {
-        for (Object d : Json.arr(r, "diagnostics")) {
-            Map<String, Object> m = (Map<String, Object>) d;
-            StringBuilder sb = new StringBuilder(String.valueOf(m.get("severity")).toUpperCase());
-            if (m.get("line") != null) {
-                sb.append(" line ").append(m.get("line"));
-                if (m.get("column") != null) {
-                    sb.append(':').append(m.get("column"));
-                }
-            }
-            if (m.get("code") != null) {
-                sb.append(" ").append(m.get("code"));
-            }
-            System.err.println(sb.append(": ").append(m.get("message")));
-        }
-    }
-
-    /** Tiny argument parser: --key value, repeated keys, positionals. */
-    private static final class Args {
-        private final String[] args;
-
-        Args(String[] args) {
-            this.args = args;
-        }
-
-        boolean has(String key) {
-            for (String s : args) {
-                if (s.equals(key)) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        String get(String key) {
-            for (int i = 0; i < args.length - 1; i++) {
-                if (args[i].equals(key)) {
-                    return args[i + 1];
-                }
-            }
-            return null;
-        }
-
-        String require(String key) {
-            String v = get(key);
-            if (v == null) {
-                throw new IllegalArgumentException("Missing " + key);
-            }
-            return v;
-        }
-
-        long num(String key, long def) {
-            String v = get(key);
-            return v == null || v.startsWith("--") ? def : Long.parseLong(v);
-        }
-
-        List<String> all(String key) {
-            List<String> out = new ArrayList<>();
-            for (int i = 0; i < args.length - 1; i++) {
-                if (args[i].equals(key)) {
-                    out.add(args[i + 1]);
-                }
-            }
-            return out;
-        }
-
-        String positional(int index) {
-            int n = 0;
-            for (int i = 0; i < args.length; i++) {
-                if (args[i].startsWith("-")) {
-                    if (i + 1 < args.length && !args[i].equals("--json") && !args[i].equals("--stdio")) {
-                        i++;
-                    }
-                    continue;
-                }
-                if (n++ == index) {
-                    return args[i];
-                }
-            }
-            return null;
-        }
-    }
 }

@@ -5,9 +5,10 @@
   import GroovyView from './components/GroovyView.svelte';
   import XsdView from './components/XsdView.svelte';
   import XPathView from './components/XPathView.svelte';
-  import TestsView from './components/TestsView.svelte';
   import Dialog from './components/Dialog.svelte';
-  import { app, xslt, groovy, init, runXslt, runXsd, runXpath, runGroovy, onGroovyProfileChange } from './lib/store.svelte';
+  import FileView from './components/FileView.svelte';
+  import { isDesktop } from './lib/engine';
+  import { app, xslt, groovy, fileView, init, runXslt, runXsd, runXpath, runGroovy, onGroovyProfileChange } from './lib/store.svelte';
 
   onMount(async () => {
     await init();
@@ -18,6 +19,10 @@
   function hasKind(kind: 'xslt' | 'groovy') {
     return app.profiles.some((p) => p.kind === kind && p.available);
   }
+
+  $effect(() => {
+    if (app.tool === 'xslt' || app.tool === 'groovy' || app.tool === 'xsd' || app.tool === 'xpath') app.stepTool = app.tool;
+  });
 
   let kind = $derived<'xslt' | 'groovy'>(app.tool === 'groovy' ? 'groovy' : 'xslt');
   let profile = $derived(app.profiles.find((p) => p.id === (kind === 'groovy' ? app.groovyProfile : app.profile)));
@@ -44,12 +49,17 @@
     if (id === 'xslt' && !xslt.result && hasKind('xslt')) runXslt();
   }
 
+  /** The webview's own menu (Back, Reload, Print) has nothing to offer in the desktop app; text fields keep theirs. */
+  function onContextMenu(e: MouseEvent) {
+    const t = e.target as HTMLElement | null;
+    if (isDesktop && !t?.closest('input, textarea, [contenteditable="true"]')) e.preventDefault();
+  }
+
   const tools = [
     { id: 'xslt', label: 'XSLT Mapping', needs: 'xslt' },
     { id: 'groovy', label: 'Groovy Script', needs: 'groovy' },
     { id: 'xsd', label: 'XSD Validation', needs: 'xslt' },
     { id: 'xpath', label: 'XPath', needs: 'xslt' },
-    { id: 'tests', label: 'Tests', needs: null },
   ] as const;
 </script>
 
@@ -62,9 +72,13 @@
           disabled={app.profiles.length > 0 && t.needs !== null && !hasKind(t.needs)}
           title={app.profiles.length > 0 && t.needs !== null && !hasKind(t.needs) ? 'The engine for this tool is not installed or not running' : ''}>{t.label}</button>
       {/each}
+      {#if fileView.path}
+        <button role="tab" class="file-tab" class:active={app.tool === 'file'} onclick={() => (app.tool = 'file')}
+          title={fileView.path}>{fileView.path.split('/').pop()}{#if fileView.content !== fileView.saved} ●{/if}</button>
+      {/if}
     </div>
     <div class="spacer"></div>
-    {#if app.tool !== 'tests'}
+    {#if app.tool !== 'file'}
       <label class="profile" title={profile?.note ?? ''}>Runtime
         {#if kind === 'groovy'}
         <select bind:value={app.groovyProfile} onchange={onProfile} aria-label="Runtime profile">
@@ -86,7 +100,7 @@
     {:else if app.tool === 'groovy'}
       <label class="live" title="Re-run on every change"><input type="checkbox" bind:checked={groovy.live} /> Live</label>
     {/if}
-    {#if app.tool !== 'tests'}
+    {#if app.tool !== 'file'}
       <button class="primary" onclick={run} title="Run (Ctrl+Enter)">▶ Run</button>
     {/if}
   </header>
@@ -105,7 +119,7 @@
       {:else if app.tool === 'groovy'}<GroovyView />
       {:else if app.tool === 'xsd'}<XsdView />
       {:else if app.tool === 'xpath'}<XPathView />
-      {:else}<TestsView />{/if}
+      {:else}<FileView />{/if}
     </main>
   </div>
 
@@ -122,6 +136,8 @@
 
 <Dialog />
 
+<svelte:window oncontextmenu={onContextMenu} />
+
 <style>
   .app { display: flex; flex-direction: column; height: 100vh; }
   .top { display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-bottom: 1px solid var(--border); background: var(--surface); flex-wrap: wrap; }
@@ -129,6 +145,7 @@
   .tools { display: flex; gap: 2px; flex-wrap: wrap; }
   .tools button { border: none; background: none; padding: 6px 10px; border-radius: 6px; color: var(--muted); font-weight: 600; font-size: 12px; cursor: pointer; }
   .tools button.active { background: var(--active); color: var(--accent); }
+  .tools .file-tab { font-family: var(--mono); font-weight: 500; border-left: 1px solid var(--border); border-radius: 0 6px 6px 0; }
   .tools button:disabled { opacity: 0.5; cursor: default; }
   .spacer { flex: 1; }
   .profile { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }

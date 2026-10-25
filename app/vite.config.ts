@@ -11,6 +11,9 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
     proxy: { '/rpc': 'http://127.0.0.1:7777' },
+    // Cargo rebuilds src-tauri/ under `tauri dev`; on Windows, watching its locked build output
+    // (target/debug/*.dll) crashes Vite with EBUSY. Tauri watches the Rust side itself.
+    watch: { ignored: ['**/src-tauri/**'] },
   },
   build: {
     target: 'es2022',

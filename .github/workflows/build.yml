@@ -1,7 +1,6 @@
 name: build
 
-# Windows and macOS minutes count 2x and 10x on private repositories, so pushes and pull requests
-# run on Linux only. Tags (v*) and manual runs (workflow_dispatch) run all three systems.
+# Pushes run only for main and v* tags, so a push to main does not also run again for an open pull request.
 on:
   push:
     branches: [main]
@@ -15,7 +14,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ fromJSON((github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')) && '["ubuntu-latest","windows-latest","macos-14"]' || '["ubuntu-latest"]') }}
+        os: [ubuntu-latest, windows-latest, macos-14]
     runs-on: ${{ matrix.os }}
     defaults:
       run: { shell: bash }
@@ -29,11 +28,11 @@ jobs:
         run: |
           python3 engine/native/workload.py java -jar engine/xml-he99/target/cpiwb-xml-he99.jar serve --stdio
           python3 engine/native/workload.py java -jar engine/xml-he12/target/cpiwb-xml-he12.jar serve --stdio
-      - name: Demo project test cases
+      - name: Regression test cases
         run: |
-          java -jar engine/xml-he99/target/cpiwb-xml-he99.jar test examples/demo-project/tests
-          java -jar engine/groovy-v1/target/cpiwb-groovy-v1.jar test examples/demo-project/tests
-          java -jar engine/groovy-v2/target/cpiwb-groovy-v2.jar test examples/demo-project/tests
+          java -jar engine/xml-he99/target/cpiwb-xml-he99.jar test testdata/regression-project/tests
+          java -jar engine/groovy-v1/target/cpiwb-groovy-v1.jar test testdata/regression-project/tests
+          java -jar engine/groovy-v2/target/cpiwb-groovy-v2.jar test testdata/regression-project/tests
 
   desktop:
     needs: engine-tests
@@ -41,7 +40,7 @@ jobs:
       fail-fast: false
       matrix:
         # macos-14 is Apple Silicon (Intel runners are no longer reliably available).
-        os: ${{ fromJSON((github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')) && '["windows-latest","macos-14","ubuntu-22.04"]' || '["ubuntu-22.04"]') }}
+        os: [windows-latest, macos-14, ubuntu-22.04]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -88,6 +87,9 @@ jobs:
       - name: Type-check UI
         working-directory: app
         run: npm run check
+      - name: UI unit tests (formatters)
+        working-directory: app
+        run: npm test
       - name: Stage sidecars
         working-directory: app
         env:
@@ -125,7 +127,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ fromJSON((github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')) && '["ubuntu-latest","windows-latest"]' || '["ubuntu-latest"]') }}
+        os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     defaults:
       run: { shell: bash }
@@ -150,7 +152,7 @@ jobs:
           # Forward slashes work for bash, Node and Java alike (cygpath exists only on Windows).
           tmp="$RUNNER_TEMP"; command -v cygpath >/dev/null && tmp="$(cygpath -m "$tmp")"
           demo="$tmp/demo-project"
-          cp -r examples/demo-project "$demo"
+          cp -r testdata/regression-project "$demo"
           node app/e2e/smoke.mjs "$demo"
-          rm -rf "$demo" && cp -r examples/demo-project "$demo"
+          rm -rf "$demo" && cp -r testdata/regression-project "$demo"
           node app/e2e/groovy.mjs "$demo"

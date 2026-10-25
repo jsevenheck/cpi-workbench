@@ -367,7 +367,7 @@ mod tests {
         if std::env::var_os("CPIWB_REQUIRE_ENGINES").is_none() {
             return;
         }
-        let demo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/demo-project");
+        let demo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testdata/regression-project");
         let project = std::env::temp_dir().join(format!("cpiwb-demo-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&project);
         copy_dir(&demo, &project);

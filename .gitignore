@@ -8,5 +8,6 @@ app/src-tauri/binaries/
 .DS_Store
 .idea/
 .vscode/
+.claude/settings.local.json
 engine/native/out/
 app/src-tauri/resources/

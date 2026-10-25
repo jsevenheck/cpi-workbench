@@ -111,7 +111,7 @@ public final class ScriptRunner {
                 scriptClass = compile(source, className, classpath, baseDir);
                 cache.put(key, scriptClass);
             } catch (MultipleCompilationErrorsException e) {
-                compileDiagnostics(e, diags);
+                compileDiagnostics(e, apiVersion, diags);
                 return finish(result, false, "compile", diags, null, null, platform, "", t0, 0, false, null);
             } catch (CompilationFailedException e) {
                 diags.add(Diagnostic.error(e.getMessage()));
@@ -519,11 +519,11 @@ public final class ScriptRunner {
 
     // ---------------------------------------------------------------- diagnostics
 
-    private static void compileDiagnostics(MultipleCompilationErrorsException e, List<Diagnostic> diags) {
+    private static void compileDiagnostics(MultipleCompilationErrorsException e, String apiVersion, List<Diagnostic> diags) {
         for (Object m : e.getErrorCollector().getErrors()) {
             if (m instanceof SyntaxErrorMessage) {
                 SyntaxException se = ((SyntaxErrorMessage) m).getCause();
-                diags.add(new Diagnostic(Diagnostic.Severity.ERROR, se.getOriginalMessage() + movedClassHint(se.getOriginalMessage()),
+                diags.add(new Diagnostic(Diagnostic.Severity.ERROR, se.getOriginalMessage() + movedClassHint(se.getOriginalMessage(), apiVersion),
                         null, null, se.getLine(), se.getStartColumn()));
             } else if (m instanceof ExceptionMessage) {
                 Exception cause = ((ExceptionMessage) m).getCause();
@@ -635,9 +635,17 @@ public final class ScriptRunner {
         }
     }
 
-    private static String movedClassHint(String message) {
+    private static String movedClassHint(String message, String apiVersion) {
+        String msg = message == null ? "" : message;
+        if ("v1".equals(apiVersion) && msg.contains("unable to resolve class com.sap.it.script.v2.")) {
+            return " (Script API v2 needs a Groovy Script 2.x step; this runtime is Groovy Script 1.x)";
+        }
+        if ("v1".equals(apiVersion) && java.util.regex.Pattern.compile("unable to resolve class groovy\\.xml\\.(slurpersupport\\.)?"
+                + "(XmlSlurper|XmlParser|XmlNodePrinter|GPathResult)\\b").matcher(msg).find()) {
+            return " (Groovy 2.4 has it in groovy.util; groovy.xml has it from Groovy 3 on, so in Groovy Script 2.x)";
+        }
         java.util.regex.Matcher m = java.util.regex.Pattern.compile("unable to resolve class (XmlSlurper|XmlParser|XmlNodePrinter|GPathResult)\\b")
-                .matcher(message == null ? "" : message);
+                .matcher(msg);
         if (!m.find()) {
             return "";
         }

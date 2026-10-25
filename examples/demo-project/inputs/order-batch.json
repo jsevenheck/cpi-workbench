@@ -1,0 +1,64 @@
+{
+  "salesOrderBatch": {
+    "header": {
+      "sourceSystem": "WEBSHOP-DE",
+      "orderCount": 2
+    },
+    "salesOrders": [
+      {
+        "orderId": "SO-1001",
+        "orderDate": "2026-10-20",
+        "customer": {
+          "id": "C-100",
+          "name": "Beispiel GmbH",
+          "country": "DE"
+        },
+        "items": [
+          {
+            "position": 10,
+            "productId": "MAT-100",
+            "description": "USB-C Adapter",
+            "quantity": 2,
+            "unitPrice": 15.50,
+            "lineAmount": 31.00
+          },
+          {
+            "position": 20,
+            "productId": "MAT-200",
+            "description": "USB-C Docking Station",
+            "quantity": 1,
+            "unitPrice": 49.90,
+            "lineAmount": 49.90
+          }
+        ],
+        "totalAmount": {
+          "value": 80.90,
+          "currency": "EUR"
+        }
+      },
+      {
+        "orderId": "SO-1002",
+        "orderDate": "2026-10-21",
+        "customer": {
+          "id": "C-200",
+          "name": "Musterhandel AG",
+          "country": "AT"
+        },
+        "items": [
+          {
+            "position": 10,
+            "productId": "MAT-300",
+            "description": "HDMI Cable",
+            "quantity": 3,
+            "unitPrice": 9.99,
+            "lineAmount": 29.97
+          }
+        ],
+        "totalAmount": {
+          "value": 29.97,
+          "currency": "EUR"
+        }
+      }
+    ]
+  }
+}

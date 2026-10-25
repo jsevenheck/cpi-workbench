@@ -4,10 +4,11 @@
 //   java -jar cpiwb-groovy-v2.jar serve --http 7779
 //   node app/e2e/groovy.mjs <projectDir> [screenshotDir]
 import { createRequire } from 'node:module';
+import fs from 'node:fs';
 import path from 'node:path';
 
 const { chromium } = createRequire(import.meta.url)('playwright');
-const project = path.resolve(process.argv[2] ?? 'examples/demo-project');
+const project = path.resolve(process.argv[2] ?? 'testdata/regression-project');
 const shots = process.argv[3];
 const url = (process.env.CPIWB_URL ?? 'http://127.0.0.1:7777/')
   + '?engines=groovy-1.x@http://127.0.0.1:7778,groovy-2.x@http://127.0.0.1:7779';
@@ -92,13 +93,26 @@ if (process.env.CPIWB_IFLOW_ZIP) {
   if (shots) await page.screenshot({ path: path.join(shots, 'g5-iflow.png') });
 }
 
-// 5) All tests across all engines.
-await page.getByRole('tab', { name: 'Tests' }).click();
-await page.getByRole('button', { name: 'Run all tests' }).click();
-await page.locator('.sum').waitFor({ timeout: 30000 });
-const sum = await page.locator('.sum').innerText();
-if (!/6 passed/.test(sum) || !/0 failed/.test(sum)) fail('test summary: ' + sum);
-if (shots) await page.screenshot({ path: path.join(shots, 'g4-tests.png') });
+// 5) A file from inputs/ opens as the Groovy input body.
+fs.mkdirSync(path.join(project, 'inputs'), { recursive: true });
+fs.writeFileSync(path.join(project, 'inputs/g-input.xml'), '<Order id="g-input-1"/>\n');
+await page.getByTitle('Reload file list').click();
+await page.locator('.tree .file', { hasText: 'g-input.xml' }).click();
+await page.locator('section.input .view-lines', { hasText: 'g-input-1' }).waitFor({ timeout: 10000 })
+  .catch(() => fail('inputs/g-input.xml not loaded as Groovy input'));
+await page.locator('section.input h2', { hasText: '· g-input.xml' }).waitFor({ timeout: 5000 })
+  .catch(() => fail('Groovy input header does not name g-input.xml'));
+
+// 6) A JSON input opens in the Groovy tab, even from the XSLT tab, and is formatted as JSON.
+fs.writeFileSync(path.join(project, 'inputs/g-input.json'), '{"order":{"id":"j-1","items":[1,2]}}\n');
+await page.getByTitle('Reload file list').click();
+await page.getByRole('tab', { name: 'XSLT Mapping' }).click();
+await page.locator('.tree .file', { hasText: 'g-input.json' }).click();
+await page.locator('section.script').waitFor({ timeout: 10000 })
+  .catch(() => fail('JSON input did not open in the Groovy tab'));
+await page.locator('section.input').getByRole('button', { name: 'Format' }).click();
+await page.locator('section.input .view-lines', { hasText: '"items": [' }).waitFor({ timeout: 5000 })
+  .catch(() => fail('Format did not pretty-print the JSON input'));
 
 if (errors.length) fail('browser errors: ' + errors.join(' | '));
 await browser.close();

@@ -7,6 +7,21 @@ install it and open a project folder. Any folder works; **Init** adds `mappings/
 `scripts/`, `tests/` and example files in `platform/`.
 
 * Open a `.xsl` or `.groovy` file in the tree and enter the input body, headers and properties on the left.
+  Opening a Groovy script picks the runtime from its Script API import; for a pasted script, choose
+  it under **Runtime**.
+* **Format** above a mapping or script re-indents it. It only moves whitespace that cannot reach the
+  result: text in XSLT, `xsl:text`, `xml:space="preserve"`, CDATA, literal attribute values and
+  multi-line Groovy strings keep theirs.
+* **Save** writes the open mapping, script or schema; **Save as…** writes it under a new name
+  (`<name>-copy` is suggested) and leaves the open file as it is.
+* Right-click a file in the tree to open, rename, copy or delete it, or to copy its path.
+* Drag the bars between input, mapping or script and output to resize them; double-click a bar to reset.
+* **Save…** above the input body stores it under `inputs/`. Clicking a file there, or **Use as input**
+  in a file's context menu, loads it as the input body of the current tool. A JSON file always goes
+  to the Groovy tab, because only a script takes a JSON body; **Format** there pretty-prints JSON
+  too.
+* Other files, such as `platform/*.json` or `cpi-workbench.json`, open in a **File** tab with their own
+  editor. They no longer replace the input body.
 * The output updates live, or press **Ctrl+Enter**. Compile and runtime errors are marked in the editor.
 * **Parameters** (XSLT) shows how each `xsl:param` was bound: header, property or default.
 * **MPL**, **Console** and **API calls** (Groovy) show message processing log entries, `println`
@@ -14,14 +29,11 @@ install it and open a project folder. Any folder works; **Init** adds `mappings/
 * **Compare** also runs the input on the other runtime of the same kind (Saxon-HE 9.9 ↔ 12,
   Groovy Script 1.x ↔ 2.x) and lists what differs: status, headers, properties and a body diff.
   This helps before you move a script from 1.x to 2.x.
-* **Save as test** stores the input, the mapping or script reference and the current output as a
-  regression test (see [Test cases](test-cases.md)). Opening a test case loads it into the editor.
-  Inputs only a case file can hold (attachments, SOAP headers, platform overrides) are kept while
-  the case is open and are shown below the input.
-* **Tests** runs all test cases of the project, each on the engine its profile names.
+* Test cases (see [Test cases](test-cases.md)) are written by hand and run from the command line;
+  the app has no test runner. Opening a `case.json` loads the case into its editor view. Inputs only
+  a case file can hold (attachments, SOAP headers, platform overrides) are kept while the case is
+  open and are shown below the input.
 * **XSD** validates a document against a schema; **XPath** evaluates an expression (1.0 or 3.1).
-  XSD test cases open in the XSD view too. Saving one from there stores the verdict (valid or
-  not); add `errorContains` to `case.json` by hand if a message should be checked.
 * **Import iFlow** unpacks an iFlow exported from Integration Suite (zip) into `iflows/` and lists
   its Groovy Script, XSLT Mapping and XML Validator steps. Clicking a step opens its file with the
   step's function name and script version. Steps that choose their mapping from a header at runtime
@@ -41,11 +53,11 @@ The Groovy runtime starts only when the Groovy tab is used and stops after 10 id
 
 ```sh
 java -jar cpiwb-groovy-v1.jar run --script scripts/enrich.groovy --in input.xml -H SenderSystem=ERP
-java -jar cpiwb-groovy-v2.jar test examples/demo-project/tests
+java -jar cpiwb-groovy-v2.jar test testdata/regression-project/tests
 cpiwb-xml xslt --xsl mappings/order.xsl --in input.xml -H SenderSystem=ERP -P Count=3:Integer
 cpiwb-xml validate --xsd schemas/order.xsd --in output.xml
 cpiwb-xml xpath --expr "//Item/@sku" --in input.xml --version 3.1
-cpiwb-xml test examples/demo-project/tests        # exit code 1 if a case fails
+cpiwb-xml test testdata/regression-project/tests        # exit code 1 if a case fails
 ```
 
 `-H` sets a header and `-P` an exchange property, as `name=value[:Type]`. The types are listed in

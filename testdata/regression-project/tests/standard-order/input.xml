@@ -1,0 +1,8 @@
+<Order number="WEB-1001" date="2026-10-01">
+  <Customer id="C-77"/>
+  <Shipping code="STANDARD"/>
+  <Items>
+    <Item sku="m-100" qty="2" price="9.95"/>
+    <Item sku="m-200" qty="1" price="120"/>
+  </Items>
+</Order>

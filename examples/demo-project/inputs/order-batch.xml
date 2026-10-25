@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<SalesOrderBatch xmlns="urn:demo:integration:orders:target:v1">
+   <Header>
+      <SourceSystem>WEBSHOP-DE</SourceSystem>
+      <OrderCount>2</OrderCount>
+   </Header>
+   <SalesOrders>
+      <SalesOrder>
+         <OrderID>SO-1001</OrderID>
+         <OrderDate>2026-10-20</OrderDate>
+         <Customer>
+            <ID>C-100</ID>
+            <Name>Beispiel GmbH</Name>
+            <Country>DE</Country>
+         </Customer>
+         <Items>
+            <Item>
+               <Position>10</Position>
+               <ProductID>MAT-100</ProductID>
+               <Description>USB-C Adapter</Description>
+               <Quantity>2</Quantity>
+               <UnitPrice>15.50</UnitPrice>
+               <LineAmount>31.00</LineAmount>
+            </Item>
+            <Item>
+               <Position>20</Position>
+               <ProductID>MAT-200</ProductID>
+               <Description>USB-C Docking Station</Description>
+               <Quantity>1</Quantity>
+               <UnitPrice>49.90</UnitPrice>
+               <LineAmount>49.90</LineAmount>
+            </Item>
+         </Items>
+         <TotalAmount currency="EUR">80.90</TotalAmount>
+      </SalesOrder>
+      <SalesOrder>
+         <OrderID>SO-1002</OrderID>
+         <OrderDate>2026-10-21</OrderDate>
+         <Customer>
+            <ID>C-200</ID>
+            <Name>Musterhandel AG</Name>
+            <Country>AT</Country>
+         </Customer>
+         <Items>
+            <Item>
+               <Position>10</Position>
+               <ProductID>MAT-300</ProductID>
+               <Description>HDMI Cable</Description>
+               <Quantity>3</Quantity>
+               <UnitPrice>9.99</UnitPrice>
+               <LineAmount>29.97</LineAmount>
+            </Item>
+         </Items>
+         <TotalAmount currency="EUR">29.97</TotalAmount>
+      </SalesOrder>
+   </SalesOrders>
+</SalesOrderBatch>

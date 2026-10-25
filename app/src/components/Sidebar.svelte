@@ -1,11 +1,23 @@
 <script lang="ts">
   import { isDesktop, pickFolder, pickZip } from '../lib/engine';
   import { app, open, closeProject, openFile, refreshFiles, writeFile, ask, xslt, xsd, groovy, SAMPLE_GROOVY_V1, SAMPLE_GROOVY_V2,
-    importIflow, openIflowStep, loadIflowSteps } from '../lib/store.svelte';
+    importIflow, openIflowStep, loadIflowSteps, deleteFile, copyFile, useAsInput, fileView } from '../lib/store.svelte';
 
   let dirInput = $state('');
   let filter = $state('');
   let collapsed = $state<Record<string, boolean>>({});
+  let menu = $state<{ x: number; y: number; path: string } | null>(null);
+
+  function openMenu(e: MouseEvent, path: string) {
+    e.preventDefault();
+    menu = { x: Math.min(e.clientX, window.innerWidth - 180), y: Math.min(e.clientY, window.innerHeight - 160), path };
+  }
+
+  function pick(action: (path: string) => unknown) {
+    const path = menu!.path;
+    menu = null;
+    action(path);
+  }
 
   async function openDialog() {
     try {
@@ -57,7 +69,7 @@
       if (!g.has(top)) g.set(top, []);
       g.get(top)!.push(f.path);
     }
-    const order = ['mappings', 'scripts', 'schemas', 'tests', 'platform', 'iflows'];
+    const order = ['mappings', 'scripts', 'schemas', 'inputs', 'tests', 'platform', 'iflows'];
     return [...g.entries()].sort((a, b) => (order.indexOf(a[0]) + 1 || 99) - (order.indexOf(b[0]) + 1 || 99) || a[0].localeCompare(b[0]));
   });
 
@@ -66,9 +78,14 @@
     return rest;
   }
 
+  /** Marks the files of the tab in front: its input, its mapping, script or schema, and its case. */
   function isActive(path: string) {
-    return path === xslt.mappingPath || path === xsd.schemaPath || path === xslt.casePath
-      || path === groovy.scriptPath || path === groovy.casePath || path === xsd.casePath;
+    if (app.tool === 'file') return path === fileView.path;
+    if (path === app.inputPaths[app.stepTool]) return true;
+    if (app.stepTool === 'xslt') return path === xslt.mappingPath || path === xslt.casePath;
+    if (app.stepTool === 'groovy') return path === groovy.scriptPath || path === groovy.casePath;
+    if (app.stepTool === 'xsd') return path === xsd.schemaPath || path === xsd.casePath;
+    return false;
   }
 </script>
 
@@ -112,7 +129,8 @@
         <button class="group" onclick={() => (collapsed[group] = !collapsed[group])}>{collapsed[group] ? '▸' : '▾'} {group === '.' ? '(root)' : group}</button>
         {#if !collapsed[group]}
           {#each paths as p}
-            <button class="file" class:active={isActive(p)} title={p} onclick={() => openFile(p)}>{label(p, group)}</button>
+            <button class="file" class:active={isActive(p)} class:menu-open={menu?.path === p} title={p} onclick={() => openFile(p)}
+              oncontextmenu={(e) => openMenu(e, p)}>{label(p, group)}</button>
           {/each}
         {/if}
       {/each}
@@ -120,6 +138,23 @@
     </nav>
   {/if}
 </aside>
+
+<svelte:window onkeydown={(e) => { if (menu && e.key === 'Escape') menu = null; }} onblur={() => (menu = null)} onresize={() => (menu = null)} />
+
+{#if menu}
+  <div class="menu-backdrop" role="presentation" onclick={() => (menu = null)} oncontextmenu={(e) => { e.preventDefault(); menu = null; }}></div>
+  <div class="menu" role="menu" aria-label={`Actions for ${menu.path}`} style:left="{menu.x}px" style:top="{menu.y}px">
+    <button role="menuitem" onclick={() => pick(openFile)}>Open</button>
+    {#if /\.(xml|json|txt|csv)$/i.test(menu.path)}
+      <button role="menuitem" onclick={() => pick(useAsInput)}>Use as input</button>
+    {/if}
+    <button role="menuitem" onclick={() => pick((p) => copyFile(p, true))}>Rename…</button>
+    <button role="menuitem" onclick={() => pick((p) => copyFile(p, false))}>Copy…</button>
+    <button role="menuitem" onclick={() => pick((p) => navigator.clipboard?.writeText(p))}>Copy path</button>
+    <hr />
+    <button role="menuitem" class="danger" onclick={() => pick(deleteFile)}>Delete…</button>
+  </div>
+{/if}
 
 <style>
   .side { width: 240px; min-width: 200px; border-right: 1px solid var(--border); display: flex; flex-direction: column; background: var(--surface); min-height: 0; }
@@ -135,6 +170,13 @@
   .file { display: block; width: 100%; text-align: left; border: none; background: none; color: var(--fg); font-size: 12px; padding: 3px 10px 3px 22px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: var(--mono); }
   .file:hover { background: var(--hover); }
   .file.active { background: var(--active); color: var(--accent); }
+  .file.menu-open { outline: 1px solid var(--accent); outline-offset: -1px; }
+  .menu-backdrop { position: fixed; inset: 0; z-index: 90; }
+  .menu { position: fixed; z-index: 91; min-width: 160px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 4px; box-shadow: 0 6px 20px rgba(0,0,0,.3); display: flex; flex-direction: column; }
+  .menu button { border: none; background: none; color: var(--fg); text-align: left; font-size: 12px; padding: 5px 10px; border-radius: 4px; cursor: pointer; }
+  .menu button:hover, .menu button:focus-visible { background: var(--hover); }
+  .menu .danger { color: var(--err); }
+  .menu hr { border: none; border-top: 1px solid var(--border); margin: 4px 0; }
   .steps { max-height: 30%; overflow: auto; border-bottom: 1px solid var(--border); padding-bottom: 4px; }
   .group.static { cursor: default; display: flex; align-items: center; justify-content: space-between; }
   .step { font-family: inherit; padding-left: 12px; }

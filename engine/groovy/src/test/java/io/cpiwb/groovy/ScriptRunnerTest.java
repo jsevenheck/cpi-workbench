@@ -213,6 +213,19 @@ class ScriptRunnerTest {
     }
 
     @Test
+    void v2ImportsOnTheV1RuntimeExplainTheCompileError() throws Exception {
+        String s = "import com.sap.it.script.v2.api.Message\nimport groovy.xml.XmlSlurper\n"
+                + "def Message processData(Message message) {\n"
+                + "  message.setProperty('root', new XmlSlurper().parseText(message.getBody(String)).name())\n"
+                + "  return message\n}";
+        Map<String, Object> r = run(s, in("<a/>", List.of(), List.of()), null);
+        String json = Json.write(r);
+        assertEquals(V2, Json.bool(r, "ok", false), json);
+        assertEquals(!V2, json.contains("Script API v2 needs a Groovy Script 2.x step"), json);
+        assertEquals(!V2, json.contains("groovy.xml has it from Groovy 3 on"), json);
+    }
+
+    @Test
     void partnerDirectoryAndKeystore(@TempDir Path tmp) throws Exception {
         Path platformDir = Files.createDirectories(tmp.resolve("platform"));
         Path p12 = Path.of(getClass().getResource("/platform/test-keystore.p12").toURI());

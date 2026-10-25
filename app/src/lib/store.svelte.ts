@@ -32,13 +32,19 @@ export const SAMPLE_INPUT = `<Order id="4711">
 </Order>
 `;
 
+export type StepTool = 'xslt' | 'groovy' | 'xsd' | 'xpath';
+
 export const app = $state({
   project: null as null | { root: string; files: FileEntry[] },
   profiles: [] as ProfileInfo[],
   engineInfo: null as any,
   profile: DEFAULT_PROFILE as Profile,
   groovyProfile: 'groovy-1.x' as Profile,
-  tool: 'xslt' as 'xslt' | 'groovy' | 'xsd' | 'xpath' | 'tests',
+  tool: 'xslt' as StepTool | 'file',
+  /** The step tool last shown; inputs opened from the tree go to its body. */
+  stepTool: 'xslt' as StepTool,
+  /** The inputs/ file last loaded or saved as each tool's input body. */
+  inputPaths: {} as Partial<Record<StepTool, string>>,
   status: '',
   error: '',
   busy: false,
@@ -167,12 +173,6 @@ export const xpath = $state({
   running: false,
 });
 
-export const tests = $state({
-  results: [] as any[],
-  summary: null as null | { passed: number; failed: number; skipped: number },
-  running: false,
-});
-
 /** In-app prompt (window.prompt is not available in every desktop webview). */
 export const dialog = $state({
   open: false,
@@ -180,12 +180,22 @@ export const dialog = $state({
   value: '',
   checkboxLabel: '' as string,
   checked: true,
+  /** false: a yes/no question without a text field. */
+  input: true,
   resolve: null as null | ((r: { value: string; checked: boolean } | null) => void),
 });
 
 export function ask(title: string, value: string, checkboxLabel = ''): Promise<{ value: string; checked: boolean } | null> {
   return new Promise((resolve) => {
-    Object.assign(dialog, { open: true, title, value, checkboxLabel, checked: true, resolve });
+    Object.assign(dialog, { open: true, title, value, checkboxLabel, checked: true, input: true, resolve });
+  });
+}
+
+/** In-app confirmation (window.confirm is not available in every desktop webview). */
+export function confirm(title: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    Object.assign(dialog, { open: true, title, value: '', checkboxLabel: '', checked: true, input: false,
+      resolve: (r: unknown) => resolve(r !== null) });
   });
 }
 
@@ -193,7 +203,7 @@ export function closeDialog(ok: boolean) {
   const r = dialog.resolve;
   dialog.open = false;
   dialog.resolve = null;
-  r?.(ok && dialog.value.trim() ? { value: dialog.value.trim(), checked: dialog.checked } : null);
+  r?.(ok && (!dialog.input || dialog.value.trim()) ? { value: dialog.value.trim(), checked: dialog.checked } : null);
 }
 
 function fail(e: unknown) {
@@ -246,6 +256,8 @@ export function closeProject() {
   groovy.caseExtras = null;
   xsd.schemaPath = null;
   xsd.casePath = null;
+  closeFileView();
+  app.inputPaths = {};
   app.iflowSteps = [];
 }
 
@@ -305,6 +317,7 @@ export async function openFile(path: string) {
       xslt.savedMapping = content;
       xslt.casePath = null;
       app.tool = 'xslt';
+      rerunIfLive('xslt');
     } else if (lower.endsWith('.groovy') || lower.endsWith('.gsh')) {
       groovy.scriptPath = path;
       groovy.script = content;
@@ -314,18 +327,20 @@ export async function openFile(path: string) {
       if (content.includes('com.sap.it.script.v2.api') && hasProfile('groovy-2.x')) app.groovyProfile = 'groovy-2.x';
       else if (content.includes('com.sap.gateway.ip.core.customdev.util') && hasProfile('groovy-1.x')) app.groovyProfile = 'groovy-1.x';
       app.tool = 'groovy';
+      rerunIfLive('groovy');
     } else if (lower.endsWith('.xsd')) {
       xsd.schemaPath = path;
       xsd.schema = content;
       xsd.savedSchema = content;
       xsd.casePath = null;
       app.tool = 'xsd';
+    } else if (path.startsWith('inputs/')) {
+      setInput(path, content);
     } else {
-      if (app.tool === 'xsd') xsd.body = content;
-      else if (app.tool === 'xpath') xpath.body = content;
-      else if (app.tool === 'groovy') groovy.body = content;
-      else xslt.body = content;
-      app.status = `Loaded ${path} as input body`;
+      fileView.path = path;
+      fileView.content = content;
+      fileView.saved = content;
+      app.tool = 'file';
     }
   } catch (e) {
     fail(e);
@@ -348,6 +363,128 @@ export async function saveMapping(): Promise<boolean> {
   app.status = 'Saved ' + path;
   await refreshFiles();
   return true;
+}
+
+/** A project file that is not a step (platform data, configuration, iFlow files) open in the File tab. */
+export const fileView = $state({ path: null as string | null, content: '', saved: '' });
+
+export function closeFileView() {
+  fileView.path = null;
+  fileView.content = fileView.saved = '';
+  if (app.tool === 'file') app.tool = app.stepTool;
+}
+
+export async function saveFileView(): Promise<boolean> {
+  if (!fileView.path) return false;
+  await writeFile(fileView.path, fileView.content);
+  fileView.saved = fileView.content;
+  app.status = 'Saved ' + fileView.path;
+  return true;
+}
+
+function stepBody(tool: StepTool) {
+  return tool === 'xsd' ? xsd.body : tool === 'xpath' ? xpath.body : tool === 'groovy' ? groovy.body : xslt.body;
+}
+
+function setInput(path: string, content: string) {
+  // XSLT, XSD and XPath read XML only; a JSON body can only feed a Groovy script.
+  const json = /\.json$/i.test(path) || /^\s*[[{]/.test(content);
+  if (json && !app.profiles.some((p) => p.kind === 'groovy' && p.available)) {
+    app.error = `${path} is JSON: only a Groovy script takes a JSON body, and no Groovy engine is available.`;
+    return;
+  }
+  const tool: StepTool = json ? 'groovy' : app.stepTool;
+  if (tool === 'xsd') xsd.body = content;
+  else if (tool === 'xpath') xpath.body = content;
+  else if (tool === 'groovy') groovy.body = content;
+  else xslt.body = content;
+  app.inputPaths[tool] = path;
+  app.tool = tool;
+  rerunIfLive(tool);
+  app.status = `Loaded ${path} as input body`;
+}
+
+/** Loads any file as the input body of the current step tool. */
+export async function useAsInput(path: string) {
+  try {
+    setInput(path, await readFile(path));
+  } catch (e) {
+    fail(e);
+  }
+}
+
+/** Saves the input body of the current step tool under inputs/, so it survives opening other files. */
+export async function saveInput() {
+  if (!app.project) {
+    app.error = 'Open a project folder to save files.';
+    return;
+  }
+  const body = stepBody(app.stepTool);
+  const ext = /^\s*[[{]/.test(body) ? 'json' : /^\s*</.test(body) ? 'xml' : 'txt';
+  const r = await ask('Save input body as (path inside the project)', `inputs/input.${ext}`);
+  if (!r) return;
+  try {
+    if (app.project.files.some((f) => f.path === r.value) && !(await confirm(`${r.value} exists. Overwrite it?`))) return;
+    await writeFile(r.value, body);
+    app.inputPaths[app.stepTool] = r.value;
+    app.status = 'Saved input as ' + r.value;
+    await refreshFiles();
+  } catch (e) {
+    fail(e);
+  }
+}
+
+/** Points the editors that show `from` to `to`; with `to` null the editor keeps the text as unsaved. */
+function movePaths(from: string, to: string | null) {
+  if (xslt.mappingPath === from) {
+    xslt.mappingPath = to;
+    if (!to) xslt.savedMapping = '';
+  }
+  if (groovy.scriptPath === from) {
+    groovy.scriptPath = to;
+    if (!to) groovy.savedScript = '';
+  }
+  if (xsd.schemaPath === from) {
+    xsd.schemaPath = to;
+    if (!to) xsd.savedSchema = '';
+  }
+  if (xslt.casePath === from) xslt.casePath = to;
+  if (groovy.casePath === from) groovy.casePath = to;
+  if (xsd.casePath === from) xsd.casePath = to;
+  if (fileView.path === from) {
+    if (to) fileView.path = to;
+    else closeFileView();
+  }
+}
+
+export async function deleteFile(path: string) {
+  if (!(await confirm(`Delete ${path}?`))) return;
+  try {
+    await call('file.delete', { path });
+    movePaths(path, null);
+    app.status = 'Deleted ' + path;
+    await refreshFiles();
+  } catch (e) {
+    fail(e);
+  }
+}
+
+/** Rename and copy go through read and write: the engines have no move call, and the tree lists text files only. */
+export async function copyFile(path: string, move: boolean) {
+  const r = await ask(move ? `Rename ${path} to` : `Copy ${path} to`, path);
+  if (!r || r.value === path) return;
+  try {
+    if (app.project?.files.some((f) => f.path === r.value) && !(await confirm(`${r.value} exists. Overwrite it?`))) return;
+    await writeFile(r.value, await readFile(path));
+    if (move) {
+      await call('file.delete', { path });
+      movePaths(path, r.value);
+    }
+    app.status = (move ? 'Renamed ' : 'Copied ') + path + ' to ' + r.value;
+    await refreshFiles();
+  } catch (e) {
+    fail(e);
+  }
 }
 
 function hasProfile(id: Profile) {
@@ -387,6 +524,65 @@ export async function saveSchema(): Promise<boolean> {
   await writeFile(xsd.schemaPath!, xsd.schema);
   xsd.savedSchema = xsd.schema;
   app.status = 'Saved ' + xsd.schemaPath;
+  await refreshFiles();
+  return true;
+}
+
+/** A free name next to the open file: mappings/x.xsl -> mappings/x-copy.xsl, -copy-2, ... */
+function copyName(path: string | null, fallback: string): string {
+  const p = path ?? fallback;
+  const dot = p.lastIndexOf('.');
+  const [stem, ext] = dot > p.lastIndexOf('/') ? [p.slice(0, dot), p.slice(dot)] : [p, ''];
+  const taken = new Set(app.project?.files.map((f) => f.path) ?? []);
+  let name = `${stem}-copy${ext}`;
+  for (let n = 2; taken.has(name); n++) name = `${stem}-copy-${n}${ext}`;
+  return path ? name : p;
+}
+
+/** Asks for a new path; an existing file is only overwritten after a second question. */
+async function askNewPath(what: string, path: string | null, fallback: string): Promise<string | null> {
+  if (!app.project) {
+    app.error = 'Open a project folder to save files.';
+    return null;
+  }
+  const r = await ask(`Save ${what} as (path inside the project)`, copyName(path, fallback));
+  if (!r) return null;
+  if (r.value !== path && app.project.files.some((f) => f.path === r.value) && !(await confirm(`${r.value} exists. Overwrite it?`))) return null;
+  return r.value;
+}
+
+export async function saveMappingAs(): Promise<boolean> {
+  const path = await askNewPath('mapping', xslt.mappingPath, 'mappings/mapping.xsl');
+  if (!path) return false;
+  await writeFile(path, xslt.mapping);
+  xslt.mappingPath = path;
+  xslt.savedMapping = xslt.mapping;
+  xslt.casePath = null;
+  app.status = 'Saved ' + path;
+  await refreshFiles();
+  return true;
+}
+
+export async function saveScriptAs(): Promise<boolean> {
+  const path = await askNewPath('script', groovy.scriptPath, 'scripts/script.groovy');
+  if (!path) return false;
+  await writeFile(path, groovy.script);
+  groovy.scriptPath = path;
+  groovy.savedScript = groovy.script;
+  groovy.casePath = null;
+  app.status = 'Saved ' + path;
+  await refreshFiles();
+  return true;
+}
+
+export async function saveSchemaAs(): Promise<boolean> {
+  const path = await askNewPath('schema', xsd.schemaPath, 'schemas/schema.xsd');
+  if (!path) return false;
+  await writeFile(path, xsd.schema);
+  xsd.schemaPath = path;
+  xsd.savedSchema = xsd.schema;
+  xsd.casePath = null;
+  app.status = 'Saved ' + path;
   await refreshFiles();
   return true;
 }
@@ -431,6 +627,12 @@ async function compareRun<R>(method: string, params: any, current: Profile): Pro
   } catch (e) {
     return { profile: other, result: null, error: (e as Error).message ?? String(e) };
   }
+}
+
+/** A mapping, script or input loaded from a file re-runs like a change typed in the editor. */
+function rerunIfLive(tool: StepTool) {
+  if (tool === 'xslt' && xslt.live) void runXslt();
+  else if (tool === 'groovy' && groovy.live) void runGroovy();
 }
 
 export async function runXslt() {
@@ -519,14 +721,6 @@ export async function formatXml(text: string): Promise<string> {
 
 // ------------------------------------------------------------------ test cases
 
-function relative(fromDir: string, to: string): string {
-  const a = fromDir.split('/').filter(Boolean);
-  const b = to.split('/').filter(Boolean);
-  let i = 0;
-  while (i < a.length && i < b.length && a[i] === b[i]) i++;
-  return [...a.slice(i).map(() => '..'), ...b.slice(i)].join('/');
-}
-
 function joinPath(dir: string, rel: string): string {
   const parts = [...dir.split('/').filter(Boolean)];
   for (const p of rel.split('/')) {
@@ -534,90 +728,6 @@ function joinPath(dir: string, rel: string): string {
     else if (p !== '.' && p !== '') parts.push(p);
   }
   return parts.join('/');
-}
-
-export function slug(name: string) {
-  return name.trim().toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'case';
-}
-
-export async function saveCase(name: string, withExpected: boolean) {
-  if (!app.project) throw new Error('Open a project folder to save test cases.');
-  if (!xslt.mappingPath || xslt.mapping !== xslt.savedMapping) {
-    if (!(await saveMapping())) return;
-  }
-  const dir = 'tests/' + slug(name);
-  const tc: any = {
-    name,
-    step: 'xslt',
-    profile: app.profile,
-    xslt: relative(dir, xslt.mappingPath!),
-    input: { body: { file: 'input.xml' }, headers: clean(xslt.headers), properties: clean(xslt.properties) },
-  };
-  if (xslt.paramPrecedence !== 'header' || xslt.missingParameter !== 'default') {
-    tc.options = { paramPrecedence: xslt.paramPrecedence, missingParameter: xslt.missingParameter };
-  }
-  await writeFile(dir + '/input.xml', xslt.body);
-  if (withExpected) {
-    const compare = xslt.result?.outputMethod === 'xml' || !xslt.result?.outputMethod ? 'xml' : 'text';
-    tc.expect = await expectations(dir, xslt.result, compare);
-  }
-  await writeFile(dir + '/case.json', JSON.stringify(tc, null, 2) + '\n');
-  xslt.casePath = dir + '/case.json';
-  app.status = 'Saved test case ' + dir;
-  await refreshFiles();
-}
-
-/** Expected body/headers/properties from the current result (only changed headers/properties). */
-async function expectations(dir: string, result: XsltResult | GroovyResult | null, compare: string): Promise<any> {
-  if (!result) return undefined;
-  if (!result.ok || !result.output) return { ok: false };
-  const ext = compare === 'xml' ? 'xml' : 'txt';
-  await writeFile(`${dir}/expected-output.${ext}`, result.output.body);
-  const expect: any = { body: { file: `expected-output.${ext}` }, compare };
-  const pick = (rows: Row[], ch?: { added: string[]; changed: string[] }) => {
-    const names = new Set([...(ch?.added ?? []), ...(ch?.changed ?? [])]);
-    const out: Record<string, string> = {};
-    for (const r of rows) if (names.has(r.name)) out[r.name] = r.value;
-    return Object.keys(out).length ? out : undefined;
-  };
-  expect.headers = pick(result.output.headers, result.changes?.headers);
-  expect.properties = pick(result.output.properties, result.changes?.properties);
-  return expect;
-}
-
-export async function saveGroovyCase(name: string, withExpected: boolean) {
-  if (!app.project) throw new Error('Open a project folder to save test cases.');
-  if (!groovy.scriptPath || groovy.script !== groovy.savedScript) {
-    if (!(await saveScript())) return;
-  }
-  const dir = 'tests/' + slug(name);
-  const tc: any = {
-    name,
-    step: 'groovy',
-    profile: app.groovyProfile,
-    script: relative(dir, groovy.scriptPath!),
-    input: { body: { file: 'input.xml' }, headers: clean(groovy.headers), properties: clean(groovy.properties) },
-  };
-  if (groovy.functionName && groovy.functionName !== 'processData') tc.function = groovy.functionName;
-  if (groovy.bodyType !== 'String') tc.options = { bodyType: groovy.bodyType };
-  const extras = groovy.caseExtras;
-  if (extras) {
-    // Keep what the opened case held; attachment files stay where they are.
-    if (extras.attachments) tc.input.attachments = extras.attachments.map((a) =>
-      a?.file ? { ...a, file: relative(dir, joinPath(extras.dir, a.file)) } : a);
-    if (extras.soapHeaders) tc.input.soapHeaders = extras.soapHeaders;
-    if (extras.platform) tc.platform = extras.platform;
-  }
-  await writeFile(dir + '/input.xml', groovy.body);
-  if (withExpected) {
-    const out = groovy.result?.output?.body ?? '';
-    tc.expect = await expectations(dir, groovy.result, out.trimStart().startsWith('<') ? 'xml' : 'text');
-  }
-  await writeFile(dir + '/case.json', JSON.stringify(tc, null, 2) + '\n');
-  groovy.casePath = dir + '/case.json';
-  if (extras) groovy.caseExtras = { ...extras, dir };
-  app.status = 'Saved test case ' + dir;
-  await refreshFiles();
 }
 
 async function loadGroovyCase(path: string, dir: string, tc: any) {
@@ -638,29 +748,6 @@ async function loadGroovyCase(path: string, dir: string, tc: any) {
   app.tool = 'groovy';
   app.status = 'Loaded test case ' + (tc.name ?? path);
   await runGroovy();
-}
-
-export async function saveXsdCase(name: string, withExpected: boolean) {
-  if (!app.project) throw new Error('Open a project folder to save test cases.');
-  if (!xsd.schemaPath || xsd.schema !== xsd.savedSchema) {
-    if (!(await saveSchema())) return;
-  }
-  const dir = 'tests/' + slug(name);
-  const tc: any = {
-    name,
-    step: 'xsd',
-    schema: relative(dir, xsd.schemaPath!),
-    input: { body: { file: 'input.xml' } },
-  };
-  await writeFile(dir + '/input.xml', xsd.body);
-  if (withExpected && xsd.result) {
-    // Only the verdict: which part of a message is stable enough for errorContains is up to the user.
-    tc.expect = xsd.result.ok ? { valid: xsd.result.valid } : { ok: false };
-  }
-  await writeFile(dir + '/case.json', JSON.stringify(tc, null, 2) + '\n');
-  xsd.casePath = dir + '/case.json';
-  app.status = 'Saved test case ' + dir;
-  await refreshFiles();
 }
 
 async function loadXsdCase(path: string, dir: string, tc: any) {
@@ -708,36 +795,4 @@ function toRows(v: any): Row[] {
   return Object.entries(v).map(([name, val]: [string, any]) =>
     val !== null && typeof val === 'object' ? { name, value: val.value ?? '', type: val.type ?? 'String' }
       : { name, value: val === null ? '' : String(val), type: val === null ? 'null' : 'String' });
-}
-
-export async function runAllTests() {
-  tests.running = true;
-  app.error = '';
-  try {
-    const merged = new Map<string, any>();
-    for (const p of app.profiles.filter((x) => x.available)) {
-      const r = await call('tests.run', { path: 'tests' }, p.id);
-      for (const c of r.results) {
-        const prev = merged.get(c.dir);
-        if (!prev || prev.status === 'skipped') merged.set(c.dir, { ...c, profile: c.status === 'skipped' ? undefined : p.id });
-      }
-    }
-    tests.results = [...merged.values()];
-    tests.summary = {
-      passed: tests.results.filter((c) => c.status === 'passed').length,
-      failed: tests.results.filter((c) => c.status === 'failed' || c.status === 'error').length,
-      skipped: tests.results.filter((c) => c.status === 'skipped').length,
-    };
-  } catch (e) {
-    fail(e);
-  } finally {
-    tests.running = false;
-  }
-}
-
-export function caseRelPath(absDir: string): string | null {
-  if (!app.project) return null;
-  const root = app.project.root.replace(/\\/g, '/');
-  const d = absDir.replace(/\\/g, '/');
-  return d.startsWith(root) ? d.slice(root.length + 1) + '/case.json' : null;
 }

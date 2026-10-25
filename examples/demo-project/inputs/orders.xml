@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<src:Orders xmlns:src="urn:demo:integration:orders:source:v1">
+    <src:SourceSystem>WEBSHOP-DE</src:SourceSystem>
+
+    <src:Order orderNumber="SO-1001" orderDate="2026-10-20">
+        <src:Customer customerId="C-100">
+            <src:Name>Beispiel GmbH</src:Name>
+            <src:Country>DE</src:Country>
+        </src:Customer>
+        <src:Currency>EUR</src:Currency>
+        <src:Items>
+            <src:Item position="10">
+                <src:Material>MAT-100</src:Material>
+                <src:Description>USB-C Adapter</src:Description>
+                <src:Quantity>2</src:Quantity>
+                <src:UnitPrice>15.50</src:UnitPrice>
+            </src:Item>
+            <src:Item position="20">
+                <src:Material>MAT-200</src:Material>
+                <src:Description>USB-C Docking Station</src:Description>
+                <src:Quantity>1</src:Quantity>
+                <src:UnitPrice>49.90</src:UnitPrice>
+            </src:Item>
+        </src:Items>
+    </src:Order>
+
+    <src:Order orderNumber="SO-1002" orderDate="2026-10-21">
+        <src:Customer customerId="C-200">
+            <src:Name>Musterhandel AG</src:Name>
+            <src:Country>AT</src:Country>
+        </src:Customer>
+        <src:Currency>EUR</src:Currency>
+        <src:Items>
+            <src:Item position="10">
+                <src:Material>MAT-300</src:Material>
+                <src:Description>HDMI Cable</src:Description>
+                <src:Quantity>3</src:Quantity>
+                <src:UnitPrice>9.99</src:UnitPrice>
+            </src:Item>
+        </src:Items>
+    </src:Order>
+</src:Orders>

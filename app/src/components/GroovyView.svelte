@@ -1,10 +1,16 @@
 <script lang="ts">
+  import Gutter from './Gutter.svelte';
+  import { paneSizes, paneColumns } from '../lib/split.svelte';
+  import { formatJson } from '../lib/json';
   import Editor from './Editor.svelte';
   import KeyValueTable from './KeyValueTable.svelte';
   import CompareView from './CompareView.svelte';
-  import { app, groovy, runGroovy, saveScript, saveGroovyCase, formatXml, ask, otherProfile } from '../lib/store.svelte';
+  import { app, groovy, runGroovy, saveScript, saveScriptAs, formatXml, otherProfile, saveInput } from '../lib/store.svelte';
+  import { reindentGroovy } from '../lib/indent';
   import type { CaseExtras } from '../lib/store.svelte';
   import type { Diagnostic } from '../lib/types';
+
+  const panes = paneSizes('groovy', [1, 1.3, 1.1]);
 
   let inputTab = $state<'body' | 'headers' | 'properties'>('body');
   let outputTab = $state<'body' | 'headers' | 'properties' | 'mpl' | 'console' | 'api' | 'compare'>('body');
@@ -30,23 +36,15 @@
     return b.startsWith('<') ? 'xml' : b.startsWith('{') || b.startsWith('[') ? 'json' : 'plaintext';
   });
 
+  /** JSON when the body starts like JSON, XML otherwise (also for an empty body). */
+  let inLanguage = $derived(/^\s*[[{]/.test(groovy.body) ? 'json' : 'xml');
+
   async function prettyInput() {
     try {
-      groovy.body = await formatXml(groovy.body);
+      groovy.body = inLanguage === 'json' ? formatJson(groovy.body) : await formatXml(groovy.body);
       changed();
     } catch (e) {
-      app.error = 'Input is not well-formed XML: ' + (e as Error).message;
-    }
-  }
-
-  async function newCase() {
-    const suggested = (groovy.scriptPath?.split('/').pop()?.replace(/\.(groovy|gsh)$/, '') ?? 'script') + '-case';
-    const r = await ask('Save as test case (name)', suggested, 'Use the current output as expected result');
-    if (!r) return;
-    try {
-      await saveGroovyCase(r.value, r.checked);
-    } catch (e) {
-      app.error = (e as Error).message;
+      app.error = `Input is not ${inLanguage === 'json' ? 'valid JSON' : 'well-formed XML'}: ` + (e as Error).message;
     }
   }
 
@@ -77,10 +75,10 @@
   }
 </script>
 
-<div class="groovy">
+<div class="groovy" style:grid-template-columns={paneColumns(panes.sizes)}>
   <section class="pane input" aria-label="Input message">
     <header>
-      <h2>Input message</h2>
+      <h2 title={app.inputPaths.groovy ?? ''}>Input message{#if app.inputPaths.groovy} <span class="from">· {app.inputPaths.groovy.split('/').pop()}</span>{/if}</h2>
       <div class="tabs" role="tablist">
         <button role="tab" class:active={inputTab === 'body'} onclick={() => (inputTab = 'body')}>Body</button>
         <button role="tab" class:active={inputTab === 'headers'} onclick={() => (inputTab = 'headers')}>Headers <span class="count">{groovy.headers.length}</span></button>
@@ -95,11 +93,12 @@
           </select>
         </label>
         <button class="small" onclick={prettyInput}>Format</button>
+        <button class="small" onclick={saveInput} disabled={!app.project} title={app.project ? 'Save the input body under inputs/' : 'Open a project to save'}>Save…</button>
       {/if}
     </header>
     <div class="body">
       {#if inputTab === 'body'}
-        <Editor bind:value={groovy.body} language="xml" onchange={changed} onrun={runGroovy} label="Input body" />
+        <Editor bind:value={groovy.body} language={inLanguage} onchange={changed} onrun={runGroovy} label="Input body" />
       {:else if inputTab === 'headers'}
         <KeyValueTable bind:rows={groovy.headers} onchange={changed} emptyText="No headers. Types matter: getHeader(name, Integer) converts like Camel." />
       {:else}
@@ -111,6 +110,8 @@
     {/if}
   </section>
 
+  <Gutter {panes} i={0} />
+
   <section class="pane script" aria-label="Groovy script">
     <header>
       <h2 title={groovy.scriptPath ?? 'Unsaved script'}>{groovy.scriptPath ?? 'script.groovy (unsaved)'}{#if dirty}<span class="dirty">●</span>{/if}</h2>
@@ -119,13 +120,17 @@
       </label>
       <div class="spacer"></div>
       <button class="small" onclick={saveScript} disabled={!app.project} title={app.project ? 'Save (Ctrl+S)' : 'Open a project to save'}>Save</button>
-      <button class="small" onclick={newCase} disabled={!app.project}>Save as test</button>
+      <button class="small" onclick={() => { groovy.script = reindentGroovy(groovy.script); changed(); }}
+        title="Re-indent by bracket depth; strings and comments keep their text">Format</button>
+      <button class="small" onclick={saveScriptAs} disabled={!app.project} title="Save under a new name; the open file stays as it is">Save as…</button>
     </header>
     <div class="body">
       <Editor bind:this={scriptEditor} bind:value={groovy.script} language="java" markers={markers}
         onchange={changed} onrun={runGroovy} onsave={saveScript} label="Groovy script" />
     </div>
   </section>
+
+  <Gutter {panes} i={1} />
 
   <section class="pane output" aria-label="Output message">
     <header>
@@ -231,7 +236,7 @@
 </div>
 
 <style>
-  .groovy { display: grid; grid-template-columns: minmax(260px, 1fr) minmax(320px, 1.3fr) minmax(280px, 1.1fr); gap: 1px; background: var(--border); height: 100%; min-height: 0; }
+  .groovy { display: grid; gap: 0; background: var(--border); height: 100%; min-height: 0; }
   .pane { background: var(--bg); display: flex; flex-direction: column; min-width: 0; min-height: 0; }
   header { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-bottom: 1px solid var(--border); flex-wrap: wrap; min-height: 34px; box-sizing: border-box; }
   h2 { font-size: 12px; font-weight: 600; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
@@ -267,6 +272,8 @@
   .on { background: var(--active); color: var(--accent); border-color: var(--accent); }
   .check { font-size: 12px; display: flex; align-items: center; gap: 4px; }
   @media (max-width: 1100px) {
-    .groovy { grid-template-columns: 1fr; grid-template-rows: minmax(220px, 1fr) minmax(300px, 1.3fr) minmax(260px, 1fr); }
+    .groovy > :global(.gutter) { display: none; }
+    .groovy { grid-template-columns: 1fr !important; gap: 1px; grid-template-rows: minmax(220px, 1fr) minmax(300px, 1.3fr) minmax(260px, 1fr); }
   }
+  .from { color: var(--muted); font-weight: 400; font-family: var(--mono); }
 </style>

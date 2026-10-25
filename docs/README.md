@@ -12,4 +12,3 @@ Start with the [project README](../README.md) for what the tool is and a quick s
 | [Building](building.md) | build the engines, native images, the Java runtime and the installers |
 | [Plan and research ledger](plan.md) | look up a finding (F…), an open question (Q…), a source (S…) or the roadmap |
 | [Tenant probes](../probes/README.md) | run the probes on a test tenant to verify the simulation |
-| [Handover](handover.md) | continue the work in a new session on a local Windows machine |

@@ -1,44 +1,39 @@
 <script lang="ts">
+  import Gutter from './Gutter.svelte';
+  import { paneSizes, paneColumns } from '../lib/split.svelte';
   import Editor from './Editor.svelte';
-  import { app, xsd, xslt, runXsd, saveSchema, saveXsdCase, ask } from '../lib/store.svelte';
+  import { app, xsd, xslt, runXsd, saveSchema, saveSchemaAs, saveInput } from '../lib/store.svelte';
+
+  const panes = paneSizes('xsd', [1, 1]);
 
   let markers = $derived((xsd.result?.diagnostics ?? []).filter((d) => d.line && d.systemId && d.systemId !== 'input'
     && d.systemId !== 'input.xml' && !d.systemId.endsWith('input.xml')));
   let inputMarkers = $derived((xsd.result?.diagnostics ?? []).filter((d) => d.line && (d.systemId === 'input.xml' || d.systemId === 'input')));
   let dirty = $derived(xsd.schema !== xsd.savedSchema);
 
-  async function newCase() {
-    const suggested = (xsd.schemaPath?.split('/').pop()?.replace(/\.xsd$/, '') ?? 'schema') + '-case';
-    const r = await ask('Save as test case (name)', suggested, 'Use the current verdict as expected result');
-    if (!r) return;
-    try {
-      await saveXsdCase(r.value, r.checked);
-    } catch (e) {
-      app.error = (e as Error).message;
-    }
-  }
-
   function useXsltOutput() {
     if (xslt.result?.output) xsd.body = xslt.result.output.body;
   }
 </script>
 
-<div class="two">
+<div class="two" style:grid-template-columns={paneColumns(panes.sizes)}>
   <section class="pane">
     <header>
-      <h2>XML document</h2>
+      <h2 title={app.inputPaths.xsd ?? ''}>XML document{#if app.inputPaths.xsd} <span class="from">· {app.inputPaths.xsd.split('/').pop()}</span>{/if}</h2>
       <div class="spacer"></div>
       <button class="small" onclick={useXsltOutput} disabled={!xslt.result?.output} title="Validate the last XSLT output">Use XSLT output</button>
       <button class="small" onclick={() => (xsd.body = xslt.body)}>Use XSLT input</button>
+      <button class="small" onclick={saveInput} disabled={!app.project} title={app.project ? 'Save the input body under inputs/' : 'Open a project to save'}>Save…</button>
     </header>
     <div class="body"><Editor bind:value={xsd.body} language="xml" markers={inputMarkers} onrun={runXsd} label="XML document" /></div>
   </section>
+  <Gutter {panes} i={0} />
   <section class="pane">
     <header>
       <h2>{xsd.schemaPath ?? 'schema.xsd (unsaved)'}{#if dirty}<span class="dirty">●</span>{/if}</h2>
       <div class="spacer"></div>
       <button class="small" onclick={saveSchema} disabled={!app.project}>Save</button>
-      <button class="small" onclick={newCase} disabled={!app.project} title="Save document, schema reference and verdict as a regression test">Save as test</button>
+      <button class="small" onclick={saveSchemaAs} disabled={!app.project} title="Save under a new name; the open file stays as it is">Save as…</button>
       <button class="primary small" onclick={runXsd} disabled={xsd.running || !xsd.schema.trim()}>Validate</button>
     </header>
     <div class="body schema">
@@ -64,7 +59,7 @@
 </div>
 
 <style>
-  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--border); height: 100%; min-height: 0; }
+  .two { display: grid; gap: 0; background: var(--border); height: 100%; min-height: 0; }
   .pane { background: var(--bg); display: flex; flex-direction: column; min-height: 0; min-width: 0; }
   header { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-bottom: 1px solid var(--border); min-height: 34px; box-sizing: border-box; flex-wrap: wrap; }
   h2 { font-size: 12px; margin: 0; font-weight: 600; }
@@ -81,5 +76,6 @@
   .d.warning b { color: var(--warn); }
   .hint { color: var(--muted); font-size: 12px; padding: 8px; margin: 0; }
   .dirty { color: var(--accent); margin-left: 4px; }
-  @media (max-width: 900px) { .two { grid-template-columns: 1fr; } }
+  @media (max-width: 900px) { .two { grid-template-columns: 1fr !important; gap: 1px; } .two > :global(.gutter) { display: none; } }
+  .from { color: var(--muted); font-weight: 400; font-family: var(--mono); }
 </style>

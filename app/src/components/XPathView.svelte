@@ -1,7 +1,11 @@
 <script lang="ts">
+  import Gutter from './Gutter.svelte';
+  import { paneSizes, paneColumns } from '../lib/split.svelte';
   import Editor from './Editor.svelte';
   import KeyValueTable from './KeyValueTable.svelte';
-  import { xpath, xslt, runXpath } from '../lib/store.svelte';
+  import { app, xpath, xslt, runXpath, saveInput } from '../lib/store.svelte';
+
+  const panes = paneSizes('xpath', [1.3, 1]);
 
   function key(e: KeyboardEvent) {
     if (e.key === 'Enter') runXpath();
@@ -21,14 +25,17 @@
     </label>
     <button class="primary" onclick={runXpath} disabled={xpath.running}>Evaluate</button>
   </div>
-  <div class="grid">
+  <div class="grid" style:grid-template-columns={paneColumns(panes.sizes)}>
     <section class="pane">
-      <header><h2>XML document</h2><div class="spacer"></div>
+      <header><h2 title={app.inputPaths.xpath ?? ''}>XML document{#if app.inputPaths.xpath} <span class="from">· {app.inputPaths.xpath.split('/').pop()}</span>{/if}</h2><div class="spacer"></div>
         <button class="small" onclick={() => (xpath.body = xslt.body)}>Use XSLT input</button>
         <button class="small" onclick={() => xslt.result?.output && (xpath.body = xslt.result.output.body)} disabled={!xslt.result?.output}>Use XSLT output</button>
+        <button class="small" onclick={saveInput} disabled={!app.project} title={app.project ? 'Save the input body under inputs/' : 'Open a project to save'}>Save…</button>
       </header>
       <div class="body"><Editor bind:value={xpath.body} language="xml" onrun={runXpath} label="XML document" /></div>
     </section>
+    <Gutter {panes} i={0} />
+
     <section class="pane side">
       <header><h2>Namespace mapping</h2></header>
       <div class="ns"><KeyValueTable bind:rows={xpath.namespaces} emptyText="Prefix → namespace URI (like the iFlow's Namespace Mapping)" /></div>
@@ -51,7 +58,7 @@
   .bar label { display: flex; flex-direction: column; font-size: 11px; color: var(--muted); gap: 2px; }
   .expr { flex: 1; min-width: 240px; }
   .expr input { width: 100%; box-sizing: border-box; font-size: 13px; padding: 5px 6px; }
-  .grid { flex: 1; display: grid; grid-template-columns: 1.3fr 1fr; gap: 1px; background: var(--border); min-height: 0; }
+  .grid { flex: 1; display: grid; gap: 0; background: var(--border); min-height: 0; }
   .pane { background: var(--bg); display: flex; flex-direction: column; min-height: 0; min-width: 0; }
   header { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-bottom: 1px solid var(--border); min-height: 34px; box-sizing: border-box; }
   h2 { font-size: 12px; margin: 0; font-weight: 600; }
@@ -64,5 +71,6 @@
   pre { margin: 2px 0 0; font-family: var(--mono); white-space: pre-wrap; word-break: break-all; }
   .err { color: var(--err); font-family: var(--mono); }
   .muted { color: var(--muted); font-weight: 400; }
-  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr !important; gap: 1px; } .grid > :global(.gutter) { display: none; } }
+  .from { color: var(--muted); font-weight: 400; font-family: var(--mono); }
 </style>

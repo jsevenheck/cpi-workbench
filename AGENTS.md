@@ -13,10 +13,11 @@ The UI is Tauri 2 + Svelte 5 + Monaco. Everything runs offline; the app never co
 mvn -f engine/pom.xml verify                    # all engine tests (Java 17+, Maven)
 mvn -f engine/pom.xml package -DskipTests       # jars only
 mvn -f engine/pom.xml package -pl groovy-v1,groovy-v2 -am   # one module and its dependencies
-java -jar engine/xml-he99/target/cpiwb-xml-he99.jar test examples/demo-project/tests     # demo cases
-java -jar engine/groovy-v1/target/cpiwb-groovy-v1.jar test examples/demo-project/tests
-java -jar engine/groovy-v2/target/cpiwb-groovy-v2.jar test examples/demo-project/tests
+java -jar engine/xml-he99/target/cpiwb-xml-he99.jar test testdata/regression-project/tests     # regression cases
+java -jar engine/groovy-v1/target/cpiwb-groovy-v1.jar test testdata/regression-project/tests
+java -jar engine/groovy-v2/target/cpiwb-groovy-v2.jar test testdata/regression-project/tests
 npm --prefix app run check                      # Svelte/TypeScript checks
+npm --prefix app test                           # UI unit tests (formatters; Node 22.18+)
 npm --prefix app run build                      # UI bundle for browser mode and e2e
 CPIWB_REQUIRE_ENGINES=1 cargo test --manifest-path app/src-tauri/Cargo.toml   # shell ⇄ engines over stdio (needs the UI bundle, engine builds; JAVA_HOME picks the JRE)
 ```
@@ -33,7 +34,8 @@ Native images (`engine/native/build-native.sh`) need GraalVM and are usually lef
   * `src/api-common`: platform services shared by both versions.
   * `src/api-v1`, `src/api-v2`: the Script API of each version.
 * `app/src`: the UI. `app/src-tauri`: the Rust shell.
-* `examples/demo-project`: the sample project.
+* `examples/demo-project`: the sample project users open in the app (no test cases).
+* `testdata/regression-project`: the project with test cases that CI, the e2e and the shell tests run.
 * `probes`: tenant probes and the simulator's baseline output.
 
 ## Rules

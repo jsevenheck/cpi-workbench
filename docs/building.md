@@ -20,6 +20,7 @@ JAVA_HOME=/path/to/jdk17 engine/groovy/build-jre.sh /tmp/jre    # trimmed Java 1
 cd app
 npm ci
 npm run check                                        # Svelte/TypeScript checks
+npm test                                             # UI unit tests (formatters; Node 22.18+)
 CPIWB_JRE_DIR=/tmp/jre node scripts/prepare-sidecars.mjs   # stage engines + JRE for bundling
 npx tauri build                                      # installer for the current OS
 npx tauri dev                                        # development (UI hot reload)
@@ -38,6 +39,19 @@ npm --prefix app run build
 CPIWB_REQUIRE_ENGINES=1 JAVA_HOME=/tmp/jre cargo test --manifest-path app/src-tauri/Cargo.toml
 ```
 
+### Without GraalVM
+
+Tauri's build script refuses to build while the sidecars in `src-tauri/binaries` are missing. Without
+native engines, drop the bundle entries with a config override. The shell then runs the XML engine
+jars with `JAVA_HOME`:
+
+```sh
+TAURI_CONFIG='{"bundle":{"externalBin":null,"resources":null}}' CPIWB_REQUIRE_ENGINES=1 cargo test --manifest-path app/src-tauri/Cargo.toml
+cd app && npx tauri dev --config '{"bundle":{"externalBin":null,"resources":null}}'
+```
+
+Installers still need the staged sidecars.
+
 ## End-to-end tests (browser mode)
 
 ```sh
@@ -46,7 +60,7 @@ java -jar engine/xml-he99/target/cpiwb-xml-he99.jar serve --http 7777 --ui app/d
 java -jar engine/groovy-v1/target/cpiwb-groovy-v1.jar serve --http 7778 &
 java -jar engine/groovy-v2/target/cpiwb-groovy-v2.jar serve --http 7779 &
 java -jar engine/xml-he12/target/cpiwb-xml-he12.jar serve --http 7780 &
-cp -r examples/demo-project /tmp/demo-project        # the tests write into the project
+cp -r testdata/regression-project /tmp/demo-project   # the tests write into the project
 node app/e2e/smoke.mjs /tmp/demo-project [screenshotDir]
 node app/e2e/groovy.mjs /tmp/demo-project [screenshotDir]
 ```
@@ -55,13 +69,12 @@ node app/e2e/groovy.mjs /tmp/demo-project [screenshotDir]
 
 `.github/workflows/build.yml`:
 
-* runs the engine tests and demo cases,
+* runs the engine tests and the regression cases in `testdata/regression-project`,
 * runs the browser e2e tests,
 * runs the shell tests against the native engines and the trimmed JRE, then builds the bundles.
 
-Pushes and pull requests to `main` run on Linux only, because Windows and macOS minutes cost 2x and
-10x on a private repository. A tag `v*` or a manual run (*Run workflow*, `workflow_dispatch`) runs
-everything on Linux, Windows (e2e, .msi/.exe) and macOS (Apple Silicon, .dmg).
+Pushes to `main`, tags `v*`, pull requests to `main` and manual runs (*Run workflow*,
+`workflow_dispatch`) run everything on Linux, Windows (e2e, .msi/.exe) and macOS (Apple Silicon, .dmg).
 
 Native images must be built on each target OS; there is no cross-compilation.
 The installers are not code-signed yet.

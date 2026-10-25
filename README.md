@@ -43,8 +43,8 @@ Without installing anything but Java:
 
 ```sh
 mvn -f engine/pom.xml package -DskipTests
-java -jar engine/xml-he99/target/cpiwb-xml-he99.jar test examples/demo-project/tests
-java -jar engine/groovy-v1/target/cpiwb-groovy-v1.jar test examples/demo-project/tests
+java -jar engine/xml-he99/target/cpiwb-xml-he99.jar test testdata/regression-project/tests
+java -jar engine/groovy-v1/target/cpiwb-groovy-v1.jar test testdata/regression-project/tests
 ```
 
 ## Documentation

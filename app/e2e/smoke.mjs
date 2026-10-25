@@ -4,7 +4,7 @@ import { createRequire } from 'node:module';
 import fs from 'node:fs';
 import path from 'node:path';
 
-const project = path.resolve(process.argv[2] ?? 'examples/demo-project');
+const project = path.resolve(process.argv[2] ?? 'testdata/regression-project');
 const shots = process.argv[3];
 // A Saxon-HE 12 engine on 7780 is optional; with it the runtime comparison is tested too.
 const url = (process.env.CPIWB_URL ?? 'http://127.0.0.1:7777/') + '?engines=saxon-he-12@http://127.0.0.1:7780';
@@ -57,6 +57,18 @@ await page.locator('.tree .file').first().waitFor({ timeout: 10000 });
 await page.locator('.tree .file', { hasText: 'order-to-salesorder.xsl' }).click();
 await page.locator('section.mapping h2', { hasText: 'order-to-salesorder.xsl' }).waitFor();
 
+// 2b) Save as… suggests a free name next to the open file and leaves the open file as it is.
+const xslBefore = fs.readFileSync(path.join(project, 'mappings/order-to-salesorder.xsl'), 'utf8');
+await page.getByRole('button', { name: 'Save as…' }).click();
+const suggested = await page.getByRole('dialog').getByRole('textbox').inputValue();
+if (suggested !== 'mappings/order-to-salesorder-copy.xsl') fail('Save as suggestion: ' + suggested);
+await page.getByRole('dialog').getByRole('button', { name: 'OK' }).click();
+await page.locator('section.mapping h2', { hasText: 'order-to-salesorder-copy.xsl' }).waitFor({ timeout: 10000 });
+if (fs.readFileSync(path.join(project, 'mappings/order-to-salesorder-copy.xsl'), 'utf8') !== xslBefore) fail('Save as wrote different content');
+if (fs.readFileSync(path.join(project, 'mappings/order-to-salesorder.xsl'), 'utf8') !== xslBefore) fail('Save as changed the open file');
+await page.locator('.tree .file', { hasText: 'order-to-salesorder.xsl' }).click();
+await page.locator('section.mapping h2', { hasText: /order-to-salesorder\.xsl$/ }).waitFor();
+
 // 4) Open a test case: loads input, headers and runs.
 await page.locator('.tree .file', { hasText: 'standard-order/case.json' }).click();
 // The scratch result stays visible until the case's run ends, so wait for the case's parameter.
@@ -66,14 +78,6 @@ await page.locator('.params tr', { hasText: 'SenderSystem' }).waitFor({ timeout:
 const params = await page.locator('.params table').innerText();
 if (!params.includes('header')) fail('parameter binding table: ' + params);
 if (shots) await page.screenshot({ path: path.join(shots, '3-xslt-case.png') });
-
-// 5) Run all tests.
-await page.getByRole('tab', { name: 'Tests' }).click();
-await page.getByRole('button', { name: 'Run all tests' }).click();
-await page.locator('.sum').waitFor({ timeout: 15000 });
-const sum = await page.locator('.sum').innerText();
-if (!/\d+ passed/.test(sum) || !/0 failed/.test(sum)) fail('test summary: ' + sum);
-if (shots) await page.screenshot({ path: path.join(shots, '4-tests.png') });
 
 // 6) XSD validation of an invalid document.
 await page.getByRole('tab', { name: 'XSD Validation' }).click();
@@ -86,17 +90,34 @@ const verdict = await page.locator('.verdict').innerText();
 if (!verdict.includes('Valid')) fail('xsd verdict: ' + verdict);
 if (shots) await page.screenshot({ path: path.join(shots, '5-xsd.png') });
 
-// 6b) An XSD test case opens in the XSD view and validates; saving it as a new case keeps the verdict.
+// 6b) An XSD test case opens in the XSD view and validates.
 await page.locator('.tree .file', { hasText: 'invalid-salesorder/case.json' }).click();
 await page.locator('.verdict', { hasText: 'Invalid' }).waitFor({ timeout: 10000 });
 if (!(await page.locator('.result').innerText()).includes('Item')) fail('xsd case diagnostics lack Item');
-await page.getByRole('button', { name: 'Save as test' }).click();
-await page.getByRole('dialog').getByRole('textbox').fill('xsd-copy');
-await page.getByRole('dialog').getByRole('checkbox').check();
-await page.getByRole('dialog').getByRole('button', { name: 'OK' }).click();
-await page.locator('.tree .file', { hasText: 'xsd-copy/case.json' }).waitFor({ timeout: 10000 });
-const saved = JSON.parse(fs.readFileSync(path.join(project, 'tests/xsd-copy/case.json'), 'utf8'));
-if (saved.step !== 'xsd' || saved.schema !== '../../schemas/salesorder.xsd' || saved.expect?.valid !== false) fail('saved xsd case: ' + JSON.stringify(saved));
+
+// 6b) File tree context menu: copy, rename and delete a file.
+const menuOn = async (name) => {
+  await page.locator('.tree .file', { hasText: name }).first().click({ button: 'right' });
+  return page.getByRole('menu');
+};
+const answer = async (value) => {
+  if (value !== undefined) await page.getByRole('dialog').getByRole('textbox').fill(value);
+  await page.getByRole('dialog').getByRole('button', { name: 'OK' }).click();
+};
+await (await menuOn('salesorder.xsd')).getByRole('menuitem', { name: 'Copy…' }).click();
+await answer('schemas/copy.xsd');
+await page.locator('.tree .file', { hasText: 'copy.xsd' }).waitFor({ timeout: 10000 });
+await (await menuOn('copy.xsd')).getByRole('menuitem', { name: 'Rename…' }).click();
+await answer('schemas/renamed.xsd');
+await page.locator('.tree .file', { hasText: 'renamed.xsd' }).waitFor({ timeout: 10000 });
+if (fs.existsSync(path.join(project, 'schemas/copy.xsd'))) fail('rename left schemas/copy.xsd behind');
+if (fs.readFileSync(path.join(project, 'schemas/renamed.xsd'), 'utf8') !== fs.readFileSync(path.join(project, 'schemas/salesorder.xsd'), 'utf8')) {
+  fail('renamed copy differs from schemas/salesorder.xsd');
+}
+await (await menuOn('renamed.xsd')).getByRole('menuitem', { name: 'Delete…' }).click();
+await answer();
+await page.locator('.tree .file', { hasText: 'renamed.xsd' }).waitFor({ state: 'detached', timeout: 10000 });
+if (fs.existsSync(path.join(project, 'schemas/renamed.xsd'))) fail('delete left schemas/renamed.xsd behind');
 
 // 7) XPath.
 await page.getByRole('tab', { name: 'XPath' }).click();
@@ -104,6 +125,59 @@ await page.getByLabel('XPath expression').fill('count(//Item)');
 await page.getByRole('button', { name: 'Evaluate' }).click();
 await page.locator('.res .item').first().waitFor({ timeout: 10000 });
 if (shots) await page.screenshot({ path: path.join(shots, '6-xpath.png') });
+
+// 8) Files that are not steps open in the File tab and leave the input alone; inputs/ holds saved inputs.
+await page.getByRole('tab', { name: 'XSLT Mapping' }).click();
+const inputEditor = page.locator('section.input .view-lines');
+const inputBefore = await inputEditor.innerText();
+await page.locator('.tree .file', { hasText: 'value-mappings.json' }).click();
+await page.locator('section[aria-label="File"] h2', { hasText: 'platform/value-mappings.json' }).waitFor({ timeout: 10000 });
+await page.getByRole('tab', { name: 'XSLT Mapping' }).click();
+// The editor is created anew after the tab switch; wait until it has rendered.
+let inputAfter = '';
+for (let i = 0; i < 20 && inputAfter !== inputBefore; i++) {
+  await page.waitForTimeout(250);
+  inputAfter = await inputEditor.innerText();
+}
+if (inputAfter !== inputBefore) fail(`opening a platform file changed the input body: ${JSON.stringify(inputBefore.slice(0, 80))} -> ${JSON.stringify(inputAfter.slice(0, 80))}`);
+await page.locator('section.input').getByRole('button', { name: 'Save…' }).click();
+await answer('inputs/order.xml');
+await page.locator('.tree .file', { hasText: 'order.xml' }).waitFor({ timeout: 10000 });
+if (!fs.existsSync(path.join(project, 'inputs/order.xml'))) fail('input not saved to inputs/order.xml');
+await (await menuOn('value-mappings.json')).getByRole('menuitem', { name: 'Use as input' }).click();
+// Only XML engines run here: a JSON body has nowhere to go and must not replace the XSLT input.
+await page.locator('.banner.error', { hasText: 'only a Groovy script takes a JSON body' }).waitFor({ timeout: 10000 })
+  .catch(() => fail('"Use as input" with JSON and no Groovy engine gave no error'));
+if ((await inputEditor.innerText()).includes('sourceAgency')) fail('JSON replaced the XSLT input');
+await page.locator('.banner.error').getByRole('button', { name: 'Dismiss' }).click();
+await (await menuOn('standard-order/input.xml')).getByRole('menuitem', { name: 'Use as input' }).click();
+await page.locator('section.input h2', { hasText: '· input.xml' }).waitFor({ timeout: 10000 })
+  .catch(() => fail('"Use as input" did not load standard-order/input.xml'));
+await page.locator('.tree .file', { hasText: 'order.xml' }).click();
+await page.locator('section.input .view-lines', { hasText: inputBefore.split('\n')[0].trim() }).waitFor({ timeout: 10000 })
+  .catch(() => fail('clicking inputs/order.xml did not load it as input'));
+// The XSD tab loads files from inputs/ into its own document and names the file.
+await page.getByRole('tab', { name: 'XSD Validation' }).click();
+await page.locator('.tree .file', { hasText: 'order.xml' }).click();
+await page.locator('section h2', { hasText: '· order.xml' }).waitFor({ timeout: 10000 })
+  .catch(() => fail('XSD tab does not show inputs/order.xml as its document'));
+if (!(await page.locator('.tree .file', { hasText: 'order.xml' }).getAttribute('class')).includes('active')) fail('inputs/order.xml not marked in the tree');
+await page.getByRole('tab', { name: 'XSLT Mapping' }).click();
+await page.getByRole('tab', { name: 'value-mappings.json' }).click();
+await page.locator('section[aria-label="File"]').getByRole('button', { name: 'Close' }).click();
+await page.getByRole('tab', { name: 'value-mappings.json' }).waitFor({ state: 'detached', timeout: 5000 });
+
+// 9) The gutter between input and mapping resizes the panes.
+const inputPane = page.locator('section.input');
+const w0 = (await inputPane.boundingBox()).width;
+const g = await page.locator('.xslt > .gutter').first().boundingBox();
+await page.mouse.move(g.x + g.width / 2, g.y + g.height / 2);
+await page.mouse.down();
+await page.mouse.move(g.x + 150, g.y + g.height / 2, { steps: 5 });
+await page.mouse.up();
+const w1 = (await inputPane.boundingBox()).width;
+if (Math.abs(w1 - w0 - 150) > 10) fail(`input pane width ${w0} -> ${w1}, expected +150`);
+if (shots) await page.screenshot({ path: path.join(shots, '7-resized.png') });
 
 if (errors.length) fail('browser errors: ' + errors.join(' | '));
 await browser.close();

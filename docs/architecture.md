@@ -9,7 +9,8 @@
 | `engine/native` | GraalVM native-image build (`build-native.sh`), reflection metadata generator, workload smoke test. |
 | `engine/groovy`, `engine/groovy-v1`, `engine/groovy-v2` | Groovy engines: shared runner, clean-room `com.sap.*` API (`src/api-common`, `src/api-v1`, `src/api-v2`), and the two builds (Groovy 2.4.21 with Camel 2.24.3, Groovy 4.0.29 with Camel 3.14.7). `build-jre.sh` trims the Java 17 runtime. |
 | `app/` | Svelte 5 + Monaco UI (`src/`), Tauri 2 shell (`src-tauri/`), browser e2e tests (`e2e/`). |
-| `examples/demo-project/` | Sample project with mappings, scripts, a schema, platform data and test cases. |
+| `examples/demo-project/` | Sample project for the app: mappings, scripts, a schema, inputs and platform data. |
+| `testdata/regression-project/` | Project with test cases (`case.json`) that CI, the browser e2e and the shell tests run. |
 | `probes/` | Fingerprint and behaviour probes for a real tenant, plus the simulator's baseline output. |
 
 ## Engines and protocol

@@ -1,5 +1,6 @@
 package com.sap.it.api.pd;
 
+import com.sap.it.api.ITApi;
 import com.sap.it.api.pd.exception.PartnerDirectoryException;
 import io.cpiwb.groovy.Platform;
 
@@ -9,7 +10,7 @@ import io.cpiwb.groovy.Platform;
  * missing entries (null) follows the documented {@code getAlternativePartnerId} contract and is assumed
  * for the other methods.
  */
-public class PartnerDirectoryService {
+public class PartnerDirectoryService implements ITApi {
 
     /** Reads a String or {@link BinaryData} parameter of a partner; null if it does not exist. */
     @SuppressWarnings("unchecked")

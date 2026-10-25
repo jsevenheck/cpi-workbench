@@ -1,44 +1,55 @@
 package com.sap.gateway.ip.core.customdev.util;
 
-import javax.activation.DataHandler;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.util.LinkedHashMap;
-import java.util.Map;
+import io.cpiwb.groovy.AttachmentHeaders;
 
-/** A message attachment with its MIME headers (simulated; constructor shape not verified against SAP). */
+import javax.activation.DataHandler;
+import javax.activation.DataSource;
+import java.util.Collection;
+import java.util.List;
+
+/**
+ * A message attachment with its MIME headers. Constructors and methods follow SAP's published Script
+ * API ({@code com.sap.cloud.script:script.api}). SAP's class extends Camel's
+ * {@code DefaultAttachment}; this one does not, so it is no {@code org.apache.camel.Attachment}.
+ */
 public class AttachmentWrapper {
 
     private final DataHandler dataHandler;
-    private final Map<String, String> headers = new LinkedHashMap<>();
+    private final AttachmentHeaders headers = new AttachmentHeaders();
 
     public AttachmentWrapper(DataHandler dataHandler) {
         this.dataHandler = dataHandler;
+    }
+
+    public AttachmentWrapper(DataSource dataSource) {
+        this(new DataHandler(dataSource));
     }
 
     public DataHandler getDataHandler() {
         return dataHandler;
     }
 
-    public void addHeader(String name, String value) {
-        headers.put(name, value);
-    }
-
     public String getHeader(String name) {
         return headers.get(name);
     }
 
-    public Map<String, String> getHeaders() {
-        return headers;
+    public List<String> getHeaderAsList(String name) {
+        return headers.getAsList(name);
     }
 
-    public long size() {
-        try {
-            ByteArrayOutputStream out = new ByteArrayOutputStream();
-            dataHandler.writeTo(out);
-            return out.size();
-        } catch (IOException e) {
-            return 0;
-        }
+    public void addHeader(String name, String value) {
+        headers.add(name, value);
+    }
+
+    public void setHeader(String name, String value) {
+        headers.set(name, value);
+    }
+
+    public void removeHeader(String name) {
+        headers.remove(name);
+    }
+
+    public Collection<String> getHeaderNames() {
+        return headers.names();
     }
 }

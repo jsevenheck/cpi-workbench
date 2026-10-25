@@ -14,7 +14,36 @@
     "locale": "en_US",
     "messageClass": "com.sap.it.script.v2.api.Message",
     "messageMethods": [
-        
+        "addAttachmentHeader(String, String, Attachment): void",
+        "addAttachmentObject(String, Attachment): void",
+        "clearAttachments(): void",
+        "clearSoapHeaders(): void",
+        "getAttachmentHeader(String, Attachment): String",
+        "getAttachmentObjects(): Map",
+        "getAttachments(): Map",
+        "getAttachmentsSize(): long",
+        "getBody(): Object",
+        "getBody(Class): Object",
+        "getBodySize(): long",
+        "getExchangeForSimulator(): Exchange",
+        "getExtensionFunctions(Class): ExtensionFunctions",
+        "getHeader(String): Object",
+        "getHeader(String, Class): Object",
+        "getHeader(String, Object): Object",
+        "getHeaders(): Map",
+        "getProperties(): Map",
+        "getProperty(String): Object",
+        "removeAttachmentHeader(String, Attachment): void",
+        "resetBodyStream(): void",
+        "setAttachmentHeader(String, String, Attachment): void",
+        "setAttachmentObjects(Map): void",
+        "setAttachments(Map): void",
+        "setBody(Object): void",
+        "setHeader(String, Object): void",
+        "setHeaders(Map): void",
+        "setProperties(Map): void",
+        "setProperty(String, Object): void",
+        "toString(): String"
     ],
     "interfaces": [
         
@@ -30,8 +59,15 @@
         "groovy.ant.AntBuilder": "unavailable: java.lang.ClassNotFoundException",
         "org.apache.commons.lang3.StringUtils": "unavailable: java.lang.ClassNotFoundException",
         "com.fasterxml.jackson.databind.ObjectMapper": "unavailable: java.lang.ClassNotFoundException",
-        "org.apache.poi.ss.usermodel.Workbook": "unavailable: java.lang.ClassNotFoundException"
+        "org.apache.poi.ss.usermodel.Workbook": "unavailable: java.lang.ClassNotFoundException",
+        "org.apache.commons.codec.binary.Base64": "unavailable: java.lang.ClassNotFoundException",
+        "iaik.cms.EnvelopedDataStream": "unavailable: java.lang.ClassNotFoundException",
+        "org.apache.camel.Attachment": "unavailable: java.lang.ClassNotFoundException",
+        "org.apache.camel.attachment.Attachment": "unavailable: java.lang.ClassNotFoundException",
+        "com.sap.it.script.v2.api.Exchange": "unavailable: java.lang.ClassNotFoundException",
+        "com.sap.it.script.v2.api.language.SimpleBuilder": "unavailable: java.lang.ClassNotFoundException"
     },
+    "scriptApiBundle": "file:cpiwb-groovy-v2.jar",
     "bindingVariables": [
         "messageLogFactory",
         "out"

@@ -157,6 +157,12 @@
         {/if}
       {:else if outputTab === 'headers'}
         <KeyValueTable rows={result.output?.headers ?? []} readOnly added={result.changes?.headers.added} changed={result.changes?.headers.changed} removed={result.changes?.headers.removed} emptyText="No headers" />
+        {#if result.soapHeaders?.length}
+          <div class="pad soap">
+            <h3>SOAP headers</h3>
+            {#each result.soapHeaders as h}<div class="row"><span class="mono">{h.name}</span>{#if h.mustUnderstand} <span class="muted">mustUnderstand</span>{/if}<pre>{h.value}</pre></div>{/each}
+          </div>
+        {/if}
       {:else if outputTab === 'properties'}
         <KeyValueTable rows={result.output?.properties ?? []} readOnly added={result.changes?.properties.added} changed={result.changes?.properties.changed} removed={result.changes?.properties.removed} emptyText="No properties" />
       {:else if outputTab === 'mpl'}
@@ -243,6 +249,7 @@
   .att { border-bottom: 1px solid var(--border-soft); padding: 3px 0; }
   .link { background: none; border: none; color: var(--accent); cursor: pointer; padding: 0; font: inherit; }
   footer { font-size: 11px; color: var(--muted); padding: 4px 10px; border-top: 1px solid var(--border); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .soap { height: auto; border-top: 1px solid var(--border); }
   .on { background: var(--active); color: var(--accent); border-color: var(--accent); }
   .check { font-size: 12px; display: flex; align-items: center; gap: 4px; }
   @media (max-width: 1100px) {

@@ -71,9 +71,12 @@ open a project folder (any folder; **Init** adds `mappings/`, `schemas/`, `tests
 * **Save as test** stores input, mapping reference and the current output as a regression test,
 * **Tests** runs all test cases of the project on the right engine,
 * **Import iFlow** unpacks an iFlow exported from Integration Suite (zip) into `iflows/` and lists
-  its Groovy Script and XSLT Mapping steps; clicking a step opens its file with the step's function
-  name and script version. The `.iflw` format is not publicly documented, so this is read
-  generically (best effort).
+  its Groovy Script, XSLT Mapping and XML Validator steps; clicking a step opens its file with the
+  step's function name and script version. Steps that choose their mapping from a header at runtime
+  are marked. The `.iflw` format is not publicly documented, so this is read generically (best effort).
+* **Lint** hints at what breaks when a script moves from 1.x to 2.x: `XmlSlurper`/`XmlParser`
+  without a `groovy.xml` import, Script API v1 imports or v1-only methods in a 2.x step,
+  wildcard imports.
 
 The installers are not code-signed yet: on macOS, right-click → *Open* the first time; on Windows,
 SmartScreen asks once ("More info" → "Run anyway"). The Windows installer installs per user, no admin rights.
@@ -147,6 +150,18 @@ A test case can override any of these with a `platform` object (`credentials`, `
 `partnerDirectory`, `keystore`); keys it leaves out still come from the folder. Use test-only keys
 and passwords here — never real tenant secrets.
 
+More script inputs and resources:
+
+* **SOAP headers** (Script API v1): a test case's input may hold
+  `"soapHeaders": [ { "name": "{urn:ns}Local", "value": "<Local xmlns=\"urn:ns\">…</Local>", "mustUnderstand": false } ]`;
+  the headers the script sets are shown in the result.
+* **Libraries**: jars in the project's `lib/` folder and in an imported iFlow's
+  `src/main/resources/lib/` are on the script's class path (CPI's own extra libraries are not
+  known, so none are bundled).
+* **Java calls from XSLT**: `xmlns:x="java:java.lang.Math"` style calls (`x:max(1, 2)`,
+  `x:new(…)`, instance methods with the object as first argument) work for JDK classes; the JVM
+  engines also see the project's `lib/` jars. Hyphenated names (`random-UUID`) are accepted too.
+
 ## Fidelity: what matches CPI and what does not (yet)
 
 | Area | Status |
@@ -158,12 +173,12 @@ and passwords here — never real tenant secrets.
 | Header vs. property with the same name | Header wins (Camel XsltBuilder order) — **to verify on a tenant** (probe Q-X2) |
 | Declared parameter without header/property | XSLT default is used; switchable to "error" — **to verify** (Q-X4) |
 | XSD validation | JDK validator, XML Schema 1.0 — CPI's validator **to verify** (Q-V1) |
-
+| Reflexive Java calls (`java:` namespaces) | Supported (CPI's EE allows them, SAP's samples use them); argument conversion follows simple rules, not all of Saxon-EE's |
 | Groovy versions | Groovy 2.4.21 / 4.0.29 as documented by SAP |
 | Java version | Java 17 (reported for 2.x); the 1.x Java version is **to verify** |
-| Camel version | 3.14.7 for 2.x (reported); 2.24.3 for 1.x is an **assumption** |
-| Script API v1 | Documented methods (body, headers, properties, attachments, sizes) |
-| Script API v2 | **Provisional**: same methods as v1 until SAP's v2 reference is available (probe `fingerprint-v2.groovy` lists the real methods) |
+| Camel version | 3.14.7 for 2.x (reported); 2.24.3 for 1.x — SAP's v1 API jar targets Camel 3.14 since late 2025, so 1.x may run on 3.14 now: **to verify** |
+| Script API v1 | Methods of SAP's published interface (`script.api` on Maven Central): body, headers, properties, attachments (`AttachmentWrapper`), SOAP headers, sizes. Not offered: overloads taking Camel's own `Attachment` type |
+| Script API v2 | Methods of SAP's published interface (`script.v2.api` 4.2.2), including attachments, `getHeader(name, default)`, `resetBodyStream`, exchange timestamps; ProcessDirect calls raise `UnsupportedInSimulator`. CPI's runtime class may offer more than the interface (`fingerprint-v2.groovy` lists it) |
 | Platform APIs | Secure Store (user credentials), Value Mapping, Partner Directory (`getParameter` for String/`BinaryData`, `getPartnerId`, `getAlternativePartnerId`), Keystore (`getKey`, `getCertificate`, `getCertificateChain`, `getKeyPair`); others raise `UnsupportedInSimulator`. Missing Partner Directory entries return `null`; an unknown keystore alias throws — CPI's behaviour for both **to verify** |
 | Data Store from scripts | Not simulated: CPI has no public script API for it (scripts use internal classes) |
 | Groovy modules on 2.x | xml, json, dateutil, datetime, templates, nio bundled — CPI's set **to verify** |

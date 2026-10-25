@@ -57,6 +57,7 @@ export interface GroovyResult {
   output?: MessageOut & { bodyType: string };
   changes?: { headers: Changes; properties: Changes };
   attachments?: { name: string; contentType: string | null; size: number }[];
+  soapHeaders?: { name: string; value: string; mustUnderstand: boolean; actor: string | null }[];
   mpl: {
     enabled: boolean;
     properties: { name: string; type: string; value: string | null }[];

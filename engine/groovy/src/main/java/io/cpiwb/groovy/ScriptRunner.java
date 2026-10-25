@@ -1,5 +1,6 @@
 package io.cpiwb.groovy;
 
+import com.sap.gateway.ip.core.customdev.util.SoapHeader;
 import com.sap.it.api.msglog.MessageLogFactory;
 import groovy.lang.Binding;
 import groovy.lang.GroovyClassLoader;
@@ -20,6 +21,15 @@ import org.codehaus.groovy.control.messages.SyntaxErrorMessage;
 import org.codehaus.groovy.runtime.InvokerHelper;
 import org.codehaus.groovy.syntax.SyntaxException;
 
+import org.w3c.dom.Element;
+
+import javax.xml.namespace.QName;
+import javax.xml.stream.XMLStreamException;
+import javax.xml.transform.OutputKeys;
+import javax.xml.transform.Transformer;
+import javax.xml.transform.TransformerFactory;
+import javax.xml.transform.dom.DOMSource;
+import javax.xml.transform.stream.StreamResult;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
@@ -81,17 +91,18 @@ public final class ScriptRunner {
 
         Platform platform = Platform.fromJson(platformData(req, baseDir), baseDir);
         Platform.setCurrent(platform);
-        lint(source, diags);
+        lint(source, apiVersion, diags);
 
         // ---- compile (cached by source, name and classpath)
         List<String> classpath = new ArrayList<>();
         for (Object o : Json.arr(req, "classpath")) {
             classpath.add(o.toString());
         }
+        classpath.addAll(libraryJars(baseDir, path));
         String className = className(path);
         Class<?> scriptClass;
         boolean cached;
-        String key = hash(className + "\0" + source + "\0" + classpath + "\0" + baseDir);
+        String key = hash(className + "\0" + source + "\0" + jarStamps(baseDir, classpath) + "\0" + baseDir);
         long tc = System.nanoTime();
         scriptClass = cache.get(key);
         cached = scriptClass != null;
@@ -123,7 +134,14 @@ public final class ScriptRunner {
         exchange.getIn().setBody(inputBody(in, bodyType));
         exchange.getIn().getHeaders().putAll(in.getHeaders());
         exchange.getProperties().putAll(in.getProperties());
-        MessageSupport message = newMessage(fn.getParameterTypes()[0], exchange, diags);
+        MessageSupport<?> message = newMessage(fn.getParameterTypes()[0], exchange, diags);
+        List<SoapHeader> inSoap = soapHeaders(Json.obj(req, "input"));
+        if (message instanceof com.sap.gateway.ip.core.customdev.util.Message) {
+            ((com.sap.gateway.ip.core.customdev.util.Message) message).setSoapHeaders(inSoap);
+        } else if (!inSoap.isEmpty()) {
+            diags.add(Diagnostic.info("The input SOAP headers are not passed to the script: the Script API v2 Message "
+                    + "has no getSoapHeaders()."));
+        }
 
         // ---- run
         StringWriter console = new StringWriter();
@@ -173,7 +191,84 @@ public final class ScriptRunner {
                 compileMs, cached, message);
     }
 
+    /** Input SOAP headers: [{name: "{namespace}local", value: "<header element/>", mustUnderstand, actor}]. */
+    @SuppressWarnings("unchecked")
+    private static List<SoapHeader> soapHeaders(Map<String, Object> input) {
+        List<SoapHeader> out = new ArrayList<>();
+        for (Object o : Json.arr(input, "soapHeaders")) {
+            if (o instanceof Map) {
+                Map<String, Object> m = (Map<String, Object>) o;
+                String name = Json.str(m, "name", "header");
+                try {
+                    out.add(new SoapHeader(QName.valueOf(name), Json.str(m, "value", null),
+                            Json.bool(m, "mustUnderstand", false), Json.str(m, "actor", null)));
+                } catch (XMLStreamException e) {
+                    throw new IllegalArgumentException("Input SOAP header " + name + ": " + e.getMessage(), e);
+                }
+            }
+        }
+        return out;
+    }
+
+    private static String xml(Element element) {
+        if (element == null) {
+            return null;
+        }
+        try {
+            Transformer t = TransformerFactory.newInstance().newTransformer();
+            t.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "yes");
+            StringWriter w = new StringWriter();
+            t.transform(new DOMSource(element), new StreamResult(w));
+            return w.toString();
+        } catch (Exception e) {
+            return element.toString();
+        }
+    }
+
     // ---------------------------------------------------------------- compile
+
+    /**
+     * Libraries a script sees besides the runtime: jars in the project's {@code lib/} folder and, for
+     * a script of an imported iFlow, the iFlow's own {@code src/main/resources/lib/} (where CPI keeps
+     * archives uploaded as iFlow resources).
+     */
+    static List<String> libraryJars(Path baseDir, String scriptPath) throws java.io.IOException {
+        List<String> out = new ArrayList<>();
+        if (baseDir == null) {
+            return out;
+        }
+        List<Path> dirs = new ArrayList<>();
+        dirs.add(baseDir.resolve("lib"));
+        String p = scriptPath.replace('\\', '/');
+        if (p.startsWith("iflows/") && p.indexOf('/', 7) > 0) {
+            dirs.add(baseDir.resolve(p.substring(0, p.indexOf('/', 7))).resolve("src/main/resources/lib"));
+        }
+        for (Path dir : dirs) {
+            if (Files.isDirectory(dir)) {
+                try (java.util.stream.Stream<Path> s = Files.list(dir)) {
+                    s.filter(f -> f.getFileName().toString().toLowerCase(java.util.Locale.ROOT).endsWith(".jar"))
+                            .sorted()
+                            .forEach(f -> out.add(baseDir.relativize(f).toString().replace('\\', '/')));
+                }
+            }
+        }
+        return out;
+    }
+
+    /** Class path plus modification times, so a replaced jar is picked up. */
+    private static String jarStamps(Path baseDir, List<String> classpath) {
+        StringBuilder sb = new StringBuilder();
+        for (String jar : classpath) {
+            sb.append(jar).append('@');
+            try {
+                sb.append(Files.getLastModifiedTime(project(baseDir, jar)).toMillis());
+            } catch (Exception e) {
+                sb.append('?');
+            }
+            sb.append(';');
+        }
+        return sb.toString();
+    }
 
     private Class<?> compile(String source, String className, List<String> classpath, Path baseDir) throws Exception {
         List<URL> urls = new ArrayList<>();
@@ -225,7 +320,7 @@ public final class ScriptRunner {
         return null;
     }
 
-    private MessageSupport newMessage(Class<?> declared, Exchange exchange, List<Diagnostic> diags) throws Exception {
+    private MessageSupport<?> newMessage(Class<?> declared, Exchange exchange, List<Diagnostic> diags) throws Exception {
         Class<? extends MessageSupport> cls = defaultMessageClass;
         if (MessageSupport.class.isAssignableFrom(declared) && declared != MessageSupport.class) {
             cls = declared.asSubclass(MessageSupport.class);
@@ -287,7 +382,7 @@ public final class ScriptRunner {
 
     private Json.Obj finish(Json.Obj result, boolean ok, String failedPhase, List<Diagnostic> diags, Json.Obj output,
                             Json.Obj changes, Platform platform, String console, long t0, double compileMs,
-                            boolean cached, MessageSupport message) {
+                            boolean cached, MessageSupport<?> message) {
         result.with("ok", ok);
         if (failedPhase != null) {
             result.with("failedPhase", failedPhase);
@@ -301,10 +396,19 @@ public final class ScriptRunner {
         }
         if (message != null) {
             List<Object> att = new ArrayList<>();
-            message.getAttachmentWrapperObjects().forEach((k, v) -> att.add(Json.o().with("name", k)
-                    .with("contentType", v.getDataHandler() == null ? null : v.getDataHandler().getContentType())
-                    .with("size", v.size())));
+            message.getAttachments().forEach((k, v) -> att.add(Json.o().with("name", k)
+                    .with("contentType", v == null ? null : v.getContentType())
+                    .with("size", AttachmentHeaders.size(v))));
             result.with("attachments", att);
+            if (message instanceof com.sap.gateway.ip.core.customdev.util.Message) {
+                List<Object> soap = new ArrayList<>();
+                for (SoapHeader h : ((com.sap.gateway.ip.core.customdev.util.Message) message).getSoapHeaders()) {
+                    soap.add(Json.o().with("name", h.getQname() == null ? null : h.getQname().toString())
+                            .with("value", xml(h.getElement())).with("mustUnderstand", h.isMustUnderstand())
+                            .with("actor", h.getActor()));
+                }
+                result.with("soapHeaders", soap);
+            }
         }
         result.with("mpl", platform.mplJson());
         result.with("apiCalls", platform.apiCallsJson());
@@ -329,8 +433,8 @@ public final class ScriptRunner {
         for (Object m : e.getErrorCollector().getErrors()) {
             if (m instanceof SyntaxErrorMessage) {
                 SyntaxException se = ((SyntaxErrorMessage) m).getCause();
-                diags.add(new Diagnostic(Diagnostic.Severity.ERROR, se.getOriginalMessage(), null, null,
-                        se.getLine(), se.getStartColumn()));
+                diags.add(new Diagnostic(Diagnostic.Severity.ERROR, se.getOriginalMessage() + movedClassHint(se.getOriginalMessage()),
+                        null, null, se.getLine(), se.getStartColumn()));
             } else if (m instanceof ExceptionMessage) {
                 Exception cause = ((ExceptionMessage) m).getCause();
                 diags.add(Diagnostic.error(cause == null ? m.toString() : cause.toString()));
@@ -354,6 +458,7 @@ public final class ScriptRunner {
         }
         Throwable shown = unwrap(e);
         String msg = shown.getClass().getName() + (shown.getMessage() == null ? "" : ": " + shown.getMessage());
+        msg += v1OnlyMethodHint(shown);
         return new Diagnostic(Diagnostic.Severity.ERROR, msg, null, null, line, -1);
     }
 
@@ -403,15 +508,60 @@ public final class ScriptRunner {
         return sb.toString();
     }
 
-    private static void lint(String source, List<Diagnostic> diags) {
+    /** XML classes that Groovy 4 (Script 2.x) only has in groovy.xml, no longer in the default-imported groovy.util. */
+    private static final java.util.regex.Pattern MOVED_XML_CLASS =
+            java.util.regex.Pattern.compile("\\b(XmlSlurper|XmlParser|XmlNodePrinter|GPathResult)\\b");
+
+    /** Methods of SAP's v1 Message interface that its published v2 interface lacks. */
+    private static final java.util.regex.Pattern V1_ONLY_METHOD = java.util.regex.Pattern.compile(
+            "\\.(getSoapHeaders|setSoapHeaders|getAttachmentWrapperObjects|setAttachmentWrapperObjects)\\s*\\(");
+
+    private static void lint(String source, String apiVersion, List<Diagnostic> diags) {
         String[] lines = source.split("\n", -1);
+        boolean xmlImport = source.contains("import groovy.xml.");
+        boolean movedClassReported = false;
         for (int i = 0; i < lines.length; i++) {
             String l = lines[i].trim();
             if (l.startsWith("import ") && l.replace(";", "").endsWith(".*")) {
                 diags.add(new Diagnostic(Diagnostic.Severity.INFO, "Wildcard import: SAP recommends explicit imports "
                         + "for Groovy Script 2.x compatibility.", "lint", null, i + 1, 1));
             }
+            if (l.startsWith("//") || l.startsWith("*") || l.startsWith("import ")) {
+                continue;
+            }
+            java.util.regex.Matcher m = MOVED_XML_CLASS.matcher(l);
+            if ("v1".equals(apiVersion) && !xmlImport && !movedClassReported && m.find()) {
+                String cls = m.group(1);
+                diags.add(new Diagnostic(Diagnostic.Severity.INFO, cls + " comes from groovy.util here. Groovy Script 2.x "
+                        + "(Groovy 4) only has it in groovy.xml: add 'import groovy.xml." + ("GPathResult".equals(cls)
+                        ? "slurpersupport." : "") + cls + "' before upgrading the step.", "lint", null, i + 1, 1));
+                movedClassReported = true;
+            }
+            java.util.regex.Matcher v = V1_ONLY_METHOD.matcher(l);
+            if ("v2".equals(apiVersion) && v.find()) {
+                diags.add(new Diagnostic(Diagnostic.Severity.WARNING, v.group(1) + "() is part of the Script API v1 "
+                        + "Message but not of SAP's published v2 interface (script.v2.api 4.2.2).", "lint", null, i + 1, 1));
+            }
         }
+    }
+
+    private static String movedClassHint(String message) {
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("unable to resolve class (XmlSlurper|XmlParser|XmlNodePrinter|GPathResult)\\b")
+                .matcher(message == null ? "" : message);
+        if (!m.find()) {
+            return "";
+        }
+        String pkg = "GPathResult".equals(m.group(1)) ? "groovy.xml.slurpersupport." : "groovy.xml.";
+        return " (Groovy 4 moved it out of groovy.util: add 'import " + pkg + m.group(1) + "')";
+    }
+
+    private static String v1OnlyMethodHint(Throwable t) {
+        String msg = t.getMessage();
+        if (t instanceof groovy.lang.MissingMethodException && msg != null
+                && msg.contains("com.sap.it.script.v2.api.Message") && V1_ONLY_METHOD.matcher("." + ((groovy.lang.MissingMethodException) t).getMethod() + "(").find()) {
+            return " (this method is part of the Script API v1 Message only)";
+        }
+        return "";
     }
 
     // ---------------------------------------------------------------- platform data

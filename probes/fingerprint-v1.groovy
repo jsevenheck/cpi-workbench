@@ -30,11 +30,20 @@ def Message processData(Message message) {
         bodyClass          : safe { message.getBody()?.class?.name },
         // Which optional Groovy modules / libraries the runtime offers (the simulator bundles
         // groovy-xml, -json, -dateutil, -datetime, -templates, -nio for 2.x).
+        // The simulator follows SAP's published interface; the runtime class may offer more (PLAN.md F6).
+        messageMethods     : safe { message.class.methods.findAll { it.declaringClass != Object }
+                                        .collect { it.name + '(' + it.parameterTypes*.simpleName.join(', ') + '): ' + it.returnType.simpleName }
+                                        .unique().sort() },
         classesAvailable   : ['groovy.util.XmlSlurper', 'groovy.xml.XmlSlurper', 'groovy.json.JsonSlurper',
                               'groovy.text.SimpleTemplateEngine', 'groovy.sql.Sql', 'groovy.yaml.YamlSlurper',
                               'groovy.toml.TomlSlurper', 'groovy.ant.AntBuilder', 'org.apache.commons.lang3.StringUtils',
-                              'com.fasterxml.jackson.databind.ObjectMapper', 'org.apache.poi.ss.usermodel.Workbook']
+                              'com.fasterxml.jackson.databind.ObjectMapper', 'org.apache.poi.ss.usermodel.Workbook',
+                              'org.apache.commons.codec.binary.Base64', 'iaik.cms.EnvelopedDataStream',
+                              'org.apache.camel.Attachment', 'org.apache.camel.attachment.Attachment',
+                              'com.sap.it.script.v2.api.Exchange', 'com.sap.it.script.v2.api.language.SimpleBuilder']
                               .collectEntries { name -> [(name): safe { Class.forName(name) != null }] },
+        // Which release of SAP's Script API bundle the runtime has (Maven Central: com.sap.cloud.script).
+        scriptApiBundle    : safe { def c = Class.forName('com.sap.gateway.ip.core.customdev.util.Message'); c.protectionDomain?.codeSource?.location?.toString() },
         bindingVariables   : safe { binding.variables.keySet().sort() },
         headerTypes        : safe { message.headers.collectEntries { k, v -> [(k): v?.class?.name] } },
         propertyTypes      : safe { message.properties.collectEntries { k, v -> [(k): v?.class?.name] } },

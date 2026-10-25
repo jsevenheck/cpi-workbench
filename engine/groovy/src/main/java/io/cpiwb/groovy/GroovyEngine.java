@@ -107,6 +107,9 @@ public final class GroovyEngine implements RpcHandler {
                 input.put("body", TestRunner.readText(in.get("body"), dir));
                 input.put("headers", in.get("headers"));
                 input.put("properties", in.get("properties"));
+                if (in.get("soapHeaders") != null) {
+                    input.put("soapHeaders", in.get("soapHeaders"));
+                }
             }
             params.put("input", input);
             for (String k : List.of("options", "platform", "classpath")) {

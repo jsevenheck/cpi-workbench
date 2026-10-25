@@ -1,5 +1,6 @@
 package com.sap.it.api.keystore;
 
+import com.sap.it.api.ITApi;
 import com.sap.it.api.keystore.exception.KeystoreException;
 import io.cpiwb.groovy.Platform;
 
@@ -12,7 +13,7 @@ import java.security.cert.Certificate;
  * PKCS#12 or JKS file). An unknown alias raises {@link KeystoreException}; whether CPI returns null
  * instead is not verified.
  */
-public class KeystoreService {
+public class KeystoreService implements ITApi {
 
     public Key getKey(String alias) throws KeystoreException {
         return Platform.current().keystore("getKey", alias, Key.class);

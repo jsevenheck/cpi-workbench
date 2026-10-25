@@ -261,4 +261,115 @@ class ScriptRunnerTest {
         assertFalse(Json.bool(bad, "ok", true));
         assertTrue(Json.write(bad).contains("Alias nope not found"), () -> Json.write(bad));
     }
+
+    @Test
+    void soapHeadersItApiAndLibraryJars(@TempDir Path tmp) throws Exception {
+        // A jar in the iFlow's src/main/resources/lib is on the script's class path.
+        Path src = Files.createDirectories(tmp.resolve("src/demo"));
+        Files.writeString(src.resolve("Util.java"), "package demo; public class Util { public static String hi() { return \"hi\"; } }");
+        Path classes = Files.createDirectories(tmp.resolve("classes"));
+        int rc = javax.tools.ToolProvider.getSystemJavaCompiler().run(null, null, null,
+                "-d", classes.toString(), src.resolve("Util.java").toString());
+        assertEquals(0, rc);
+        Path project = Files.createDirectories(tmp.resolve("project"));
+        Path lib = Files.createDirectories(project.resolve("iflows/Flow/src/main/resources/lib"));
+        try (java.util.jar.JarOutputStream jar = new java.util.jar.JarOutputStream(Files.newOutputStream(lib.resolve("util.jar")))) {
+            jar.putNextEntry(new java.util.jar.JarEntry("demo/Util.class"));
+            jar.write(Files.readAllBytes(classes.resolve("demo/Util.class")));
+            jar.closeEntry();
+        }
+        String soap = V2 ? "" : "  def received = message.getSoapHeaders()\n"
+                + "  message.setProperty('soapIn', received.size() + ':' + received[0].getQname().getLocalPart()"
+                + " + ':' + received[0].getElement().getAttribute('id'))\n"
+                + "  message.clearSoapHeaders()\n"
+                + "  message.setSoapHeaders([new SoapHeader(new QName('urn:x', 'Out'), '<Out xmlns=\"urn:x\">1</Out>', true, null)])\n";
+        String s = IMPORT + "import com.sap.gateway.ip.core.customdev.util.SoapHeader\n"
+                + "import com.sap.it.api.ITApi\n"
+                + "import javax.xml.namespace.QName\n"
+                + "def Message processData(Message message) {\n"
+                + soap
+                + "  message.setProperty('lib', demo.Util.hi())\n"
+                + "  message.setProperty('itapi', ITApi.isInterface())\n"
+                + "  return message\n}";
+        Map<String, Object> input = in("", List.of(), List.of());
+        input.put("soapHeaders", List.of(Json.o().with("name", "{urn:y}In").with("value", "<In xmlns=\"urn:y\" id=\"7\"/>")));
+        Map<String, Object> r = (Map<String, Object>) ENGINE.call("groovy.run", Json.o()
+                .with("script", Json.o().with("content", s).with("path", "iflows/Flow/src/main/resources/script/s.groovy"))
+                .with("baseDir", project.toString()).with("input", input));
+        assertTrue(Json.bool(r, "ok", false), () -> Json.write(r));
+        assertEquals("hi", entry(r, "properties", "lib").get("value"));
+        assertEquals("true", entry(r, "properties", "itapi").get("value"));
+        if (V2) {
+            // The v2 Message has no SOAP header getter, so the input headers are not handed over.
+            assertNull(r.get("soapHeaders"));
+            assertTrue(Json.write(r).contains("has no getSoapHeaders()"), () -> Json.write(r));
+        } else {
+            assertEquals("1:In:7", entry(r, "properties", "soapIn").get("value"));
+            Map<String, Object> out = (Map<String, Object>) Json.arr(r, "soapHeaders").get(0);
+            assertEquals("{urn:x}Out", out.get("name"));
+            assertEquals("<Out xmlns=\"urn:x\">1</Out>", out.get("value"));
+            assertEquals(true, out.get("mustUnderstand"));
+        }
+    }
+
+    @Test
+    void attachmentsFollowThePublishedApi() throws Exception {
+        String att = V2 ? "import com.sap.it.script.v2.api.attachment.DefaultAttachment as Att\n"
+                : "import com.sap.gateway.ip.core.customdev.util.AttachmentWrapper as Att\n";
+        String objects = V2 ? "getAttachmentObjects" : "getAttachmentWrapperObjects";
+        String s = IMPORT + att + "import javax.activation.DataHandler\n"
+                + "def Message processData(Message message) {\n"
+                + "  def a = new Att(new DataHandler('hello', 'text/plain'))\n"
+                + "  message.addAttachmentObject('a.txt', a)\n"
+                + "  message.addAttachmentHeader('X-Tag', '1', a)\n"
+                + "  message.addAttachmentHeader('x-tag', '2', a)\n"
+                + "  message.getAttachments().put('b.txt', new DataHandler('bb', 'text/plain'))\n"
+                + "  message.setProperty('tag', message.getAttachmentHeader('X-TAG', a) + '|' + a.getHeaderNames())\n"
+                + "  message.setProperty('names', message." + objects + "().keySet().join(','))\n"
+                + "  message.setProperty('size', message.getAttachmentsSize())\n"
+                + "  return message\n}";
+        Map<String, Object> r = run(s, in("", List.of(), List.of()), null);
+        assertTrue(Json.bool(r, "ok", false), () -> Json.write(r));
+        assertEquals("1,2|[x-tag]", entry(r, "properties", "tag").get("value"));
+        assertEquals("a.txt,b.txt", entry(r, "properties", "names").get("value"));
+        assertEquals("7", entry(r, "properties", "size").get("value"));
+        assertEquals(2, Json.arr(r, "attachments").size());
+    }
+
+    @Test
+    void migrationHintsBetweenScriptVersions() throws Exception {
+        String s = IMPORT + "def Message processData(Message message) {\n"
+                + "  def x = new XmlSlurper().parseText('<a/>')\n"
+                + "  return message\n}";
+        Map<String, Object> r = run(s, in("", List.of(), List.of()), null);
+        String json = Json.write(r);
+        if (V2) {
+            assertFalse(Json.bool(r, "ok", true));
+            assertTrue(json.contains("add 'import groovy.xml.XmlSlurper'"), json);
+        } else {
+            assertTrue(Json.bool(r, "ok", false), json);
+            assertTrue(json.contains("Groovy Script 2.x (Groovy 4) only has it in groovy.xml"), json);
+        }
+        if (V2) {
+            String v1Only = IMPORT + "def Message processData(Message message) {\n"
+                    + "  message.getSoapHeaders()\n"
+                    + "  return message\n}";
+            Map<String, Object> e = run(v1Only, in("", List.of(), List.of()), null);
+            String ej = Json.write(e);
+            assertFalse(Json.bool(e, "ok", true));
+            assertTrue(ej.contains("not of SAP's published v2 interface"), ej);
+            assertTrue(ej.contains("Script API v1 Message only"), ej);
+
+            String ext = IMPORT + "import com.sap.it.script.v2.api.extensions.ExchangeExtensionFunctions\n"
+                    + "import com.sap.it.script.v2.api.extensions.ProcessDirectService\n"
+                    + "def Message processData(Message message) {\n"
+                    + "  def f = message.getExtensionFunctions(ExchangeExtensionFunctions)\n"
+                    + "  message.setProperty('created', f.getCreated() > 0)\n"
+                    + "  message.setProperty('h', message.getHeader('missing', 'dflt'))\n"
+                    + "  message.getExtensionFunctions(ProcessDirectService).invokeProcessDirect('/x', null)\n"
+                    + "  return message\n}";
+            Map<String, Object> x = run(ext, in("", List.of(), List.of()), null);
+            assertTrue(Json.write(x).contains("UnsupportedInSimulator: ProcessDirectService"), () -> Json.write(x));
+        }
+    }
 }

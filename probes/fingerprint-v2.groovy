@@ -1,6 +1,6 @@
 // CPI Workbench – runtime fingerprint for a Groovy Script step version 2.x (Script API v2).
-// NOTE: written from public community information (package com.sap.it.script.v2.api); not yet
-// verified on a tenant. If it does not compile, the error message itself is useful – please send it.
+// The v2 interface follows SAP's published Script API (com.sap.cloud.script:script.v2.api on Maven
+// Central); not yet run on a tenant. If it does not compile, the error message itself is useful.
 import com.sap.it.script.v2.api.Message
 import groovy.json.JsonOutput
 
@@ -23,7 +23,7 @@ def Message processData(Message message) {
         locale         : Locale.default.toString(),
         messageClass   : message.class.name,
         // The v2 API surface is still unknown (PLAN.md F6): list it by reflection.
-        messageMethods : safe { message.class.methods.findAll { it.declaringClass.name.startsWith('com.sap') }
+        messageMethods : safe { message.class.methods.findAll { it.declaringClass != Object }
                                     .collect { it.name + '(' + it.parameterTypes*.simpleName.join(', ') + '): ' + it.returnType.simpleName }
                                     .unique().sort() },
         interfaces     : safe { message.class.interfaces*.name },
@@ -32,8 +32,13 @@ def Message processData(Message message) {
         classesAvailable   : ['groovy.util.XmlSlurper', 'groovy.xml.XmlSlurper', 'groovy.json.JsonSlurper',
                               'groovy.text.SimpleTemplateEngine', 'groovy.sql.Sql', 'groovy.yaml.YamlSlurper',
                               'groovy.toml.TomlSlurper', 'groovy.ant.AntBuilder', 'org.apache.commons.lang3.StringUtils',
-                              'com.fasterxml.jackson.databind.ObjectMapper', 'org.apache.poi.ss.usermodel.Workbook']
+                              'com.fasterxml.jackson.databind.ObjectMapper', 'org.apache.poi.ss.usermodel.Workbook',
+                              'org.apache.commons.codec.binary.Base64', 'iaik.cms.EnvelopedDataStream',
+                              'org.apache.camel.Attachment', 'org.apache.camel.attachment.Attachment',
+                              'com.sap.it.script.v2.api.Exchange', 'com.sap.it.script.v2.api.language.SimpleBuilder']
                               .collectEntries { name -> [(name): safe { Class.forName(name) != null }] },
+        // Which release of SAP's Script API bundle the runtime has (Maven Central: com.sap.cloud.script).
+        scriptApiBundle    : safe { def c = Class.forName('com.sap.it.script.v2.api.Message'); c.protectionDomain?.codeSource?.location?.toString() },
         bindingVariables : safe { binding.variables.keySet().sort() },
     ]
     message.setBody(JsonOutput.prettyPrint(JsonOutput.toJson(info)))

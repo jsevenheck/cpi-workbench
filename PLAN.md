@@ -8,7 +8,7 @@ What changed in v3: the plan is now built around **our own CPI simulation core**
 
 ---
 
-## 0. Implementation status (2026-10-24)
+## 0. Implementation status (2026-10-25)
 
 Decisions taken: build-vs-reuse principle accepted (§3), XSLT first, tenant probes later (§13 Q1–Q6).
 
@@ -17,8 +17,9 @@ Decisions taken: build-vs-reuse principle accepted (§3), XSLT first, tenant pro
 | 0 — Spikes | **Done.** (a) Saxon-HE 9.9.1-8 and 12.9 compile to GraalVM native executables (Linux measured; Windows/macOS via CI, not yet run). (b) CPI parameter binding and `hci:setHeader`/`setProperty` work as Saxon integrated extension functions in both versions — no `xsl:message` workaround needed. (d) Tauri ⇄ engine JSON-RPC over stdio works. (e) Budgets measured, see below. (c) Groovy spike: not started. |
 | 1 — Probe kit | **Written** (`probes/`), simulator baseline recorded; waiting for a tenant run. |
 | 2 — XSLT MVP | **Done**: XSLT simulator with live mode, both Saxon profiles, parameter binding view, XSD validation, XPath 1.0/3.1, test cases + runner + CLI, desktop app and browser mode. |
-| 3 — Groovy MVP | **Done**: engines for Groovy Script 1.x (Groovy 2.4.21, Camel 2.24.3) and 2.x (Groovy 4.0.29, Camel 3.14.7), clean-room Script API, MPL, Secure Store + Value Mapping mocks, Groovy view in the app, test cases, bundled Java 17 runtime with AppCDS and idle shutdown. Script API v2 surface is provisional (F6). |
-| 4/5 | Partly: CLI runner, platform API mocks (4 of 5: Secure Store, Value Mapping, Partner Directory, Keystore), runtime comparison (Saxon 9.9 ↔ 12, Groovy 1.x ↔ 2.x), v2 lint warning, wildcard-import lint, iFlow-zip import (best-effort reading of the undocumented .iflw format) done; CI builds unsigned Windows/macOS (Apple Silicon)/Linux installers (green, not yet run on real Windows/macOS hardware). Open: Data Store (no public script API, see F28), code signing, auto-update. |
+| 3 — Groovy MVP | **Done**: engines for Groovy Script 1.x (Groovy 2.4.21, Camel 2.24.3) and 2.x (Groovy 4.0.29, Camel 3.14.7), clean-room Script API, MPL, Secure Store + Value Mapping mocks, Groovy view in the app, test cases, bundled Java 17 runtime with AppCDS and idle shutdown. Message methods of v1 and v2 follow SAP's published interfaces (F29). |
+| 4 — Productivity | **Done**: CLI runner; platform API mocks (Secure Store, Value Mapping, Partner Directory, Keystore; Data Store has no public script API, F28); runtime comparison (Saxon 9.9 ↔ 12, Groovy 1.x ↔ 2.x); lint (v1 imports in 2.x, wildcard imports, 1.x scripts that will break on 2.x through the `groovy.util` → `groovy.xml` move, v1-only methods in 2.x); iFlow-zip import (Groovy, XSLT and XML Validator steps, header-driven mappings flagged; checked against 24 SAP sample iFlows); reflexive Java extension functions in XSLT (F32); SOAP headers and `lib/` jars for scripts. |
+| 5 — Distribution | Partly: CI builds unsigned Windows/macOS (Apple Silicon)/Linux installers (green, not yet run on real Windows/macOS hardware). Open: code signing, auto-update. |
 
 Measured (Linux x86-64, native engines): engine start ≈ 10 ms (JVM: ≈ 200 ms); first XSLT run ≈ 10 ms, cached
 runs < 1 ms (JVM: ≈ 420 ms / 5 ms); 270 KB input ≈ 70 ms (9.9) / ≈ 200 ms (12) with ≈ 60 MB peak RSS;
@@ -37,6 +38,10 @@ New findings from the implementation:
 | F26 | A classic 1.x → 2.x break is reproduced: scripts using `XmlParser`/`XmlSlurper` without import (default `groovy.util` package) fail on Groovy 4. | Observed (simulator) | corpus `edi-segment-counter` |
 | F27 | Partner Directory: SAP's Javadoc documents `getParameter(String, String, Class)`, `getPartnerId(agency, scheme, alternativePartnerId)` and `getAlternativePartnerId(agency, scheme, partnerId)` (null if not maintained, `IllegalArgumentException` on null/empty input); `getCertificateParameter` exists but its signature is unverified. Keystore: `getKey`, `getCertificate`, `getCertificateChain`, `getKeyPair`. What CPI does for a missing parameter or an unknown keystore alias (null vs. exception) is not verified; the simulator returns null for the Partner Directory and throws `KeystoreException` for the keystore. | Observed (docs) / Unknown (edge cases) → probe Q-P1 | SAP Javadoc via search snippets; community examples |
 | F28 | CPI has no public script API for the Data Store; scripts that access it use internal classes looked up from the Camel registry. The simulator does not mock this. | Inferred (community examples) | — |
+| F29 | SAP publishes its Script API interfaces on Maven Central (`com.sap.cloud.script:script.api` 2.14.0–2.16.4 for v1, `script.v2.api` 4.0.0–4.2.2 for v2; SAP Developer License, not bundled). The simulator's `Message`, `AttachmentWrapper`, `SoapHeader` and the v2 `Attachment`, extension-function and exception types follow these signatures. The v2 `Message` has no `getSoapHeaders`/`setSoapHeaders` and no `AttachmentWrapper` methods, but adds `getHeader(String)`, `getHeader(String, Object)`, `clearAttachments`, `resetBodyStream` and `getExtensionFunctions` (exchange timestamps, ProcessDirect). The interface is a lower bound: CPI's implementation class may offer more, which the fingerprint probes list (`messageMethods`). | Observed (published jars) / Unknown (runtime class) → Q-G4 | Maven Central `com.sap.cloud.script` |
+| F30 | The v1 API jar moved from Camel 2.24 (`script.api` 2.15.0, May 2024: imports `org.apache.camel` [2.24,3), `AttachmentWrapper` extends `org.apache.camel.impl.DefaultAttachment`) to Camel 3.14 (2.16.2, Dec 2025, and 2.16.4: [3.14,4), `org.apache.camel.attachment.DefaultAttachment`). So 1.x steps may now run on Camel 3.14; the simulator's 1.x engine still uses Camel 2.24.3 until the fingerprint (`camelPom`) confirms. The simulator's v1 Message leaves out the overloads that take Camel's `Attachment` type. | Observed (jar manifests) / Inferred (tenant) → Q-G3 | Maven Central `com.sap.cloud.script:script.api` |
+| F31 | Which libraries CPI puts on a script's class path besides Groovy and Camel (e.g. commons-codec, IAIK used by SAP's own sample scripts) is not known; the simulator offers none and loads jars from `lib/` and the iFlow's `src/main/resources/lib/`. | Unknown → fingerprint `classesAvailable` | SAP sample iFlows |
+| F32 | SAP's sample XSLTs call Java static methods through `java:` namespaces (e.g. `java:java.util.Date`), so CPI's Saxon-EE allows reflexive extension functions. The simulator registers them as integrated functions for the JDK classes and the project's jars (native engines: a fixed list of JDK classes). Exact argument conversion rules of Saxon-EE are not reproduced in all cases. | Observed (SAP samples) / Inferred (conversion) | SAP sample iFlows, `JavaExtensions.java` |
 | F23 | Saxon instantiates built-in functions reflectively; native builds need reflection metadata for all of them (generated by `engine/native/GenReflect.java`), plus the JDK XPath 1.0 function classes. | Observed | native build failures fixed in this phase |
 
 ---
@@ -80,8 +85,8 @@ Labels follow the REA evidence rules (see §4): **Observed** = read in a source 
 | F3 | A diagnostic on a 2.x step reported **Java 17.0.18, Groovy 4.0.29, Camel 3.14.7** | Observed (one community report) | S2 |
 | F4 | Java version behind **1.x** scripts today | **Unknown** (SAP Help still mentions Java 8) | S1 |
 | F5 | v1 API `com.sap.gateway.ip.core.customdev.util.Message`, entry `def Message processData(Message message)` | Observed | S1, S5 |
-| F6 | v2 API in package `com.sap.it.script.v2.api` (`Message`, `Exchange`); full method list | Package Observed, methods **Unknown** | S2, S3 |
-| F7 | The public SAP Script API jar is under an SAP licence and is "bare-bones" | Observed (community) → not shippable (Inferred) | S5, S6 |
+| F6 | v2 API in package `com.sap.it.script.v2.api` (`Message`, `Exchange`); full method list | Interface **Observed** (F29); runtime class Unknown | S2, S3, S23 |
+| F7 | The public SAP Script API jar is under an SAP licence and is "bare-bones" | Observed (jar: SAP Developer License, interfaces only) → not shippable (Inferred) | S5, S6, S23 |
 | F8 | CPI's XSLT engine is **Saxon-EE**, most recently reported as **9.9.1.6** (older report: 9.8.0.12) | Observed (community) | S8, S9 |
 | F9 | XSLT 3.0 supported since XSLT Mapping step 1.2 | Observed | S7 |
 | F10 | XSLT parameters: **every `xsl:param` is bound automatically** to a header or exchange property of the same name, if one exists | Observed (SAP sample docs) | S10 |
@@ -234,7 +239,7 @@ Reference products (GrooveBox, Contiva, go-xslt's desktop app, CPI's own simulat
 ### 6.3 Our Script API implementation
 **v1** `com.sap.gateway.ip.core.customdev.util.Message`: `getBody()`, `getBody(Class)`, `setBody`, `getHeaders`, `getHeader(String, Class)`, `setHeader(s)`, `getProperties`, `getProperty`, `setProperty`/`setProperties`, attachment methods, `getBodySize`, `getAttachmentsSize`; `messageLogFactory` binding with `MessageLog` (`setStringProperty`, `addCustomHeaderProperty`, `addAttachmentAsString`).
 
-**v2** `com.sap.it.script.v2.api.*`: from SAP's API reference once available (F6 — open question Q3).
+**v2** `com.sap.it.script.v2.api.*`: `Message` (incl. `getHeader(String)`, `getHeader(String, Object)`, `Attachment` methods, `clearAttachments`, `resetBodyStream`, `getExtensionFunctions` with `ExchangeExtensionFunctions`; `ProcessDirectService` fails with `UnsupportedInSimulator`), `attachment.DefaultAttachment`, `exceptions.*`. Not simulated: `Exchange`, `CamelContext` and the `language.Simple*` classes (F29).
 
 **Type conversion**: our `Message` wraps a real Camel `DefaultExchange`, so `getBody(String)`, `getHeader(name, Type)` etc. use Camel's actual converters — the same rules as on CPI.
 
@@ -363,8 +368,8 @@ Later convenience: open an **iFlow export (zip)** and list its script and XSLT s
 |---|---|---|---|
 | Q-G1 | Groovy versions per step | Answered (F1, F2) | — |
 | Q-G2 | Java version per step | Partial (F3, F4) | Fingerprint iFlow |
-| Q-G3 | Camel version per step | Partial (F3) | Fingerprint iFlow |
-| Q-G4 | v2 API method list | Open (F6) | SAP docs (Q3) or reflection probe |
+| Q-G3 | Camel version per step | Partial (F3, F30) | Fingerprint iFlow |
+| Q-G4 | v2 API method list | Interface answered (F29); runtime class open | Fingerprint (`messageMethods`) |
 | Q-G5 | `getBody(Class)` conversions for String/byte[]/InputStream/Document bodies | Inferred (Camel) | Probe iFlow |
 | Q-G6 | Which bindings are in the script context (`messageLogFactory`, others?) | Partial | Probe iFlow listing the binding |
 | Q-X1 | Saxon edition/version | Partial (F8) | Fingerprint iFlow |
@@ -401,3 +406,4 @@ Later convenience: open an **iFlow export (zip)** and list its script and XSLT s
 - S20 Contiva Groovy IDE: https://ide.contiva.com/
 - S21 go-xslt: https://github.com/tim-riep/go-xslt
 - S22 REA workflow skill: https://github.com/morluto/rea/blob/main/.agents/skills/reverse-engineer-anything/SKILL.md
+- S23 SAP Script API jars on Maven Central: https://repo1.maven.org/maven2/com/sap/cloud/script/

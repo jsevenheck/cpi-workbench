@@ -3,7 +3,10 @@ package io.cpiwb.groovy;
 import io.cpiwb.core.Json;
 import io.cpiwb.groovy.camel.Launcher;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 
@@ -207,5 +210,55 @@ class ScriptRunnerTest {
                 + "def processData(message) { message }";
         Map<String, Object> r = run(s, in("", List.of(), List.of()), null);
         assertTrue(Json.write(r).contains("Wildcard import"), () -> Json.write(r));
+    }
+
+    @Test
+    void partnerDirectoryAndKeystore(@TempDir Path tmp) throws Exception {
+        Path platformDir = Files.createDirectories(tmp.resolve("platform"));
+        Files.copy(Path.of(getClass().getResource("/platform/test-keystore.p12").toURI()), platformDir.resolve("ks.p12"));
+        Files.writeString(platformDir.resolve("logo.bin"), "LOGO");
+        Files.writeString(platformDir.resolve("partner-directory.json"), "{\"partners\": {\"P1\": {"
+                + "\"parameters\": {\"ADDRESS\": \"https://p1.example\","
+                + " \"XSD\": {\"contentType\": \"text/xml\", \"file\": \"logo.bin\"}},"
+                + "\"alternativePartners\": [{\"agency\": \"SAP\", \"scheme\": \"GLN\", \"id\": \"400\"}]}}}");
+        Files.writeString(platformDir.resolve("keystore.json"), "{\"file\": \"ks.p12\", \"password\": \"changeit\"}");
+        String s = IMPORT + "import com.sap.it.api.ITApiFactory\n"
+                + "import com.sap.it.api.pd.PartnerDirectoryService\n"
+                + "import com.sap.it.api.pd.BinaryData\n"
+                + "import com.sap.it.api.keystore.KeystoreService\n"
+                + "def Message processData(Message message) {\n"
+                + "  def pd = ITApiFactory.getService(PartnerDirectoryService, null)\n"
+                + "  def pid = pd.getPartnerId('SAP', 'GLN', '400')\n"
+                + "  message.setProperty('pid', pid)\n"
+                + "  message.setProperty('alt', pd.getAlternativePartnerId('SAP', 'GLN', pid))\n"
+                + "  message.setProperty('address', pd.getParameter('ADDRESS', pid, String))\n"
+                + "  BinaryData b = pd.getParameter('XSD', pid, BinaryData)\n"
+                + "  message.setProperty('bin', new String(b.getData(), 'UTF-8') + ' ' + b.getContentType())\n"
+                + "  message.setProperty('missing', String.valueOf(pd.getParameter('NOPE', pid, String)))\n"
+                + "  def ks = ITApiFactory.getService(KeystoreService, null)\n"
+                + "  message.setProperty('alg', ks.getKeyPair('sim_key').getPrivate().getAlgorithm())\n"
+                + "  message.setProperty('cert', ks.getCertificate('partner_cert').getSubjectX500Principal().getName())\n"
+                + "  message.setProperty('chain', ks.getCertificateChain('sim_key').length)\n"
+                + "  try { ks.getKey('partner_cert'); message.setProperty('noKey', 'no error') }"
+                + " catch (com.sap.it.api.keystore.exception.KeystoreException e) { message.setProperty('noKey', 'error') }\n"
+                + "  return message\n}";
+        Map<String, Object> r = run(s, in("", List.of(), List.of()), Json.o().with("baseDir", tmp.toString()));
+        assertTrue(Json.bool(r, "ok", false), () -> Json.write(r));
+        assertEquals("P1", entry(r, "properties", "pid").get("value"));
+        assertEquals("400", entry(r, "properties", "alt").get("value"));
+        assertEquals("https://p1.example", entry(r, "properties", "address").get("value"));
+        assertEquals("LOGO text/xml", entry(r, "properties", "bin").get("value"));
+        assertEquals("null", entry(r, "properties", "missing").get("value"));
+        assertEquals("RSA", entry(r, "properties", "alg").get("value"));
+        assertEquals("CN=cpiwb test", entry(r, "properties", "cert").get("value"));
+        assertEquals("1", entry(r, "properties", "chain").get("value"));
+        assertEquals("error", entry(r, "properties", "noKey").get("value"));
+
+        String unknownAlias = IMPORT + "import com.sap.it.api.ITApiFactory\nimport com.sap.it.api.keystore.KeystoreService\n"
+                + "def Message processData(Message message) {\n"
+                + "  ITApiFactory.getService(KeystoreService, null).getCertificate('nope')\n  return message\n}";
+        Map<String, Object> bad = run(unknownAlias, in("", List.of(), List.of()), Json.o().with("baseDir", tmp.toString()));
+        assertFalse(Json.bool(bad, "ok", true));
+        assertTrue(Json.write(bad).contains("Alias nope not found"), () -> Json.write(bad));
     }
 }

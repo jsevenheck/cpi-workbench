@@ -79,7 +79,7 @@ public final class ScriptRunner {
         String function = Json.str(req, "function", "processData");
         Map<String, Object> options = Json.obj(req, "options");
 
-        Platform platform = Platform.fromJson(platformData(req, baseDir));
+        Platform platform = Platform.fromJson(platformData(req, baseDir), baseDir);
         Platform.setCurrent(platform);
         lint(source, diags);
 
@@ -416,24 +416,34 @@ public final class ScriptRunner {
 
     // ---------------------------------------------------------------- platform data
 
-    /** Platform data from the request, else from the project's platform/ folder. */
-    @SuppressWarnings("unchecked")
+    /** Platform data from the project's platform/ folder; keys given in the request replace the folder's. */
     private static Map<String, Object> platformData(Map<String, Object> req, Path baseDir) throws Exception {
-        Map<String, Object> p = Json.obj(req, "platform");
-        if (p != null || baseDir == null) {
-            return p;
-        }
         Map<String, Object> out = new LinkedHashMap<>();
-        Path creds = baseDir.resolve("platform/credentials.json");
-        if (Files.isRegularFile(creds)) {
-            out.put("credentials", Json.parse(Files.readString(creds, StandardCharsets.UTF_8)));
+        if (baseDir != null) {
+            for (String[] f : PLATFORM_FILES) {
+                Path file = baseDir.resolve("platform").resolve(f[1]);
+                if (Files.isRegularFile(file)) {
+                    try {
+                        out.put(f[0], Json.parse(Files.readString(file, StandardCharsets.UTF_8)));
+                    } catch (RuntimeException e) {
+                        throw new IllegalArgumentException("platform/" + f[1] + ": " + e.getMessage(), e);
+                    }
+                }
+            }
         }
-        Path vm = baseDir.resolve("platform/value-mappings.json");
-        if (Files.isRegularFile(vm)) {
-            out.put("valueMappings", Json.parse(Files.readString(vm, StandardCharsets.UTF_8)));
+        Map<String, Object> p = Json.obj(req, "platform");
+        if (p != null) {
+            out.putAll(p);
         }
         return out;
     }
+
+    private static final String[][] PLATFORM_FILES = {
+            {"credentials", "credentials.json"},
+            {"valueMappings", "value-mappings.json"},
+            {"partnerDirectory", "partner-directory.json"},
+            {"keystore", "keystore.json"},
+    };
 
     private static String hash(String s) {
         try {

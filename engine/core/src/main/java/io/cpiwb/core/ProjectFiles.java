@@ -39,7 +39,8 @@ public final class ProjectFiles {
         for (String sub : List.of("mappings", "schemas", "scripts", "tests", "platform")) {
             Files.createDirectories(dir.resolve(sub));
         }
-        // Mocked platform data for the Groovy simulator (secure store, value mappings).
+        // Mocked platform data for the Groovy simulator (secure store, value mappings, partner directory).
+        // A keystore is optional: platform/keystore.json naming a PKCS#12 or JKS file next to it.
         Path creds = dir.resolve("platform/credentials.json");
         if (!Files.exists(creds)) {
             Files.writeString(creds, "{\n  \"EXAMPLE_ALIAS\": { \"username\": \"demo-user\", \"password\": \"demo-password\" }\n}\n",
@@ -50,6 +51,13 @@ public final class ProjectFiles {
             Files.writeString(vm, "[\n  { \"sourceAgency\": \"S4\", \"sourceIdentifier\": \"Plant\", \"sourceValue\": \"1000\",\n"
                     + "    \"targetAgency\": \"Shop\", \"targetIdentifier\": \"Warehouse\", \"targetValue\": \"WH-A\" }\n]\n",
                     StandardCharsets.UTF_8);
+        }
+        Path pd = dir.resolve("platform/partner-directory.json");
+        if (!Files.exists(pd)) {
+            Files.writeString(pd, "{\n  \"partners\": {\n    \"EXAMPLE_PARTNER\": {\n"
+                    + "      \"parameters\": { \"RECEIVER_URL\": \"https://example.invalid/receiver\" },\n"
+                    + "      \"alternativePartners\": [ { \"agency\": \"SAP\", \"scheme\": \"GLN\", \"id\": \"4000000000001\" } ]\n"
+                    + "    }\n  }\n}\n", StandardCharsets.UTF_8);
         }
         Path cfg = dir.resolve("cpi-workbench.json");
         if (!Files.exists(cfg)) {

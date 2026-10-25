@@ -1,0 +1,13 @@
+{
+  "partners": {
+    "SHOP_EU": {
+      "parameters": {
+        "RECEIVER_URL": "https://s4.example.invalid/sap/opu/odata/sap/API_SALES_ORDER_SRV",
+        "SALES_ORG": "1010"
+      },
+      "alternativePartners": [
+        { "agency": "Shop", "scheme": "Channel", "id": "web-eu" }
+      ]
+    }
+  }
+}

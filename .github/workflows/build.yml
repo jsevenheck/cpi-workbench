@@ -23,6 +23,7 @@ jobs:
         run: |
           java -jar engine/xml-he99/target/cpiwb-xml-he99.jar test examples/demo-project/tests
           java -jar engine/groovy-v1/target/cpiwb-groovy-v1.jar test examples/demo-project/tests
+          java -jar engine/groovy-v2/target/cpiwb-groovy-v2.jar test examples/demo-project/tests
 
   desktop:
     needs: engine-tests

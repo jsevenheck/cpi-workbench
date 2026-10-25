@@ -174,7 +174,7 @@
         </div>
       {:else}
         <div class="pad">
-          <p class="hint">Calls to SAP APIs. Secure store and value mapping data come from <code>platform/credentials.json</code> and <code>platform/value-mappings.json</code> in the project.</p>
+          <p class="hint">Calls to SAP APIs. Mocked data comes from the project's <code>platform/</code> folder: <code>credentials.json</code>, <code>value-mappings.json</code>, <code>partner-directory.json</code> and <code>keystore.json</code> (names a PKCS#12/JKS file).</p>
           {#each result.apiCalls as c}
             <div class="row mono">{c.api}.{c.method}({c.args.map((a) => (a === null ? 'null' : JSON.stringify(a))).join(', ')})</div>
           {/each}

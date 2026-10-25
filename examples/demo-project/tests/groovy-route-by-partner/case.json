@@ -1,0 +1,17 @@
+{
+  "name": "Groovy 2.x: route by partner (Partner Directory)",
+  "step": "groovy",
+  "profile": "groovy-2.x",
+  "script": "../../scripts/route-by-partner.groovy",
+  "input": {
+    "body": { "file": "../standard-order/input.xml" },
+    "headers": { "SalesChannel": "web-eu" }
+  },
+  "expect": {
+    "headers": { "SalesOrg": "1010" },
+    "properties": {
+      "PartnerId": "SHOP_EU",
+      "ReceiverUrl": "https://s4.example.invalid/sap/opu/odata/sap/API_SALES_ORDER_SRV"
+    }
+  }
+}

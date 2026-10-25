@@ -1,6 +1,8 @@
 package com.sap.it.api;
 
+import com.sap.it.api.keystore.KeystoreService;
 import com.sap.it.api.mapping.ValueMappingApi;
+import com.sap.it.api.pd.PartnerDirectoryService;
 import com.sap.it.api.securestore.SecureStoreService;
 import io.cpiwb.groovy.Platform;
 
@@ -31,7 +33,13 @@ public final class ITApiFactory {
         if (type == ValueMappingApi.class) {
             return type.cast(new ValueMappingApi());
         }
+        if (type == PartnerDirectoryService.class) {
+            return type.cast(new PartnerDirectoryService());
+        }
+        if (type == KeystoreService.class) {
+            return type.cast(new KeystoreService());
+        }
         throw new UnsupportedOperationException("UnsupportedInSimulator: " + (type == null ? "null" : type.getName())
-                + " is not simulated yet (supported: SecureStoreService, ValueMappingApi)");
+                + " is not simulated yet (supported: SecureStoreService, ValueMappingApi, PartnerDirectoryService, KeystoreService)");
     }
 }

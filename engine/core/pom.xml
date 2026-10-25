@@ -6,7 +6,7 @@
   <parent>
     <groupId>io.cpiwb</groupId>
     <artifactId>cpiwb-engine-parent</artifactId>
-    <version>0.1.0</version>
+    <version>0.1.1</version>
   </parent>
   <artifactId>cpiwb-core</artifactId>
   <name>CPI Workbench core (exchange model, JSON, RPC, test runner)</name>

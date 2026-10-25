@@ -6,6 +6,8 @@ of its version.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-26
+
 ### Fixed
 
 - Windows: the installed app could not start the Groovy engines ("exited during start"), because

@@ -79,12 +79,14 @@ jobs:
       - name: Type-check UI
         working-directory: app
         run: npm run check
+      # Default shell (pwsh on Windows): in Git bash, /usr/bin/link shadows MSVC's link.exe.
       - name: Bundle desktop app
         working-directory: app
-        shell: bash
+        env:
+          CPIWB_JRE_DIR: ${{ runner.temp }}/jre
         run: |
-          CPIWB_JRE_DIR="$RUNNER_TEMP/jre" node scripts/prepare-sidecars.mjs
-          npx tauri build
+          node scripts/prepare-sidecars.mjs
+          npx tauri build ${{ runner.os == 'Linux' && '--bundles deb,rpm' || '' }}
       - uses: actions/upload-artifact@v4
         with:
           name: cpi-workbench-${{ matrix.os }}
@@ -92,7 +94,7 @@ jobs:
             app/src-tauri/target/release/bundle/**/*.msi
             app/src-tauri/target/release/bundle/**/*.exe
             app/src-tauri/target/release/bundle/**/*.dmg
-            app/src-tauri/target/release/bundle/**/*.AppImage
+            app/src-tauri/target/release/bundle/**/*.rpm
             app/src-tauri/target/release/bundle/**/*.deb
           if-no-files-found: warn
 

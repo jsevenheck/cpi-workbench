@@ -32,7 +32,11 @@ need an `X-Cpiwb` header, which forces a CORS preflight, and the origin's host i
 * **Groovy engines** run on a trimmed Java 17 runtime with an AppCDS archive. Groovy 2 and 4 run in
   separate processes, so they never mix and a runaway script only stops its own engine. The
   `Message` object is backed by a real Camel exchange, so type conversion and header handling come
-  from Camel itself.
+  from Camel itself. On Windows, Java cannot start from a folder whose path has characters outside
+  the ANSI code page ([JDK-8205991](https://bugs.openjdk.org/browse/JDK-8205991)). If the install
+  folder has non-ASCII characters, the shell reaches it through a directory junction in
+  `%ProgramData%\CPI Workbench <user SID>`, a folder only that user, SYSTEM and Administrators can
+  write (`app/src-tauri/src/ascii_alias.rs`); the AppCDS archives go there too.
 * **Caches**: compiled stylesheets and scripts are cached by content hash and profile, so changing
   only the input skips compilation.
 

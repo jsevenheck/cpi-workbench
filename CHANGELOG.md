@@ -6,6 +6,15 @@ of its version.
 
 ## [Unreleased]
 
+### Fixed
+
+- Windows: the installed app could not start the Groovy engines ("exited during start"), because
+  the jar path reached Java with a `\\?\` prefix.
+- Windows: the Groovy engines now also start when the install folder has characters Java cannot
+  handle, such as a Polish or Chinese user name (JDK-8205991). The app reaches the folder through a
+  junction in `C:\ProgramData\CPI Workbench <user SID>`. If that fails, the start error names the
+  cause and the workaround.
+
 ## [0.1.0] - 2026-10-25
 
 First public release.

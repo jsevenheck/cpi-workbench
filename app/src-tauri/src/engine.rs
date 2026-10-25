@@ -191,7 +191,9 @@ fn start(launch: &Launch, profile: &str, cache_dir: Option<&Path>) -> Result<Pro
                 // JVM log output must never reach stdout (the protocol channel).
                 .arg("-Xlog:disable").arg("-Xlog:all=warning:stderr");
             // AppCDS: reuse the class-data archive of an earlier run, or create it on exit.
-            if let Some(dir) = cache_dir {
+            // On Windows the JVM reads these options in the ANSI code page; with characters outside
+            // it (user name in the cache path) it cannot create the archive and exits with code 1.
+            if let Some(dir) = cache_dir.filter(|d| !cfg!(windows) || d.to_string_lossy().is_ascii()) {
                 let _ = std::fs::create_dir_all(dir);
                 let archive = dir.join(format!("{profile}-{}.jsa", file_stamp(jar)));
                 if archive.is_file() {
@@ -222,7 +224,7 @@ fn start(launch: &Launch, profile: &str, cache_dir: Option<&Path>) -> Result<Pro
         let mut buf = String::new();
         if stdout.read_line(&mut buf).map_err(|e| e.to_string())? == 0 {
             let code = child.try_wait().ok().flatten().and_then(|s| s.code());
-            return Err(format!("Engine {launch:?} exited during start (exit code {code:?})"));
+            return Err(format!("Engine {launch:?} exited during start (exit code {code:?}){}", path_hint(launch)));
         }
         if let Ok(v) = serde_json::from_str::<Value>(buf.trim()) {
             if v.get("event").and_then(Value::as_str) == Some("ready") {
@@ -231,6 +233,20 @@ fn start(launch: &Launch, profile: &str, cache_dir: Option<&Path>) -> Result<Pro
         }
     }
     Ok(Process { child, stdin: Some(stdin), stdout, next_id: 0, last_used: Instant::now(), jvm })
+}
+
+/// Java on Windows cannot start from a folder whose path has characters outside the ANSI code page
+/// (JDK-8205991, open). Non-ASCII is the cheap check; ä/ö/ü in a Western code page still work.
+fn path_hint(launch: &Launch) -> &'static str {
+    match launch {
+        Launch::Jar { java, jar } if cfg!(windows)
+            && !(java.to_string_lossy().is_ascii() && jar.to_string_lossy().is_ascii()) =>
+            ". Java cannot start from a folder whose path has characters outside the Windows code page, \
+             and no link under %ProgramData% could be made. Reinstall CPI Workbench into a folder with \
+             plain ASCII characters, e.g. C:\\CPI Workbench, or use the .msi, which installs under \
+             Program Files.",
+        _ => "",
+    }
 }
 
 /// Size+mtime of the jar, so a new engine version gets a new class-data archive.
@@ -302,6 +318,19 @@ pub fn locate(name: &str, resource_dir: Option<&Path>) -> Option<Launch> {
     }
 }
 
+/// Drops the Windows verbatim prefix (`\\?\C:\…`, `\\?\UNC\server\…`) that Tauri's resource_dir
+/// returns. Java cannot open a jar given in that form ("Unable to access jarfile").
+pub fn plain_path(path: PathBuf) -> PathBuf {
+    let s = path.to_string_lossy();
+    if let Some(rest) = s.strip_prefix(r"\\?\UNC\") {
+        return PathBuf::from(format!(r"\\{rest}"));
+    }
+    match s.strip_prefix(r"\\?\") {
+        Some(rest) if rest.as_bytes().get(1) == Some(&b':') => PathBuf::from(rest),
+        _ => path.clone(),
+    }
+}
+
 /// Bundled JRE first, then JAVA_HOME, then `java` on PATH (only if it runs).
 fn java_binary(resource_dir: Option<&Path>) -> Option<PathBuf> {
     let java = exe_name("java");
@@ -331,6 +360,15 @@ mod tests {
         assert_eq!(profile("saxon-he-9.9").map(|p| p.1), Some("cpiwb-xml-he99"));
         assert_eq!(profile("groovy-2.x").map(|p| p.1), Some("cpiwb-groovy-v2"));
         assert!(profile("nope").is_none());
+    }
+
+    #[test]
+    fn plain_paths() {
+        let p = |s: &str| plain_path(PathBuf::from(s));
+        assert_eq!(p(r"\\?\C:\Users\a\CPI Workbench"), PathBuf::from(r"C:\Users\a\CPI Workbench"));
+        assert_eq!(p(r"\\?\UNC\server\share\x"), PathBuf::from(r"\\server\share\x"));
+        assert_eq!(p(r"\\?\Volume{1234}\x"), PathBuf::from(r"\\?\Volume{1234}\x"));
+        assert_eq!(p("/opt/cpi-workbench"), PathBuf::from("/opt/cpi-workbench"));
     }
 
     /// Runs against real engines when found (repository checkout with a build).

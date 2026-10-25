@@ -24,6 +24,13 @@ The installers are **not code-signed** yet, so Windows and macOS warn on the fir
    administrators and software distribution tools.
 2. If SmartScreen says "Windows protected your PC", choose **More info** → **Run anyway**.
 
+Java cannot start from a folder whose path has characters outside the system's code page, for
+example Polish, Czech or Chinese letters in the user name on a German or English Windows
+([JDK-8205991](https://bugs.openjdk.org/browse/JDK-8205991)). The app then starts the Groovy engines
+through a link in `C:\ProgramData\CPI Workbench <user SID>`, which only you and administrators can
+change. Uninstalling leaves that folder behind; you can delete it. If the engines still do not
+start, reinstall into a folder with plain ASCII characters, such as `C:\CPI Workbench`.
+
 Managed company devices may block unsigned installers altogether. Ask your IT department, or use the
 command-line jars.
 

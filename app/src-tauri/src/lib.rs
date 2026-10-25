@@ -1,3 +1,5 @@
+#[cfg(windows)]
+mod ascii_alias;
 mod engine;
 
 use engine::Engines;
@@ -34,8 +36,12 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .manage(AppState { engines: engines.clone() })
         .setup(move |app| {
-            *engines.resource_dir.lock().unwrap() = app.path().resource_dir().ok();
-            *engines.cache_dir.lock().unwrap() = app.path().app_cache_dir().ok().map(|d| d.join("cds"));
+            let resources = app.path().resource_dir().ok().map(engine::plain_path);
+            let cache = app.path().app_cache_dir().ok().map(|d| d.join("cds"));
+            #[cfg(windows)]
+            let (resources, cache) = ascii_alias::for_java(resources, cache);
+            *engines.resource_dir.lock().unwrap() = resources;
+            *engines.cache_dir.lock().unwrap() = cache;
             // Stop idle JVM engines (Groovy) to give memory back.
             let idle = engines.clone();
             std::thread::spawn(move || loop {

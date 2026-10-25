@@ -15,7 +15,7 @@ Finding numbers (F…) and questions (Q…) refer to the [plan](plan.md).
 | Header vs. property with the same name | Header wins (Camel XsltBuilder order). **To verify** (Q-X2). |
 | Declared parameter without header or property | The XSLT default is used; can be switched to "error". **To verify** (Q-X4). |
 | Typed parameter values | Passed as Java objects, so Saxon converts them (F21). **To verify** (Q-X3). |
-| Reflexive Java calls (`java:` namespaces) | Supported, since SAP's own samples use them (F32). Argument conversion follows simple rules, not all of Saxon-EE's. |
+| Reflexive Java calls (`java:` namespaces) | Supported for JDK classes, since SAP's own samples use them (F32). Classes from the iFlow's jars are not available to XSLT. Argument conversion follows simple rules, not all of Saxon-EE's. |
 | XSD validation | JDK validator, XML Schema 1.0. CPI's validator is **to verify** (Q-V1). |
 
 ## Groovy Script

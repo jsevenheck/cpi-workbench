@@ -302,7 +302,7 @@ public final class ScriptRunner {
     private Class<?> compile(String source, String className, List<String> classpath, Path baseDir) throws Exception {
         List<URL> urls = new ArrayList<>();
         for (String jar : classpath) {
-            urls.add(project(baseDir, jar).toUri().toURL());
+            urls.add(shadowCopy(project(baseDir, jar)).toUri().toURL());
         }
         ClassLoader parent = getClass().getClassLoader();
         if (!urls.isEmpty()) {
@@ -314,6 +314,67 @@ public final class ScriptRunner {
         GroovyCodeSource code = new GroovyCodeSource(source, className + ".groovy", "/groovy/script");
         code.setCachable(false);
         return gcl.parseClass(code);
+    }
+
+    /**
+     * The class loader reads a copy of each jar, never the project's file: an open jar is locked on
+     * Windows, so the user could not replace or delete it while the engine runs. Copies live in one
+     * temp folder per engine process (named with its PID); folders of processes that have ended are
+     * removed.
+     */
+    private static Path shadowCopy(Path jar) throws java.io.IOException {
+        synchronized (ScriptRunner.class) {
+            if (shadowDir == null) {
+                Path tmp = Path.of(System.getProperty("java.io.tmpdir"));
+                try (java.util.stream.Stream<Path> old = Files.list(tmp)) {
+                    old.filter(ScriptRunner::abandoned).forEach(ScriptRunner::deleteQuietly);
+                } catch (java.io.IOException ignored) {
+                    // best effort
+                }
+                shadowDir = Files.createTempDirectory(SHADOW_PREFIX + ProcessHandle.current().pid() + "-");
+            }
+            Files.createDirectories(shadowDir);
+        }
+        Path copy = shadowDir.resolve(hash(jar + "\0" + Files.getLastModifiedTime(jar).toMillis() + "\0" + Files.size(jar))
+                .substring(0, 24) + ".jar");
+        if (!Files.exists(copy)) {
+            Path part = Files.createTempFile(shadowDir, "copy", ".part");
+            Files.copy(jar, part, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            Files.move(part, copy, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        }
+        return copy;
+    }
+
+    private static final String SHADOW_PREFIX = "cpiwb-lib-";
+    private static Path shadowDir;
+
+    /** A shadow folder whose engine process is no longer running. */
+    private static boolean abandoned(Path dir) {
+        String name = dir.getFileName().toString();
+        if (!name.startsWith(SHADOW_PREFIX)) {
+            return false;
+        }
+        String[] parts = name.substring(SHADOW_PREFIX.length()).split("-", 2);
+        try {
+            return ProcessHandle.of(Long.parseLong(parts[0])).map(h -> !h.isAlive()).orElse(true);
+        } catch (NumberFormatException e) {
+            return false;
+        }
+    }
+
+    /** Deletes a folder tree; files that are still locked stay. */
+    private static void deleteQuietly(Path dir) {
+        try (java.util.stream.Stream<Path> s = Files.walk(dir)) {
+            s.sorted(java.util.Comparator.reverseOrder()).forEach(f -> {
+                try {
+                    Files.deleteIfExists(f);
+                } catch (java.io.IOException ignored) {
+                    // in use
+                }
+            });
+        } catch (java.io.IOException ignored) {
+            // gone already
+        }
     }
 
     private static Path project(Path baseDir, String relative) {

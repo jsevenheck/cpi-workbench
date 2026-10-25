@@ -339,6 +339,7 @@ class ScriptRunnerTest {
                 + "def Message processData(Message message) {\n"
                 + soap
                 + "  message.setProperty('lib', demo.Util.hi())\n"
+                + "  message.setProperty('libFrom', demo.Util.protectionDomain.codeSource.location.toString())\n"
                 + "  message.setProperty('itapi', ITApi.isInterface())\n"
                 + "  return message\n}";
         Map<String, Object> input = in("", List.of(), List.of());
@@ -348,6 +349,9 @@ class ScriptRunnerTest {
                 .with("baseDir", project.toString()).with("input", input));
         assertTrue(Json.bool(r, "ok", false), () -> Json.write(r));
         assertEquals("hi", entry(r, "properties", "lib").get("value"));
+        // Loaded from a copy: the project's jar stays unlocked (Windows) and can be replaced or deleted.
+        String libFrom = String.valueOf(entry(r, "properties", "libFrom").get("value"));
+        assertFalse(java.nio.file.Paths.get(java.net.URI.create(libFrom)).startsWith(project), libFrom);
         assertEquals("true", entry(r, "properties", "itapi").get("value"));
         if (V2) {
             // The v2 Message has no SOAP header getter, so the input headers are not handed over.

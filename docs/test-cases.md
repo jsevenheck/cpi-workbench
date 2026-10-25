@@ -58,8 +58,9 @@ my-project/
   `src/main/resources/lib/` are on the script's class path. CPI's own extra libraries are not
   known, so none are bundled ([plan](plan.md) F31).
 * **Java calls from XSLT**: `xmlns:x="java:java.lang.Math"` style calls (`x:max(1, 2)`,
-  `x:new(…)`, instance methods with the object as first argument) work for JDK classes. The JVM
-  engines also see the project's `lib/` jars. Hyphenated names (`random-UUID`) work too.
+  `x:new(…)`, instance methods with the object as first argument) work for JDK classes (the native
+  engines: a fixed list of common ones). Classes from `lib/` jars are not available to XSLT.
+  Hyphenated names (`random-UUID`) work too.
 
 ## Mocked platform data (`platform/`)
 

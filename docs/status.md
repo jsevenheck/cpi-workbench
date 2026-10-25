@@ -15,13 +15,13 @@ Automated checks:
 * Engine tests (`mvn -f engine/pom.xml verify`): core 8, XSLT/XSD/XPath 22 per Saxon version, Groovy 22 per script version.
 * Demo test cases: 6.
 * Browser end-to-end tests: `app/e2e/smoke.mjs` and `groovy.mjs`.
-* CI builds for Windows, macOS and Linux.
+* CI runs the engine tests on Linux, Windows and macOS, the browser e2e tests on Linux and Windows, and the shell tests on all three before it builds the installers.
 
 ## By area
 
 | Area | Built | Open items |
 |---|---|---|
-| XSLT Mapping step (both Saxon profiles, parameter binding, `hci:` functions, includes, `java:` calls, error lines) | ≈ 95 % | Saxon-EE argument conversion for `java:` calls only in simple cases. |
+| XSLT Mapping step (both Saxon profiles, parameter binding, `hci:` functions, includes, `java:` calls, error lines) | ≈ 90 % | `java:` calls: JDK classes only (no classes from the iFlow's jars), Saxon-EE argument conversion only in simple cases. |
 | XSD validation | ≈ 85 % | XML Schema 1.0 only (JDK validator). XSD test cases run in the runner but cannot be opened in the editor view. |
 | XPath tester | ≈ 95 % | — |
 | Groovy Script 1.x (Groovy 2.4.21, Camel 2.24.3, Script API v1) | ≈ 90 % | Overloads that take Camel's `Attachment` type. Camel 3.14 variant in case the fingerprint shows it (F30). |
@@ -46,6 +46,9 @@ Automated checks:
   * New: certificate parameters, authorized users, pattern lookups, key and trust managers, OAuth2 tokens, number ranges.
 * Groovy test cases can carry input attachments. The app keeps a case's attachments, SOAP headers and platform overrides while the case is open (before, it dropped them).
 * XSLT features that need Saxon-PE/EE now say that CPI supports them and which profile to use.
+* Windows: script jars in `lib/` were locked while the Groovy engine ran (found by the new Windows
+  CI tests). The engine now loads copies.
+* Corrected: earlier docs said XSLT `java:` calls could use the project's jars; they cannot.
 
 ## Next steps
 

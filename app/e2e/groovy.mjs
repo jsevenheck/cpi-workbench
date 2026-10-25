@@ -69,6 +69,15 @@ if (!cmp.includes('Groovy Script 2.x') || !cmp.includes('XmlParser')) fail('comp
 if (shots) await page.screenshot({ path: path.join(shots, 'g3b-compare.png') });
 await page.getByRole('button', { name: 'Comparing' }).click();
 
+// 4a2) A case with an attachment file: the app keeps it while the case is open.
+await page.locator('.tree .file', { hasText: 'groovy-attachment/case.json' }).click();
+await page.locator('section.output .badge.ok').waitFor({ timeout: 20000 });
+const extras = await page.locator('.extras').innerText();
+if (!extras.includes('1 attachment')) fail('case extras: ' + extras);
+await page.locator('section.output').getByRole('tab', { name: /^Headers/ }).click();
+const outHeaders = await page.locator('section.output').innerText();
+if (!outHeaders.includes('Delivery DN-4711')) fail('attachment header: ' + outHeaders.slice(0, 400));
+
 // 4b) Import an exported iFlow (zip) and open its Groovy step.
 if (process.env.CPIWB_IFLOW_ZIP) {
   await page.getByRole('button', { name: 'Import iFlow' }).click();

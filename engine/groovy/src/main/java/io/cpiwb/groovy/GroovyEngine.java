@@ -79,13 +79,24 @@ public final class GroovyEngine implements RpcHandler {
         }
     }
 
-    private Map<String, Object> withProjectRoot(Map<String, Object> params) {
-        if (params.get("baseDir") == null && files.root() != null) {
-            Map<String, Object> copy = new LinkedHashMap<>(params);
-            copy.put("baseDir", files.root().toString());
-            return copy;
+    /**
+     * Adds the open project as base directory. A test case opened in the app sends its attachments as
+     * written in case.json; {"file"} entries are read here, relative to {@code caseDir}.
+     */
+    private Map<String, Object> withProjectRoot(Map<String, Object> params) throws IOException {
+        if (files.root() == null) {
+            return params;
         }
-        return params;
+        Map<String, Object> copy = new LinkedHashMap<>(params);
+        copy.putIfAbsent("baseDir", files.root().toString());
+        Map<String, Object> in = Json.obj(params, "input");
+        if (in != null && in.get("attachments") != null) {
+            Map<String, Object> input = new LinkedHashMap<>(in);
+            Path dir = files.root().resolve(Json.str(params, "caseDir", "")).normalize();
+            input.put("attachments", attachments(Json.arr(in, "attachments"), dir, files.root()));
+            copy.put("input", input);
+        }
+        return copy;
     }
 
     /** Test-case attachments: {"file": "..."} entries are read relative to the case and sent as Base64. */

@@ -134,9 +134,19 @@ export const groovy = $state({
   running: false,
   live: true,
   casePath: null as string | null,
+  /** Inputs only a test case can hold (attachments, SOAP headers, platform overrides); kept while it is open. */
+  caseExtras: null as CaseExtras | null,
   compareOn: false,
   compare: null as CompareRun<GroovyResult> | null,
 });
+
+export interface CaseExtras {
+  /** Project-relative folder of the case; attachment files are relative to it. */
+  dir: string;
+  attachments?: any[];
+  soapHeaders?: any[];
+  platform?: any;
+}
 
 export const xsd = $state({
   schemaPath: null as string | null,
@@ -232,6 +242,7 @@ export function closeProject() {
   xslt.casePath = null;
   groovy.scriptPath = null;
   groovy.casePath = null;
+  groovy.caseExtras = null;
   app.iflowSteps = [];
 }
 
@@ -296,6 +307,7 @@ export async function openFile(path: string) {
       groovy.script = content;
       groovy.savedScript = content;
       groovy.casePath = null;
+      groovy.caseExtras = null;
       if (content.includes('com.sap.it.script.v2.api') && hasProfile('groovy-2.x')) app.groovyProfile = 'groovy-2.x';
       else if (content.includes('com.sap.gateway.ip.core.customdev.util') && hasProfile('groovy-1.x')) app.groovyProfile = 'groovy-1.x';
       app.tool = 'groovy';
@@ -391,8 +403,13 @@ function groovyRequest() {
   return {
     script: { content: groovy.script, path: groovy.scriptPath ?? 'script.groovy' },
     function: groovy.functionName || 'processData',
-    input: { body: groovy.body, headers: clean(groovy.headers), properties: clean(groovy.properties) },
+    input: {
+      body: groovy.body, headers: clean(groovy.headers), properties: clean(groovy.properties),
+      attachments: groovy.caseExtras?.attachments, soapHeaders: groovy.caseExtras?.soapHeaders,
+    },
     options: { bodyType: groovy.bodyType },
+    platform: groovy.caseExtras?.platform,
+    caseDir: groovy.caseExtras?.dir,
   };
 }
 
@@ -579,6 +596,14 @@ export async function saveGroovyCase(name: string, withExpected: boolean) {
   };
   if (groovy.functionName && groovy.functionName !== 'processData') tc.function = groovy.functionName;
   if (groovy.bodyType !== 'String') tc.options = { bodyType: groovy.bodyType };
+  const extras = groovy.caseExtras;
+  if (extras) {
+    // Keep what the opened case held; attachment files stay where they are.
+    if (extras.attachments) tc.input.attachments = extras.attachments.map((a) =>
+      a?.file ? { ...a, file: relative(dir, joinPath(extras.dir, a.file)) } : a);
+    if (extras.soapHeaders) tc.input.soapHeaders = extras.soapHeaders;
+    if (extras.platform) tc.platform = extras.platform;
+  }
   await writeFile(dir + '/input.xml', groovy.body);
   if (withExpected) {
     const out = groovy.result?.output?.body ?? '';
@@ -586,6 +611,7 @@ export async function saveGroovyCase(name: string, withExpected: boolean) {
   }
   await writeFile(dir + '/case.json', JSON.stringify(tc, null, 2) + '\n');
   groovy.casePath = dir + '/case.json';
+  if (extras) groovy.caseExtras = { ...extras, dir };
   app.status = 'Saved test case ' + dir;
   await refreshFiles();
 }
@@ -602,6 +628,8 @@ async function loadGroovyCase(path: string, dir: string, tc: any) {
   groovy.functionName = tc.function ?? 'processData';
   groovy.bodyType = tc.options?.bodyType ?? 'String';
   if (tc.profile && hasProfile(tc.profile)) app.groovyProfile = tc.profile;
+  const extras: CaseExtras = { dir, attachments: tc.input?.attachments, soapHeaders: tc.input?.soapHeaders, platform: tc.platform };
+  groovy.caseExtras = extras.attachments || extras.soapHeaders || extras.platform ? extras : null;
   groovy.casePath = path;
   app.tool = 'groovy';
   app.status = 'Loaded test case ' + (tc.name ?? path);

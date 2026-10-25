@@ -3,6 +3,7 @@
   import KeyValueTable from './KeyValueTable.svelte';
   import CompareView from './CompareView.svelte';
   import { app, groovy, runGroovy, saveScript, saveGroovyCase, formatXml, ask, otherProfile } from '../lib/store.svelte';
+  import type { CaseExtras } from '../lib/store.svelte';
   import type { Diagnostic } from '../lib/types';
 
   let inputTab = $state<'body' | 'headers' | 'properties'>('body');
@@ -51,6 +52,15 @@
 
   let other = $derived(otherProfile(app.groovyProfile));
 
+  function extrasSummary(x: CaseExtras) {
+    const n = (k: number, one: string) => `${k} ${one}${k === 1 ? '' : 's'}`;
+    const parts: string[] = [];
+    if (x.attachments?.length) parts.push(n(x.attachments.length, 'attachment'));
+    if (x.soapHeaders?.length) parts.push(n(x.soapHeaders.length, 'SOAP header'));
+    if (x.platform) parts.push('platform overrides');
+    return parts.join(', ');
+  }
+
   function toggleCompare() {
     groovy.compareOn = !groovy.compareOn;
     groovy.compare = null;
@@ -96,6 +106,9 @@
         <KeyValueTable bind:rows={groovy.properties} onchange={changed} emptyText="No exchange properties." />
       {/if}
     </div>
+    {#if groovy.caseExtras}
+      <p class="hint extras">From the test case (edit in <code>case.json</code>): {extrasSummary(groovy.caseExtras)}</p>
+    {/if}
   </section>
 
   <section class="pane script" aria-label="Groovy script">
@@ -234,6 +247,7 @@
   .badge.run { color: var(--muted); }
   .hint { color: var(--muted); font-size: 12px; padding: 4px 0; margin: 0; }
   .body > .hint { padding: 12px; }
+  .extras { padding: 4px 8px; border-top: 1px solid var(--border-soft); }
   .errors, .pad { padding: 8px; overflow: auto; height: 100%; box-sizing: border-box; font-size: 12px; }
   .diag { display: block; width: 100%; text-align: left; border: 1px solid var(--border); border-left: 3px solid var(--err); border-radius: 4px; padding: 6px 8px; margin-bottom: 6px; background: var(--err-bg); color: var(--fg); font: inherit; cursor: pointer; }
   .diag div, .diag pre { white-space: pre-wrap; margin: 2px 0 0; font-family: var(--mono); }

@@ -15,7 +15,7 @@ Automated checks:
 * Engine tests (`mvn -f engine/pom.xml verify`): core 8, XSLT/XSD/XPath 22 per Saxon version, Groovy 22 per script version.
 * Demo test cases: 6.
 * Browser end-to-end tests: `app/e2e/smoke.mjs` and `groovy.mjs`.
-* CI runs the engine tests on Linux, Windows and macOS, the browser e2e tests on Linux and Windows, and the shell tests on all three before it builds the installers.
+* CI runs the engine tests on Linux, Windows and macOS, the browser e2e tests on Linux and Windows, and the shell tests on all three before it builds the installers. All of them passed on Windows and macOS runners for the first time on 2026-10-25.
 
 ## By area
 
@@ -32,7 +32,7 @@ Automated checks:
 | Runtime comparison (9.9 ↔ 12, 1.x ↔ 2.x) | ≈ 95 % | — |
 | Lint (1.x → 2.x) | ≈ 80 % | Covers the known breaks (F26, v1-only methods, imports). Others appear only as compile or runtime errors. |
 | iFlow-zip import | ≈ 75 % | Groovy, XSLT and XML Validator steps only. Header-driven mappings are flagged, not resolved. The format is undocumented (best effort; checked against 24 SAP sample iFlows). |
-| Desktop app and browser mode | ≈ 90 % | Not yet run on real Windows or macOS hardware (CI builds only). |
+| Desktop app and browser mode | ≈ 90 % | Engines, shell and browser mode are tested on Windows and macOS in CI. The installers and the desktop window (WebView2, WKWebView) are not yet tried by hand. |
 | Distribution | ≈ 40 % | No code signing, no auto-update. One all-in-one installer instead of a base app plus a separate Groovy pack (plan §5.3). |
 | Large messages | ≈ 70 % | Messages go through JSON-RPC, not temp files (plan §5.3). 7.4 MB worked (XSLT 1.3 s, Groovy 0.45 s); larger ones are untested. |
 | Performance budgets | measured on Linux | Windows and macOS not measured. |
@@ -48,11 +48,13 @@ Automated checks:
 * XSLT features that need Saxon-PE/EE now say that CPI supports them and which profile to use.
 * Windows: script jars in `lib/` were locked while the Groovy engine ran (found by the new Windows
   CI tests). The engine now loads copies.
+* The browser e2e tests waited for a stale result badge and could read the previous case's output
+  (seen on Windows); they now wait for the expected content.
 * XSD test cases open in the XSD view and can be saved from it.
 * Corrected: earlier docs said XSLT `java:` calls could use the project's jars; they cannot.
 
 ## Next steps
 
 1. Run the probes on a test tenant (Appendix A of the plan) and turn "to verify" into facts.
-2. Run the installers on real Windows and macOS machines.
+2. Install and open the CI-built installers on Windows and macOS once by hand.
 3. Code signing and auto-update (Phase 5).

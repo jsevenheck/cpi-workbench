@@ -12,9 +12,14 @@ import io.cpiwb.groovy.Platform;
 public class PartnerDirectoryService {
 
     /** Reads a String or {@link BinaryData} parameter of a partner; null if it does not exist. */
+    @SuppressWarnings("unchecked")
     public <T> T getParameter(String parameterId, String partnerId, Class<T> type) throws PartnerDirectoryException {
         require(parameterId, "parameterId");
         require(partnerId, "partnerId");
+        if (type != null && type != String.class && type != BinaryData.class) {
+            throw new PartnerDirectoryException("Unsupported parameter type " + type.getName()
+                    + " (String or com.sap.it.api.pd.BinaryData)");
+        }
         Object v = Platform.current().pdParameter(parameterId, partnerId, type == null ? null : type.getSimpleName());
         if (v == null) {
             return null;
@@ -24,17 +29,13 @@ public class PartnerDirectoryService {
                 throw new PartnerDirectoryException("Parameter " + parameterId + " of partner " + partnerId
                         + " is binary; read it with BinaryData.class");
             }
-            return type == null ? null : type.cast(v);
+            return (T) v;
         }
-        if (type == BinaryData.class) {
-            if (v instanceof String) {
-                throw new PartnerDirectoryException("Parameter " + parameterId + " of partner " + partnerId
-                        + " is a string parameter; read it with String.class");
-            }
-            return type.cast(v);
+        if (v instanceof String) {
+            throw new PartnerDirectoryException("Parameter " + parameterId + " of partner " + partnerId
+                    + " is a string parameter; read it with String.class");
         }
-        throw new PartnerDirectoryException("Unsupported parameter type " + type.getName()
-                + " (String or com.sap.it.api.pd.BinaryData)");
+        return type.cast(v);
     }
 
     /** Partner ID for an alternative partner (agency, scheme, ID); null if none is maintained. */

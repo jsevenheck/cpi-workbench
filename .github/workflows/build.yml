@@ -116,6 +116,7 @@ jobs:
           java -jar engine/xml-he99/target/cpiwb-xml-he99.jar serve --http 7777 --ui app/dist &
           java -jar engine/groovy-v1/target/cpiwb-groovy-v1.jar serve --http 7778 &
           java -jar engine/groovy-v2/target/cpiwb-groovy-v2.jar serve --http 7779 &
+          java -jar engine/xml-he12/target/cpiwb-xml-he12.jar serve --http 7780 &
           sleep 5
           cp -r examples/demo-project /tmp/demo-project
           node app/e2e/smoke.mjs /tmp/demo-project

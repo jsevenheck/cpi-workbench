@@ -61,6 +61,14 @@ const calls = await page.locator('section.output .pad').innerText();
 if (!calls.includes('getMappedValue') || !calls.includes('getUserCredential')) fail('api calls: ' + calls);
 if (shots) await page.screenshot({ path: path.join(shots, 'g3-groovy-case.png') });
 
+// 4a) Compare runtimes: the 1.x demo script uses XmlParser without import, which Groovy 4 rejects.
+await page.getByRole('button', { name: 'Compare', exact: true }).click();
+await page.locator('section.output .compare .side .badge.bad').waitFor({ timeout: 20000 });
+const cmp = await page.locator('section.output .compare').innerText();
+if (!cmp.includes('Groovy Script 2.x') || !cmp.includes('XmlParser')) fail('compare: ' + cmp.slice(0, 400));
+if (shots) await page.screenshot({ path: path.join(shots, 'g3b-compare.png') });
+await page.getByRole('button', { name: 'Comparing' }).click();
+
 // 4b) Import an exported iFlow (zip) and open its Groovy step.
 if (process.env.CPIWB_IFLOW_ZIP) {
   await page.getByRole('button', { name: 'Import iFlow' }).click();
@@ -80,7 +88,7 @@ await page.getByRole('tab', { name: 'Tests' }).click();
 await page.getByRole('button', { name: 'Run all tests' }).click();
 await page.locator('.sum').waitFor({ timeout: 30000 });
 const sum = await page.locator('.sum').innerText();
-if (!/4 passed/.test(sum) || !/0 failed/.test(sum)) fail('test summary: ' + sum);
+if (!/5 passed/.test(sum) || !/0 failed/.test(sum)) fail('test summary: ' + sum);
 if (shots) await page.screenshot({ path: path.join(shots, 'g4-tests.png') });
 
 if (errors.length) fail('browser errors: ' + errors.join(' | '));

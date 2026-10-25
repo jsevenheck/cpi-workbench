@@ -1,11 +1,12 @@
 <script lang="ts">
   import Editor from './Editor.svelte';
   import KeyValueTable from './KeyValueTable.svelte';
-  import { app, groovy, runGroovy, saveScript, saveGroovyCase, formatXml, ask } from '../lib/store.svelte';
+  import CompareView from './CompareView.svelte';
+  import { app, groovy, runGroovy, saveScript, saveGroovyCase, formatXml, ask, otherProfile } from '../lib/store.svelte';
   import type { Diagnostic } from '../lib/types';
 
   let inputTab = $state<'body' | 'headers' | 'properties'>('body');
-  let outputTab = $state<'body' | 'headers' | 'properties' | 'mpl' | 'console' | 'api'>('body');
+  let outputTab = $state<'body' | 'headers' | 'properties' | 'mpl' | 'console' | 'api' | 'compare'>('body');
   let showDiff = $state(false);
   let scriptEditor: Editor | undefined = $state();
   let mplOpen = $state<number | null>(null);
@@ -45,6 +46,19 @@
       await saveGroovyCase(r.value, r.checked);
     } catch (e) {
       app.error = (e as Error).message;
+    }
+  }
+
+  let other = $derived(otherProfile(app.groovyProfile));
+
+  function toggleCompare() {
+    groovy.compareOn = !groovy.compareOn;
+    groovy.compare = null;
+    if (groovy.compareOn) {
+      outputTab = 'compare';
+      runGroovy();
+    } else if (outputTab === 'compare') {
+      outputTab = 'body';
     }
   }
 
@@ -113,7 +127,10 @@
         <button role="tab" class:active={outputTab === 'mpl'} onclick={() => (outputTab = 'mpl')}>MPL{#if mplCount}<span class="count">{mplCount}</span>{/if}</button>
         <button role="tab" class:active={outputTab === 'console'} onclick={() => (outputTab = 'console')}>Console{#if result && (result.console || result.diagnostics.length)}<span class="count" class:err={errors.length > 0}>{result.diagnostics.length + (result.console ? 1 : 0)}</span>{/if}</button>
         <button role="tab" class:active={outputTab === 'api'} onclick={() => (outputTab = 'api')}>API calls{#if result?.apiCalls.length}<span class="count">{result.apiCalls.length}</span>{/if}</button>
+        {#if groovy.compareOn}<button role="tab" class:active={outputTab === 'compare'} onclick={() => (outputTab = 'compare')}>Compare</button>{/if}
       </div>
+      <button class="small" class:on={groovy.compareOn} onclick={toggleCompare} disabled={!other && !groovy.compareOn}
+        title={other ? 'Also run on ' + other + ' and show the differences' : 'No second Groovy runtime available'}>{groovy.compareOn ? 'Comparing' : 'Compare'}</button>
       {#if outputTab === 'body' && result?.output}
         <label class="check"><input type="checkbox" bind:checked={showDiff} /> Diff</label>
       {/if}
@@ -121,6 +138,8 @@
     <div class="body">
       {#if !result}
         <p class="hint">Press <kbd>Ctrl</kbd>+<kbd>Enter</kbd> or <b>Run</b>. The first run starts the Groovy runtime (about a second); later runs take milliseconds.</p>
+      {:else if outputTab === 'compare'}
+        <CompareView profile={app.groovyProfile} {result} compare={groovy.compare} language={outLanguage} />
       {:else if outputTab === 'body'}
         {#if result.output}
           <Editor value={result.output.body} language={outLanguage} readOnly original={showDiff ? groovy.body : null} label="Output body" />
@@ -224,6 +243,7 @@
   .att { border-bottom: 1px solid var(--border-soft); padding: 3px 0; }
   .link { background: none; border: none; color: var(--accent); cursor: pointer; padding: 0; font: inherit; }
   footer { font-size: 11px; color: var(--muted); padding: 4px 10px; border-top: 1px solid var(--border); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .on { background: var(--active); color: var(--accent); border-color: var(--accent); }
   .check { font-size: 12px; display: flex; align-items: center; gap: 4px; }
   @media (max-width: 1100px) {
     .groovy { grid-template-columns: 1fr; grid-template-rows: minmax(220px, 1fr) minmax(300px, 1.3fr) minmax(260px, 1fr); }

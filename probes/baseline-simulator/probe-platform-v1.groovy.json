@@ -1,0 +1,56 @@
+{
+    "pd.service": {
+        "result": "com.sap.it.api.pd.PartnerDirectoryService: com.sap.it.api.pd.PartnerDirectoryService"
+    },
+    "pd.getParameter(missing parameter, missing partner, String)": {
+        "result": null
+    },
+    "pd.getParameter(.., BinaryData)": {
+        "result": null
+    },
+    "pd.getParameter(.., Integer)": {
+        "exception": "com.sap.it.api.pd.exception.PartnerDirectoryException",
+        "message": "Unsupported parameter type java.lang.Integer (String or com.sap.it.api.pd.BinaryData)"
+    },
+    "pd.getPartnerId(missing)": {
+        "result": null
+    },
+    "pd.getAlternativePartnerId(missing)": {
+        "result": null
+    },
+    "pd.getParameter(empty id)": {
+        "exception": "java.lang.IllegalArgumentException",
+        "message": "parameterId must not be null or empty"
+    },
+    "pd.methods": [
+        "public <T> T com.sap.it.api.pd.PartnerDirectoryService.getParameter(java.lang.String,java.lang.String,java.lang.Class<T>) throws com.sap.it.api.pd.exception.PartnerDirectoryException",
+        "public java.lang.Object com.sap.it.api.pd.PartnerDirectoryService.getCertificateParameter(java.lang.Object...)",
+        "public java.lang.String com.sap.it.api.pd.PartnerDirectoryService.getAlternativePartnerId(java.lang.String,java.lang.String,java.lang.String) throws com.sap.it.api.pd.exception.PartnerDirectoryException",
+        "public java.lang.String com.sap.it.api.pd.PartnerDirectoryService.getPartnerId(java.lang.String,java.lang.String,java.lang.String) throws com.sap.it.api.pd.exception.PartnerDirectoryException"
+    ],
+    "ks.service": {
+        "result": "com.sap.it.api.keystore.KeystoreService: com.sap.it.api.keystore.KeystoreService"
+    },
+    "ks.getKey(missing)": {
+        "exception": "com.sap.it.api.keystore.exception.KeystoreException",
+        "message": "No keystore configured for the simulator: create platform/keystore.json with {\"file\": \"keystore.p12\", \"password\": \"...\"}"
+    },
+    "ks.getCertificate(missing)": {
+        "exception": "com.sap.it.api.keystore.exception.KeystoreException",
+        "message": "No keystore configured for the simulator: create platform/keystore.json with {\"file\": \"keystore.p12\", \"password\": \"...\"}"
+    },
+    "ks.getKeyPair(missing)": {
+        "exception": "com.sap.it.api.keystore.exception.KeystoreException",
+        "message": "No keystore configured for the simulator: create platform/keystore.json with {\"file\": \"keystore.p12\", \"password\": \"...\"}"
+    },
+    "ks.getCertificateChain(missing)": {
+        "exception": "com.sap.it.api.keystore.exception.KeystoreException",
+        "message": "No keystore configured for the simulator: create platform/keystore.json with {\"file\": \"keystore.p12\", \"password\": \"...\"}"
+    },
+    "ks.methods": [
+        "public java.security.Key com.sap.it.api.keystore.KeystoreService.getKey(java.lang.String) throws com.sap.it.api.keystore.exception.KeystoreException",
+        "public java.security.KeyPair com.sap.it.api.keystore.KeystoreService.getKeyPair(java.lang.String) throws com.sap.it.api.keystore.exception.KeystoreException",
+        "public java.security.cert.Certificate com.sap.it.api.keystore.KeystoreService.getCertificate(java.lang.String) throws com.sap.it.api.keystore.exception.KeystoreException",
+        "public java.security.cert.Certificate[] com.sap.it.api.keystore.KeystoreService.getCertificateChain(java.lang.String) throws com.sap.it.api.keystore.exception.KeystoreException"
+    ]
+}

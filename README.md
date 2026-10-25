@@ -22,7 +22,8 @@ The goal is to behave like the real CPI step, not like a generic XSLT tester or 
 * **`Message` backed by a real Apache Camel exchange** (Camel 2.24 / 3.14), so `getBody(String)`,
   `getBody(Reader)`, `getHeader(name, Integer)` and case-insensitive header names behave like CPI.
 * `messageLogFactory` with MPL properties, custom header properties and attachments;
-  `ITApiFactory` with **Secure Store** and **Value Mapping** mocks fed from `platform/*.json`.
+  `ITApiFactory` with **Secure Store**, **Value Mapping**, **Partner Directory** and **Keystore** mocks
+  fed from the project's `platform/` folder.
 * Compile and runtime errors point to the script line; `println` output is captured.
 * Groovy 1.x → 2.x differences surface for real (e.g. `groovy.util.XmlSlurper` no longer exists in Groovy 4).
 
@@ -64,6 +65,9 @@ open a project folder (any folder; **Init** adds `mappings/`, `schemas/`, `tests
 * open a `.xsl` in the tree, enter input body / headers / properties on the left,
 * the output updates live (or press **Ctrl+Enter**); compile and runtime errors are marked in the editor,
 * **Parameters** shows how each `xsl:param` was bound (header, property, default),
+* **Compare** also runs the input on the other runtime of the same kind (Saxon-HE 9.9 ↔ 12,
+  Groovy Script 1.x ↔ 2.x) and lists what differs: status, headers, properties and a body diff.
+  Handy before migrating a script from 1.x to 2.x,
 * **Save as test** stores input, mapping reference and the current output as a regression test,
 * **Tests** runs all test cases of the project on the right engine,
 * **Import iFlow** unpacks an iFlow exported from Integration Suite (zip) into `iflows/` and lists
@@ -130,6 +134,19 @@ java -jar cpiwb-groovy-v2.jar serve --http 7779 &
 * `compare`: `xml` (ignores formatting and namespace declarations), `text`, `trimmed`.
 * `expect.ok: false` asserts that the mapping fails.
 
+### Mocked platform data (`platform/`)
+
+| File | Used by | Format |
+|---|---|---|
+| `credentials.json` | `SecureStoreService.getUserCredential` | `{ "ALIAS": { "username": "…", "password": "…", "properties": {…} } }` |
+| `value-mappings.json` | `ValueMappingApi.getMappedValue` | `[ { "sourceAgency", "sourceIdentifier", "sourceValue", "targetAgency", "targetIdentifier", "targetValue" } ]` |
+| `partner-directory.json` | `PartnerDirectoryService` | `{ "partners": { "PID": { "parameters": { "NAME": "string" or { "contentType": "…", "file": "x.bin" } or { "base64": "…" } }, "alternativePartners": [ { "agency", "scheme", "id" } ] } } }` |
+| `keystore.json` | `KeystoreService` | `{ "file": "keystore.p12", "password": "…", "type": "PKCS12", "keyPasswords": { "alias": "…" } }` — the file lies next to it; `type` is optional |
+
+A test case can override any of these with a `platform` object (`credentials`, `valueMappings`,
+`partnerDirectory`, `keystore`); keys it leaves out still come from the folder. Use test-only keys
+and passwords here — never real tenant secrets.
+
 ## Fidelity: what matches CPI and what does not (yet)
 
 | Area | Status |
@@ -147,7 +164,8 @@ java -jar cpiwb-groovy-v2.jar serve --http 7779 &
 | Camel version | 3.14.7 for 2.x (reported); 2.24.3 for 1.x is an **assumption** |
 | Script API v1 | Documented methods (body, headers, properties, attachments, sizes) |
 | Script API v2 | **Provisional**: same methods as v1 until SAP's v2 reference is available (probe `fingerprint-v2.groovy` lists the real methods) |
-| Platform APIs | Secure Store (user credentials), Value Mapping; others raise `UnsupportedInSimulator` |
+| Platform APIs | Secure Store (user credentials), Value Mapping, Partner Directory (`getParameter` for String/`BinaryData`, `getPartnerId`, `getAlternativePartnerId`), Keystore (`getKey`, `getCertificate`, `getCertificateChain`, `getKeyPair`); others raise `UnsupportedInSimulator`. Missing Partner Directory entries return `null`; an unknown keystore alias throws — CPI's behaviour for both **to verify** |
+| Data Store from scripts | Not simulated: CPI has no public script API for it (scripts use internal classes) |
 | Groovy modules on 2.x | xml, json, dateutil, datetime, templates, nio bundled — CPI's set **to verify** |
 
 Run the probes in `probes/` on a test tenant to turn the "to verify" items into facts.

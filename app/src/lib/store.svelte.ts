@@ -70,7 +70,16 @@ export const xslt = $state({
   running: false,
   live: true,
   casePath: null as string | null,
+  compareOn: false,
+  compare: null as CompareRun<XsltResult> | null,
 });
+
+/** The same run on the other runtime of the same kind (Saxon 9.9 vs 12, Groovy 1.x vs 2.x). */
+export interface CompareRun<R> {
+  profile: Profile;
+  result: R | null;
+  error: string;
+}
 
 export const SAMPLE_GROOVY_V1 = `import com.sap.gateway.ip.core.customdev.util.Message
 
@@ -124,6 +133,8 @@ export const groovy = $state({
   running: false,
   live: true,
   casePath: null as string | null,
+  compareOn: false,
+  compare: null as CompareRun<GroovyResult> | null,
 });
 
 export const xsd = $state({
@@ -366,17 +377,53 @@ export async function saveSchema(): Promise<boolean> {
 
 let runSeq = 0;
 
+function xsltRequest() {
+  return {
+    xslt: { content: xslt.mapping, path: xslt.mappingPath ?? 'mapping.xsl' },
+    input: { body: xslt.body, headers: clean(xslt.headers), properties: clean(xslt.properties) },
+    options: { paramPrecedence: xslt.paramPrecedence, missingParameter: xslt.missingParameter },
+  };
+}
+
+function groovyRequest() {
+  return {
+    script: { content: groovy.script, path: groovy.scriptPath ?? 'script.groovy' },
+    function: groovy.functionName || 'processData',
+    input: { body: groovy.body, headers: clean(groovy.headers), properties: clean(groovy.properties) },
+    options: { bodyType: groovy.bodyType },
+  };
+}
+
+/** The other available runtime of the same kind, if any. */
+export function otherProfile(current: Profile): Profile | null {
+  const kind = app.profiles.find((p) => p.id === current)?.kind;
+  return app.profiles.find((p) => p.available && p.kind === kind && p.id !== current)?.id ?? null;
+}
+
+async function compareRun<R>(method: string, params: any, current: Profile): Promise<CompareRun<R> | null> {
+  const other = otherProfile(current);
+  if (!other) return null;
+  try {
+    return { profile: other, result: await call<R>(method, params, other), error: '' };
+  } catch (e) {
+    return { profile: other, result: null, error: (e as Error).message ?? String(e) };
+  }
+}
+
 export async function runXslt() {
   const seq = ++runSeq;
   xslt.running = true;
   app.error = '';
   try {
-    const r = await call<XsltResult>('xslt.run', {
-      xslt: { content: xslt.mapping, path: xslt.mappingPath ?? 'mapping.xsl' },
-      input: { body: xslt.body, headers: clean(xslt.headers), properties: clean(xslt.properties) },
-      options: { paramPrecedence: xslt.paramPrecedence, missingParameter: xslt.missingParameter },
-    }, app.profile);
-    if (seq === runSeq) xslt.result = r;
+    const params = xsltRequest();
+    const [r, c] = await Promise.all([
+      call<XsltResult>('xslt.run', params, app.profile),
+      xslt.compareOn ? compareRun<XsltResult>('xslt.run', params, app.profile) : Promise.resolve(null),
+    ]);
+    if (seq === runSeq) {
+      xslt.result = r;
+      xslt.compare = c;
+    }
   } catch (e) {
     if (seq === runSeq) fail(e);
   } finally {
@@ -391,13 +438,15 @@ export async function runGroovy() {
   groovy.running = true;
   app.error = '';
   try {
-    const r = await call<GroovyResult>('groovy.run', {
-      script: { content: groovy.script, path: groovy.scriptPath ?? 'script.groovy' },
-      function: groovy.functionName || 'processData',
-      input: { body: groovy.body, headers: clean(groovy.headers), properties: clean(groovy.properties) },
-      options: { bodyType: groovy.bodyType },
-    }, app.groovyProfile);
-    if (seq === groovySeq) groovy.result = r;
+    const params = groovyRequest();
+    const [r, c] = await Promise.all([
+      call<GroovyResult>('groovy.run', params, app.groovyProfile),
+      groovy.compareOn ? compareRun<GroovyResult>('groovy.run', params, app.groovyProfile) : Promise.resolve(null),
+    ]);
+    if (seq === groovySeq) {
+      groovy.result = r;
+      groovy.compare = c;
+    }
   } catch (e) {
     if (seq === groovySeq) fail(e);
   } finally {

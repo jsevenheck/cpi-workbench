@@ -1,12 +1,13 @@
 <script lang="ts">
   import Editor from './Editor.svelte';
   import KeyValueTable from './KeyValueTable.svelte';
-  import { app, xslt, runXslt, saveMapping, saveCase, formatXml, ask } from '../lib/store.svelte';
+  import CompareView from './CompareView.svelte';
+  import { app, xslt, runXslt, saveMapping, saveCase, formatXml, ask, otherProfile } from '../lib/store.svelte';
   import { languageFor } from '../lib/monaco';
   import type { Diagnostic } from '../lib/types';
 
   let inputTab = $state<'body' | 'headers' | 'properties'>('body');
-  let outputTab = $state<'body' | 'headers' | 'properties' | 'parameters' | 'console'>('body');
+  let outputTab = $state<'body' | 'headers' | 'properties' | 'parameters' | 'console' | 'compare'>('body');
   let showDiff = $state(false);
   let mappingEditor: Editor | undefined = $state();
 
@@ -51,6 +52,19 @@
       await saveCase(r.value, r.checked);
     } catch (e) {
       app.error = (e as Error).message;
+    }
+  }
+
+  let other = $derived(otherProfile(app.profile));
+
+  function toggleCompare() {
+    xslt.compareOn = !xslt.compareOn;
+    xslt.compare = null;
+    if (xslt.compareOn) {
+      outputTab = 'compare';
+      runXslt();
+    } else if (outputTab === 'compare') {
+      outputTab = 'body';
     }
   }
 
@@ -108,7 +122,10 @@
         <button role="tab" class:active={outputTab === 'properties'} onclick={() => (outputTab = 'properties')}>Properties{#if result?.changes && (result.changes.properties.added.length + result.changes.properties.changed.length) > 0}<span class="count hl">{result.changes.properties.added.length + result.changes.properties.changed.length}</span>{/if}</button>
         <button role="tab" class:active={outputTab === 'parameters'} onclick={() => (outputTab = 'parameters')}>Parameters</button>
         <button role="tab" class:active={outputTab === 'console'} onclick={() => (outputTab = 'console')}>Console{#if consoleCount}<span class="count" class:err={errors.length > 0}>{consoleCount}</span>{/if}</button>
+        {#if xslt.compareOn}<button role="tab" class:active={outputTab === 'compare'} onclick={() => (outputTab = 'compare')}>Compare</button>{/if}
       </div>
+      <button class="small" class:on={xslt.compareOn} onclick={toggleCompare} disabled={!other && !xslt.compareOn}
+        title={other ? 'Also run on ' + other + ' and show the differences' : 'No second XSLT runtime available'}>{xslt.compareOn ? 'Comparing' : 'Compare'}</button>
       {#if outputTab === 'body' && result?.output}
         <label class="check"><input type="checkbox" bind:checked={showDiff} /> Diff</label>
       {/if}
@@ -116,6 +133,8 @@
     <div class="body">
       {#if !result}
         <p class="hint">Press <kbd>Ctrl</kbd>+<kbd>Enter</kbd> or <b>Run</b>. With <b>Live</b> on, every change re-runs the mapping.</p>
+      {:else if outputTab === 'compare'}
+        <CompareView profile={app.profile} {result} compare={xslt.compare} language={outLanguage} />
       {:else if outputTab === 'body'}
         {#if result.output}
           <Editor value={result.output.body} language={outLanguage} readOnly original={showDiff ? xslt.body : null} label="Output body" />
@@ -212,6 +231,7 @@
   tr.muted td { color: var(--muted); }
   .tag { margin-left: 6px; font-size: 10px; text-transform: uppercase; color: var(--warn); }
   footer { font-size: 11px; color: var(--muted); padding: 4px 10px; border-top: 1px solid var(--border); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .on { background: var(--active); color: var(--accent); border-color: var(--accent); }
   .check { font-size: 12px; display: flex; align-items: center; gap: 4px; }
   @media (max-width: 1100px) {
     .xslt { grid-template-columns: 1fr; grid-template-rows: minmax(220px, 1fr) minmax(300px, 1.3fr) minmax(260px, 1fr); }

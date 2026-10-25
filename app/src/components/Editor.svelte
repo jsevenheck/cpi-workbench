@@ -94,7 +94,21 @@
     editor?.focus();
   }
 
-  onMount(create);
+  // Monaco scrolls virtually. When its hidden textarea gets focus far right, the browser can also
+  // scroll Monaco's container natively, which shifts the text out of view for good; undo that.
+  function nativeScroll(e: Event) {
+    const t = e.target as HTMLElement;
+    const monacoBox = t.classList?.contains('monaco-scrollable-element') || t.classList?.contains('overflow-guard');
+    if (monacoBox && (t.scrollLeft !== 0 || t.scrollTop !== 0)) {
+      t.scrollLeft = 0;
+      t.scrollTop = 0;
+    }
+  }
+
+  onMount(() => {
+    create();
+    host.addEventListener('scroll', nativeScroll, true);
+  });
   onDestroy(dispose);
 
   // External value changes (file loaded, result arrived) → update the model without echo.

@@ -6,7 +6,8 @@ import path from 'node:path';
 
 const project = path.resolve(process.argv[2] ?? 'examples/demo-project');
 const shots = process.argv[3];
-const url = process.env.CPIWB_URL ?? 'http://127.0.0.1:7777/';
+// A Saxon-HE 12 engine on 7780 is optional; with it the runtime comparison is tested too.
+const url = (process.env.CPIWB_URL ?? 'http://127.0.0.1:7777/') + '?engines=saxon-he-12@http://127.0.0.1:7780';
 // Resolve playwright via require so a globally installed copy (NODE_PATH) works too.
 const { chromium } = createRequire(import.meta.url)('playwright');
 const fail = (m) => { console.error('FAIL: ' + m); process.exitCode = 1; };
@@ -27,6 +28,17 @@ if (!out.includes('SalesOrder')) fail('sample output missing SalesOrder: ' + out
 await page.getByRole('tab', { name: /^Headers/ }).nth(1).click();
 if (!(await page.locator('section.output tr.added').first().innerText()).includes('OrderNumber')) fail('OrderNumber header not marked as added');
 if (shots) await page.screenshot({ path: path.join(shots, '1-xslt-scratch.png') });
+
+// 1b) Compare runtimes (only when the second XSLT engine is running).
+const compare = page.getByRole('button', { name: 'Compare', exact: true });
+if (await compare.isEnabled()) {
+  await compare.click();
+  await page.locator('section.output .compare .same').waitFor({ timeout: 15000 });
+  if (shots) await page.screenshot({ path: path.join(shots, '1b-xslt-compare.png') });
+  await page.getByRole('button', { name: 'Comparing' }).click();
+} else {
+  console.log('note: saxon-he-12 engine not running, comparison not tested');
+}
 
 // 2) A compile error shows up with its line.
 await page.locator('section.mapping .view-lines').click();

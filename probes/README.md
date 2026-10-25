@@ -10,6 +10,7 @@ runtime profiles.
 | `fingerprint-v1.groovy` | Groovy Script **1.x** | Java / Groovy / Camel / Saxon versions, JAXP factories, charset, timezone, locale, script bindings (Q-G2, Q-G3, Q-G6, Q-X1) |
 | `fingerprint-v2.groovy` | Groovy Script **2.x** | Same for 2.x plus the **Script API v2 method list** via reflection (Q-G4). Not yet verified on a tenant. |
 | `fingerprint.xsl` | XSLT Mapping 1.2+ | Saxon edition/version, supported features, localisation of `format-date` (Q-X1) |
+| `probe-platform-v1.groovy` | Groovy Script **1.x** | Partner Directory and Keystore behaviour for entries that do not exist, plus the real method lists (Q-P1) |
 | `prepare-xslt-probe.groovy` + `probe-xslt-behaviour.xsl` | Groovy 1.x, then XSLT Mapping | Header vs. property precedence, Java→XDM types, missing params, `setHeader` return value (Q-X2 … Q-X5) |
 
 ## How to run
@@ -24,8 +25,10 @@ runtime profiles.
    The response body is an XML document. If the mapping step fails, keep the full error text from
    the message processing log.
 4. iFlow **Probe_XSLT_Fingerprint**: `HTTPS sender` → `XSLT Mapping: fingerprint.xsl` → end.
+5. iFlow **Probe_Platform**: `HTTPS sender` → `Groovy Script 1.x: probe-platform-v1.groovy` → end.
+   It only looks up names that cannot exist; no Partner Directory content or keys are needed.
 
-Send the four response bodies (or attach them to an issue). Nothing in them is confidential beyond
+Send the response bodies (or attach them to an issue). Nothing in them is confidential beyond
 version numbers and the tenant's default timezone/locale.
 
 ## Baseline from the simulator

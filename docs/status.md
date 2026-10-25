@@ -33,8 +33,8 @@ Automated checks:
 | Runtime comparison (9.9 ↔ 12, 1.x ↔ 2.x) | ≈ 95 % | — |
 | Lint (1.x → 2.x) | ≈ 80 % | Covers the known breaks (F26, v1-only methods, imports). Others appear only as compile or runtime errors. On the 1.x runtime, the compile error for a Script API v2 or `groovy.xml.XmlSlurper` import says that it needs 2.x. |
 | iFlow-zip import | ≈ 75 % | Groovy, XSLT and XML Validator steps only. Header-driven mappings are flagged, not resolved. The format is undocumented (best effort; checked against 24 SAP sample iFlows). |
-| Desktop app and browser mode | ≈ 90 % | Engines, shell and browser mode are tested on Windows and macOS in CI. On Windows, the desktop window (WebView2, `tauri dev`) was tried by hand on 2026-10-25 with XSLT and Groovy 1.x/2.x. Not yet tried by hand: the installers, the XSD view and iFlow import in the window, macOS (WKWebView). |
-| Distribution | ≈ 40 % | No code signing, no auto-update. One all-in-one installer instead of a base app plus a separate Groovy pack (plan §5.3). |
+| Desktop app and browser mode | ≈ 90 % | Engines, shell and browser mode are tested on Windows and macOS in CI. On Windows, the desktop window (WebView2, `tauri dev`) was tried by hand on 2026-10-25 with XSLT, Groovy 1.x/2.x and iFlow import. Not yet tried by hand: the installers, the XSD view in the window, macOS (WKWebView). |
+| Distribution | ≈ 40 % | No code signing, no auto-update. On a managed Windows laptop, the unsigned MSI is refused as untrusted, so it could not be tried there. One all-in-one installer instead of a base app plus a separate Groovy pack (plan §5.3). |
 | Large messages | ≈ 70 % | Messages go through JSON-RPC, not temp files (plan §5.3). 7.4 MB worked (XSLT 1.3 s, Groovy 0.45 s); larger ones are untested. |
 | Performance budgets | measured on Linux | Windows and macOS not measured. |
 | Probe kit | written 100 %, run 0 % | Needs one run on a test tenant. |
@@ -72,5 +72,5 @@ From the first manual test of the desktop window on Windows:
 ## Next steps
 
 1. Run the probes on a test tenant (Appendix A of the plan) and turn "to verify" into facts.
-2. Install and open the installers on Windows and macOS once by hand; try the XSD view and iFlow import in the desktop window.
+2. Install and open the installers on Windows (a machine without a policy against unsigned MSIs) and macOS once by hand; try the XSD view in the desktop window.
 3. Code signing and auto-update (Phase 5).

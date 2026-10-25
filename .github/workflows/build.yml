@@ -31,8 +31,7 @@ jobs:
       matrix:
         include:
           - os: windows-latest
-          - os: macos-14        # Apple Silicon
-          - os: macos-13        # Intel
+          - os: macos-14        # Apple Silicon (Intel runners are no longer reliably available)
           - os: ubuntu-22.04
     runs-on: ${{ matrix.os }}
     steps:
@@ -51,11 +50,16 @@ jobs:
           cache: maven
       - name: Build engine jars
         run: mvn -B -f engine/pom.xml -DskipTests package
+      - name: MSVC environment for native-image (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
       - name: Build native engines
         shell: bash
         run: |
+          mkdir -p engine/native/out
+          ni=native-image; [ "$RUNNER_OS" = "Windows" ] && ni=native-image.cmd
           for id in he99 he12; do
-            native-image --no-fallback -march=compatibility -jar engine/xml-$id/target/cpiwb-xml-$id.jar -o engine/native/out/cpiwb-xml-$id
+            "$ni" --no-fallback -march=compatibility -jar engine/xml-$id/target/cpiwb-xml-$id.jar -o engine/native/out/cpiwb-xml-$id
           done
       - name: Smoke-test native engines
         shell: bash

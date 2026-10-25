@@ -15,7 +15,7 @@ Automated checks:
 * Engine tests (`mvn -f engine/pom.xml verify`): core 8, XSLT/XSD/XPath 22 per Saxon version, Groovy 22 per script version.
 * Demo test cases: 6.
 * Browser end-to-end tests: `app/e2e/smoke.mjs` and `groovy.mjs`.
-* CI runs the engine tests on Linux, Windows and macOS, the browser e2e tests on Linux and Windows, and the shell tests on all three before it builds the installers. All of them passed on Windows and macOS runners for the first time on 2026-10-25.
+* CI runs the engine tests on Linux, Windows and macOS, the browser e2e tests on Linux and Windows, and the shell tests on all three before it builds the installers. All of them passed on Windows and macOS runners for the first time on 2026-10-25 (`d237e25`). Since then, pushes run on Linux only; tags and manual runs run all three ([building](building.md#ci-and-installers)).
 
 ## By area
 

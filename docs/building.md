@@ -55,10 +55,13 @@ node app/e2e/groovy.mjs /tmp/demo-project [screenshotDir]
 
 `.github/workflows/build.yml`:
 
-* runs the engine tests and demo cases on Linux, Windows and macOS,
-* runs the browser e2e tests on Linux and Windows,
-* runs the shell tests against the native engines and the trimmed JRE, then builds Windows
-  (.msi/.exe), macOS (Apple Silicon, .dmg) and Linux bundles.
+* runs the engine tests and demo cases,
+* runs the browser e2e tests,
+* runs the shell tests against the native engines and the trimmed JRE, then builds the bundles.
+
+Pushes and pull requests to `main` run on Linux only, because Windows and macOS minutes cost 2x and
+10x on a private repository. A tag `v*` or a manual run (*Run workflow*, `workflow_dispatch`) runs
+everything on Linux, Windows (e2e, .msi/.exe) and macOS (Apple Silicon, .dmg).
 
 Native images must be built on each target OS; there is no cross-compilation.
 The installers are not code-signed yet.

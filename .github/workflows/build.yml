@@ -1,9 +1,13 @@
 name: build
 
+# Windows and macOS minutes count 2x and 10x on private repositories, so pushes and pull requests
+# run on Linux only. Tags (v*) and manual runs (workflow_dispatch) run all three systems.
 on:
   push:
-    branches: ["**"]
+    branches: [main]
+    tags: ["v*"]
   pull_request:
+    branches: [main]
   workflow_dispatch:
 
 jobs:
@@ -11,7 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-14]
+        os: ${{ fromJSON((github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')) && '["ubuntu-latest","windows-latest","macos-14"]' || '["ubuntu-latest"]') }}
     runs-on: ${{ matrix.os }}
     defaults:
       run: { shell: bash }
@@ -36,10 +40,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: windows-latest
-          - os: macos-14        # Apple Silicon (Intel runners are no longer reliably available)
-          - os: ubuntu-22.04
+        # macos-14 is Apple Silicon (Intel runners are no longer reliably available).
+        os: ${{ fromJSON((github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')) && '["windows-latest","macos-14","ubuntu-22.04"]' || '["ubuntu-22.04"]') }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -123,7 +125,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: ${{ fromJSON((github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')) && '["ubuntu-latest","windows-latest"]' || '["ubuntu-latest"]') }}
     runs-on: ${{ matrix.os }}
     defaults:
       run: { shell: bash }

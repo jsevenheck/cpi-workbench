@@ -44,7 +44,7 @@ public final class GroovyEngine implements RpcHandler {
                 .with("nativeImage", false)
                 .with("types", TypedValue.TYPES)
                 .with("methods", List.of("engine.info", "groovy.run", "project.open", "project.list", "file.read",
-                        "file.write", "file.delete", "tests.run"));
+                        "file.write", "file.delete", "iflow.import", "iflow.steps", "tests.run"));
     }
 
     @Override
@@ -65,6 +65,10 @@ public final class GroovyEngine implements RpcHandler {
                 return files.write(params);
             case "file.delete":
                 return files.delete(params);
+            case "iflow.import":
+                return files.iflowImport(params);
+            case "iflow.steps":
+                return files.iflowSteps();
             case "tests.run":
                 String p = Json.str(params, "path", null);
                 Path target = p == null ? files.root().resolve("tests")

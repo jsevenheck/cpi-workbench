@@ -113,6 +113,19 @@ public final class ProjectFiles {
         return Json.o().with("deleted", true);
     }
 
+    /** Imports an exported iFlow zip into iflows/<name>/ and lists its script and XSLT steps. */
+    public synchronized Map<String, Object> iflowImport(Map<String, Object> p) throws IOException {
+        requireRoot();
+        Map<String, Object> r = IflowImport.importZip(Path.of(Json.str(p, "zip", "")), root, Json.str(p, "name", null));
+        r.put("fileList", list());
+        return r;
+    }
+
+    public synchronized Map<String, Object> iflowSteps() throws IOException {
+        requireRoot();
+        return IflowImport.steps(root);
+    }
+
     public synchronized Path root() {
         return root;
     }

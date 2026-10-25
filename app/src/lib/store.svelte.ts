@@ -42,7 +42,20 @@ export const app = $state({
   status: '',
   error: '',
   busy: false,
+  iflowSteps: [] as IflowStep[],
 });
+
+export interface IflowStep {
+  iflow: string;
+  id: string;
+  name: string;
+  type: 'groovy' | 'xslt' | 'error';
+  componentVersion?: string;
+  file?: string;
+  fileFound?: boolean;
+  function?: string;
+  profile?: Profile;
+}
 
 export const xslt = $state({
   mappingPath: null as string | null,
@@ -195,6 +208,7 @@ export async function open(dir: string, initProject = false) {
   const r = await openProject(dir, initProject);
   app.project = { root: r.root, files: r.files };
   safeSet('cpiwb.project', r.root);
+  await loadIflowSteps();
   if (!r.isProject && !initProject) app.status = 'Folder has no cpi-workbench.json – it still works; use "Init" to add the standard folders.';
   else app.status = 'Project opened: ' + r.root;
 }
@@ -206,12 +220,42 @@ export function closeProject() {
   xslt.casePath = null;
   groovy.scriptPath = null;
   groovy.casePath = null;
+  app.iflowSteps = [];
 }
 
 export async function refreshFiles() {
   if (!app.project) return;
   const r = await call('project.list');
   app.project.files = r.files;
+}
+
+export async function loadIflowSteps() {
+  if (!app.project) return;
+  try {
+    app.iflowSteps = (await call('iflow.steps')).steps;
+  } catch {
+    app.iflowSteps = [];
+  }
+}
+
+export async function importIflow(zip: string) {
+  const r = await call('iflow.import', { zip });
+  if (app.project) app.project.files = r.fileList;
+  app.iflowSteps = r.steps;
+  app.status = `Imported ${r.imported} (${r.files} files, ${r.steps.length} script/XSLT steps found)`;
+}
+
+/** Opens the file of an imported iFlow step with the step's settings (function, script version). */
+export async function openIflowStep(step: IflowStep) {
+  if (!step.file || !step.fileFound) {
+    app.error = `The file of step "${step.name}" was not found in the export (${step.file ?? 'no reference'}).`;
+    return;
+  }
+  await openFile(step.file);
+  if (step.type === 'groovy') {
+    groovy.functionName = step.function ?? 'processData';
+    if (step.profile && hasProfile(step.profile)) app.groovyProfile = step.profile;
+  }
 }
 
 export async function readFile(path: string): Promise<string> {

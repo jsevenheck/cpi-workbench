@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Synthetic test model shaped like an exported iFlow (BPMN 2 with ifl:property key/value pairs).
+     The real format is not publicly specified; the importer reads it generically. -->
+<bpmn2:definitions xmlns:bpmn2="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:ifl="http:///com.sap.ifl.model/Ifl.xsd" id="Definitions_1">
+  <bpmn2:process id="Process_1" name="Integration Process">
+    <bpmn2:callActivity id="CallActivity_1" name="Enrich order">
+      <bpmn2:extensionElements>
+        <ifl:property><key>scriptFunction</key><value>enrich</value></ifl:property>
+        <ifl:property><key>componentVersion</key><value>2.0</value></ifl:property>
+        <ifl:property><key>activityType</key><value>Script</value></ifl:property>
+        <ifl:property><key>subActivityType</key><value>GroovyScript</value></ifl:property>
+        <ifl:property><key>script</key><value>enrich.groovy</value></ifl:property>
+      </bpmn2:extensionElements>
+    </bpmn2:callActivity>
+    <bpmn2:callActivity id="CallActivity_2" name="Map to sales order">
+      <bpmn2:extensionElements>
+        <ifl:property><key>componentVersion</key><value>1.2</value></ifl:property>
+        <ifl:property><key>activityType</key><value>Mapping</value></ifl:property>
+        <ifl:property><key>subActivityType</key><value>XSLTMapping</value></ifl:property>
+        <ifl:property><key>mappinguri</key><value>dir://mapping/order.xsl</value></ifl:property>
+      </bpmn2:extensionElements>
+    </bpmn2:callActivity>
+    <bpmn2:callActivity id="CallActivity_3" name="Set headers">
+      <bpmn2:extensionElements>
+        <ifl:property><key>activityType</key><value>Enricher</value></ifl:property>
+      </bpmn2:extensionElements>
+    </bpmn2:callActivity>
+  </bpmn2:process>
+</bpmn2:definitions>

@@ -65,7 +65,11 @@ open a project folder (any folder; **Init** adds `mappings/`, `schemas/`, `tests
 * the output updates live (or press **Ctrl+Enter**); compile and runtime errors are marked in the editor,
 * **Parameters** shows how each `xsl:param` was bound (header, property, default),
 * **Save as test** stores input, mapping reference and the current output as a regression test,
-* **Tests** runs all test cases of the project on the right engine.
+* **Tests** runs all test cases of the project on the right engine,
+* **Import iFlow** unpacks an iFlow exported from Integration Suite (zip) into `iflows/` and lists
+  its Groovy Script and XSLT Mapping steps; clicking a step opens its file with the step's function
+  name and script version. The `.iflw` format is not publicly documented, so this is read
+  generically (best effort).
 
 The installers are not code-signed yet: on macOS, right-click → *Open* the first time; on Windows,
 SmartScreen asks once ("More info" → "Run anyway"). The Windows installer installs per user, no admin rights.

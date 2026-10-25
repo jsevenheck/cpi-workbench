@@ -61,6 +61,20 @@ const calls = await page.locator('section.output .pad').innerText();
 if (!calls.includes('getMappedValue') || !calls.includes('getUserCredential')) fail('api calls: ' + calls);
 if (shots) await page.screenshot({ path: path.join(shots, 'g3-groovy-case.png') });
 
+// 4b) Import an exported iFlow (zip) and open its Groovy step.
+if (process.env.CPIWB_IFLOW_ZIP) {
+  await page.getByRole('button', { name: 'Import iFlow' }).click();
+  await page.locator('.dlg input.mono').fill(process.env.CPIWB_IFLOW_ZIP);
+  await page.locator('.dlg').getByRole('button', { name: 'OK' }).click();
+  await page.locator('.steps .step', { hasText: 'Enrich order' }).click();
+  await page.locator('section.script h2', { hasText: 'enrich.groovy' }).waitFor({ timeout: 10000 });
+  const fn = await page.getByLabel('Function name').inputValue();
+  if (fn !== 'enrich') fail('function from iFlow step: ' + fn);
+  const prof = await page.getByLabel('Runtime profile').inputValue();
+  if (prof !== 'groovy-2.x') fail('profile from iFlow step: ' + prof);
+  if (shots) await page.screenshot({ path: path.join(shots, 'g5-iflow.png') });
+}
+
 // 5) All tests across all engines.
 await page.getByRole('tab', { name: 'Tests' }).click();
 await page.getByRole('button', { name: 'Run all tests' }).click();

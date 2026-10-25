@@ -18,7 +18,7 @@ Decisions taken: build-vs-reuse principle accepted (§3), XSLT first, tenant pro
 | 1 — Probe kit | **Written** (`probes/`), simulator baseline recorded; waiting for a tenant run. |
 | 2 — XSLT MVP | **Done**: XSLT simulator with live mode, both Saxon profiles, parameter binding view, XSD validation, XPath 1.0/3.1, test cases + runner + CLI, desktop app and browser mode. |
 | 3 — Groovy MVP | **Done**: engines for Groovy Script 1.x (Groovy 2.4.21, Camel 2.24.3) and 2.x (Groovy 4.0.29, Camel 3.14.7), clean-room Script API, MPL, Secure Store + Value Mapping mocks, Groovy view in the app, test cases, bundled Java 17 runtime with AppCDS and idle shutdown. Script API v2 surface is provisional (F6). |
-| 4/5 | Partly: CLI runner, platform API mocks (2 of 5), v2 lint warning, wildcard-import lint done; CI workflow for Windows/macOS/Linux installers written but not yet run; Keystore/Partner Directory/Data Store mocks, iFlow-zip import and auto-update open. |
+| 4/5 | Partly: CLI runner, platform API mocks (2 of 5), v2 lint warning, wildcard-import lint done; CI workflow for Windows/macOS/Linux installers written but not yet run; Keystore/Partner Directory/Data Store mocks and auto-update open; iFlow-zip import done (best-effort reading of the undocumented .iflw format). |
 
 Measured (Linux x86-64, native engines): engine start ≈ 10 ms (JVM: ≈ 200 ms); first XSLT run ≈ 10 ms, cached
 runs < 1 ms (JVM: ≈ 420 ms / 5 ms); 270 KB input ≈ 70 ms (9.9) / ≈ 200 ms (12) with ≈ 60 MB peak RSS;

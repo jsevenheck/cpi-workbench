@@ -38,7 +38,7 @@ public final class XmlEngine implements RpcHandler {
                 .with("nativeImage", System.getProperty("org.graalvm.nativeimage.imagecode") != null)
                 .with("types", TypedValue.TYPES)
                 .with("methods", List.of("engine.info", "xslt.run", "xsd.validate", "xpath.eval", "xml.format",
-                        "project.open", "project.list", "file.read", "file.write", "file.delete", "tests.run"));
+                        "project.open", "project.list", "file.read", "file.write", "file.delete", "iflow.import", "iflow.steps", "tests.run"));
     }
 
     @Override
@@ -65,6 +65,10 @@ public final class XmlEngine implements RpcHandler {
                 return files.write(params);
             case "file.delete":
                 return files.delete(params);
+            case "iflow.import":
+                return files.iflowImport(params);
+            case "iflow.steps":
+                return files.iflowSteps();
             case "tests.run":
                 return runTests(params);
             default:

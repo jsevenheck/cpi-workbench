@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { isDesktop, pickFolder } from '../lib/engine';
-  import { app, open, closeProject, openFile, refreshFiles, writeFile, ask, xslt, xsd, groovy, SAMPLE_GROOVY_V1, SAMPLE_GROOVY_V2 } from '../lib/store.svelte';
+  import { isDesktop, pickFolder, pickZip } from '../lib/engine';
+  import { app, open, closeProject, openFile, refreshFiles, writeFile, ask, xslt, xsd, groovy, SAMPLE_GROOVY_V1, SAMPLE_GROOVY_V2,
+    importIflow, openIflowStep, loadIflowSteps } from '../lib/store.svelte';
 
   let dirInput = $state('');
   let filter = $state('');
@@ -10,6 +11,15 @@
     try {
       const dir = isDesktop ? await pickFolder() : dirInput.trim();
       if (dir) await open(dir);
+    } catch (e) {
+      app.error = (e as Error).message;
+    }
+  }
+
+  async function importZip() {
+    try {
+      const zip = isDesktop ? await pickZip() : (await ask('Path of the exported iFlow (.zip)', ''))?.value;
+      if (zip) await importIflow(zip);
     } catch (e) {
       app.error = (e as Error).message;
     }
@@ -47,7 +57,7 @@
       if (!g.has(top)) g.set(top, []);
       g.get(top)!.push(f.path);
     }
-    const order = ['mappings', 'scripts', 'schemas', 'tests', 'platform'];
+    const order = ['mappings', 'scripts', 'schemas', 'tests', 'platform', 'iflows'];
     return [...g.entries()].sort((a, b) => (order.indexOf(a[0]) + 1 || 99) - (order.indexOf(b[0]) + 1 || 99) || a[0].localeCompare(b[0]));
   });
 
@@ -71,6 +81,7 @@
         <button class="small" onclick={() => newFile('xsl')}>+ Mapping</button>
         <button class="small" onclick={() => newFile('xsd')}>+ Schema</button>
         <button class="small" onclick={() => newFile('groovy')}>+ Script</button>
+        <button class="small" onclick={importZip} title="Import an iFlow exported from Integration Suite (zip)">Import iFlow</button>
         <button class="small" onclick={initProject} title="Create mappings/, schemas/, tests/ and cpi-workbench.json">Init</button>
         <button class="small" onclick={closeProject} title="Close project">✕</button>
       </div>
@@ -84,6 +95,17 @@
       <p class="muted small">Without a project you can still try mappings in the editor.</p>
     {/if}
   </div>
+  {#if app.project && app.iflowSteps.length}
+    <div class="steps" aria-label="iFlow steps">
+      <div class="group static">iFlow steps <button class="icon" title="Rescan" onclick={() => { refreshFiles(); loadIflowSteps(); }}>↻</button></div>
+      {#each app.iflowSteps as s}
+        <button class="file step" class:missing={!s.fileFound} title={`${s.iflow} · ${s.type}${s.componentVersion ? ' ' + s.componentVersion : ''} · ${s.file ?? ''}`}
+          onclick={() => openIflowStep(s)}>
+          <span class="kind {s.type}">{s.type === 'groovy' ? 'G' : s.type === 'xslt' ? 'X' : '!'}</span>{s.name || s.id}
+        </button>
+      {/each}
+    </div>
+  {/if}
   {#if app.project}
     <nav class="tree" aria-label="Project files">
       {#each groups as [group, paths]}
@@ -113,5 +135,13 @@
   .file { display: block; width: 100%; text-align: left; border: none; background: none; color: var(--fg); font-size: 12px; padding: 3px 10px 3px 22px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: var(--mono); }
   .file:hover { background: var(--hover); }
   .file.active { background: var(--active); color: var(--accent); }
+  .steps { max-height: 30%; overflow: auto; border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+  .group.static { cursor: default; display: flex; align-items: center; justify-content: space-between; }
+  .step { font-family: inherit; padding-left: 12px; }
+  .step.missing { opacity: 0.6; }
+  .kind { display: inline-block; width: 16px; font-size: 10px; font-weight: 700; font-family: var(--mono); }
+  .kind.groovy { color: var(--ok); }
+  .kind.xslt { color: var(--accent); }
+  .kind.error { color: var(--err); }
   @media (max-width: 800px) { .side { width: 100%; border-right: none; border-bottom: 1px solid var(--border); max-height: 35vh; } }
 </style>

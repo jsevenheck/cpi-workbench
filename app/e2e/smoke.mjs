@@ -197,11 +197,22 @@ await page.getByTitle('Reload file list').click();
 await page.getByRole('button', { name: '+ Script' }).click();
 const newName = await page.getByRole('dialog').getByRole('textbox').inputValue();
 if (newName !== 'scripts/new-script-2.groovy') fail('+ Script suggestion: ' + newName);
-await page.getByRole('dialog').getByRole('textbox').fill('scripts/new-script.groovy');
+// Another spelling of the same path is the same file.
+await page.getByRole('dialog').getByRole('textbox').fill('scripts/./new-script.groovy');
 await page.getByRole('dialog').getByRole('button', { name: 'OK' }).click();
 await page.getByRole('dialog').filter({ hasText: 'exists. Overwrite it?' }).getByRole('button', { name: 'Cancel' }).click()
   .catch(() => fail('no overwrite question for an existing script'));
 if (fs.readFileSync(path.join(project, 'scripts/new-script.groovy'), 'utf8') !== '// keep me\n') fail('+ Script overwrote an existing file');
+
+// 11) Closing the project asks before it drops unsaved changes in the File tab; Cancel keeps it open.
+await page.locator('.tree .file', { hasText: 'value-mappings.json' }).click();
+await page.locator('section[aria-label="File"] .view-lines').click({ position: { x: 40, y: 10 } });
+await page.keyboard.press('Control+End');
+await page.keyboard.type(' ');
+await page.getByTitle('Close project').click();
+await page.getByRole('dialog').filter({ hasText: 'Discard the unsaved changes' }).getByRole('button', { name: 'Cancel' }).click()
+  .catch(() => fail('no question before Close project drops File tab changes'));
+if (!(await page.locator('.tree .file', { hasText: 'value-mappings.json' }).isVisible())) fail('Cancel closed the project anyway');
 
 if (errors.length) fail('browser errors: ' + errors.join(' | '));
 await browser.close();

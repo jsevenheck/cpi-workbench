@@ -1,5 +1,6 @@
 package io.cpiwb.xml;
 
+import io.cpiwb.xml.compat.SaxonCompat;
 import net.sf.saxon.Configuration;
 import net.sf.saxon.trans.XPathException;
 import org.w3c.dom.ls.LSInput;
@@ -84,6 +85,11 @@ public final class ProjectResolver implements URIResolver, LSResourceResolver, E
 
     /** Returns the content for an absolute system id, or throws if it is outside the project. */
     public String load(String systemId) throws TransformerException {
+        return load(systemId, StandardCharsets.UTF_8);
+    }
+
+    /** Like {@link #load(String)}; files are decoded with {@code charset} (editor buffers are text already). */
+    public String load(String systemId, java.nio.charset.Charset charset) throws TransformerException {
         String normalized = normalize(systemId);
         String mem = resources.get(normalized);
         if (mem != null) {
@@ -97,7 +103,7 @@ public final class ProjectResolver implements URIResolver, LSResourceResolver, E
             }
             try {
                 filesRead.put(p, Files.getLastModifiedTime(p).toMillis());
-                return Files.readString(p, StandardCharsets.UTF_8);
+                return Files.readString(p, charset);
             } catch (java.io.IOException e) {
                 throw new TransformerException("Cannot read " + p + ": " + e.getMessage());
             }
@@ -194,9 +200,10 @@ public final class ProjectResolver implements URIResolver, LSResourceResolver, E
     }
 
     /**
-     * Routes {@code unparsed-text()} (and the functions built on it, like {@code json-doc()}) to the
-     * resolver of the current run and blocks {@code collection()}. Files are read as UTF-8 whatever
-     * encoding the call names (simulator assumption).
+     * Routes {@code unparsed-text()} (and the functions built on it, like {@code json-doc()}) and the
+     * external entities of documents Saxon parses itself ({@code parse-xml()}) to the resolver of the
+     * current run, and blocks {@code collection()}. {@code unparsed-text()} without an encoding reads
+     * UTF-8 (simulator assumption; the spec also allows guessing from the content).
      */
     public static void install(Configuration config) {
         config.setUnparsedTextURIResolver((URI uri, String encoding, Configuration c) -> {
@@ -204,11 +211,24 @@ public final class ProjectResolver implements URIResolver, LSResourceResolver, E
             if (r == null) {
                 throw new XPathException("Access to '" + uri + "' is blocked: no run is active");
             }
+            java.nio.charset.Charset charset;
             try {
-                return new StringReader(r.load(r.resolveAgainst(uri.toString(), null)));
+                charset = encoding == null ? StandardCharsets.UTF_8 : java.nio.charset.Charset.forName(encoding);
+            } catch (IllegalArgumentException e) {
+                throw new XPathException("Unknown encoding '" + encoding + "'", "FOUT1190");
+            }
+            try {
+                return new StringReader(r.load(r.resolveAgainst(uri.toString(), null), charset));
             } catch (TransformerException e) {
                 throw new XPathException(e.getMessage(), "FOUT1170");
             }
+        });
+        SaxonCompat.setEntityResolver(config, (publicId, systemId) -> {
+            ProjectResolver r = CURRENT.get();
+            if (r == null) {
+                throw new SAXException("External entity '" + systemId + "' is blocked: no run is active");
+            }
+            return r.resolveEntity(publicId, systemId);
         });
         config.setCollectionFinder((context, collectionURI) -> {
             throw new XPathException("UnsupportedInSimulator: collection() is not available ("

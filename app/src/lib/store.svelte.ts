@@ -1,6 +1,7 @@
 import { call, openProject, closeProject as closeEngineProject, availableProfiles, DEFAULT_PROFILE, type Profile, type ProfileInfo } from './engine';
 import type { Diagnostic, FileEntry, GroovyResult, Row, XsltResult } from './types';
 import { toRows } from './rows';
+import { pathKey } from './paths';
 
 export const SAMPLE_XSL = `<?xml version="1.0" encoding="UTF-8"?>
 <!-- Headers and exchange properties arrive as xsl:param with the same name, like in Cloud Integration.
@@ -248,6 +249,8 @@ export async function open(dir: string, initProject = false) {
 }
 
 export async function closeProject() {
+  // Mappings and scripts stay in their editors as unsaved text; the File tab closes with the project.
+  if (!(await mayDiscard('file'))) return;
   await closeEngineProject();
   app.project = null;
   safeSet('cpiwb.project', null);
@@ -554,7 +557,8 @@ export async function saveSchema(): Promise<boolean> {
 }
 
 function fileExists(path: string): boolean {
-  return !!app.project?.files.some((f) => f.path === path);
+  const key = pathKey(path);
+  return !!app.project?.files.some((f) => pathKey(f.path) === key);
 }
 
 /**
@@ -571,6 +575,8 @@ export function freePath(path: string, suffix = ''): string {
 
 /** True if no file has this path or the user agreed to overwrite it. */
 export async function mayOverwrite(path: string): Promise<boolean> {
+  // Files may have appeared outside the app since the tree was listed.
+  await refreshFiles().catch(() => undefined);
   return !fileExists(path) || confirm(`${path} exists. Overwrite it?`);
 }
 
@@ -582,7 +588,7 @@ async function askNewPath(what: string, path: string | null, fallback: string): 
   }
   const r = await ask(`Save ${what} as (path inside the project)`, path ? freePath(path, '-copy') : freePath(fallback));
   if (!r) return null;
-  if (r.value !== path && !(await mayOverwrite(r.value))) return null;
+  if ((!path || pathKey(r.value) !== pathKey(path)) && !(await mayOverwrite(r.value))) return null;
   return r.value;
 }
 

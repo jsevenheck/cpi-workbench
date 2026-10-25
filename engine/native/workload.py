@@ -94,6 +94,8 @@ def main():
         ("xpath.eval", {"expression": "string(/r)", "version": "1.0", "input": {"body": entity_doc}}, no_leak),
         ("xpath.eval", {"expression": "string(/r)", "version": "3.1", "input": {"body": entity_doc}}, no_leak),
         ("xpath.eval", {"expression": f"unparsed-text('{secret_uri}')", "version": "3.1", "input": {"body": "<a/>"}}, no_leak),
+        ("xpath.eval", {"expression": "string(parse-xml(concat('<!DOCTYPE r [<!ENTITY x SYSTEM \"', $u, '\">]><r>&x;</r>')))".replace("$u", f"'{secret_uri}'"),
+                        "version": "3.1", "input": {"body": "<a/>"}}, no_leak),
         ("xslt.run", {"xslt": {"content": "<xsl:stylesheet version='2.0' xmlns:xsl='http://www.w3.org/1999/XSL/Transform'><xsl:template match='/'><xsl:copy-of select='.'/></xsl:template></xsl:stylesheet>"},
                       "input": {"body": entity_doc}}, no_leak),
         ("tests.run", {"path": "tests"}, lambda r: r["failed"] == 0),

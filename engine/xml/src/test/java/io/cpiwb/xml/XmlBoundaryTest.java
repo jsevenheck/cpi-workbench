@@ -136,6 +136,32 @@ class XmlBoundaryTest {
     }
 
     @Test
+    void parseXmlCannotReadEntitiesOutside() {
+        // The XML text is built in XPath, so no escaping is needed inside the attribute or the string.
+        String text = "concat('&lt;!DOCTYPE r [&lt;!ENTITY x SYSTEM &quot;', $u, '&quot;&gt;]&gt;&lt;r&gt;&amp;x;&lt;/r&gt;')";
+        for (String fn : List.of("parse-xml", "parse-xml-fragment")) {
+            String xsl = "<xsl:stylesheet version='3.0' xmlns:xsl='http://www.w3.org/1999/XSL/Transform'>"
+                    + "<xsl:output method='text'/><xsl:variable name='u' select=\"'" + secretUri + "'\"/>"
+                    + "<xsl:template match='/'><xsl:value-of select=\"string(" + fn + "(" + text + "))\"/></xsl:template></xsl:stylesheet>";
+            assertNoLeak(xslt(xsl, "<a/>"));
+            String xp = "let $u := '" + secretUri + "' return string(" + fn + "(concat('<!DOCTYPE r [<!ENTITY x SYSTEM \"', $u, '\">]><r>&x;</r>')))";
+            Map<String, Object> r = xpath(xp, "3.1", "<a/>");
+            assertNoLeak(r);
+        }
+        Map<String, Object> internal = xpath("string(parse-xml('<!DOCTYPE r [<!ENTITY x \"in\">]><r>&x;</r>'))", "3.1", "<a/>");
+        assertTrue(Json.write(internal).contains("\"in\""), () -> Json.write(internal));
+    }
+
+    @Test
+    void unparsedTextHonoursTheEncoding() throws Exception {
+        Files.write(project.resolve("latin1.txt"), "Grüße".getBytes(java.nio.charset.StandardCharsets.ISO_8859_1));
+        Map<String, Object> r = xpath("unparsed-text('latin1.txt', 'iso-8859-1')", "3.1", "<a/>");
+        assertTrue(Json.write(r).contains("Grüße"), () -> Json.write(r));
+        Map<String, Object> utf8 = xpath("unparsed-text('inside.txt')", "3.1", "<a/>");
+        assertTrue(Json.write(utf8).contains("inside-value"), () -> Json.write(utf8));
+    }
+
+    @Test
     void resultDocumentWritesNoFiles() {
         Path target = tmp.resolve("written.xml");
         String xsl = "<xsl:stylesheet version='2.0' xmlns:xsl='http://www.w3.org/1999/XSL/Transform'>"

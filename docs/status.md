@@ -12,10 +12,10 @@
 
 Automated checks:
 
-* Engine tests (`mvn -f engine/pom.xml verify`): core 11, XSLT/XSD/XPath 33 per Saxon version (11 of them on project boundaries), Groovy 23 per script version.
+* Engine tests (`mvn -f engine/pom.xml verify`): core 11, XSLT/XSD/XPath 35 per Saxon version (13 of them on project boundaries), Groovy 23 per script version.
 * Regression test cases (`testdata/regression-project`): 6.
 * Browser end-to-end tests: `app/e2e/smoke.mjs` and `groovy.mjs`.
-* UI unit tests (`npm --prefix app test`): the JSON, XSLT and Groovy formatters, test-case rows.
+* UI unit tests (`npm --prefix app test`): the JSON, XSLT and Groovy formatters, test-case rows, path comparison.
 * CI runs the engine tests on Linux, Windows and macOS, the browser e2e tests on Linux and Windows, and the shell tests on all three before it builds the installers. All of them passed on Windows and macOS runners for the first time on 2026-10-25 (`d237e25`).
 
 ## By area
@@ -87,6 +87,18 @@ From a code review (October 2026):
 * Test cases: a JSON boolean header or property stays a Boolean in the app, as on the CLI.
 * `cpi-workbench.json` no longer gets the unused `defaultXsltProfile` setting.
 * Native XML engines: parser error messages no longer fail on missing resource bundles.
+
+After a second review round:
+
+* `parse-xml()` and `parse-xml-fragment()` could still read external entities outside the project
+  (Saxon 9.9, and XPath on Saxon 12, which resolves entities through its `ResourceResolver`). Both
+  now go through the project resolver.
+* The overwrite question compared paths as typed: `scripts/./new-script.groovy` overwrote
+  `scripts/new-script.groovy`. Paths are now compared in one spelling, ignoring case.
+* Closing the project asks before it drops unsaved changes in the File tab.
+* `unparsed-text()` uses its encoding argument (it always read UTF-8).
+* Not changed, out of scope for local projects: path checks are lexical (a symlink inside the
+  project can point outside), and a failed iFlow import leaves the files it already wrote.
 
 ## Next steps
 

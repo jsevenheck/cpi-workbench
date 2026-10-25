@@ -44,6 +44,11 @@ public final class SaxonCompat {
     private SaxonCompat() {
     }
 
+    /** Entity resolver for every document Saxon parses itself, such as parse-xml() arguments. */
+    public static void setEntityResolver(Configuration config, org.xml.sax.EntityResolver resolver) {
+        config.getParseOptions().setEntityResolver(resolver);
+    }
+
     public static void captureMessages(Transformer transformer, Consumer<XslMessage> sink) {
         MessageListener2 listener = (content, errorCode, terminate, locator) -> sink.accept(new XslMessage(
                 content == null ? "" : content.getStringValue(), terminate,

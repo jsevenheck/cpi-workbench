@@ -43,6 +43,29 @@ public final class SaxonCompat {
     private SaxonCompat() {
     }
 
+    /** Entity resolver for every document Saxon parses itself, such as parse-xml() arguments. */
+    public static void setEntityResolver(Configuration config, org.xml.sax.EntityResolver resolver) {
+        config.setParseOptions(config.getParseOptions().withEntityResolver(resolver));
+        // Saxon 12 resolves the external entities and DTDs of documents it parses itself (parse-xml()
+        // in XPath) through the configuration's ResourceResolver, not the entity resolver above.
+        // Other requests return null and keep Saxon's handling.
+        config.setResourceResolver(request -> {
+            if (!net.sf.saxon.lib.ResourceRequest.EXTERNAL_ENTITY_NATURE.equals(request.nature)
+                    && !net.sf.saxon.lib.ResourceRequest.DTD_NATURE.equals(request.nature)) {
+                return null;
+            }
+            try {
+                org.xml.sax.InputSource in = resolver.resolveEntity(request.publicId, request.uri);
+                if (in == null) {
+                    throw new net.sf.saxon.trans.XPathException("External entity '" + request.uri + "' is blocked");
+                }
+                return new javax.xml.transform.stream.StreamSource(in.getCharacterStream(), in.getSystemId());
+            } catch (org.xml.sax.SAXException | java.io.IOException e) {
+                throw new net.sf.saxon.trans.XPathException(e.getMessage());
+            }
+        });
+    }
+
     public static void captureMessages(Transformer transformer, Consumer<XslMessage> sink) {
         ((TransformerImpl) transformer).getUnderlyingXsltTransformer().setMessageHandler(m -> sink.accept(
                 new XslMessage(m.getStringValue(), m.isTerminate(),

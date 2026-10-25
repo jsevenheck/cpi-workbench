@@ -60,7 +60,7 @@ node app/e2e/groovy.mjs /tmp/demo-project [screenshotDir]
 * runs the shell tests against the native engines and the trimmed JRE, then builds Windows
   (.msi/.exe), macOS (Apple Silicon, .dmg) and Linux bundles.
 
- Native images must be built on each target OS; there is no cross-compilation.
+Native images must be built on each target OS; there is no cross-compilation.
 The installers are not code-signed yet.
 
 ## Native image metadata

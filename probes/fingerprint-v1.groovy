@@ -30,7 +30,7 @@ def Message processData(Message message) {
         bodyClass          : safe { message.getBody()?.class?.name },
         // Which optional Groovy modules / libraries the runtime offers (the simulator bundles
         // groovy-xml, -json, -dateutil, -datetime, -templates, -nio for 2.x).
-        // The simulator follows SAP's published interface; the runtime class may offer more (PLAN.md F6).
+        // The simulator follows SAP's published interface; the runtime class may offer more (docs/plan.md F6).
         messageMethods     : safe { message.class.methods.findAll { it.declaringClass != Object }
                                         .collect { it.name + '(' + it.parameterTypes*.simpleName.join(', ') + '): ' + it.returnType.simpleName }
                                         .unique().sort() },

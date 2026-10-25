@@ -37,7 +37,7 @@ import java.util.TreeMap;
 /**
  * Simulates the Cloud Integration <em>XSLT Mapping</em> step.
  *
- * <p>Behaviour reproduced (see PLAN.md, findings F10/F11):
+ * <p>Behaviour reproduced (see docs/plan.md, findings F10/F11):
  * <ul>
  *   <li>Every global {@code xsl:param} receives the value of the header or exchange property with the
  *       same name. Values are passed as Java objects through JAXP, as Camel's XSLT component does, so

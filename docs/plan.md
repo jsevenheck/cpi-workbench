@@ -1,6 +1,6 @@
 # CPI Workbench — Project Plan
 
-Status: **v3, implementation in progress** — see §0 for what is built. Open decisions are in §13.
+Status: **v3, implementation in progress** — see §0 for what is built and [status.md](status.md) for the per-area completeness audit. Open decisions are in §13.
 
 Working name: **CPI Workbench** (placeholder).
 
@@ -18,7 +18,7 @@ Decisions taken: build-vs-reuse principle accepted (§3), XSLT first, tenant pro
 | 1 — Probe kit | **Written** (`probes/`), simulator baseline recorded; waiting for a tenant run. |
 | 2 — XSLT MVP | **Done**: XSLT simulator with live mode, both Saxon profiles, parameter binding view, XSD validation, XPath 1.0/3.1, test cases + runner + CLI, desktop app and browser mode. |
 | 3 — Groovy MVP | **Done**: engines for Groovy Script 1.x (Groovy 2.4.21, Camel 2.24.3) and 2.x (Groovy 4.0.29, Camel 3.14.7), clean-room Script API, MPL, Secure Store + Value Mapping mocks, Groovy view in the app, test cases, bundled Java 17 runtime with AppCDS and idle shutdown. Message methods of v1 and v2 follow SAP's published interfaces (F29). |
-| 4 — Productivity | **Done**: CLI runner; platform API mocks (Secure Store, Value Mapping, Partner Directory, Keystore; Data Store has no public script API, F28); runtime comparison (Saxon 9.9 ↔ 12, Groovy 1.x ↔ 2.x); lint (v1 imports in 2.x, wildcard imports, 1.x scripts that will break on 2.x through the `groovy.util` → `groovy.xml` move, v1-only methods in 2.x); iFlow-zip import (Groovy, XSLT and XML Validator steps, header-driven mappings flagged; checked against 24 SAP sample iFlows); reflexive Java extension functions in XSLT (F32); SOAP headers and `lib/` jars for scripts. |
+| 4 — Productivity | **Done**: CLI runner; platform API mocks following SAP's published generic API (Secure Store incl. OAuth2 tokens, Value Mapping, Partner Directory, Keystore incl. key/trust managers, number ranges; F33; Data Store has no public script API, F28); runtime comparison (Saxon 9.9 ↔ 12, Groovy 1.x ↔ 2.x); lint (v1 imports in 2.x, wildcard imports, 1.x scripts that will break on 2.x through the `groovy.util` → `groovy.xml` move, v1-only methods in 2.x); iFlow-zip import (Groovy, XSLT and XML Validator steps, header-driven mappings flagged; checked against 24 SAP sample iFlows); reflexive Java extension functions in XSLT (F32); SOAP headers and `lib/` jars for scripts. |
 | 5 — Distribution | Partly: CI builds unsigned Windows/macOS (Apple Silicon)/Linux installers (green, not yet run on real Windows/macOS hardware). Open: code signing, auto-update. |
 
 Measured (Linux x86-64, native engines): engine start ≈ 10 ms (JVM: ≈ 200 ms); first XSLT run ≈ 10 ms, cached
@@ -36,12 +36,13 @@ New findings from the implementation:
 | F24 | Groovy 2.4.21 runs the Script API v1 corpus on Java 17 and 21 without changes (7 community scripts). | Observed (simulator) | `GroovyCorpusTest` |
 | F25 | `XmlUtil.serialize` / XSLT pretty-printing differs between JDK versions (indentation), so the Java version behind each CPI step matters for byte-exact comparisons. | Observed (corpus expected files vs. JDK 17/21 output) | `GroovyCorpusTest` |
 | F26 | A classic 1.x → 2.x break is reproduced: scripts using `XmlParser`/`XmlSlurper` without import (default `groovy.util` package) fail on Groovy 4. | Observed (simulator) | corpus `edi-segment-counter` |
-| F27 | Partner Directory: SAP's Javadoc documents `getParameter(String, String, Class)`, `getPartnerId(agency, scheme, alternativePartnerId)` and `getAlternativePartnerId(agency, scheme, partnerId)` (null if not maintained, `IllegalArgumentException` on null/empty input); `getCertificateParameter` exists but its signature is unverified. Keystore: `getKey`, `getCertificate`, `getCertificateChain`, `getKeyPair`. What CPI does for a missing parameter or an unknown keystore alias (null vs. exception) is not verified; the simulator returns null for the Partner Directory and throws `KeystoreException` for the keystore. | Observed (docs) / Unknown (edge cases) → probe Q-P1 | SAP Javadoc via search snippets; community examples |
+| F27 | Partner Directory, Keystore, Secure Store and number ranges: SAP's Javadoc (`generic.api`, F33) documents null for a missing Partner Directory parameter, partner or certificate parameter; `IllegalArgumentException` for null/empty IDs and for types other than `String`/`BinaryData`; null for an unknown keystore alias or the wrong entry kind (`IllegalStateException` when a key cannot be recovered); `SecureStoreException` for an unknown credential. The simulator follows this. Whether the deployed runtime matches its Javadoc, and the exact messages, are not verified. | Observed (Javadoc) / Unknown (runtime) → probe Q-P1 | S24 |
 | F28 | CPI has no public script API for the Data Store; scripts that access it use internal classes looked up from the Camel registry. The simulator does not mock this. | Inferred (community examples) | — |
 | F29 | SAP publishes its Script API interfaces on Maven Central (`com.sap.cloud.script:script.api` 2.14.0–2.16.4 for v1, `script.v2.api` 4.0.0–4.2.2 for v2; SAP Developer License, not bundled). The simulator's `Message`, `AttachmentWrapper`, `SoapHeader` and the v2 `Attachment`, extension-function and exception types follow these signatures. The v2 `Message` has no `getSoapHeaders`/`setSoapHeaders` and no `AttachmentWrapper` methods, but adds `getHeader(String)`, `getHeader(String, Object)`, `clearAttachments`, `resetBodyStream` and `getExtensionFunctions` (exchange timestamps, ProcessDirect). The interface is a lower bound: CPI's implementation class may offer more, which the fingerprint probes list (`messageMethods`). | Observed (published jars) / Unknown (runtime class) → Q-G4 | Maven Central `com.sap.cloud.script` |
 | F30 | The v1 API jar moved from Camel 2.24 (`script.api` 2.15.0, May 2024: imports `org.apache.camel` [2.24,3), `AttachmentWrapper` extends `org.apache.camel.impl.DefaultAttachment`) to Camel 3.14 (2.16.2, Dec 2025, and 2.16.4: [3.14,4), `org.apache.camel.attachment.DefaultAttachment`). So 1.x steps may now run on Camel 3.14; the simulator's 1.x engine still uses Camel 2.24.3 until the fingerprint (`camelPom`) confirms. The simulator's v1 Message leaves out the overloads that take Camel's `Attachment` type. | Observed (jar manifests) / Inferred (tenant) → Q-G3 | Maven Central `com.sap.cloud.script:script.api` |
 | F31 | Which libraries CPI puts on a script's class path besides Groovy and Camel (e.g. commons-codec, IAIK used by SAP's own sample scripts) is not known; the simulator offers none and loads jars from `lib/` and the iFlow's `src/main/resources/lib/`. | Unknown → fingerprint `classesAvailable` | SAP sample iFlows |
 | F32 | SAP's sample XSLTs call Java static methods through `java:` namespaces (e.g. `java:java.util.Date`), so CPI's Saxon-EE allows reflexive extension functions. The simulator registers them as integrated functions for the JDK classes and the project's jars (native engines: a fixed list of JDK classes). Exact argument conversion rules of Saxon-EE are not reproduced in all cases. | Observed (SAP samples) / Inferred (conversion) | SAP sample iFlows, `JavaExtensions.java` |
+| F33 | SAP also publishes the platform API interfaces as `com.sap.cloud.adk:generic.api` (4.10.2, with Javadoc; SAP Developer License, not bundled): `ITApiFactory`, `ITApiException`/`InvalidContextException`, Keystore (incl. key and trust managers), message log, number ranges (`NumberRangeConfigurationService.getNextValuefromNumberRange(name, correlationId)`), Partner Directory (incl. `getCertificateParameter(parameterId, partnerId)`, authorized users, deprecated LIKE-pattern lookups) and Secure Store (incl. OAuth2 tokens: `getAccesTokenForOauth2ClientCredential`, SAP's spelling). `ValueMappingApi` is not in it. The simulator's classes follow these signatures. | Observed (published jar + Javadoc) | S24 |
 | F23 | Saxon instantiates built-in functions reflectively; native builds need reflection metadata for all of them (generated by `engine/native/GenReflect.java`), plus the JDK XPath 1.0 function classes. | Observed | native build failures fixed in this phase |
 
 ---
@@ -270,7 +271,7 @@ Three panes: **Input** (body, headers, properties) → **XSLT** (Monaco, with in
 | **Modern HE** | Saxon-HE 12.x, native | Supports higher-order functions and `xsl:evaluate`, which CPI's EE 9.9 has but HE 9.9 lacks (F14) |
 | **Bring your own EE** (optional) | your licensed Saxon-EE 9.9 jar, on the JRE | Exact CPI engine, if you own a licence |
 
-The linter detects EE-only features (higher-order functions, schema-aware XSLT, streaming, reflexive Java calls) and suggests the right profile. Reflexive calls to your own Java classes do not work in CPI either (S8), so they are flagged as errors.
+The linter detects EE-only features (higher-order functions, schema-aware XSLT, streaming, reflexive Java calls) and suggests the right profile. ~~Reflexive calls to your own Java classes do not work in CPI either (S8), so they are flagged as errors.~~ Superseded by F32: SAP's own samples use reflexive calls, so the simulator supports them; features that need Saxon-PE/EE get an explaining diagnostic instead.
 
 ---
 
@@ -303,7 +304,7 @@ my-project/
   scripts/                # .groovy
   mappings/               # .xsl / .xslt
   schemas/                # .xsd
-  libs/                   # extra .jar
+  lib/                    # extra .jar
   platform/               # mocked secure store, value mappings, partner directory
   tests/
     order-to-idoc/
@@ -380,7 +381,7 @@ Later convenience: open an **iFlow export (zip)** and list its script and XSLT s
 | Q-X6 | Source/target from header/property in newer step versions | Open | SAP docs + probe |
 | Q-V1 | XSD engine and version behind the XML Validator step | Open | Probe iFlow (error message format) |
 | Q-T1 | Format of exported MPL trace content | Open (F18) | Export one sample |
-| Q-P1 | Partner Directory / Keystore edge cases: missing parameter, unknown partner, unknown keystore alias (null or exception, which message) | Open (F27) | Probe iFlow |
+| Q-P1 | Partner Directory / Keystore / Secure Store edge cases: missing parameter, unknown partner, unknown keystore alias (null or exception, which message) | Documented (F27, F33); runtime and messages open | `probe-platform-v1.groovy` |
 
 ## Sources
 
@@ -407,3 +408,4 @@ Later convenience: open an **iFlow export (zip)** and list its script and XSLT s
 - S21 go-xslt: https://github.com/tim-riep/go-xslt
 - S22 REA workflow skill: https://github.com/morluto/rea/blob/main/.agents/skills/reverse-engineer-anything/SKILL.md
 - S23 SAP Script API jars on Maven Central: https://repo1.maven.org/maven2/com/sap/cloud/script/
+- S24 SAP generic API (platform services) on Maven Central, with Javadoc jar: https://repo1.maven.org/maven2/com/sap/cloud/adk/generic.api/

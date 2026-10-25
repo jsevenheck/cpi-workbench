@@ -22,7 +22,7 @@ def Message processData(Message message) {
         timezone       : TimeZone.default.ID,
         locale         : Locale.default.toString(),
         messageClass   : message.class.name,
-        // The v2 API surface is still unknown (PLAN.md F6): list it by reflection.
+        // The v2 API surface is still unknown (docs/plan.md F6): list it by reflection.
         messageMethods : safe { message.class.methods.findAll { it.declaringClass != Object }
                                     .collect { it.name + '(' + it.parameterTypes*.simpleName.join(', ') + '): ' + it.returnType.simpleName }
                                     .unique().sort() },

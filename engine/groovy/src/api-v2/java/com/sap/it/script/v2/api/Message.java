@@ -17,7 +17,7 @@ import java.util.Map;
  * Script API v2 message ({@code com.sap.it.script.v2.api.Message}), a clean-room implementation of
  * the methods of SAP's published interface ({@code com.sap.cloud.script:script.v2.api} 4.2.2). Methods
  * of the v1 message that the v2 interface lacks (SOAP header list, {@code AttachmentWrapper}) are not
- * offered; whether CPI's runtime class still has them is open (PLAN.md F6).
+ * offered; whether CPI's runtime class still has them is open (docs/plan.md F6).
  */
 public class Message extends MessageSupport<Attachment> {
 

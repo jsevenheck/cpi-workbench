@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- CPI Workbench – XSLT Mapping behaviour probe. Run after prepare-xslt-probe.groovy.
-     Answers PLAN.md Appendix A questions Q-X2 (precedence), Q-X3 (types), Q-X4 (missing params),
+     Answers docs/plan.md Appendix A questions Q-X2 (precedence), Q-X3 (types), Q-X4 (missing params),
      Q-X5 (setHeader return value). If the step fails, the error text answers Q-X4. -->
 <xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
     xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:hci="http://sap.com/it/"

@@ -1,6 +1,6 @@
 # Tenant probes
 
-These artifacts close the open questions in [PLAN.md](../PLAN.md) (Appendix A) by observing a real
+These artifacts close the open questions in [docs/plan.md](../docs/plan.md) (Appendix A) by observing a real
 Cloud Integration tenant as a black box: no decompiling, just inputs and outputs. You run them once
 on a test tenant; the results tell us whether the simulator matches CPI and where to adjust the
 runtime profiles.

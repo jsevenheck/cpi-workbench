@@ -41,7 +41,7 @@ if (await compare.isEnabled()) {
 }
 
 // 2) A compile error shows up with its line.
-await page.locator('section.mapping .view-lines').click();
+await page.locator('section.mapping .view-lines').click({ position: { x: 40, y: 10 } }); // the element is as wide as the longest line
 await page.keyboard.press('Control+End');
 await page.keyboard.type('<broken');
 await page.locator('.badge.bad').waitFor({ timeout: 10000 });

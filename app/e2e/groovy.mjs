@@ -42,7 +42,7 @@ if (!script.includes('com.sap.it.script.v2.api.Message')) fail('v2 sample not lo
 await page.locator('section.output footer', { hasText: 'Groovy 4.0.29' }).waitFor({ timeout: 10000 });
 
 // 3) A runtime error is reported with its script line.
-await page.locator('section.script .view-lines').click();
+await page.locator('section.script .view-lines').click({ position: { x: 40, y: 10 } }); // the element is as wide as the longest line
 await page.keyboard.press('Control+a');
 await page.keyboard.insertText("import com.sap.it.script.v2.api.Message\ndef Message processData(Message message) {\n    def items = null\n    message.setProperty('n', items.size())\n    return message\n}\n");
 await page.locator('section.output .badge.bad').waitFor({ timeout: 20000 });

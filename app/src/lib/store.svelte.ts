@@ -1,5 +1,6 @@
-import { call, openProject, availableProfiles, DEFAULT_PROFILE, type Profile, type ProfileInfo } from './engine';
+import { call, openProject, closeProject as closeEngineProject, availableProfiles, DEFAULT_PROFILE, type Profile, type ProfileInfo } from './engine';
 import type { Diagnostic, FileEntry, GroovyResult, Row, XsltResult } from './types';
+import { toRows } from './rows';
 
 export const SAMPLE_XSL = `<?xml version="1.0" encoding="UTF-8"?>
 <!-- Headers and exchange properties arrive as xsl:param with the same name, like in Cloud Integration.
@@ -246,7 +247,8 @@ export async function open(dir: string, initProject = false) {
   else app.status = 'Project opened: ' + r.root;
 }
 
-export function closeProject() {
+export async function closeProject() {
+  await closeEngineProject();
   app.project = null;
   safeSet('cpiwb.project', null);
   xslt.mappingPath = null;
@@ -290,11 +292,8 @@ export async function openIflowStep(step: IflowStep) {
       : `The file of step "${step.name}" was not found in the export (${step.file ?? 'no reference'}).`;
     return;
   }
-  await openFile(step.file);
-  if (step.type === 'groovy') {
-    groovy.functionName = step.function ?? 'processData';
-    if (step.profile && hasProfile(step.profile)) app.groovyProfile = step.profile;
-  }
+  // The step's function and runtime go in with the script, so a live run uses them from the start.
+  await openFile(step.file, step.type === 'groovy' ? { functionName: step.function ?? 'processData', profile: step.profile } : {});
 }
 
 export async function readFile(path: string): Promise<string> {
@@ -305,11 +304,41 @@ export async function writeFile(path: string, content: string) {
   await call('file.write', { path, content });
 }
 
-export async function openFile(path: string) {
+/** The editor a file opens in, or null for inputs (they replace the input body, not an editor). */
+function editorFor(path: string): Editor | null {
+  const lower = path.toLowerCase();
+  if (lower.endsWith('.xsl') || lower.endsWith('.xslt')) return 'xslt';
+  if (lower.endsWith('.groovy') || lower.endsWith('.gsh')) return 'groovy';
+  if (lower.endsWith('.xsd')) return 'xsd';
+  return path.startsWith('inputs/') ? null : 'file';
+}
+
+type Editor = 'xslt' | 'groovy' | 'xsd' | 'file';
+
+/** Asks before an editor's unsaved changes are replaced; true when nothing would be lost. */
+export async function mayDiscard(editor: Editor | null): Promise<boolean> {
+  const [dirty, name] = editor === 'xslt' ? [xslt.mapping !== xslt.savedMapping, xslt.mappingPath ?? 'the unsaved mapping']
+    : editor === 'groovy' ? [groovy.script !== groovy.savedScript, groovy.scriptPath ?? 'the unsaved script']
+    : editor === 'xsd' ? [xsd.schema !== xsd.savedSchema, xsd.schemaPath ?? 'the unsaved schema']
+    : editor === 'file' ? [fileView.path !== null && fileView.content !== fileView.saved, fileView.path]
+    : [false, null];
+  return !dirty || confirm(`Discard the unsaved changes to ${name}?`);
+}
+
+export interface OpenOptions {
+  /** The caller already asked about unsaved changes. */
+  discardChecked?: boolean;
+  /** Groovy step settings (from an iFlow step); a plain script runs processData. */
+  functionName?: string;
+  profile?: Profile;
+}
+
+export async function openFile(path: string, opts: OpenOptions = {}) {
   try {
     app.error = '';
     const lower = path.toLowerCase();
     if (lower.endsWith('case.json')) return await loadCase(path);
+    if (!opts.discardChecked && !(await mayDiscard(editorFor(path)))) return;
     const content = await readFile(path);
     if (lower.endsWith('.xsl') || lower.endsWith('.xslt')) {
       xslt.mappingPath = path;
@@ -324,7 +353,9 @@ export async function openFile(path: string) {
       groovy.savedScript = content;
       groovy.casePath = null;
       groovy.caseExtras = null;
-      if (content.includes('com.sap.it.script.v2.api') && hasProfile('groovy-2.x')) app.groovyProfile = 'groovy-2.x';
+      groovy.functionName = opts.functionName ?? 'processData';
+      if (opts.profile && hasProfile(opts.profile)) app.groovyProfile = opts.profile;
+      else if (content.includes('com.sap.it.script.v2.api') && hasProfile('groovy-2.x')) app.groovyProfile = 'groovy-2.x';
       else if (content.includes('com.sap.gateway.ip.core.customdev.util') && hasProfile('groovy-1.x')) app.groovyProfile = 'groovy-1.x';
       app.tool = 'groovy';
       rerunIfLive('groovy');
@@ -352,11 +383,8 @@ export async function saveMapping(): Promise<boolean> {
     app.error = 'Open a project folder to save files.';
     return false;
   }
-  let path = xslt.mappingPath;
-  if (!path) {
-    path = (await ask('Save mapping as (path inside the project)', 'mappings/mapping.xsl'))?.value ?? null;
-    if (!path) return false;
-  }
+  const path = xslt.mappingPath ?? await askNewPath('mapping', null, 'mappings/mapping.xsl');
+  if (!path) return false;
   await writeFile(path, xslt.mapping);
   xslt.mappingPath = path;
   xslt.savedMapping = xslt.mapping;
@@ -424,7 +452,7 @@ export async function saveInput() {
   const r = await ask('Save input body as (path inside the project)', `inputs/input.${ext}`);
   if (!r) return;
   try {
-    if (app.project.files.some((f) => f.path === r.value) && !(await confirm(`${r.value} exists. Overwrite it?`))) return;
+    if (!(await mayOverwrite(r.value))) return;
     await writeFile(r.value, body);
     app.inputPaths[app.stepTool] = r.value;
     app.status = 'Saved input as ' + r.value;
@@ -474,7 +502,7 @@ export async function copyFile(path: string, move: boolean) {
   const r = await ask(move ? `Rename ${path} to` : `Copy ${path} to`, path);
   if (!r || r.value === path) return;
   try {
-    if (app.project?.files.some((f) => f.path === r.value) && !(await confirm(`${r.value} exists. Overwrite it?`))) return;
+    if (!(await mayOverwrite(r.value))) return;
     await writeFile(r.value, await readFile(path));
     if (move) {
       await call('file.delete', { path });
@@ -496,11 +524,8 @@ export async function saveScript(): Promise<boolean> {
     app.error = 'Open a project folder to save files.';
     return false;
   }
-  let path = groovy.scriptPath;
-  if (!path) {
-    path = (await ask('Save script as (path inside the project)', 'scripts/script.groovy'))?.value ?? null;
-    if (!path) return false;
-  }
+  const path = groovy.scriptPath ?? await askNewPath('script', null, 'scripts/script.groovy');
+  if (!path) return false;
   await writeFile(path, groovy.script);
   groovy.scriptPath = path;
   groovy.savedScript = groovy.script;
@@ -517,7 +542,7 @@ export function onGroovyProfileChange() {
 
 export async function saveSchema(): Promise<boolean> {
   if (!app.project || !xsd.schemaPath) {
-    const p = app.project ? (await ask('Save schema as (path inside the project)', 'schemas/schema.xsd'))?.value : null;
+    const p = await askNewPath('schema', null, 'schemas/schema.xsd');
     if (!p) return false;
     xsd.schemaPath = p;
   }
@@ -528,15 +553,25 @@ export async function saveSchema(): Promise<boolean> {
   return true;
 }
 
-/** A free name next to the open file: mappings/x.xsl -> mappings/x-copy.xsl, -copy-2, ... */
-function copyName(path: string | null, fallback: string): string {
-  const p = path ?? fallback;
-  const dot = p.lastIndexOf('.');
-  const [stem, ext] = dot > p.lastIndexOf('/') ? [p.slice(0, dot), p.slice(dot)] : [p, ''];
-  const taken = new Set(app.project?.files.map((f) => f.path) ?? []);
-  let name = `${stem}-copy${ext}`;
-  for (let n = 2; taken.has(name); n++) name = `${stem}-copy-${n}${ext}`;
-  return path ? name : p;
+function fileExists(path: string): boolean {
+  return !!app.project?.files.some((f) => f.path === path);
+}
+
+/**
+ * A name no file has yet: `path` itself (or path + suffix), else -2, -3, ...
+ * mappings/x.xsl with suffix '-copy' -> mappings/x-copy.xsl, mappings/x-copy-2.xsl, ...
+ */
+export function freePath(path: string, suffix = ''): string {
+  const dot = path.lastIndexOf('.');
+  const [stem, ext] = dot > path.lastIndexOf('/') ? [path.slice(0, dot), path.slice(dot)] : [path, ''];
+  let name = `${stem}${suffix}${ext}`;
+  for (let n = 2; fileExists(name); n++) name = `${stem}${suffix}-${n}${ext}`;
+  return name;
+}
+
+/** True if no file has this path or the user agreed to overwrite it. */
+export async function mayOverwrite(path: string): Promise<boolean> {
+  return !fileExists(path) || confirm(`${path} exists. Overwrite it?`);
 }
 
 /** Asks for a new path; an existing file is only overwritten after a second question. */
@@ -545,9 +580,9 @@ async function askNewPath(what: string, path: string | null, fallback: string): 
     app.error = 'Open a project folder to save files.';
     return null;
   }
-  const r = await ask(`Save ${what} as (path inside the project)`, copyName(path, fallback));
+  const r = await ask(`Save ${what} as (path inside the project)`, path ? freePath(path, '-copy') : freePath(fallback));
   if (!r) return null;
-  if (r.value !== path && app.project.files.some((f) => f.path === r.value) && !(await confirm(`${r.value} exists. Overwrite it?`))) return null;
+  if (r.value !== path && !(await mayOverwrite(r.value))) return null;
   return r.value;
 }
 
@@ -766,6 +801,7 @@ async function loadXsdCase(path: string, dir: string, tc: any) {
 export async function loadCase(path: string) {
   const tc = JSON.parse(await readFile(path));
   const dir = path.split('/').slice(0, -1).join('/');
+  if (!(await mayDiscard(tc.step === 'groovy' ? 'groovy' : tc.step === 'xsd' ? 'xsd' : 'xslt'))) return;
   if (tc.step === 'groovy') return loadGroovyCase(path, dir, tc);
   if (tc.step === 'xsd') return loadXsdCase(path, dir, tc);
   if ((tc.step ?? 'xslt') !== 'xslt') {
@@ -787,12 +823,4 @@ export async function loadCase(path: string) {
   app.tool = 'xslt';
   app.status = 'Loaded test case ' + (tc.name ?? path);
   await runXslt();
-}
-
-function toRows(v: any): Row[] {
-  if (!v) return [];
-  if (Array.isArray(v)) return v.map((r) => ({ name: r.name, value: r.value ?? '', type: r.type ?? 'String', disabled: !!r.disabled }));
-  return Object.entries(v).map(([name, val]: [string, any]) =>
-    val !== null && typeof val === 'object' ? { name, value: val.value ?? '', type: val.type ?? 'String' }
-      : { name, value: val === null ? '' : String(val), type: val === null ? 'null' : 'String' });
 }

@@ -35,6 +35,12 @@ public final class ProjectFiles {
                 .with("files", list());
     }
 
+    /** Forgets the open project, so runs no longer see its files or platform data. */
+    public synchronized Map<String, Object> close() {
+        root = null;
+        return Json.o().with("closed", true);
+    }
+
     private static void init(Path dir) throws IOException {
         for (String sub : List.of("mappings", "schemas", "scripts", "tests", "platform")) {
             Files.createDirectories(dir.resolve(sub));
@@ -67,8 +73,7 @@ public final class ProjectFiles {
         }
         Path cfg = dir.resolve("cpi-workbench.json");
         if (!Files.exists(cfg)) {
-            Files.writeString(cfg, "{\n  \"name\": \"" + dir.getFileName() + "\",\n"
-                    + "  \"defaultXsltProfile\": \"saxon-he-9.9\"\n}\n", StandardCharsets.UTF_8);
+            Files.writeString(cfg, "{\n  \"name\": \"" + dir.getFileName() + "\"\n}\n", StandardCharsets.UTF_8);
         }
     }
 

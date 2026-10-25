@@ -23,6 +23,10 @@ browser mode. The main methods are:
 * `groovy.run` (Groovy engines),
 * `tests.run`, and `project.*`, `file.*`, `iflow.*` for files (all engines).
 
+File methods and XML runs stay inside the open project (`ProjectFiles`, `ProjectResolver`). Over
+HTTP, the engines answer pages from `localhost`, `127.0.0.1` and the desktop shell only: requests
+need an `X-Cpiwb` header, which forces a CORS preflight, and the origin's host is compared exactly.
+
 * **XML engines** are GraalVM native executables, so XSLT needs no JVM at runtime. The same code
   also runs as a jar (`java -jar engine/xml-he99/target/cpiwb-xml-he99.jar`).
 * **Groovy engines** run on a trimmed Java 17 runtime with an AppCDS archive. Groovy 2 and 4 run in

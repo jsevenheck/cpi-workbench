@@ -1,12 +1,16 @@
 package io.cpiwb.core;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import java.math.BigDecimal;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -66,5 +70,29 @@ class CoreTest {
         String diff = TestRunner.compare("<a><b>t</b></a>", "<a><b>u</b></a>", "xml");
         assertTrue(diff.contains("expected text 't'"), diff);
         assertTrue(TestRunner.compare("x", "y", "text").startsWith("line 1"));
+    }
+
+    @Test
+    void corsAcceptsOnlyExactLocalOrigins() {
+        for (String ok : List.of("http://localhost:5173", "http://127.0.0.1:7777", "tauri://localhost", "http://tauri.localhost",
+                "https://tauri.localhost")) {
+            assertTrue(RpcServer.isLocalOrigin(ok), ok);
+        }
+        for (String bad : List.of("http://tauri.localhost.example.invalid", "http://localhost.example.invalid:80",
+                "http://127.0.0.1.example.invalid:80", "tauri://localhost.evil", "http://localhost", "https://example.com",
+                "http://user@localhost:5173", "null", "file://localhost")) {
+            assertFalse(RpcServer.isLocalOrigin(bad), bad);
+        }
+    }
+
+    @Test
+    void closedProjectRefusesFileAccess(@TempDir Path tmp) throws Exception {
+        ProjectFiles files = new ProjectFiles();
+        files.open(Map.of("dir", tmp.toString()));
+        Files.writeString(tmp.resolve("a.txt"), "x");
+        assertEquals("x", files.read(Map.of("path", "a.txt")).get("content"));
+        files.close();
+        assertNull(files.root());
+        assertThrows(IllegalStateException.class, () -> files.read(Map.of("path", "a.txt")));
     }
 }

@@ -38,7 +38,7 @@ public final class XmlEngine implements RpcHandler {
                 .with("nativeImage", System.getProperty("org.graalvm.nativeimage.imagecode") != null)
                 .with("types", TypedValue.TYPES)
                 .with("methods", List.of("engine.info", "xslt.run", "xsd.validate", "xpath.eval", "xml.format",
-                        "project.open", "project.list", "file.read", "file.write", "file.delete", "iflow.import", "iflow.steps", "tests.run"));
+                        "project.open", "project.close", "project.list", "file.read", "file.write", "file.delete", "iflow.import", "iflow.steps", "tests.run"));
     }
 
     @Override
@@ -52,11 +52,13 @@ public final class XmlEngine implements RpcHandler {
             case "xsd.validate":
                 return xsd.run(withProjectRoot(params));
             case "xpath.eval":
-                return xpath.run(params);
+                return xpath.run(withProjectRoot(params));
             case "xml.format":
                 return xpath.format(params);
             case "project.open":
                 return files.open(params);
+            case "project.close":
+                return files.close();
             case "project.list":
                 return files.listing();
             case "file.read":

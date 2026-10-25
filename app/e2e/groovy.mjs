@@ -56,6 +56,8 @@ if (shots) await page.screenshot({ path: path.join(shots, 'g2-groovy-error.png')
 await page.getByLabel('Project folder').fill(project);
 await page.getByRole('button', { name: 'Open' }).click();
 await page.locator('.tree .file', { hasText: 'groovy-enrich-order/case.json' }).click();
+// The script typed in step 3 is unsaved, so the case asks before it replaces the script.
+await page.getByRole('dialog').filter({ hasText: 'Discard the unsaved changes' }).getByRole('button', { name: 'OK' }).click();
 await page.locator('section.output .badge.ok').waitFor({ timeout: 20000 });
 await page.getByRole('tab', { name: /^API calls/ }).click();
 const calls = await page.locator('section.output .pad').innerText();
@@ -93,6 +95,12 @@ if (process.env.CPIWB_IFLOW_ZIP) {
   if (shots) await page.screenshot({ path: path.join(shots, 'g5-iflow.png') });
 }
 
+// 4c) Another script starts with processData again, not with the function set for the previous one.
+await page.getByLabel('Function name').fill('customFunction');
+await page.locator('.tree .file', { hasText: 'route-by-partner.groovy' }).click();
+await page.locator('section.script h2', { hasText: 'route-by-partner.groovy' }).waitFor({ timeout: 10000 });
+if ((await page.getByLabel('Function name').inputValue()) !== 'processData') fail('function name kept from the previous script');
+
 // 5) A file from inputs/ opens as the Groovy input body.
 fs.mkdirSync(path.join(project, 'inputs'), { recursive: true });
 fs.writeFileSync(path.join(project, 'inputs/g-input.xml'), '<Order id="g-input-1"/>\n');
@@ -113,6 +121,16 @@ await page.locator('section.script').waitFor({ timeout: 10000 })
 await page.locator('section.input').getByRole('button', { name: 'Format' }).click();
 await page.locator('section.input .view-lines', { hasText: '"items": [' }).waitFor({ timeout: 5000 })
   .catch(() => fail('Format did not pretty-print the JSON input'));
+
+// 7) Closing the project closes it in the engines too: runs no longer see its platform data.
+await page.getByTitle('Close project').click();
+await page.getByLabel('Project folder').waitFor({ timeout: 5000 });
+const afterClose = await page.evaluate(async () => {
+  const r = await fetch('http://127.0.0.1:7778/rpc', { method: 'POST', headers: { 'content-type': 'application/json', 'x-cpiwb': '1' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'project.list', params: {} }) });
+  return (await r.json()).error?.message ?? 'still open';
+});
+if (!/No project folder is open/.test(afterClose)) fail('Groovy 1.x engine after Close project: ' + afterClose);
 
 if (errors.length) fail('browser errors: ' + errors.join(' | '));
 await browser.close();

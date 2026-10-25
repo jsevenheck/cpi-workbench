@@ -40,9 +40,10 @@ public final class IflowImport {
         }
         String n = name == null || name.isBlank() ? zip.getFileName().toString().replaceFirst("\\.zip$", "") : name;
         n = n.replaceAll("[^A-Za-z0-9._-]+", "_");
-        Path target = projectRoot.resolve("iflows").resolve(n).normalize();
-        if (!target.startsWith(projectRoot)) {
-            throw new IllegalArgumentException("Invalid iFlow name");
+        Path iflows = projectRoot.resolve("iflows").normalize();
+        Path target = iflows.resolve(n).normalize();
+        if (!target.startsWith(iflows) || target.equals(iflows)) {
+            throw new IllegalArgumentException("Invalid iFlow name: " + n);
         }
         Files.createDirectories(target);
         long total = 0;
@@ -59,11 +60,8 @@ public final class IflowImport {
                     continue;
                 }
                 Files.createDirectories(out.getParent());
-                total += Files.copy(limited(in), out, StandardCopyOption.REPLACE_EXISTING);
+                total += Files.copy(limited(in, MAX_UNZIPPED - total), out, StandardCopyOption.REPLACE_EXISTING);
                 files++;
-                if (total > MAX_UNZIPPED) {
-                    throw new IOException("iFlow archive is larger than " + (MAX_UNZIPPED >> 20) + " MB unpacked");
-                }
             }
         }
         Map<String, Object> r = steps(projectRoot);
@@ -72,8 +70,36 @@ public final class IflowImport {
         return r;
     }
 
-    private static InputStream limited(ZipInputStream in) {
+    /** The current entry, failing as soon as the archive's unpacked size passes the limit. */
+    private static InputStream limited(ZipInputStream in, long budget) {
         return new java.io.FilterInputStream(in) {
+            private long left = budget;
+
+            @Override
+            public int read() throws IOException {
+                int b = in.read();
+                if (b >= 0) {
+                    count(1);
+                }
+                return b;
+            }
+
+            @Override
+            public int read(byte[] buf, int off, int len) throws IOException {
+                int n = in.read(buf, off, len);
+                if (n > 0) {
+                    count(n);
+                }
+                return n;
+            }
+
+            private void count(int n) throws IOException {
+                left -= n;
+                if (left < 0) {
+                    throw new IOException("iFlow archive is larger than " + (MAX_UNZIPPED >> 20) + " MB unpacked");
+                }
+            }
+
             @Override
             public void close() {
                 // keep the zip stream open

@@ -11,6 +11,8 @@ import java.io.OutputStream;
 import java.io.PrintStream;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -159,11 +161,38 @@ public final class RpcServer {
 
     private static void cors(HttpExchange ex) {
         String origin = ex.getRequestHeaders().getFirst("Origin");
-        if (origin != null && (origin.startsWith("http://localhost:") || origin.startsWith("http://127.0.0.1:")
-                || origin.startsWith("tauri://") || origin.startsWith("http://tauri.localhost"))) {
+        if (origin != null && isLocalOrigin(origin)) {
             ex.getResponseHeaders().add("Access-Control-Allow-Origin", origin);
             ex.getResponseHeaders().add("Access-Control-Allow-Headers", "content-type, x-cpiwb");
             ex.getResponseHeaders().add("Access-Control-Allow-Methods", "POST, OPTIONS");
+        }
+    }
+
+    /**
+     * Pages served from this machine or by the desktop shell. The host is compared exactly, so
+     * look-alikes such as {@code http://localhost.example.com} or {@code http://tauri.localhost.evil} fail.
+     */
+    static boolean isLocalOrigin(String origin) {
+        try {
+            URI u = new URI(origin);
+            String scheme = u.getScheme();
+            String host = u.getHost();
+            if (host == null || u.getRawPath() != null && !u.getRawPath().isEmpty() || u.getRawQuery() != null
+                    || u.getRawUserInfo() != null) {
+                return false;
+            }
+            if ("tauri".equals(scheme)) {
+                return host.equals("localhost") && u.getPort() == -1;
+            }
+            if (!"http".equals(scheme) && !"https".equals(scheme)) {
+                return false;
+            }
+            if (host.equals("tauri.localhost")) {
+                return u.getPort() == -1;
+            }
+            return (host.equals("localhost") || host.equals("127.0.0.1")) && u.getPort() > 0;
+        } catch (URISyntaxException e) {
+            return false;
         }
     }
 

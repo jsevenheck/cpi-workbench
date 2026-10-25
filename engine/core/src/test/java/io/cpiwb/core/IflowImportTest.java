@@ -74,4 +74,20 @@ class IflowImportTest {
         assertThrows(java.io.IOException.class, () -> IflowImport.importZip(zip, project, "evil"));
         assertTrue(Files.notExists(tmp.resolve("outside.txt")));
     }
+
+    @Test
+    void rejectsNamesThatLeaveTheIflowsFolder(@TempDir Path tmp) throws Exception {
+        Path zip = tmp.resolve("ok.zip");
+        try (ZipOutputStream z = new ZipOutputStream(Files.newOutputStream(zip))) {
+            z.putNextEntry(new ZipEntry("a.txt"));
+            z.write("x".getBytes());
+            z.closeEntry();
+        }
+        Path project = Files.createDirectories(tmp.resolve("project"));
+        for (String name : List.of("..", ".")) {
+            assertThrows(IllegalArgumentException.class, () -> IflowImport.importZip(zip, project, name), name);
+        }
+        assertTrue(Files.notExists(project.resolve("a.txt")));
+        assertTrue(Files.notExists(project.resolve("iflows/a.txt")));
+    }
 }

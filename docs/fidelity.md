@@ -17,6 +17,8 @@ Finding numbers (F…) and questions (Q…) refer to the [plan](plan.md).
 | Typed parameter values | Passed as Java objects, so Saxon converts them (F21). **To verify** (Q-X3). |
 | Reflexive Java calls (`java:` namespaces) | Supported for JDK classes, since SAP's own samples use them (F32). Classes from the iFlow's jars are not available to XSLT. Argument conversion follows simple rules, not all of Saxon-EE's. |
 | XSD validation | JDK validator, XML Schema 1.0. CPI's validator is **to verify** (Q-V1). |
+| File access (includes, `doc()`, `unparsed-text()`, external entities) | Inside the project folder only, no network: a simulator rule, standing in for the iFlow's resources. Whether CPI resolves external entities and DTDs is **to verify**. |
+| `xsl:result-document`, `collection()` | Not supported (`UnsupportedInSimulator`); the simulator has no place for secondary results. What CPI does with them is **to verify**. |
 
 ## Groovy Script
 

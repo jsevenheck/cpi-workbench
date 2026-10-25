@@ -15,21 +15,24 @@ import net.sf.saxon.s9api.XdmNode;
 import net.sf.saxon.s9api.XdmValue;
 import org.w3c.dom.Document;
 import org.w3c.dom.Node;
+import org.xml.sax.InputSource;
 
 import javax.xml.namespace.NamespaceContext;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.transform.OutputKeys;
 import javax.xml.transform.Transformer;
+import javax.xml.transform.TransformerException;
 import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
-import javax.xml.transform.stream.StreamSource;
 import javax.xml.xpath.XPath;
 import javax.xml.xpath.XPathEvaluationResult;
 import javax.xml.xpath.XPathFactory;
 import javax.xml.xpath.XPathNodes;
 import java.io.ByteArrayInputStream;
 import java.io.StringWriter;
+import java.net.URI;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -44,11 +47,28 @@ public final class XPathStep {
 
     private final Processor processor = new Processor(false);
 
+    public XPathStep() {
+        ProjectResolver.install(processor.getUnderlyingConfiguration());
+    }
+
     /**
      * Request: {@code {"expression": "...", "version": "1.0"|"3.1", "namespaces": {"p": "uri"},
-     * "input": {"body": "..."}}}
+     * "baseDir": "/abs/project", "input": {"body": "..."}}}. {@code doc()}, {@code unparsed-text()} and
+     * external entities read files inside {@code baseDir} only.
      */
-    public Map<String, Object> run(Map<String, Object> req) {
+    public synchronized Map<String, Object> run(Map<String, Object> req) {
+        String baseDirStr = Json.str(req, "baseDir", null);
+        ProjectResolver resolver = new ProjectResolver(
+                baseDirStr == null || baseDirStr.isBlank() ? null : Path.of(baseDirStr), null);
+        resolver.begin();
+        try {
+            return run(req, resolver);
+        } finally {
+            ProjectResolver.end();
+        }
+    }
+
+    private Map<String, Object> run(Map<String, Object> req, ProjectResolver resolver) {
         long t0 = System.nanoTime();
         String expr = Json.str(req, "expression", "");
         String version = Json.str(req, "version", "1.0");
@@ -59,10 +79,10 @@ public final class XPathStep {
         List<Object> diags = new ArrayList<>();
         try {
             if ("1.0".equals(version)) {
-                evalJdk(expr, ns, input.getBody(), items);
+                evalJdk(expr, ns, input.getBody(), items, resolver);
                 result.with("engine", "JDK XPath 1.0");
             } else {
-                evalSaxon(expr, ns, input.getBody(), items);
+                evalSaxon(expr, ns, input.getBody(), items, resolver);
                 result.with("engine", XsltStep.engineVersion() + " (XPath 3.1)");
             }
             result.with("ok", true);
@@ -75,11 +95,15 @@ public final class XPathStep {
         return result;
     }
 
-    private static void evalJdk(String expr, Map<String, String> ns, byte[] body, List<Object> items)
-            throws Exception {
+    private static void evalJdk(String expr, Map<String, String> ns, byte[] body, List<Object> items,
+                                ProjectResolver resolver) throws Exception {
         DocumentBuilderFactory f = DocumentBuilderFactory.newDefaultInstance();
         f.setNamespaceAware(true);
-        Document doc = f.newDocumentBuilder().parse(new ByteArrayInputStream(body));
+        javax.xml.parsers.DocumentBuilder builder = f.newDocumentBuilder();
+        builder.setEntityResolver(resolver);
+        InputSource in = new InputSource(new ByteArrayInputStream(body));
+        in.setSystemId(ProjectResolver.MEMORY_BASE + "input.xml");
+        Document doc = builder.parse(in);
         XPath xp = XPathFactory.newDefaultInstance().newXPath();
         xp.setNamespaceContext(new NamespaceContext() {
             @Override
@@ -134,13 +158,17 @@ public final class XPathStep {
                 .with("name", n.getNodeName()).with("value", n.getNodeValue());
     }
 
-    private void evalSaxon(String expr, Map<String, String> ns, byte[] body, List<Object> items)
-            throws SaxonApiException {
+    private void evalSaxon(String expr, Map<String, String> ns, byte[] body, List<Object> items,
+                           ProjectResolver resolver) throws SaxonApiException, TransformerException {
         DocumentBuilder db = processor.newDocumentBuilder();
-        XdmNode doc = db.build(new StreamSource(new ByteArrayInputStream(body)));
+        XdmNode doc = db.build(resolver.source(new InputSource(new ByteArrayInputStream(body)),
+                ProjectResolver.MEMORY_BASE + "input.xml"));
         XPathCompiler xc = processor.newXPathCompiler();
+        // Relative URIs in doc() and unparsed-text() resolve against the project folder.
+        xc.setBaseURI(URI.create(resolver.resolveAgainst(".", null)));
         ns.forEach(xc::declareNamespace);
         XPathSelector sel = xc.compile(expr).load();
+        sel.setURIResolver(resolver);
         sel.setContextItem(doc);
         XdmValue value = sel.evaluate();
         for (XdmItem item : value) {
@@ -165,8 +193,10 @@ public final class XPathStep {
     public Map<String, Object> format(Map<String, Object> req) {
         String text = Json.str(req, "text", "");
         try {
-            XdmNode doc = processor.newDocumentBuilder().build(
-                    new StreamSource(new ByteArrayInputStream(text.getBytes(java.nio.charset.StandardCharsets.UTF_8))));
+            // Formatting reads no files: no project, so external entities fail instead of expanding.
+            XdmNode doc = processor.newDocumentBuilder().build(new ProjectResolver(null, null).source(
+                    new InputSource(new ByteArrayInputStream(text.getBytes(java.nio.charset.StandardCharsets.UTF_8))),
+                    ProjectResolver.MEMORY_BASE + "input.xml"));
             StringWriter w = new StringWriter();
             Serializer s = processor.newSerializer(w);
             s.setOutputProperty(Serializer.Property.INDENT, "yes");
@@ -174,7 +204,7 @@ public final class XPathStep {
                     text.stripLeading().startsWith("<?xml") ? "no" : "yes");
             s.serializeNode(doc);
             return Json.o().with("ok", true).with("text", w.toString().strip() + "\n");
-        } catch (SaxonApiException e) {
+        } catch (SaxonApiException | TransformerException e) {
             return Json.o().with("ok", false).with("diagnostics", List.of(Diagnostic.error(e.getMessage()).toJson()));
         }
     }

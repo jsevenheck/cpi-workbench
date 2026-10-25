@@ -9,15 +9,16 @@ import net.sf.saxon.jaxp.TemplatesImpl;
 import net.sf.saxon.s9api.QName;
 import net.sf.saxon.s9api.XsltExecutable;
 import net.sf.saxon.trans.XPathException;
+import org.xml.sax.InputSource;
 
 import javax.xml.transform.ErrorListener;
 import javax.xml.transform.OutputKeys;
+import javax.xml.transform.Source;
 import javax.xml.transform.SourceLocator;
 import javax.xml.transform.Templates;
 import javax.xml.transform.Transformer;
 import javax.xml.transform.TransformerException;
 import javax.xml.transform.stream.StreamResult;
-import javax.xml.transform.stream.StreamSource;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.StringReader;
@@ -103,6 +104,7 @@ public final class XsltStep {
 
     public XsltStep() {
         factory = new net.sf.saxon.TransformerFactoryImpl();
+        ProjectResolver.install(factory.getConfiguration());
         SaxonCompat.registerCpiFunctions(factory.getConfiguration(), (function, target, name, value) -> {
             if (!(target instanceof ExchangeHandle)) {
                 throw new IllegalArgumentException(function + ": the first argument must be $exchange "
@@ -134,6 +136,14 @@ public final class XsltStep {
      * </pre>
      */
     public synchronized Map<String, Object> run(Map<String, Object> req) {
+        try {
+            return runWithResolver(req);
+        } finally {
+            ProjectResolver.end();
+        }
+    }
+
+    private Map<String, Object> runWithResolver(Map<String, Object> req) {
         List<Diagnostic> diags = new ArrayList<>();
         List<XslMessage> messages = new ArrayList<>();
         Json.Obj result = Json.o();
@@ -145,6 +155,7 @@ public final class XsltStep {
         Path baseDir = baseDirStr == null || baseDirStr.isBlank() ? null : Path.of(baseDirStr);
         Map<String, String> resources = stringMap(Json.obj(req, "resources"));
         ProjectResolver resolver = new ProjectResolver(baseDir, resources);
+        resolver.begin();
         String path = Json.str(xslt, "path", "mapping.xsl");
         String systemId = resolver.systemIdFor(path);
         String content = xslt.get("content") != null ? Json.str(xslt, "content", "") : null;
@@ -174,8 +185,7 @@ public final class XsltStep {
                 // Reflexive Java calls (java: namespaces) in the main module and in included modules.
                 List<String> javaProblems = new ArrayList<>(javaExtensions.scan(content));
                 resolver.setModuleListener(text -> javaProblems.addAll(javaExtensions.scan(text)));
-                StreamSource src = new StreamSource(new StringReader(content));
-                src.setSystemId(systemId);
+                Source src = resolver.source(new InputSource(new StringReader(content)), systemId);
                 try {
                     Templates t = factory.newTemplates(src);
                     List<Diagnostic> warnings = new ArrayList<>(compileDiags);
@@ -206,6 +216,14 @@ public final class XsltStep {
         try {
             Transformer tr = templates.newTransformer();
             tr.setURIResolver(resolver);
+            if (tr instanceof net.sf.saxon.jaxp.TransformerImpl) {
+                // Saxon would write secondary results to any file path; the simulator has no place for them.
+                ((net.sf.saxon.jaxp.TransformerImpl) tr).getUnderlyingController().setResultDocumentResolver(
+                        (context, href, base, properties) -> {
+                            throw new XPathException("UnsupportedInSimulator: xsl:result-document is not supported,"
+                                    + " the simulator writes no secondary results (href '" + href + "')");
+                        });
+            }
             List<Diagnostic> runtimeDiags = new ArrayList<>();
             tr.setErrorListener(new CollectingListener(runtimeDiags));
             SaxonCompat.captureMessages(tr, messages::add);
@@ -237,8 +255,8 @@ public final class XsltStep {
             }
 
             ByteArrayOutputStream out = new ByteArrayOutputStream();
-            StreamSource in = new StreamSource(new ByteArrayInputStream(input.getBody()));
-            in.setSystemId(ProjectResolver.MEMORY_BASE + "input.xml");
+            Source in = resolver.source(new InputSource(new ByteArrayInputStream(input.getBody())),
+                    ProjectResolver.MEMORY_BASE + "input.xml");
             try {
                 tr.transform(in, new StreamResult(out));
             } catch (RuntimeException e) {

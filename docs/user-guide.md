@@ -13,7 +13,9 @@ install it and open a project folder. Any folder works; **Init** adds `mappings/
   result: text in XSLT, `xsl:text`, `xml:space="preserve"`, CDATA, literal attribute values and
   multi-line Groovy strings keep theirs.
 * **Save** writes the open mapping, script or schema; **Save as…** writes it under a new name
-  (`<name>-copy` is suggested) and leaves the open file as it is.
+  (`<name>-copy` is suggested) and leaves the open file as it is. Saving or creating a file under a
+  name that exists asks before it overwrites the file, and opening another file asks before it
+  drops unsaved changes (the dot after the file name).
 * Right-click a file in the tree to open, rename, copy or delete it, or to copy its path.
 * Drag the bars between input, mapping or script and output to resize them; double-click a bar to reset.
 * **Save…** above the input body stores it under `inputs/`. Clicking a file there, or **Use as input**
@@ -42,6 +44,17 @@ install it and open a project folder. Any folder works; **Init** adds `mappings/
   * `XmlSlurper` or `XmlParser` used without a `groovy.xml` import,
   * Script API v1 imports or v1-only methods in a 2.x step,
   * wildcard imports.
+
+**✕** closes the project in the engines too, so runs no longer see its files or `platform/` data.
+
+### What a run can access
+
+* XSLT, XSD and XPath runs read files inside the open project only: includes, `doc()`,
+  `document()`, `unparsed-text()`, external entities and DTDs. The network is blocked.
+  `xsl:result-document` and `collection()` are not supported. Reflexive `java:` calls are the
+  exception: they run JDK code and are not restricted.
+* Groovy scripts run as ordinary Java code with your user's rights; there is no sandbox. Run only
+  scripts you trust.
 
 The installers are not code-signed yet. On macOS, right-click the app and choose *Open* the first
 time. On Windows, SmartScreen asks once ("More info" → "Run anyway"). The Windows installer

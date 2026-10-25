@@ -43,7 +43,7 @@ public final class GroovyEngine implements RpcHandler {
                 .with("java", System.getProperty("java.vm.name") + " " + System.getProperty("java.version"))
                 .with("nativeImage", false)
                 .with("types", TypedValue.TYPES)
-                .with("methods", List.of("engine.info", "groovy.run", "project.open", "project.list", "file.read",
+                .with("methods", List.of("engine.info", "groovy.run", "project.open", "project.close", "project.list", "file.read",
                         "file.write", "file.delete", "iflow.import", "iflow.steps", "tests.run"));
     }
 
@@ -57,6 +57,8 @@ public final class GroovyEngine implements RpcHandler {
                 return runner.run(withProjectRoot(params));
             case "project.open":
                 return files.open(params);
+            case "project.close":
+                return files.close();
             case "project.list":
                 return files.listing();
             case "file.read":

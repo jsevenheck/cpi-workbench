@@ -34,5 +34,17 @@
   }, {
     "name":"com.sun.org.apache.xml.internal.serializer.XMLEntities",
     "locales":[""]
+  }, {
+    "name":"com.sun.org.apache.xerces.internal.impl.msg.XMLMessages",
+    "locales":["", "und"]
+  }, {
+    "name":"com.sun.org.apache.xerces.internal.impl.msg.SAXMessages",
+    "locales":["", "und"]
+  }, {
+    "name":"com.sun.org.apache.xerces.internal.impl.msg.DOMMessages",
+    "locales":["", "und"]
+  }, {
+    "name":"com.sun.org.apache.xml.internal.res.XMLErrorResources",
+    "locales":["", "und"]
   }]
 }

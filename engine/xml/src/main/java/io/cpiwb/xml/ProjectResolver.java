@@ -1,12 +1,20 @@
 package io.cpiwb.xml;
 
+import net.sf.saxon.Configuration;
+import net.sf.saxon.trans.XPathException;
 import org.w3c.dom.ls.LSInput;
 import org.w3c.dom.ls.LSResourceResolver;
+import org.xml.sax.EntityResolver;
+import org.xml.sax.InputSource;
+import org.xml.sax.SAXException;
+import org.xml.sax.XMLReader;
 
+import javax.xml.parsers.ParserConfigurationException;
+import javax.xml.parsers.SAXParserFactory;
 import javax.xml.transform.Source;
 import javax.xml.transform.TransformerException;
 import javax.xml.transform.URIResolver;
-import javax.xml.transform.stream.StreamSource;
+import javax.xml.transform.sax.SAXSource;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.io.Reader;
@@ -20,12 +28,14 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * Resolves {@code xsl:include}, {@code xsl:import}, {@code document()} and XSD includes inside a
- * project, like resources inside an iFlow. Lookup order: unsaved editor buffers ({@code resources}),
- * then files below {@code baseDir}. Everything else (network, files outside the project) is blocked,
- * so a run never reaches outside the project folder.
+ * Resolves {@code xsl:include}, {@code xsl:import}, {@code document()}, {@code unparsed-text()},
+ * external entities and XSD includes inside a project, like resources inside an iFlow. Lookup order:
+ * unsaved editor buffers ({@code resources}), then files below {@code baseDir}. Everything else
+ * (network, files outside the project) is blocked, so a run never reads outside the project folder.
+ * Every XML document a run parses goes through {@link #source}, whose parser resolves entities here.
+ * Not covered: reflexive {@code java:} calls, which run JDK code (see {@link JavaExtensions}).
  */
-public final class ProjectResolver implements URIResolver, LSResourceResolver {
+public final class ProjectResolver implements URIResolver, LSResourceResolver, EntityResolver {
 
     /** Scheme used for documents that exist only in memory (no project folder). */
     public static final String MEMORY_BASE = "cpiwb:///";
@@ -129,9 +139,81 @@ public final class ProjectResolver implements URIResolver, LSResourceResolver {
         if (moduleListener != null) {
             moduleListener.accept(content);
         }
-        StreamSource s = new StreamSource(new StringReader(content));
-        s.setSystemId(abs);
-        return s;
+        return source(new InputSource(new StringReader(content)), abs);
+    }
+
+    /** A source whose parser loads external entities and DTDs through this resolver only. */
+    public SAXSource source(InputSource in, String systemId) throws TransformerException {
+        in.setSystemId(systemId);
+        return new SAXSource(xmlReader(), in);
+    }
+
+    /** A namespace-aware SAX parser that resolves external entities and DTDs through this resolver. */
+    public XMLReader xmlReader() throws TransformerException {
+        try {
+            SAXParserFactory f = SAXParserFactory.newInstance();
+            f.setNamespaceAware(true);
+            XMLReader r = f.newSAXParser().getXMLReader();
+            r.setEntityResolver(this);
+            return r;
+        } catch (ParserConfigurationException | SAXException e) {
+            throw new TransformerException("Cannot create an XML parser: " + e.getMessage(), e);
+        }
+    }
+
+    // ---------------------------------------------------------------- org.xml.sax (external entities, DTDs)
+
+    @Override
+    public InputSource resolveEntity(String publicId, String systemId) throws SAXException {
+        if (systemId == null) {
+            return null;
+        }
+        String abs = resolveAgainst(systemId, null);
+        try {
+            InputSource in = new InputSource(new StringReader(load(abs)));
+            in.setSystemId(abs);
+            in.setPublicId(publicId);
+            return in;
+        } catch (TransformerException e) {
+            throw new SAXException("External entity '" + systemId + "': " + e.getMessage());
+        }
+    }
+
+    // ---------------------------------------------------------------- Saxon: unparsed-text(), collection()
+
+    /** The resolver of the run on this thread; Saxon's configuration-wide hooks below look it up. */
+    private static final ThreadLocal<ProjectResolver> CURRENT = new ThreadLocal<>();
+
+    /** Makes this resolver the one for {@code unparsed-text()} on this thread until {@link #end()}. */
+    public void begin() {
+        CURRENT.set(this);
+    }
+
+    public static void end() {
+        CURRENT.remove();
+    }
+
+    /**
+     * Routes {@code unparsed-text()} (and the functions built on it, like {@code json-doc()}) to the
+     * resolver of the current run and blocks {@code collection()}. Files are read as UTF-8 whatever
+     * encoding the call names (simulator assumption).
+     */
+    public static void install(Configuration config) {
+        config.setUnparsedTextURIResolver((URI uri, String encoding, Configuration c) -> {
+            ProjectResolver r = CURRENT.get();
+            if (r == null) {
+                throw new XPathException("Access to '" + uri + "' is blocked: no run is active");
+            }
+            try {
+                return new StringReader(r.load(r.resolveAgainst(uri.toString(), null)));
+            } catch (TransformerException e) {
+                throw new XPathException(e.getMessage(), "FOUT1170");
+            }
+        });
+        config.setCollectionFinder((context, collectionURI) -> {
+            throw new XPathException("UnsupportedInSimulator: collection() is not available ("
+                    + (collectionURI == null ? "default collection" : collectionURI) + ")", "FODC0002");
+        });
     }
 
     // ---------------------------------------------------------------- XSD includes/imports

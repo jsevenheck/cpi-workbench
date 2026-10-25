@@ -118,6 +118,14 @@ export async function openProject(dir: string, init = false): Promise<any> {
   return r;
 }
 
+/** Forgets the project here and in every engine that opened it, so runs no longer see its files. */
+export async function closeProject(): Promise<void> {
+  const opened = [...projectOpenedIn];
+  projectDir = null;
+  projectOpenedIn.clear();
+  await Promise.all(opened.map((p) => rawCall(p, 'project.close', {}).catch(() => undefined)));
+}
+
 /** Which profiles can actually run here. Web mode serves exactly one engine. */
 export async function availableProfiles(): Promise<{ profiles: ProfileInfo[]; info: any }> {
   if (isDesktop) {

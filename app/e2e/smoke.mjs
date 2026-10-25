@@ -48,14 +48,22 @@ await page.locator('.badge.bad').waitFor({ timeout: 10000 });
 await page.getByRole('tab', { name: /^Body/ }).nth(1).click();
 if (!(await page.locator('.diag.error').first().innerText()).match(/line \d+/)) fail('compile error without line');
 if (shots) await page.screenshot({ path: path.join(shots, '2-xslt-error.png') });
-await page.keyboard.press('Control+z');
 
 // 3) Open the demo project and a mapping from the tree.
 await page.getByLabel('Project folder').fill(project);
 await page.getByRole('button', { name: 'Open' }).click();
 await page.locator('.tree .file').first().waitFor({ timeout: 10000 });
-await page.locator('.tree .file', { hasText: 'order-to-salesorder.xsl' }).click();
-await page.locator('section.mapping h2', { hasText: 'order-to-salesorder.xsl' }).waitFor();
+// The scratch mapping still has the broken edit: opening a file asks first, and Cancel keeps the edit.
+const mappingFile = page.locator('.tree .file', { hasText: 'order-to-salesorder.xsl' });
+const discard = page.getByRole('dialog').filter({ hasText: 'Discard the unsaved changes' });
+await mappingFile.click();
+await discard.waitFor({ timeout: 5000 }).catch(() => fail('no question before an unsaved mapping is replaced'));
+await discard.getByRole('button', { name: 'Cancel' }).click();
+if (!(await page.locator('section.mapping .view-lines').innerText()).includes('<broken')) fail('Cancel did not keep the unsaved mapping');
+await mappingFile.click();
+await discard.getByRole('button', { name: 'OK' }).click();
+// The title holds the bare path; the visible text may end with the unsaved-changes dot.
+await page.locator('section.mapping h2[title="mappings/order-to-salesorder.xsl"]').waitFor();
 
 // 2b) Save as… suggests a free name next to the open file and leaves the open file as it is.
 const xslBefore = fs.readFileSync(path.join(project, 'mappings/order-to-salesorder.xsl'), 'utf8');
@@ -66,8 +74,8 @@ await page.getByRole('dialog').getByRole('button', { name: 'OK' }).click();
 await page.locator('section.mapping h2', { hasText: 'order-to-salesorder-copy.xsl' }).waitFor({ timeout: 10000 });
 if (fs.readFileSync(path.join(project, 'mappings/order-to-salesorder-copy.xsl'), 'utf8') !== xslBefore) fail('Save as wrote different content');
 if (fs.readFileSync(path.join(project, 'mappings/order-to-salesorder.xsl'), 'utf8') !== xslBefore) fail('Save as changed the open file');
-await page.locator('.tree .file', { hasText: 'order-to-salesorder.xsl' }).click();
-await page.locator('section.mapping h2', { hasText: /order-to-salesorder\.xsl$/ }).waitFor();
+await mappingFile.click();
+await page.locator('section.mapping h2[title="mappings/order-to-salesorder.xsl"]').waitFor();
 
 // 4) Open a test case: loads input, headers and runs.
 await page.locator('.tree .file', { hasText: 'standard-order/case.json' }).click();
@@ -182,6 +190,18 @@ await page.mouse.up();
 const w1 = (await inputPane.boundingBox()).width;
 if (Math.abs(w1 - w0 - 150) > 10) fail(`input pane width ${w0} -> ${w1}, expected +150`);
 if (shots) await page.screenshot({ path: path.join(shots, '7-resized.png') });
+
+// 10) "+ Script" suggests a free name and asks before it overwrites an existing file.
+fs.writeFileSync(path.join(project, 'scripts/new-script.groovy'), '// keep me\n');
+await page.getByTitle('Reload file list').click();
+await page.getByRole('button', { name: '+ Script' }).click();
+const newName = await page.getByRole('dialog').getByRole('textbox').inputValue();
+if (newName !== 'scripts/new-script-2.groovy') fail('+ Script suggestion: ' + newName);
+await page.getByRole('dialog').getByRole('textbox').fill('scripts/new-script.groovy');
+await page.getByRole('dialog').getByRole('button', { name: 'OK' }).click();
+await page.getByRole('dialog').filter({ hasText: 'exists. Overwrite it?' }).getByRole('button', { name: 'Cancel' }).click()
+  .catch(() => fail('no overwrite question for an existing script'));
+if (fs.readFileSync(path.join(project, 'scripts/new-script.groovy'), 'utf8') !== '// keep me\n') fail('+ Script overwrote an existing file');
 
 if (errors.length) fail('browser errors: ' + errors.join(' | '));
 await browser.close();

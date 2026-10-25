@@ -12,10 +12,10 @@
 
 Automated checks:
 
-* Engine tests (`mvn -f engine/pom.xml verify`): core 8, XSLT/XSD/XPath 22 per Saxon version, Groovy 23 per script version.
+* Engine tests (`mvn -f engine/pom.xml verify`): core 11, XSLT/XSD/XPath 33 per Saxon version (11 of them on project boundaries), Groovy 23 per script version.
 * Regression test cases (`testdata/regression-project`): 6.
 * Browser end-to-end tests: `app/e2e/smoke.mjs` and `groovy.mjs`.
-* UI unit tests (`npm --prefix app test`): the JSON, XSLT and Groovy formatters.
+* UI unit tests (`npm --prefix app test`): the JSON, XSLT and Groovy formatters, test-case rows.
 * CI runs the engine tests on Linux, Windows and macOS, the browser e2e tests on Linux and Windows, and the shell tests on all three before it builds the installers. All of them passed on Windows and macOS runners for the first time on 2026-10-25 (`d237e25`).
 
 ## By area
@@ -68,6 +68,25 @@ From the first manual test of the desktop window on Windows:
 * The Tests tab and *Save as test* were removed; test cases stay a CLI feature.
 * Local builds without GraalVM: `cargo test` and `tauri dev` work with a config override
   ([building](building.md#without-graalvm)).
+
+From a code review (October 2026):
+
+* Unsaved changes: opening another file, a test case or an iFlow step asks first; new files and
+  saves ask before they overwrite an existing file (*+ Script* used to overwrite `new-script.groovy`).
+* Opening a script resets the function to `processData`; an iFlow step's function and runtime are
+  set before the first live run.
+* Closing the project closes it in the engines too (`project.close`); before, a run could still
+  read the old project's `platform/` data.
+* XML runs: external entities, DTDs, `doc()` and `unparsed-text()` (XPath and XSLT) now stay inside
+  the project, as the docs said. `xsl:result-document` could write to any path; it is now
+  `UnsupportedInSimulator`, like `collection()`.
+* Browser mode: the CORS check compared origin prefixes, so `http://tauri.localhost.example` passed;
+  it now compares hosts exactly.
+* iFlow import: the names `.` and `..` are refused, and the size limit stops the copy as soon as it
+  is exceeded.
+* Test cases: a JSON boolean header or property stays a Boolean in the app, as on the CLI.
+* `cpi-workbench.json` no longer gets the unused `defaultXsltProfile` setting.
+* Native XML engines: parser error messages no longer fail on missing resource bundles.
 
 ## Next steps
 

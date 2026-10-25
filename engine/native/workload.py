@@ -58,6 +58,12 @@ def main():
     open(os.path.join(proj, "mappings", "lib.xsl"), "w").write(LIB)
     inp = {"body": BODY, "headers": [{"name": "P", "value": "hp", "type": "String"}],
            "properties": [{"name": "N", "value": "41", "type": "Integer"}]}
+    # A file next to the project: runs must not read it (entities, doc(), unparsed-text()).
+    secret = os.path.join(os.path.dirname(proj), os.path.basename(proj) + "-secret.txt")
+    open(secret, "w").write("TOP-SECRET-42")
+    secret_uri = "file:///" + secret.replace(os.sep, "/").lstrip("/")
+    entity_doc = f"<!DOCTYPE r [<!ENTITY x SYSTEM '{secret_uri}'>]><r>&x;</r>"
+    no_leak = lambda r: not r["ok"] and "TOP-SECRET" not in json.dumps(r) and "outside the project" in json.dumps(r)
     reqs = [
         ("engine.info", {}, lambda r: r["profile"]),
         ("project.open", {"dir": proj, "init": True}, lambda r: r["isProject"]),
@@ -85,8 +91,15 @@ def main():
         ("xpath.eval", {"expression": "/x", "version": "1.0", "input": {"body": BODY}}, lambda r: r["ok"] and r["items"][0]["kind"] == "element"),
         ("xpath.eval", {"expression": "//i[position() = last()]/@g | //i[1]/@g", "version": "1.0", "input": {"body": BODY}}, lambda r: r["ok"] and r["count"] == 2),
         ("xml.format", {"text": BODY}, lambda r: r["ok"]),
+        ("xpath.eval", {"expression": "string(/r)", "version": "1.0", "input": {"body": entity_doc}}, no_leak),
+        ("xpath.eval", {"expression": "string(/r)", "version": "3.1", "input": {"body": entity_doc}}, no_leak),
+        ("xpath.eval", {"expression": f"unparsed-text('{secret_uri}')", "version": "3.1", "input": {"body": "<a/>"}}, no_leak),
+        ("xslt.run", {"xslt": {"content": "<xsl:stylesheet version='2.0' xmlns:xsl='http://www.w3.org/1999/XSL/Transform'><xsl:template match='/'><xsl:copy-of select='.'/></xsl:template></xsl:stylesheet>"},
+                      "input": {"body": entity_doc}}, no_leak),
         ("tests.run", {"path": "tests"}, lambda r: r["failed"] == 0),
         ("file.delete", {"path": "mappings/main.xsl"}, lambda r: r["deleted"]),
+        ("project.close", {}, lambda r: r["closed"]),
+        ("project.list", {}, "error"),
     ]
     t0 = time.time()
     p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
@@ -99,11 +112,14 @@ def main():
         p.stdin.flush()
         resp = json.loads(p.stdout.readline())
         ms = (time.time() - t) * 1000
-        ok = "result" in resp
-        try:
-            ok = ok and bool(check(resp["result"]))
-        except Exception as e:  # noqa
-            ok = False
+        if check == "error":
+            ok = "error" in resp
+        else:
+            ok = "result" in resp
+            try:
+                ok = ok and bool(check(resp["result"]))
+            except Exception as e:  # noqa
+                ok = False
         if not ok:
             failures += 1
         print(f"{'ok ' if ok else 'BAD'} {method:14s} {ms:8.1f} ms" + ("" if ok else "  " + json.dumps(resp)[:1500]))

@@ -282,6 +282,7 @@ Versioned JSON files with Java, Groovy, Camel and Saxon versions per CPI step ve
 
 ### 8.2 Isolation and safety
 Fresh exchange per run, timeout (default 10 s), memory cap, captured output. XML engine: no network, file access limited to the project folder. Groovy: network allowed by default (CPI scripts may call HTTP), "offline sandbox" toggle.
+*Update 2026-10: no Groovy sandbox is planned; scripts run with the user's rights, and the user guide says to run trusted scripts only.*
 
 ### 8.3 Calibration and probe iFlows (the REA "observe" step)
 - **Fingerprint iFlow**: reports Java, Groovy (`GroovySystem.getVersion()`), Camel and Saxon (`system-property('xsl:product-version')`) versions, default charset, timezone, locale.
@@ -300,7 +301,7 @@ Fresh exchange per run, timeout (default 10 s), memory cap, captured output. XML
 
 ```
 my-project/
-  cpi-workbench.json      # project settings, default profiles
+  cpi-workbench.json      # marks the folder as a project (name)
   scripts/                # .groovy
   mappings/               # .xsl / .xslt
   schemas/                # .xsd

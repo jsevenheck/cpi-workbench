@@ -4,7 +4,7 @@
 
 ```
 my-project/
-  cpi-workbench.json      # project settings (default profile)
+  cpi-workbench.json      # marks the folder as a project (name)
   mappings/  scripts/  schemas/
   lib/                    # extra .jar files on the script class path
   platform/               # mocked platform data (see below)

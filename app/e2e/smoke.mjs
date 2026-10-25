@@ -162,6 +162,10 @@ await page.locator('.tree .file', { hasText: 'order.xml' }).click();
 await page.locator('section h2', { hasText: '· order.xml' }).waitFor({ timeout: 10000 })
   .catch(() => fail('XSD tab does not show inputs/order.xml as its document'));
 if (!(await page.locator('.tree .file', { hasText: 'order.xml' }).getAttribute('class')).includes('active')) fail('inputs/order.xml not marked in the tree');
+// The XSLT output replaces the document, so the header no longer names the file.
+await page.getByRole('button', { name: 'Use XSLT output' }).click();
+await page.locator('section h2', { hasText: '· order.xml' }).waitFor({ state: 'detached', timeout: 5000 })
+  .catch(() => fail('XSD header still names order.xml after Use XSLT output'));
 await page.getByRole('tab', { name: 'XSLT Mapping' }).click();
 await page.getByRole('tab', { name: 'value-mappings.json' }).click();
 await page.locator('section[aria-label="File"]').getByRole('button', { name: 'Close' }).click();

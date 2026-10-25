@@ -11,8 +11,15 @@
   let inputMarkers = $derived((xsd.result?.diagnostics ?? []).filter((d) => d.line && (d.systemId === 'input.xml' || d.systemId === 'input')));
   let dirty = $derived(xsd.schema !== xsd.savedSchema);
 
+  // The header names the file the body came from: the XSLT input's file, none for the output.
   function useXsltOutput() {
-    if (xslt.result?.output) xsd.body = xslt.result.output.body;
+    if (!xslt.result?.output) return;
+    xsd.body = xslt.result.output.body;
+    delete app.inputPaths.xsd;
+  }
+  function useXsltInput() {
+    xsd.body = xslt.body;
+    app.inputPaths.xsd = app.inputPaths.xslt;
   }
 </script>
 
@@ -22,7 +29,7 @@
       <h2 title={app.inputPaths.xsd ?? ''}>XML document{#if app.inputPaths.xsd} <span class="from">· {app.inputPaths.xsd.split('/').pop()}</span>{/if}</h2>
       <div class="spacer"></div>
       <button class="small" onclick={useXsltOutput} disabled={!xslt.result?.output} title="Validate the last XSLT output">Use XSLT output</button>
-      <button class="small" onclick={() => (xsd.body = xslt.body)}>Use XSLT input</button>
+      <button class="small" onclick={useXsltInput}>Use XSLT input</button>
       <button class="small" onclick={saveInput} disabled={!app.project} title={app.project ? 'Save the input body under inputs/' : 'Open a project to save'}>Save…</button>
     </header>
     <div class="body"><Editor bind:value={xsd.body} language="xml" markers={inputMarkers} onrun={runXsd} label="XML document" /></div>

@@ -7,6 +7,17 @@
 
   const panes = paneSizes('xpath', [1.3, 1]);
 
+  // The header names the file the body came from: the XSLT input's file, none for the output.
+  function useXsltOutput() {
+    if (!xslt.result?.output) return;
+    xpath.body = xslt.result.output.body;
+    delete app.inputPaths.xpath;
+  }
+  function useXsltInput() {
+    xpath.body = xslt.body;
+    app.inputPaths.xpath = app.inputPaths.xslt;
+  }
+
   function key(e: KeyboardEvent) {
     if (e.key === 'Enter') runXpath();
   }
@@ -28,8 +39,8 @@
   <div class="grid" style:grid-template-columns={paneColumns(panes.sizes)}>
     <section class="pane">
       <header><h2 title={app.inputPaths.xpath ?? ''}>XML document{#if app.inputPaths.xpath} <span class="from">· {app.inputPaths.xpath.split('/').pop()}</span>{/if}</h2><div class="spacer"></div>
-        <button class="small" onclick={() => (xpath.body = xslt.body)}>Use XSLT input</button>
-        <button class="small" onclick={() => xslt.result?.output && (xpath.body = xslt.result.output.body)} disabled={!xslt.result?.output}>Use XSLT output</button>
+        <button class="small" onclick={useXsltInput}>Use XSLT input</button>
+        <button class="small" onclick={useXsltOutput} disabled={!xslt.result?.output}>Use XSLT output</button>
         <button class="small" onclick={saveInput} disabled={!app.project} title={app.project ? 'Save the input body under inputs/' : 'Open a project to save'}>Save…</button>
       </header>
       <div class="body"><Editor bind:value={xpath.body} language="xml" onrun={runXpath} label="XML document" /></div>

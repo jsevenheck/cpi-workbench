@@ -53,6 +53,7 @@ import java.util.TreeMap;
 public final class XsltStep {
 
     private final net.sf.saxon.TransformerFactoryImpl factory;
+    private final JavaExtensions javaExtensions;
     private final Map<String, CacheEntry> cache = new LinkedHashMap<>(16, 0.75f, true) {
         @Override
         protected boolean removeEldestEntry(Map.Entry<String, CacheEntry> eldest) {
@@ -115,6 +116,8 @@ public final class XsltStep {
             }
             h.calls.add(Json.o().with("function", function).with("name", name).with("value", value));
         });
+        javaExtensions = new JavaExtensions((ns, local, invoker) ->
+                SaxonCompat.registerJavaFunction(factory.getConfiguration(), ns, local, invoker));
     }
 
     public static String engineVersion() {
@@ -168,6 +171,9 @@ public final class XsltStep {
                 List<Diagnostic> compileDiags = new ArrayList<>();
                 factory.setErrorListener(new CollectingListener(compileDiags));
                 factory.setURIResolver(resolver);
+                // Reflexive Java calls (java: namespaces) in the main module and in included modules.
+                List<String> javaProblems = new ArrayList<>(javaExtensions.scan(content));
+                resolver.setModuleListener(text -> javaProblems.addAll(javaExtensions.scan(text)));
                 StreamSource src = new StreamSource(new StringReader(content));
                 src.setSystemId(systemId);
                 try {
@@ -177,6 +183,7 @@ public final class XsltStep {
                     cache.put(key, entry);
                     diags.addAll(compileDiags);
                 } catch (TransformerException e) {
+                    javaProblems.forEach(p -> diags.add(Diagnostic.error(p)));
                     diags.addAll(compileDiags);
                     if (compileDiags.stream().noneMatch(d -> d.getSeverity() == Diagnostic.Severity.ERROR)) {
                         diags.add(toDiagnostic(e, Diagnostic.Severity.ERROR));

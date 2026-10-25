@@ -34,6 +34,7 @@ public final class ProjectResolver implements URIResolver, LSResourceResolver {
     private final Map<String, String> resources = new LinkedHashMap<>();
     /** Files read from disk with their modification time, for cache validation. */
     private final Map<Path, Long> filesRead = new LinkedHashMap<>();
+    private java.util.function.Consumer<String> moduleListener;
 
     /**
      * @param baseDir   project folder, may be null
@@ -60,6 +61,11 @@ public final class ProjectResolver implements URIResolver, LSResourceResolver {
 
     private static String encodePath(String rel) {
         return rel.replace(" ", "%20");
+    }
+
+    /** Called with the text of every stylesheet module loaded via {@link #resolve}. */
+    public void setModuleListener(java.util.function.Consumer<String> listener) {
+        this.moduleListener = listener;
     }
 
     public Map<Path, Long> getFilesRead() {
@@ -120,6 +126,9 @@ public final class ProjectResolver implements URIResolver, LSResourceResolver {
     public Source resolve(String href, String base) throws TransformerException {
         String abs = resolveAgainst(href, base);
         String content = load(abs);
+        if (moduleListener != null) {
+            moduleListener.accept(content);
+        }
         StreamSource s = new StreamSource(new StringReader(content));
         s.setSystemId(abs);
         return s;

@@ -213,4 +213,34 @@ class XsltStepTest {
         assertTrue(body(r).contains("<r>äöü</r>"), body(r));
         assertEquals("ISO-8859-1", Json.str(Json.obj(r, "output"), "encoding", null));
     }
+
+    @Test
+    void reflexiveJavaExtensionFunctions() {
+        String xsl = String.join("\n",
+                "<xsl:stylesheet version='3.0' xmlns:xsl='http://www.w3.org/1999/XSL/Transform'",
+                "    xmlns:math='java:java.lang.Math' xmlns:str='java:java.lang.String'",
+                "    xmlns:uuid='java:java.util.UUID' xmlns:sb='java:java.lang.StringBuilder'",
+                "    xmlns:ld='java:java.time.LocalDate' exclude-result-prefixes='#all'>",
+                "  <xsl:template match='/'>",
+                "    <xsl:variable name='b' select=\"sb:new('x')\"/>",
+                "    <r max='{math:max(3, 7)}' upper=\"{str:to-upper-case('abc')}\" fmt=\"{str:format('%05d', 42)}\"",
+                "       uuid='{string-length(string(uuid:random-UUID()))}' sb=\"{sb:to-string(sb:append($b, 'yz'))}\"",
+                "       date='{ld:plus-days(ld:of(2026, 1, 31), 1)}' int='{math:abs(-5) instance of xs:integer}'",
+                "       xmlns:xs='http://www.w3.org/2001/XMLSchema'/>",
+                "  </xsl:template>",
+                "</xsl:stylesheet>");
+        Map<String, Object> r = run(xsl, input("<a/>", List.of(), List.of()), null);
+        assertTrue(Json.bool(r, "ok", false), () -> Json.write(r));
+        for (String expected : List.of("max=\"7\"", "upper=\"ABC\"", "fmt=\"00042\"", "uuid=\"36\"", "sb=\"xyz\"",
+                "date=\"2026-02-01\"", "int=\"true\"")) {
+            assertTrue(body(r).contains(expected), () -> expected + " in " + body(r));
+        }
+
+        String missing = "<xsl:stylesheet version='3.0' xmlns:xsl='http://www.w3.org/1999/XSL/Transform'"
+                + " xmlns:x='java:com.example.DoesNotExist'><xsl:template match='/'><r>{x:go()}</r></xsl:template></xsl:stylesheet>";
+        Map<String, Object> bad = run(missing.replace("<r>{x:go()}</r>", "<r><xsl:value-of select='x:go()'/></r>"),
+                input("<a/>", List.of(), List.of()), null);
+        assertFalse(Json.bool(bad, "ok", true));
+        assertTrue(Json.write(bad).contains("com.example.DoesNotExist is not available"), () -> Json.write(bad));
+    }
 }

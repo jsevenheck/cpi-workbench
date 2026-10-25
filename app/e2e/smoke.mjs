@@ -59,10 +59,12 @@ await page.locator('section.mapping h2', { hasText: 'order-to-salesorder.xsl' })
 
 // 4) Open a test case: loads input, headers and runs.
 await page.locator('.tree .file', { hasText: 'standard-order/case.json' }).click();
-await page.locator('.badge.ok').waitFor({ timeout: 10000 });
+// The scratch result stays visible until the case's run ends, so wait for the case's parameter.
 await page.getByRole('tab', { name: /^Parameters/ }).click();
+await page.locator('.params tr', { hasText: 'SenderSystem' }).waitFor({ timeout: 10000 })
+  .catch(() => fail('SenderSystem missing from the parameter table'));
 const params = await page.locator('.params table').innerText();
-if (!params.includes('SenderSystem') || !params.includes('header')) fail('parameter binding table: ' + params);
+if (!params.includes('header')) fail('parameter binding table: ' + params);
 if (shots) await page.screenshot({ path: path.join(shots, '3-xslt-case.png') });
 
 // 5) Run all tests.

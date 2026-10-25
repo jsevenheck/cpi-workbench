@@ -71,12 +71,12 @@ await page.getByRole('button', { name: 'Comparing' }).click();
 
 // 4a2) A case with an attachment file: the app keeps it while the case is open.
 await page.locator('.tree .file', { hasText: 'groovy-attachment/case.json' }).click();
-await page.locator('section.output .badge.ok').waitFor({ timeout: 20000 });
-const extras = await page.locator('.extras').innerText();
-if (!extras.includes('1 attachment')) fail('case extras: ' + extras);
+// The previous case's result stays visible until this run ends, so wait for content, not the badge.
+await page.locator('.extras', { hasText: '1 attachment' }).waitFor({ timeout: 20000 })
+  .catch(() => fail('case extras missing'));
 await page.locator('section.output').getByRole('tab', { name: /^Headers/ }).click();
-const outHeaders = await page.locator('section.output').innerText();
-if (!outHeaders.includes('Delivery DN-4711')) fail('attachment header: ' + outHeaders.slice(0, 400));
+await page.locator('section.output tr', { hasText: 'DN-4711' }).waitFor({ timeout: 20000 })
+  .catch(async () => fail('attachment header: ' + (await page.locator('section.output').innerText()).slice(0, 400)));
 
 // 4b) Import an exported iFlow (zip) and open its Groovy step.
 if (process.env.CPIWB_IFLOW_ZIP) {

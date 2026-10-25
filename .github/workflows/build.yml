@@ -19,8 +19,8 @@ jobs:
     defaults:
       run: { shell: bash }
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
         with: { distribution: temurin, java-version: "17", cache: maven }
       - name: Unit tests (both Saxon and both Groovy engines)
         run: mvn -B -f engine/pom.xml verify
@@ -35,7 +35,7 @@ jobs:
           java -jar engine/groovy-v2/target/cpiwb-groovy-v2.jar test testdata/regression-project/tests
       # The engine jars run on any Java 17+ (command line, CI pipelines); a release attaches them.
       - if: matrix.os == 'ubuntu-latest'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: engine-jars
           path: |
@@ -61,8 +61,8 @@ jobs:
       # pass it on to its linker, so the native engines get it as a linker option below.
       MACOSX_DEPLOYMENT_TARGET: "11.0"
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
         id: jdk17
         with: { distribution: temurin, java-version: "17" }
       - name: Java runtime for the Groovy engines (jlink, Java 17 like CPI)
@@ -76,9 +76,6 @@ jobs:
           cache: maven
       - name: Build engine jars
         run: mvn -B -f engine/pom.xml -DskipTests package
-      - name: MSVC environment for native-image (Windows)
-        if: runner.os == 'Windows'
-        uses: ilammy/msvc-dev-cmd@v1
       - name: Build native engines
         shell: bash
         run: |
@@ -103,7 +100,7 @@ jobs:
             echo "cpiwb-xml-$id: minos $minos"
             [ "${minos%%.*}" -le 11 ] || { echo "::error::cpiwb-xml-$id needs macOS $minos, the app promises 11.0"; exit 1; }
           done
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with: { node-version: "22", cache: npm, cache-dependency-path: app/package-lock.json }
       - uses: dtolnay/rust-toolchain@stable
       - name: Linux build dependencies
@@ -139,7 +136,7 @@ jobs:
           CPIWB_JRE_DIR: ${{ runner.temp }}/jre
         run: |
           npx tauri build ${{ runner.os == 'Linux' && '--bundles deb,rpm' || '' }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: cpi-workbench-${{ matrix.os }}
           path: |
@@ -160,10 +157,10 @@ jobs:
     defaults:
       run: { shell: bash }
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
         with: { distribution: temurin, java-version: "17", cache: maven }
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with: { node-version: "22", cache: npm, cache-dependency-path: app/package-lock.json }
       - run: mvn -B -f engine/pom.xml -DskipTests package
       - working-directory: app
@@ -194,7 +191,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Tag matches the app and engine versions
         run: |
           version="${GITHUB_REF_NAME#v}"
@@ -210,7 +207,7 @@ jobs:
             fi
           done
           echo "VERSION=$version" >> "$GITHUB_ENV"
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: downloaded
       - name: Collect assets

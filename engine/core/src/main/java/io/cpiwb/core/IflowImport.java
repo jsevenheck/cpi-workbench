@@ -124,9 +124,7 @@ public final class IflowImport {
             }
             String file = null;
             for (String v : props.values()) {
-                String lv = v.toLowerCase(Locale.ROOT);
-                if (("groovy".equals(type) && (lv.endsWith(".groovy") || lv.endsWith(".gsh")))
-                        || ("xslt".equals(type) && (lv.endsWith(".xsl") || lv.endsWith(".xslt")))) {
+                if (hasExtension(type, v.toLowerCase(Locale.ROOT))) {
                     file = v;
                     break;
                 }
@@ -140,8 +138,13 @@ public final class IflowImport {
                     .with("componentVersion", props.get("componentVersion"))
                     .with("file", resolved == null ? file : projectRoot.relativize(resolved).toString().replace('\\', '/'))
                     .with("fileFound", resolved != null);
+            String note = note(type, props, file);
+            if (note != null) {
+                step.with("note", note);
+            }
             if ("groovy".equals(type)) {
-                step.with("function", props.getOrDefault("scriptFunction", "processData"));
+                String fn = props.get("scriptFunction");
+                step.with("function", fn == null || fn.isBlank() ? "processData" : fn.trim());
                 step.with("profile", majorVersion(props.get("componentVersion")) >= 2 ? "groovy-2.x" : "groovy-1.x");
             }
             out.add(step);
@@ -174,30 +177,66 @@ public final class IflowImport {
         return props;
     }
 
+    /**
+     * Step type from the activity properties (as seen in SAP's public sample iFlows:
+     * {@code activityType} Script/Mapping/XmlValidator, {@code subActivityType} GroovyScript/XSLTMapping,
+     * {@code cmdVariantUri} ...cname::GroovyScript...), else from referenced file extensions.
+     */
     private static String classify(Map<String, String> props) {
         String all = (props.getOrDefault("activityType", "") + " " + props.getOrDefault("subActivityType", "")
                 + " " + props.getOrDefault("cmdVariantUri", "")).toLowerCase(Locale.ROOT);
-        if (all.contains("script") && !all.contains("javascript")) {
+        if (all.contains("javascript")) {
+            return null;
+        }
+        if (all.contains("groovy") || all.contains("script")) {
             return "groovy";
         }
         if (all.contains("xslt")) {
             return "xslt";
         }
-        for (String v : props.values()) {
-            String lv = v.toLowerCase(Locale.ROOT);
-            if (lv.endsWith(".groovy") || lv.endsWith(".gsh")) {
-                return "groovy";
+        if (all.contains("xmlvalidator")) {
+            return "xsd";
+        }
+        for (String type : List.of("groovy", "xslt")) {
+            for (String v : props.values()) {
+                if (hasExtension(type, v.toLowerCase(Locale.ROOT))) {
+                    return type;
+                }
             }
-            if (lv.endsWith(".xsl") || lv.endsWith(".xslt")) {
-                return "xslt";
-            }
+        }
+        return null;
+    }
+
+    private static boolean hasExtension(String type, String lowerValue) {
+        switch (type) {
+            case "groovy":
+                return lowerValue.endsWith(".groovy") || lowerValue.endsWith(".gsh");
+            case "xslt":
+                return lowerValue.endsWith(".xsl") || lowerValue.endsWith(".xslt");
+            case "xsd":
+                return lowerValue.endsWith(".xsd");
+            default:
+                return false;
+        }
+    }
+
+    /** Explains a step whose file cannot be opened directly. */
+    private static String note(String type, Map<String, String> props, String file) {
+        String source = props.getOrDefault("mappingSource", "");
+        if ("xslt".equals(type) && "mappingSrcHeader".equals(source)) {
+            return "The mapping is chosen at runtime from the header "
+                    + props.getOrDefault("mappingHeaderNameKey", "(unknown)") + "; open the stylesheet yourself.";
+        }
+        if (file == null) {
+            return "xsd".equals(type) ? "No schema file referenced in the step."
+                    : "No file referenced in the step (not configured, or from another artifact).";
         }
         return null;
     }
 
     /** Resolves a referenced file: as a path inside the flow, else by file name below src/main/resources. */
     private static Path resolve(Path flowRoot, String ref) throws IOException {
-        String clean = ref.replaceFirst("^[a-z]+://", "").replace('\\', '/');
+        String clean = ref.replaceFirst("^[a-z]+://", "").replace('\\', '/').replaceFirst("^/+", "");
         for (Path base : List.of(flowRoot, flowRoot.resolve("src/main/resources"))) {
             Path p = base.resolve(clean).normalize();
             if (p.startsWith(flowRoot) && Files.isRegularFile(p)) {

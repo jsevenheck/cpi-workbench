@@ -49,7 +49,8 @@ export interface IflowStep {
   iflow: string;
   id: string;
   name: string;
-  type: 'groovy' | 'xslt' | 'error';
+  type: 'groovy' | 'xslt' | 'xsd' | 'error';
+  note?: string;
   componentVersion?: string;
   file?: string;
   fileFound?: boolean;
@@ -259,7 +260,8 @@ export async function importIflow(zip: string) {
 /** Opens the file of an imported iFlow step with the step's settings (function, script version). */
 export async function openIflowStep(step: IflowStep) {
   if (!step.file || !step.fileFound) {
-    app.error = `The file of step "${step.name}" was not found in the export (${step.file ?? 'no reference'}).`;
+    app.error = step.note ? `Step "${step.name}": ${step.note}`
+      : `The file of step "${step.name}" was not found in the export (${step.file ?? 'no reference'}).`;
     return;
   }
   await openFile(step.file);

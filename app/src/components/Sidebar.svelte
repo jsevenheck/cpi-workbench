@@ -99,9 +99,9 @@
     <div class="steps" aria-label="iFlow steps">
       <div class="group static">iFlow steps <button class="icon" title="Rescan" onclick={() => { refreshFiles(); loadIflowSteps(); }}>↻</button></div>
       {#each app.iflowSteps as s}
-        <button class="file step" class:missing={!s.fileFound} title={`${s.iflow} · ${s.type}${s.componentVersion ? ' ' + s.componentVersion : ''} · ${s.file ?? ''}`}
+        <button class="file step" class:missing={!s.fileFound} title={`${s.iflow} · ${s.type}${s.componentVersion ? ' ' + s.componentVersion : ''} · ${s.file ?? ''}${s.note ? ' · ' + s.note : ''}`}
           onclick={() => openIflowStep(s)}>
-          <span class="kind {s.type}">{s.type === 'groovy' ? 'G' : s.type === 'xslt' ? 'X' : '!'}</span>{s.name || s.id}
+          <span class="kind {s.type}">{s.type === 'groovy' ? 'G' : s.type === 'xslt' ? 'X' : s.type === 'xsd' ? 'V' : '!'}</span>{s.name || s.id}
         </button>
       {/each}
     </div>
@@ -142,6 +142,7 @@
   .kind { display: inline-block; width: 16px; font-size: 10px; font-weight: 700; font-family: var(--mono); }
   .kind.groovy { color: var(--ok); }
   .kind.xslt { color: var(--accent); }
+  .kind.xsd { color: var(--warn); }
   .kind.error { color: var(--err); }
   @media (max-width: 800px) { .side { width: 100%; border-right: none; border-bottom: 1px solid var(--border); max-height: 35vh; } }
 </style>

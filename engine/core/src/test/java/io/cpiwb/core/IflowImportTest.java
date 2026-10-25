@@ -39,7 +39,7 @@ class IflowImportTest {
         Map<String, Object> r = IflowImport.importZip(zip, project, null);
         assertEquals("iflows/Order_Replication", r.get("imported"));
         List<Object> steps = (List<Object>) r.get("steps");
-        assertEquals(2, steps.size(), () -> Json.write(r));
+        assertEquals(5, steps.size(), () -> Json.write(r));
         Map<String, Object> g = (Map<String, Object>) steps.get(0);
         assertEquals("groovy", g.get("type"));
         assertEquals("enrich", g.get("function"));
@@ -49,6 +49,17 @@ class IflowImportTest {
         assertEquals("xslt", x.get("type"));
         assertEquals("iflows/Order_Replication/src/main/resources/mapping/order.xsl", x.get("file"));
         assertTrue((Boolean) x.get("fileFound"));
+
+        Map<String, Object> blankFn = (Map<String, Object>) steps.get(2);
+        assertEquals("processData", blankFn.get("function"));
+        assertEquals("groovy-1.x", blankFn.get("profile"));
+        Map<String, Object> dynamic = (Map<String, Object>) steps.get(3);
+        assertEquals("xslt", dynamic.get("type"));
+        assertEquals(false, dynamic.get("fileFound"));
+        assertTrue(dynamic.get("note").toString().contains("xsltmappingname"));
+        Map<String, Object> xsd = (Map<String, Object>) steps.get(4);
+        assertEquals("xsd", xsd.get("type"));
+        assertEquals("iflows/Order_Replication/src/main/resources/xsd/order.xsd", xsd.get("file"));
     }
 
     @Test

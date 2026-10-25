@@ -304,9 +304,10 @@ public final class XsltStep {
         if (failedPhase != null) {
             result.with("failedPhase", failedPhase);
         }
-        List<Object> d = new ArrayList<>();
+        // Saxon reports some static errors once per template rule; show each only once.
+        java.util.Set<Object> d = new java.util.LinkedHashSet<>();
         diags.forEach(x -> d.add(x.toJson()));
-        result.with("diagnostics", d);
+        result.with("diagnostics", new ArrayList<>(d));
         List<Object> m = new ArrayList<>();
         messages.forEach(x -> m.add(x.toJson()));
         result.with("messages", m);
@@ -385,10 +386,26 @@ public final class XsltStep {
         if (msg == null && e.getCause() != null) {
             msg = e.getCause().getMessage();
         }
+        msg = editionHint(msg);
         return new Diagnostic(severity, msg, code,
                 loc == null ? null : displayId(loc.getSystemId()),
                 loc == null ? -1 : loc.getLineNumber(),
                 loc == null ? -1 : loc.getColumnNumber());
+    }
+
+    /** Explains Saxon's "needs PE/EE" errors: CPI runs Saxon-EE, the simulator Saxon-HE. */
+    static String editionHint(String msg) {
+        if (msg == null) {
+            return null;
+        }
+        msg = msg.replaceFirst("^net\\.sf\\.saxon\\.trans\\.XPathException: ", "");
+        if (msg.contains("needs Saxon-PE") || msg.contains("xsl:evaluate is not available")) {
+            return msg + ". CPI runs Saxon-EE, which supports this; use the Saxon-HE 12 profile to test it.";
+        }
+        if (msg.contains("requires Saxon-EE")) {
+            return msg + ". CPI runs Saxon-EE; the simulator only has Saxon-HE and cannot run this.";
+        }
+        return msg;
     }
 
     static String displayId(String systemId) {

@@ -88,7 +88,7 @@ await page.getByRole('tab', { name: 'Tests' }).click();
 await page.getByRole('button', { name: 'Run all tests' }).click();
 await page.locator('.sum').waitFor({ timeout: 30000 });
 const sum = await page.locator('.sum').innerText();
-if (!/5 passed/.test(sum) || !/0 failed/.test(sum)) fail('test summary: ' + sum);
+if (!/6 passed/.test(sum) || !/0 failed/.test(sum)) fail('test summary: ' + sum);
 if (shots) await page.screenshot({ path: path.join(shots, 'g4-tests.png') });
 
 if (errors.length) fail('browser errors: ' + errors.join(' | '));

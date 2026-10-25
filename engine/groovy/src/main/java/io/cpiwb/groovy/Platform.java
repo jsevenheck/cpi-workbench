@@ -40,6 +40,9 @@ public final class Platform {
     private final Map<String, Map<String, Object>> credentials;
     private final List<Map<String, Object>> valueMappings;
     private final boolean mplEnabled;
+    private Map<String, Object> numberRanges = Map.of();
+    private final Map<String, Long> numberNext = new LinkedHashMap<>();
+    private final Map<String, String> numberByCorrelation = new LinkedHashMap<>();
 
     private final List<Object> apiCalls = new ArrayList<>();
     private final List<Object> mplProperties = new ArrayList<>();
@@ -76,7 +79,6 @@ public final class Platform {
     // ---------------------------------------------------------------- secure store
 
     public Map<String, Object> credential(String alias) {
-        recordCall("SecureStoreService", "getUserCredential", alias);
         return alias == null ? null : credentials.get(alias);
     }
 
@@ -103,9 +105,87 @@ public final class Platform {
     @SuppressWarnings("unchecked")
     public Object pdParameter(String parameterId, String partnerId, String type) {
         recordCall("PartnerDirectoryService", "getParameter", parameterId, partnerId, type);
+        Map<String, Object> params = pdRawParameters(partnerId);
+        return pdValue(parameterId, partnerId, params == null ? null : params.get(parameterId));
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> pdRawParameters(String partnerId) {
         Object partner = partners.get(partnerId);
-        Map<String, Object> params = partner instanceof Map ? Json.obj((Map<String, Object>) partner, "parameters") : null;
-        Object v = params == null ? null : params.get(parameterId);
+        return partner instanceof Map ? Json.obj((Map<String, Object>) partner, "parameters") : null;
+    }
+
+    /**
+     * Parameters of a partner whose IDs match a pattern with SQL LIKE wildcards ({@code _}, {@code %},
+     * escape {@code \}) as documented for {@code getParametersMatchingPattern}; null pattern = all.
+     * {@code binary} selects BinaryData (true) or String (false) parameters.
+     */
+    public Map<String, Object> pdParameters(String method, String pattern, String partnerId, boolean binary) {
+        recordCall("PartnerDirectoryService", method, pattern, partnerId, binary ? "BinaryData" : "String");
+        java.util.regex.Pattern re = pattern == null ? null : likePattern(pattern);
+        Map<String, Object> out = new LinkedHashMap<>();
+        Map<String, Object> params = pdRawParameters(partnerId);
+        if (params != null) {
+            for (Map.Entry<String, Object> e : params.entrySet()) {
+                if (re != null && !re.matcher(e.getKey()).matches()) {
+                    continue;
+                }
+                Object v = pdValue(e.getKey(), partnerId, e.getValue());
+                if (v != null && (v instanceof BinaryData) == binary) {
+                    out.put(e.getKey(), v);
+                }
+            }
+        }
+        return out;
+    }
+
+    private static java.util.regex.Pattern likePattern(String pattern) {
+        if (pattern.indexOf('[') >= 0 || pattern.indexOf(']') >= 0) {
+            throw new IllegalArgumentException("The pattern must not contain '[' or ']': " + pattern);
+        }
+        StringBuilder re = new StringBuilder();
+        for (int i = 0; i < pattern.length(); i++) {
+            char ch = pattern.charAt(i);
+            if (ch == '\\' && i + 1 < pattern.length()) {
+                re.append(java.util.regex.Pattern.quote(String.valueOf(pattern.charAt(++i))));
+            } else if (ch == '_') {
+                re.append('.');
+            } else if (ch == '%') {
+                re.append(".*");
+            } else {
+                re.append(java.util.regex.Pattern.quote(String.valueOf(ch)));
+            }
+        }
+        return java.util.regex.Pattern.compile(re.toString(), java.util.regex.Pattern.DOTALL);
+    }
+
+    /** Authorized users of a partner ({@code "authorizedUsers": [...]} in the mocked directory). */
+    @SuppressWarnings("unchecked")
+    public List<String> pdAuthorizedUsers(String partnerId) {
+        recordCall("PartnerDirectoryService", "getAuthorizedUsers", partnerId);
+        List<String> out = new ArrayList<>();
+        Object partner = partners.get(partnerId);
+        if (partner instanceof Map) {
+            for (Object u : Json.arr((Map<String, Object>) partner, "authorizedUsers")) {
+                out.add(String.valueOf(u));
+            }
+        }
+        return out;
+    }
+
+    @SuppressWarnings("unchecked")
+    public String pdPartnerIdOfAuthorizedUser(String user) {
+        recordCall("PartnerDirectoryService", "getPartnerIdOfAuthorizedUser", user);
+        for (Map.Entry<String, Object> e : partners.entrySet()) {
+            if (e.getValue() instanceof Map && Json.arr((Map<String, Object>) e.getValue(), "authorizedUsers").contains(user)) {
+                return e.getKey();
+            }
+        }
+        return null;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Object pdValue(String parameterId, String partnerId, Object v) {
         if (v == null || v instanceof String) {
             return v;
         }
@@ -180,55 +260,97 @@ public final class Platform {
 
     // ---------------------------------------------------------------- keystore
 
-    /** One KeystoreService call: getKey, getCertificate, getCertificateChain or getKeyPair. */
+    /**
+     * One KeystoreService call: getKey, getCertificate, getCertificateChain or getKeyPair. As in SAP's
+     * Javadoc, an unknown alias or an entry of the wrong kind gives null; a key that cannot be
+     * recovered (wrong key password) gives IllegalStateException.
+     */
     public <T> T keystore(String method, String alias, Class<T> type) throws KeystoreException {
         recordCall("KeystoreService", method, alias);
         KeyStore ks = loadKeystore();
         try {
             if (alias == null || !ks.containsAlias(alias)) {
-                throw new KeystoreException("Alias " + alias + " not found in the simulator's keystore ("
-                        + keystoreConfig.get("file") + ")");
+                return null;
             }
             Object r;
             switch (method) {
                 case "getCertificate":
                     r = ks.getCertificate(alias);
                     break;
-                case "getCertificateChain": {
-                    Certificate[] chain = ks.getCertificateChain(alias);
-                    Certificate c = ks.getCertificate(alias);
-                    r = chain != null ? chain : c == null ? null : new Certificate[] {c};
+                case "getCertificateChain":
+                    r = ks.getCertificateChain(alias);
                     break;
-                }
                 case "getKey":
                     r = key(ks, alias);
                     break;
                 case "getKeyPair": {
                     Key k = key(ks, alias);
                     Certificate c = ks.getCertificate(alias);
-                    if (!(k instanceof PrivateKey) || c == null) {
-                        throw new KeystoreException("Alias " + alias + " is not a key pair entry");
-                    }
-                    r = new KeyPair(c.getPublicKey(), (PrivateKey) k);
+                    r = k instanceof PrivateKey && c != null ? new KeyPair(c.getPublicKey(), (PrivateKey) k) : null;
                     break;
                 }
                 default:
                     throw new IllegalArgumentException(method);
             }
             return type.cast(r);
-        } catch (java.security.GeneralSecurityException e) {
+        } catch (java.security.KeyStoreException e) {
             throw new KeystoreException("Keystore access for alias " + alias + " failed: " + e.getMessage(), e);
         }
     }
 
-    private Key key(KeyStore ks, String alias) throws java.security.GeneralSecurityException, KeystoreException {
-        Map<String, Object> kp = Json.obj(keystoreConfig, "keyPasswords");
-        String pw = kp != null && kp.get(alias) != null ? kp.get(alias).toString() : Json.str(keystoreConfig, "password", "");
-        Key k = ks.getKey(alias, pw.toCharArray());
-        if (k == null) {
-            throw new KeystoreException("Alias " + alias + " is a certificate entry without a key");
+    /** Key managers over the simulator keystore, or over just the given alias. */
+    public javax.net.ssl.KeyManager[] keyManagers(String method, String alias) throws KeystoreException {
+        recordCall("KeystoreService", method, alias);
+        KeyStore ks = loadKeystore();
+        try {
+            KeyStore source = ks;
+            char[] pw = keyPassword(alias == null ? "" : alias).toCharArray();
+            if (alias != null) {
+                if (!ks.isKeyEntry(alias)) {
+                    return null;
+                }
+                source = KeyStore.getInstance("PKCS12");
+                source.load(null, null);
+                source.setKeyEntry(alias, ks.getKey(alias, pw), pw, ks.getCertificateChain(alias));
+            }
+            javax.net.ssl.KeyManagerFactory f = javax.net.ssl.KeyManagerFactory.getInstance(
+                    javax.net.ssl.KeyManagerFactory.getDefaultAlgorithm());
+            f.init(source, pw);
+            return f.getKeyManagers();
+        } catch (IOException | java.security.GeneralSecurityException e) {
+            throw new IllegalStateException("Key managers for the simulator keystore failed: " + e.getMessage(), e);
         }
-        return k;
+    }
+
+    /** Trust managers over the certificates of the simulator keystore. */
+    public javax.net.ssl.TrustManager[] trustManagers(String method) throws KeystoreException {
+        recordCall("KeystoreService", method);
+        KeyStore ks = loadKeystore();
+        try {
+            javax.net.ssl.TrustManagerFactory f = javax.net.ssl.TrustManagerFactory.getInstance(
+                    javax.net.ssl.TrustManagerFactory.getDefaultAlgorithm());
+            f.init(ks);
+            return f.getTrustManagers();
+        } catch (java.security.GeneralSecurityException e) {
+            throw new IllegalStateException("Trust managers for the simulator keystore failed: " + e.getMessage(), e);
+        }
+    }
+
+    private String keyPassword(String alias) {
+        Map<String, Object> kp = Json.obj(keystoreConfig, "keyPasswords");
+        return kp != null && kp.get(alias) != null ? kp.get(alias).toString() : Json.str(keystoreConfig, "password", "");
+    }
+
+    private Key key(KeyStore ks, String alias) throws java.security.KeyStoreException {
+        if (!ks.isKeyEntry(alias)) {
+            return null;
+        }
+        try {
+            return ks.getKey(alias, keyPassword(alias).toCharArray());
+        } catch (java.security.UnrecoverableKeyException | java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException("The key of alias " + alias + " cannot be recovered (check keyPasswords "
+                    + "in platform/keystore.json): " + e.getMessage(), e);
+        }
     }
 
     private KeyStore loadKeystore() throws KeystoreException {
@@ -268,6 +390,45 @@ public final class Platform {
             throw new IOException("File outside the project: " + name);
         }
         return p;
+    }
+
+    // ---------------------------------------------------------------- number ranges
+
+    /**
+     * Next value of a mocked number range ({@code platform/number-ranges.json}:
+     * {@code {"NAME": {"next": 1000, "min": 1, "max": 9999, "fieldLength": 6, "rotate": true}}}).
+     * Values count up within one run only; nothing is written back. The same correlation ID returns the
+     * same value again, as SAP documents.
+     */
+    public String nextNumber(String name, String correlationId) throws com.sap.it.api.nrc.exception.NumberRangeConfigException {
+        recordCall("NumberRangeConfigurationService", "getNextValuefromNumberRange", name, correlationId);
+        if (correlationId != null && numberByCorrelation.containsKey(name + "\0" + correlationId)) {
+            return numberByCorrelation.get(name + "\0" + correlationId);
+        }
+        Object def = name == null ? null : numberRanges.get(name);
+        if (!(def instanceof Map)) {
+            throw new com.sap.it.api.nrc.exception.NumberRangeConfigException("Number range " + name
+                    + " is not defined in the simulator's platform/number-ranges.json");
+        }
+        @SuppressWarnings("unchecked")
+        Map<String, Object> d = (Map<String, Object>) def;
+        long min = Json.num(d, "min", 0);
+        long max = Json.num(d, "max", Long.MAX_VALUE);
+        long next = numberNext.containsKey(name) ? numberNext.get(name) : Json.num(d, "next", min);
+        if (next > max) {
+            if (!Json.bool(d, "rotate", false)) {
+                throw new com.sap.it.api.nrc.exception.NumberRangeConfigException("Number range " + name
+                        + " is exhausted (max " + max + ")");
+            }
+            next = min;
+        }
+        numberNext.put(name, next + 1);
+        long width = Json.num(d, "fieldLength", 0);
+        String value = width > 0 ? String.format("%0" + width + "d", next) : Long.toString(next);
+        if (correlationId != null) {
+            numberByCorrelation.put(name + "\0" + correlationId, value);
+        }
+        return value;
     }
 
     // ---------------------------------------------------------------- message processing log
@@ -325,6 +486,8 @@ public final class Platform {
         Map<String, Object> partners = pd == null ? null : Json.obj(pd, "partners");
         r.partners = partners == null ? Map.of() : partners;
         r.keystoreConfig = Json.obj(p, "keystore");
+        Map<String, Object> nr = Json.obj(p, "numberRanges");
+        r.numberRanges = nr == null ? Map.of() : nr;
         return r;
     }
 }

@@ -9,7 +9,7 @@
         "result": null
     },
     "pd.getParameter(.., Integer)": {
-        "exception": "com.sap.it.api.pd.exception.PartnerDirectoryException",
+        "exception": "java.lang.IllegalArgumentException",
         "message": "Unsupported parameter type java.lang.Integer (String or com.sap.it.api.pd.BinaryData)"
     },
     "pd.getPartnerId(missing)": {
@@ -22,11 +22,29 @@
         "exception": "java.lang.IllegalArgumentException",
         "message": "parameterId must not be null or empty"
     },
+    "pd.getCertificateParameter(missing)": {
+        "result": null
+    },
+    "pd.getAuthorizedUsers(missing)": {
+        "result": "java.util.ArrayList: []"
+    },
+    "pd.getPartnerIdOfAuthorizedUser(missing)": {
+        "result": null
+    },
+    "pd.getParameterIdsMatchingPattern(bracket)": {
+        "exception": "java.lang.IllegalArgumentException",
+        "message": "The pattern must not contain '[' or ']': [x]"
+    },
     "pd.methods": [
         "public <T> T com.sap.it.api.pd.PartnerDirectoryService.getParameter(java.lang.String,java.lang.String,java.lang.Class<T>) throws com.sap.it.api.pd.exception.PartnerDirectoryException",
-        "public java.lang.Object com.sap.it.api.pd.PartnerDirectoryService.getCertificateParameter(java.lang.Object...)",
+        "public <T> java.util.Map<java.lang.String, T> com.sap.it.api.pd.PartnerDirectoryService.getParameters(java.lang.String,java.lang.Class<T>) throws com.sap.it.api.pd.exception.PartnerDirectoryException",
+        "public <T> java.util.Map<java.lang.String, T> com.sap.it.api.pd.PartnerDirectoryService.getParametersMatchingPattern(java.lang.String,java.lang.String,java.lang.Class<T>) throws com.sap.it.api.pd.exception.PartnerDirectoryException",
         "public java.lang.String com.sap.it.api.pd.PartnerDirectoryService.getAlternativePartnerId(java.lang.String,java.lang.String,java.lang.String) throws com.sap.it.api.pd.exception.PartnerDirectoryException",
-        "public java.lang.String com.sap.it.api.pd.PartnerDirectoryService.getPartnerId(java.lang.String,java.lang.String,java.lang.String) throws com.sap.it.api.pd.exception.PartnerDirectoryException"
+        "public java.lang.String com.sap.it.api.pd.PartnerDirectoryService.getPartnerId(java.lang.String,java.lang.String,java.lang.String) throws com.sap.it.api.pd.exception.PartnerDirectoryException",
+        "public java.lang.String com.sap.it.api.pd.PartnerDirectoryService.getPartnerIdOfAuthorizedUser(java.lang.String) throws com.sap.it.api.pd.exception.PartnerDirectoryException",
+        "public java.security.cert.Certificate com.sap.it.api.pd.PartnerDirectoryService.getCertificateParameter(java.lang.String,java.lang.String) throws com.sap.it.api.pd.exception.PartnerDirectoryException",
+        "public java.util.Collection<java.lang.String> com.sap.it.api.pd.PartnerDirectoryService.getParameterIdsMatchingPattern(java.lang.String,java.lang.String,java.lang.Class<?>) throws com.sap.it.api.pd.exception.PartnerDirectoryException",
+        "public java.util.List<java.lang.String> com.sap.it.api.pd.PartnerDirectoryService.getAuthorizedUsers(java.lang.String) throws com.sap.it.api.pd.exception.PartnerDirectoryException"
     ],
     "ks.service": {
         "result": "com.sap.it.api.keystore.KeystoreService: com.sap.it.api.keystore.KeystoreService"
@@ -47,10 +65,46 @@
         "exception": "com.sap.it.api.keystore.exception.KeystoreException",
         "message": "No keystore configured for the simulator: create platform/keystore.json with {\"file\": \"keystore.p12\", \"password\": \"...\"}"
     },
+    "ks.getKeyManagers(missing)": {
+        "exception": "com.sap.it.api.keystore.exception.KeystoreException",
+        "message": "No keystore configured for the simulator: create platform/keystore.json with {\"file\": \"keystore.p12\", \"password\": \"...\"}"
+    },
     "ks.methods": [
         "public java.security.Key com.sap.it.api.keystore.KeystoreService.getKey(java.lang.String) throws com.sap.it.api.keystore.exception.KeystoreException",
         "public java.security.KeyPair com.sap.it.api.keystore.KeystoreService.getKeyPair(java.lang.String) throws com.sap.it.api.keystore.exception.KeystoreException",
         "public java.security.cert.Certificate com.sap.it.api.keystore.KeystoreService.getCertificate(java.lang.String) throws com.sap.it.api.keystore.exception.KeystoreException",
-        "public java.security.cert.Certificate[] com.sap.it.api.keystore.KeystoreService.getCertificateChain(java.lang.String) throws com.sap.it.api.keystore.exception.KeystoreException"
-    ]
+        "public java.security.cert.Certificate[] com.sap.it.api.keystore.KeystoreService.getCertificateChain(java.lang.String) throws com.sap.it.api.keystore.exception.KeystoreException",
+        "public javax.net.ssl.KeyManager com.sap.it.api.keystore.KeystoreService.getKeyManager() throws com.sap.it.api.keystore.exception.KeystoreException",
+        "public javax.net.ssl.KeyManager com.sap.it.api.keystore.KeystoreService.getKeyManager(java.lang.String) throws com.sap.it.api.keystore.exception.KeystoreException",
+        "public javax.net.ssl.KeyManager[] com.sap.it.api.keystore.KeystoreService.getKeyManagers() throws com.sap.it.api.keystore.exception.KeystoreException",
+        "public javax.net.ssl.KeyManager[] com.sap.it.api.keystore.KeystoreService.getKeyManagers(java.lang.String) throws com.sap.it.api.keystore.exception.KeystoreException",
+        "public javax.net.ssl.TrustManager com.sap.it.api.keystore.KeystoreService.getTrustManager() throws com.sap.it.api.keystore.exception.KeystoreException",
+        "public javax.net.ssl.TrustManager[] com.sap.it.api.keystore.KeystoreService.getTrustManagers() throws com.sap.it.api.keystore.exception.KeystoreException"
+    ],
+    "ss.service": {
+        "result": "com.sap.it.api.securestore.SecureStoreService: com.sap.it.api.securestore.SecureStoreService"
+    },
+    "ss.getUserCredential(missing)": {
+        "exception": "com.sap.it.api.securestore.exception.SecureStoreException",
+        "message": "Could not fetch the credential for alias CPIWB_PROBE_DOES_NOT_EXIST_xxxxxxxx (not defined in the simulator's platform/credentials.json)"
+    },
+    "ss.getUserCredential(empty)": {
+        "exception": "com.sap.it.api.securestore.exception.SecureStoreException",
+        "message": "The alias must not be null or empty"
+    },
+    "ss.getAccesTokenForOauth2ClientCredential(missing)": {
+        "exception": "com.sap.it.api.securestore.exception.SecureStoreException",
+        "message": "Could not fetch the credential for alias CPIWB_PROBE_DOES_NOT_EXIST_xxxxxxxx (not defined in the simulator's platform/credentials.json)"
+    },
+    "nrc.service": {
+        "result": "com.sap.it.api.nrc.NumberRangeConfigurationService: com.sap.it.api.nrc.NumberRangeConfigurationService"
+    },
+    "nrc.getNextValuefromNumberRange(missing)": {
+        "exception": "com.sap.it.api.nrc.exception.NumberRangeConfigException",
+        "message": "Number range CPIWB_PROBE_DOES_NOT_EXIST_xxxxxxxx is not defined in the simulator's platform/number-ranges.json"
+    },
+    "factory.getService(ITApi)": {
+        "exception": "com.sap.it.api.exception.InvalidContextException",
+        "message": "UnsupportedInSimulator: com.sap.it.api.ITApi is not simulated (supported: SecureStoreService, ValueMappingApi, PartnerDirectoryService, KeystoreService, NumberRangeConfigurationService)"
+    }
 }

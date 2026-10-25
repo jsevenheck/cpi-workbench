@@ -88,6 +88,26 @@ public final class GroovyEngine implements RpcHandler {
         return params;
     }
 
+    /** Test-case attachments: {"file": "..."} entries are read relative to the case and sent as Base64. */
+    @SuppressWarnings("unchecked")
+    private static List<Object> attachments(List<Object> list, Path dir, Path root) throws IOException {
+        List<Object> out = new ArrayList<>();
+        for (Object o : list) {
+            Map<String, Object> m = new LinkedHashMap<>((Map<String, Object>) o);
+            Object file = m.remove("file");
+            if (file != null) {
+                Path p = dir.resolve(file.toString()).normalize();
+                if (!p.startsWith(root)) {
+                    throw new IllegalArgumentException("Attachment file is outside the project: " + file);
+                }
+                m.put("base64", java.util.Base64.getEncoder().encodeToString(Files.readAllBytes(p)));
+                m.putIfAbsent("name", p.getFileName().toString());
+            }
+            out.add(m);
+        }
+        return out;
+    }
+
     public Map<String, Object> runTests(Path target) throws IOException {
         TestRunner tr = new TestRunner(this, profile).register("groovy", (tc, dir, root, params) -> {
             Object ref = tc.get("script");
@@ -109,6 +129,9 @@ public final class GroovyEngine implements RpcHandler {
                 input.put("properties", in.get("properties"));
                 if (in.get("soapHeaders") != null) {
                     input.put("soapHeaders", in.get("soapHeaders"));
+                }
+                if (in.get("attachments") != null) {
+                    input.put("attachments", attachments(Json.arr(in, "attachments"), dir, root));
                 }
             }
             params.put("input", input);

@@ -135,6 +135,7 @@ public final class ScriptRunner {
         exchange.getIn().getHeaders().putAll(in.getHeaders());
         exchange.getProperties().putAll(in.getProperties());
         MessageSupport<?> message = newMessage(fn.getParameterTypes()[0], exchange, diags);
+        message.setAttachments(attachments(Json.obj(req, "input")));
         List<SoapHeader> inSoap = soapHeaders(Json.obj(req, "input"));
         if (message instanceof com.sap.gateway.ip.core.customdev.util.Message) {
             ((com.sap.gateway.ip.core.customdev.util.Message) message).setSoapHeaders(inSoap);
@@ -208,6 +209,34 @@ public final class ScriptRunner {
             }
         }
         return out;
+    }
+
+    /** Input attachments: [{name, contentType, text | base64}]. */
+    @SuppressWarnings("unchecked")
+    private static Map<String, javax.activation.DataHandler> attachments(Map<String, Object> input) {
+        Map<String, javax.activation.DataHandler> out = new LinkedHashMap<>();
+        for (Object o : Json.arr(input, "attachments")) {
+            if (o instanceof Map) {
+                Map<String, Object> m = (Map<String, Object>) o;
+                String name = Json.str(m, "name", "attachment" + (out.size() + 1));
+                String type = Json.str(m, "contentType", "application/octet-stream");
+                byte[] data = m.get("base64") != null
+                        ? java.util.Base64.getMimeDecoder().decode(Json.str(m, "base64", ""))
+                        : Json.str(m, "text", "").getBytes(StandardCharsets.UTF_8);
+                out.put(name, new javax.activation.DataHandler(new BytesDataSource(name, type, data)));
+            }
+        }
+        return out;
+    }
+
+    /** In-memory attachment content (javax.activation has no byte-array data source of its own). */
+    private record BytesDataSource(String name, String contentType, byte[] data) implements javax.activation.DataSource {
+        public InputStream getInputStream() { return new ByteArrayInputStream(data); }
+        public java.io.OutputStream getOutputStream() throws java.io.IOException {
+            throw new java.io.IOException("Read-only attachment");
+        }
+        public String getContentType() { return contentType; }
+        public String getName() { return name; }
     }
 
     private static String xml(Element element) {
@@ -593,6 +622,7 @@ public final class ScriptRunner {
             {"valueMappings", "value-mappings.json"},
             {"partnerDirectory", "partner-directory.json"},
             {"keystore", "keystore.json"},
+            {"numberRanges", "number-ranges.json"},
     };
 
     private static String hash(String s) {

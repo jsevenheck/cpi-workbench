@@ -39,7 +39,8 @@ public final class ProjectFiles {
         for (String sub : List.of("mappings", "schemas", "scripts", "tests", "platform")) {
             Files.createDirectories(dir.resolve(sub));
         }
-        // Mocked platform data for the Groovy simulator (secure store, value mappings, partner directory).
+        // Mocked platform data for the Groovy simulator (secure store, value mappings, partner directory,
+        // number ranges).
         // A keystore is optional: platform/keystore.json naming a PKCS#12 or JKS file next to it.
         Path creds = dir.resolve("platform/credentials.json");
         if (!Files.exists(creds)) {
@@ -58,6 +59,11 @@ public final class ProjectFiles {
                     + "      \"parameters\": { \"RECEIVER_URL\": \"https://example.invalid/receiver\" },\n"
                     + "      \"alternativePartners\": [ { \"agency\": \"SAP\", \"scheme\": \"GLN\", \"id\": \"4000000000001\" } ]\n"
                     + "    }\n  }\n}\n", StandardCharsets.UTF_8);
+        }
+        Path nr = dir.resolve("platform/number-ranges.json");
+        if (!Files.exists(nr)) {
+            Files.writeString(nr, "{\n  \"EXAMPLE_RANGE\": { \"next\": 1, \"min\": 1, \"max\": 999999, \"fieldLength\": 6, \"rotate\": false }\n}\n",
+                    StandardCharsets.UTF_8);
         }
         Path cfg = dir.resolve("cpi-workbench.json");
         if (!Files.exists(cfg)) {

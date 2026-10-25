@@ -1,0 +1,14 @@
+{
+  "name": "Groovy: read a message attachment",
+  "step": "groovy",
+  "profile": "groovy-1.x",
+  "script": "../../scripts/read-delivery-note.groovy",
+  "input": {
+    "body": { "file": "../standard-order/input.xml" },
+    "attachments": [ { "file": "delivery-note.txt", "contentType": "text/plain" } ]
+  },
+  "expect": {
+    "headers": { "DeliveryNote": "Delivery DN-4711" },
+    "properties": { "AttachmentCount": "1" }
+  }
+}

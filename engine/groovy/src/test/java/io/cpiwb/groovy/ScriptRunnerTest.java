@@ -215,11 +215,19 @@ class ScriptRunnerTest {
     @Test
     void partnerDirectoryAndKeystore(@TempDir Path tmp) throws Exception {
         Path platformDir = Files.createDirectories(tmp.resolve("platform"));
-        Files.copy(Path.of(getClass().getResource("/platform/test-keystore.p12").toURI()), platformDir.resolve("ks.p12"));
+        Path p12 = Path.of(getClass().getResource("/platform/test-keystore.p12").toURI());
+        Files.copy(p12, platformDir.resolve("ks.p12"));
+        java.security.KeyStore store = java.security.KeyStore.getInstance("PKCS12");
+        try (java.io.InputStream ksIn = Files.newInputStream(p12)) {
+            store.load(ksIn, "changeit".toCharArray());
+        }
+        Files.write(platformDir.resolve("partner.crt"), store.getCertificate("partner_cert").getEncoded());
         Files.writeString(platformDir.resolve("logo.bin"), "LOGO");
         Files.writeString(platformDir.resolve("partner-directory.json"), "{\"partners\": {\"P1\": {"
-                + "\"parameters\": {\"ADDRESS\": \"https://p1.example\","
-                + " \"XSD\": {\"contentType\": \"text/xml\", \"file\": \"logo.bin\"}},"
+                + "\"parameters\": {\"ADDRESS\": \"https://p1.example\", \"ADDR_2\": \"b\", \"ADDRXY\": \"c\","
+                + " \"XSD\": {\"contentType\": \"text/xml\", \"file\": \"logo.bin\"},"
+                + " \"CERT\": {\"contentType\": \"crt\", \"file\": \"partner.crt\"}},"
+                + "\"authorizedUsers\": [\"sb-user-1\"],"
                 + "\"alternativePartners\": [{\"agency\": \"SAP\", \"scheme\": \"GLN\", \"id\": \"400\"}]}}}");
         Files.writeString(platformDir.resolve("keystore.json"), "{\"file\": \"ks.p12\", \"password\": \"changeit\"}");
         String s = IMPORT + "import com.sap.it.api.ITApiFactory\n"
@@ -235,12 +243,20 @@ class ScriptRunnerTest {
                 + "  BinaryData b = pd.getParameter('XSD', pid, BinaryData)\n"
                 + "  message.setProperty('bin', new String(b.getData(), 'UTF-8') + ' ' + b.getContentType())\n"
                 + "  message.setProperty('missing', String.valueOf(pd.getParameter('NOPE', pid, String)))\n"
+                + "  message.setProperty('like', pd.getParameterIdsMatchingPattern('ADDR\\\\_%', pid, String).join(','))\n"
+                + "  message.setProperty('strings', pd.getParameters(pid, String).keySet().join(','))\n"
+                + "  message.setProperty('pdCert', pd.getCertificateParameter('CERT', pid).getSubjectX500Principal().getName())\n"
+                + "  message.setProperty('owner', pd.getPartnerIdOfAuthorizedUser('sb-user-1'))\n"
+                + "  message.setProperty('users', pd.getAuthorizedUsers(pid).join(','))\n"
+                + "  try { pd.getParameter('ADDRESS', pid, Integer) } catch (IllegalArgumentException e) { message.setProperty('badType', 'IAE') }\n"
                 + "  def ks = ITApiFactory.getService(KeystoreService, null)\n"
                 + "  message.setProperty('alg', ks.getKeyPair('sim_key').getPrivate().getAlgorithm())\n"
                 + "  message.setProperty('cert', ks.getCertificate('partner_cert').getSubjectX500Principal().getName())\n"
                 + "  message.setProperty('chain', ks.getCertificateChain('sim_key').length)\n"
-                + "  try { ks.getKey('partner_cert'); message.setProperty('noKey', 'no error') }"
-                + " catch (com.sap.it.api.keystore.exception.KeystoreException e) { message.setProperty('noKey', 'error') }\n"
+                + "  message.setProperty('noKey', String.valueOf(ks.getKey('partner_cert')))\n"
+                + "  message.setProperty('unknown', String.valueOf(ks.getCertificate('nope')))\n"
+                + "  message.setProperty('km', ks.getKeyManagers('sim_key').length)\n"
+                + "  message.setProperty('tm', ks.getTrustManager().getAcceptedIssuers().length > 0)\n"
                 + "  return message\n}";
         Map<String, Object> r = run(s, in("", List.of(), List.of()), Json.o().with("baseDir", tmp.toString()));
         assertTrue(Json.bool(r, "ok", false), () -> Json.write(r));
@@ -249,17 +265,51 @@ class ScriptRunnerTest {
         assertEquals("https://p1.example", entry(r, "properties", "address").get("value"));
         assertEquals("LOGO text/xml", entry(r, "properties", "bin").get("value"));
         assertEquals("null", entry(r, "properties", "missing").get("value"));
+        assertEquals("ADDR_2", entry(r, "properties", "like").get("value"), "escaped _ matches only itself");
+        assertEquals("ADDRESS,ADDR_2,ADDRXY", entry(r, "properties", "strings").get("value"));
+        assertEquals("CN=cpiwb test", entry(r, "properties", "pdCert").get("value"));
+        assertEquals("P1", entry(r, "properties", "owner").get("value"));
+        assertEquals("sb-user-1", entry(r, "properties", "users").get("value"));
+        assertEquals("IAE", entry(r, "properties", "badType").get("value"));
         assertEquals("RSA", entry(r, "properties", "alg").get("value"));
         assertEquals("CN=cpiwb test", entry(r, "properties", "cert").get("value"));
         assertEquals("1", entry(r, "properties", "chain").get("value"));
-        assertEquals("error", entry(r, "properties", "noKey").get("value"));
+        assertEquals("null", entry(r, "properties", "noKey").get("value"), "a certificate entry has no key");
+        assertEquals("null", entry(r, "properties", "unknown").get("value"), "SAP documents null for an unknown alias");
+        assertEquals("1", entry(r, "properties", "km").get("value"));
+        assertEquals("true", entry(r, "properties", "tm").get("value"));
+    }
 
-        String unknownAlias = IMPORT + "import com.sap.it.api.ITApiFactory\nimport com.sap.it.api.keystore.KeystoreService\n"
+    @Test
+    void oauthTokensNumberRangesAndUnknownServices() throws Exception {
+        String s = IMPORT + "import com.sap.it.api.ITApiFactory\n"
+                + "import com.sap.it.api.securestore.SecureStoreService\n"
+                + "import com.sap.it.api.nrc.NumberRangeConfigurationService\n"
+                + "import com.sap.it.api.exception.InvalidContextException\n"
                 + "def Message processData(Message message) {\n"
-                + "  ITApiFactory.getService(KeystoreService, null).getCertificate('nope')\n  return message\n}";
-        Map<String, Object> bad = run(unknownAlias, in("", List.of(), List.of()), Json.o().with("baseDir", tmp.toString()));
-        assertFalse(Json.bool(bad, "ok", true));
-        assertTrue(Json.write(bad).contains("Alias nope not found"), () -> Json.write(bad));
+                + "  def t = ITApiFactory.getService(SecureStoreService, null).getAccesTokenForOauth2ClientCredential('OAUTH')\n"
+                + "  message.setProperty('token', t.getAccessToken() + ' ' + t.getTokenResponse().get('access_token'))\n"
+                + "  def nr = ITApiFactory.getService(NumberRangeConfigurationService, null)\n"
+                + "  def a = nr.getNextValuefromNumberRange('INV', 'c1')\n"
+                + "  def b = nr.getNextValuefromNumberRange('INV', 'c1')\n"
+                + "  def c = nr.getNextValuefromNumberRange('INV', 'c2')\n"
+                + "  def d = nr.getNextValuefromNumberRange('INV', 'c3')\n"
+                + "  message.setProperty('numbers', [a, b, c, d].join(','))\n"
+                + "  try { ITApiFactory.getService(com.sap.it.api.ITApi, null) }"
+                + " catch (InvalidContextException e) { message.setProperty('invalid', e.getMessage()) }\n"
+                + "  return message\n}";
+        Map<String, Object> platform = Json.o()
+                .with("credentials", Json.o().with("OAUTH", Json.o().with("accessToken", "tok-1")))
+                .with("numberRanges", Json.o().with("INV", Json.o().with("next", 98).with("min", 1).with("max", 99)
+                        .with("fieldLength", 4).with("rotate", true)));
+        Map<String, Object> r = run(s, in("", List.of(), List.of()), Json.o().with("platform", platform));
+        assertTrue(Json.bool(r, "ok", false), () -> Json.write(r));
+        assertEquals("tok-1 tok-1", entry(r, "properties", "token").get("value"));
+        assertEquals("0098,0098,0099,0001", entry(r, "properties", "numbers").get("value"));
+        assertTrue(String.valueOf(entry(r, "properties", "invalid").get("value")).startsWith("UnsupportedInSimulator"),
+                () -> Json.write(r));
+        long secureStoreCalls = Json.arr(r, "apiCalls").stream().filter(c -> "SecureStoreService".equals(((Map<?, ?>) c).get("api"))).count();
+        assertEquals(1, secureStoreCalls, () -> Json.write(r));
     }
 
     @Test
@@ -371,5 +421,26 @@ class ScriptRunnerTest {
             Map<String, Object> x = run(ext, in("", List.of(), List.of()), null);
             assertTrue(Json.write(x).contains("UnsupportedInSimulator: ProcessDirectService"), () -> Json.write(x));
         }
+    }
+
+    @Test
+    void inputAttachments() throws Exception {
+        String s = IMPORT + "def Message processData(Message message) {\n"
+                + "  def a = message.getAttachments()\n"
+                + "  message.setProperty('names', a.keySet().join(','))\n"
+                + "  message.setProperty('text', a['note.txt'].getContent().text)\n"
+                + "  message.setProperty('type', a['logo.bin'].getContentType())\n"
+                + "  message.setProperty('size', message.getAttachmentsSize())\n"
+                + "  return message\n}";
+        Map<String, Object> input = in("", List.of(), List.of());
+        input.put("attachments", List.of(
+                Json.o().with("name", "note.txt").with("contentType", "text/plain").with("text", "hallo"),
+                Json.o().with("name", "logo.bin").with("contentType", "image/png").with("base64", "AAEC")));
+        Map<String, Object> r = run(s, input, null);
+        assertTrue(Json.bool(r, "ok", false), () -> Json.write(r));
+        assertEquals("note.txt,logo.bin", entry(r, "properties", "names").get("value"));
+        assertEquals("hallo", entry(r, "properties", "text").get("value"));
+        assertEquals("image/png", entry(r, "properties", "type").get("value"));
+        assertEquals("8", entry(r, "properties", "size").get("value"));
     }
 }

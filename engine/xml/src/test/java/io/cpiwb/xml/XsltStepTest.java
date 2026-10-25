@@ -243,4 +243,27 @@ class XsltStepTest {
         assertFalse(Json.bool(bad, "ok", true));
         assertTrue(Json.write(bad).contains("com.example.DoesNotExist is not available"), () -> Json.write(bad));
     }
+
+    @Test
+    void explainsEditionOnlyFeatures() {
+        String schema = "<xsl:stylesheet version=\"3.0\" xmlns:xsl=\"http://www.w3.org/1999/XSL/Transform\">"
+                + "<xsl:import-schema namespace=\"urn:x\"/><xsl:template match=\"/\"><r/></xsl:template>"
+                + "<xsl:template match=\"a\"><r/></xsl:template></xsl:stylesheet>";
+        Map<String, Object> r = run(schema, input("<x/>", List.of(), List.of()), null);
+        assertFalse(Json.bool(r, "ok", true));
+        List<Object> d = Json.arr(r, "diagnostics");
+        assertEquals(d.size(), new java.util.HashSet<>(d).size(), () -> "duplicate diagnostics: " + d);
+        assertTrue(Json.write(r).contains("CPI runs Saxon-EE"), () -> Json.write(r));
+
+        String hof = "<xsl:stylesheet version=\"3.0\" xmlns:xsl=\"http://www.w3.org/1999/XSL/Transform\">"
+                + "<xsl:template match=\"/\"><r><xsl:value-of select=\"for-each((1,2), function($x){$x*2})\"/></r>"
+                + "</xsl:template></xsl:stylesheet>";
+        Map<String, Object> h = run(hof, input("<x/>", List.of(), List.of()), null);
+        if ("saxon-he-9.9".equals(io.cpiwb.xml.compat.SaxonCompat.PROFILE)) {
+            assertFalse(Json.bool(h, "ok", true));
+            assertTrue(Json.write(h).contains("use the Saxon-HE 12 profile"), () -> Json.write(h));
+        } else {
+            assertTrue(Json.bool(h, "ok", false), () -> Json.write(h));
+        }
+    }
 }

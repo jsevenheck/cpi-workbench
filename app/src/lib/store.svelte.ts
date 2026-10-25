@@ -150,6 +150,7 @@ export interface CaseExtras {
 
 export const xsd = $state({
   schemaPath: null as string | null,
+  casePath: null as string | null,
   schema: '',
   savedSchema: '',
   body: '',
@@ -243,6 +244,8 @@ export function closeProject() {
   groovy.scriptPath = null;
   groovy.casePath = null;
   groovy.caseExtras = null;
+  xsd.schemaPath = null;
+  xsd.casePath = null;
   app.iflowSteps = [];
 }
 
@@ -315,6 +318,7 @@ export async function openFile(path: string) {
       xsd.schemaPath = path;
       xsd.schema = content;
       xsd.savedSchema = content;
+      xsd.casePath = null;
       app.tool = 'xsd';
     } else {
       if (app.tool === 'xsd') xsd.body = content;
@@ -636,12 +640,49 @@ async function loadGroovyCase(path: string, dir: string, tc: any) {
   await runGroovy();
 }
 
+export async function saveXsdCase(name: string, withExpected: boolean) {
+  if (!app.project) throw new Error('Open a project folder to save test cases.');
+  if (!xsd.schemaPath || xsd.schema !== xsd.savedSchema) {
+    if (!(await saveSchema())) return;
+  }
+  const dir = 'tests/' + slug(name);
+  const tc: any = {
+    name,
+    step: 'xsd',
+    schema: relative(dir, xsd.schemaPath!),
+    input: { body: { file: 'input.xml' } },
+  };
+  await writeFile(dir + '/input.xml', xsd.body);
+  if (withExpected && xsd.result) {
+    // Only the verdict: which part of a message is stable enough for errorContains is up to the user.
+    tc.expect = xsd.result.ok ? { valid: xsd.result.valid } : { ok: false };
+  }
+  await writeFile(dir + '/case.json', JSON.stringify(tc, null, 2) + '\n');
+  xsd.casePath = dir + '/case.json';
+  app.status = 'Saved test case ' + dir;
+  await refreshFiles();
+}
+
+async function loadXsdCase(path: string, dir: string, tc: any) {
+  const schemaPath = joinPath(dir, tc.schema);
+  xsd.schemaPath = schemaPath;
+  xsd.schema = await readFile(schemaPath);
+  xsd.savedSchema = xsd.schema;
+  const body = tc.input?.body;
+  xsd.body = typeof body === 'string' ? body : body?.file ? await readFile(joinPath(dir, body.file)) : body?.text ?? '';
+  xsd.casePath = path;
+  app.tool = 'xsd';
+  app.status = 'Loaded test case ' + (tc.name ?? path);
+  await runXsd();
+}
+
 export async function loadCase(path: string) {
   const tc = JSON.parse(await readFile(path));
   const dir = path.split('/').slice(0, -1).join('/');
   if (tc.step === 'groovy') return loadGroovyCase(path, dir, tc);
+  if (tc.step === 'xsd') return loadXsdCase(path, dir, tc);
   if ((tc.step ?? 'xslt') !== 'xslt') {
-    app.error = 'XSD cases run in the test runner; they cannot be opened in an editor view yet.';
+    app.error = `Step '${tc.step}' cannot be opened in an editor view.`;
     return;
   }
   const mappingPath = joinPath(dir, tc.xslt);

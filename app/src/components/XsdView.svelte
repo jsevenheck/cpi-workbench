@@ -1,11 +1,22 @@
 <script lang="ts">
   import Editor from './Editor.svelte';
-  import { app, xsd, xslt, runXsd, saveSchema } from '../lib/store.svelte';
+  import { app, xsd, xslt, runXsd, saveSchema, saveXsdCase, ask } from '../lib/store.svelte';
 
   let markers = $derived((xsd.result?.diagnostics ?? []).filter((d) => d.line && d.systemId && d.systemId !== 'input'
     && d.systemId !== 'input.xml' && !d.systemId.endsWith('input.xml')));
   let inputMarkers = $derived((xsd.result?.diagnostics ?? []).filter((d) => d.line && (d.systemId === 'input.xml' || d.systemId === 'input')));
   let dirty = $derived(xsd.schema !== xsd.savedSchema);
+
+  async function newCase() {
+    const suggested = (xsd.schemaPath?.split('/').pop()?.replace(/\.xsd$/, '') ?? 'schema') + '-case';
+    const r = await ask('Save as test case (name)', suggested, 'Use the current verdict as expected result');
+    if (!r) return;
+    try {
+      await saveXsdCase(r.value, r.checked);
+    } catch (e) {
+      app.error = (e as Error).message;
+    }
+  }
 
   function useXsltOutput() {
     if (xslt.result?.output) xsd.body = xslt.result.output.body;
@@ -27,6 +38,7 @@
       <h2>{xsd.schemaPath ?? 'schema.xsd (unsaved)'}{#if dirty}<span class="dirty">●</span>{/if}</h2>
       <div class="spacer"></div>
       <button class="small" onclick={saveSchema} disabled={!app.project}>Save</button>
+      <button class="small" onclick={newCase} disabled={!app.project} title="Save document, schema reference and verdict as a regression test">Save as test</button>
       <button class="primary small" onclick={runXsd} disabled={xsd.running || !xsd.schema.trim()}>Validate</button>
     </header>
     <div class="body schema">

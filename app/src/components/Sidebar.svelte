@@ -68,7 +68,7 @@
 
   function isActive(path: string) {
     return path === xslt.mappingPath || path === xsd.schemaPath || path === xslt.casePath
-      || path === groovy.scriptPath || path === groovy.casePath;
+      || path === groovy.scriptPath || path === groovy.casePath || path === xsd.casePath;
   }
 </script>
 

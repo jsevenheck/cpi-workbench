@@ -20,6 +20,8 @@ install it and open a project folder. Any folder works; **Init** adds `mappings/
   the case is open and are shown below the input.
 * **Tests** runs all test cases of the project, each on the engine its profile names.
 * **XSD** validates a document against a schema; **XPath** evaluates an expression (1.0 or 3.1).
+  XSD test cases open in the XSD view too. Saving one from there stores the verdict (valid or
+  not); add `errorContains` to `case.json` by hand if a message should be checked.
 * **Import iFlow** unpacks an iFlow exported from Integration Suite (zip) into `iflows/` and lists
   its Groovy Script, XSLT Mapping and XML Validator steps. Clicking a step opens its file with the
   step's function name and script version. Steps that choose their mapping from a header at runtime

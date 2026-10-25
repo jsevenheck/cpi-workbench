@@ -84,6 +84,18 @@ const verdict = await page.locator('.verdict').innerText();
 if (!verdict.includes('Valid')) fail('xsd verdict: ' + verdict);
 if (shots) await page.screenshot({ path: path.join(shots, '5-xsd.png') });
 
+// 6b) An XSD test case opens in the XSD view and validates; saving it as a new case keeps the verdict.
+await page.locator('.tree .file', { hasText: 'invalid-salesorder/case.json' }).click();
+await page.locator('.verdict', { hasText: 'Invalid' }).waitFor({ timeout: 10000 });
+if (!(await page.locator('.result').innerText()).includes('Item')) fail('xsd case diagnostics lack Item');
+await page.getByRole('button', { name: 'Save as test' }).click();
+await page.getByRole('dialog').getByRole('textbox').fill('xsd-copy');
+await page.getByRole('dialog').getByRole('checkbox').check();
+await page.getByRole('dialog').getByRole('button', { name: 'OK' }).click();
+await page.locator('.tree .file', { hasText: 'xsd-copy/case.json' }).waitFor({ timeout: 10000 });
+const saved = JSON.parse(fs.readFileSync(path.join(project, 'tests/xsd-copy/case.json'), 'utf8'));
+if (saved.step !== 'xsd' || saved.schema !== '../../schemas/salesorder.xsd' || saved.expect?.valid !== false) fail('saved xsd case: ' + JSON.stringify(saved));
+
 // 7) XPath.
 await page.getByRole('tab', { name: 'XPath' }).click();
 await page.getByLabel('XPath expression').fill('count(//Item)');

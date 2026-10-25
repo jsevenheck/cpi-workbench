@@ -22,7 +22,7 @@ Automated checks:
 | Area | Built | Open items |
 |---|---|---|
 | XSLT Mapping step (both Saxon profiles, parameter binding, `hci:` functions, includes, `java:` calls, error lines) | ≈ 90 % | `java:` calls: JDK classes only (no classes from the iFlow's jars), Saxon-EE argument conversion only in simple cases. |
-| XSD validation | ≈ 85 % | XML Schema 1.0 only (JDK validator). XSD test cases run in the runner but cannot be opened in the editor view. |
+| XSD validation | ≈ 90 % | XML Schema 1.0 only (JDK validator). |
 | XPath tester | ≈ 95 % | — |
 | Groovy Script 1.x (Groovy 2.4.21, Camel 2.24.3, Script API v1) | ≈ 90 % | Overloads that take Camel's `Attachment` type. Camel 3.14 variant in case the fingerprint shows it (F30). |
 | Groovy Script 2.x (Groovy 4.0.29, Camel 3.14.7, Script API v2) | ≈ 90 % | ProcessDirect raises `UnsupportedInSimulator`. Methods the runtime class may have beyond the interface. |
@@ -48,6 +48,7 @@ Automated checks:
 * XSLT features that need Saxon-PE/EE now say that CPI supports them and which profile to use.
 * Windows: script jars in `lib/` were locked while the Groovy engine ran (found by the new Windows
   CI tests). The engine now loads copies.
+* XSD test cases open in the XSD view and can be saved from it.
 * Corrected: earlier docs said XSLT `java:` calls could use the project's jars; they cannot.
 
 ## Next steps

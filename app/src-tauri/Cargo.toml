@@ -4,6 +4,8 @@ version = "0.1.0"
 description = "Local simulator for SAP Integration Suite (Cloud Integration) XSLT mappings and Groovy scripts"
 edition = "2021"
 license = "Apache-2.0"
+repository = "https://github.com/jsevenheck/cpi-workbench"
+homepage = "https://github.com/jsevenheck/cpi-workbench"
 
 [lib]
 name = "cpi_workbench_lib"

@@ -1,5 +1,9 @@
 # CPI Workbench
 
+[![build](https://github.com/jsevenheck/cpi-workbench/actions/workflows/build.yml/badge.svg)](https://github.com/jsevenheck/cpi-workbench/actions/workflows/build.yml)
+[![release](https://img.shields.io/github/v/release/jsevenheck/cpi-workbench?include_prereleases)](https://github.com/jsevenheck/cpi-workbench/releases/latest)
+[![license](https://img.shields.io/github/license/jsevenheck/cpi-workbench)](LICENSE)
+
 A lean, offline desktop app for testing **SAP Integration Suite (Cloud Integration)** mappings and
 scripts locally: enter a message (body, headers, exchange properties), run an **XSLT mapping** or a
 **Groovy script** and see the resulting body, headers, properties and log entries immediately,
@@ -33,13 +37,20 @@ Everything runs locally; the app never connects to a tenant.
 
 ![Groovy view](docs/images/screenshot-groovy.png)
 
+## Install
+
+Download the installer for Windows, macOS (Apple Silicon) or Linux from the
+**[latest release](https://github.com/jsevenheck/cpi-workbench/releases/latest)**. It brings its own
+engines and Java runtime. The installers are not code-signed yet; [Installing](docs/install.md)
+shows how to get past the first-start warning.
+
 ## Quick start
 
-1. Install the desktop app from the CI artifacts (unsigned for now; see the [user guide](docs/user-guide.md)).
-2. Open a folder as project and press **Init**, or open `examples/demo-project`.
-3. Open a mapping or script, enter the input message and press **Ctrl+Enter**.
+1. Open a folder as project and press **Init**, or open [`examples/demo-project`](examples/demo-project/README.md).
+2. Open a mapping or script, enter the input message and press **Ctrl+Enter**.
 
-Without installing anything but Java:
+Test cases also run on the command line with the engine jars from the release (Java 17+), or from
+source:
 
 ```sh
 mvn -f engine/pom.xml package -DskipTests
@@ -51,6 +62,7 @@ java -jar engine/groovy-v1/target/cpiwb-groovy-v1.jar test testdata/regression-p
 
 The [documentation index](docs/README.md) lists everything. The most used pages:
 
+* [Installing](docs/install.md)
 * [User guide](docs/user-guide.md): desktop app, command line, browser mode
 * [Test cases and platform data](docs/test-cases.md)
 * [Fidelity](docs/fidelity.md): what matches CPI and what is still to verify
@@ -58,7 +70,17 @@ The [documentation index](docs/README.md) lists everything. The most used pages:
 * [Building](docs/building.md)
 * [Plan and research ledger](docs/plan.md)
 
-## Licences of bundled components
+## Contributing
+
+Issues and pull requests are welcome; see [CONTRIBUTING](CONTRIBUTING.md) and the
+[changelog](CHANGELOG.md). Report security problems privately ([SECURITY](SECURITY.md)).
+
+## Licence
+
+CPI Workbench is licensed under the [Apache License 2.0](LICENSE). SAP, SAP Integration Suite and
+Cloud Integration are trademarks of SAP SE; this project is not affiliated with or endorsed by SAP.
+
+### Licences of bundled components
 
 Saxon-HE: MPL-2.0 · Groovy, Apache Camel: Apache-2.0 · Tauri, Monaco: MIT/Apache-2.0 ·
 OpenJDK runtime and GraalVM Native Image runtime: GPLv2 with Classpath Exception · JavaBeans

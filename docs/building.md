@@ -77,7 +77,26 @@ Pushes to `main`, tags `v*`, pull requests to `main` and manual runs (*Run workf
 `workflow_dispatch`) run everything on Linux, Windows (e2e, .msi/.exe) and macOS (Apple Silicon, .dmg).
 
 Native images must be built on each target OS; there is no cross-compilation.
-The installers are not code-signed yet.
+The installers are not code-signed yet. On macOS the app is signed ad hoc (`signingIdentity: "-"`,
+without hardened runtime, so the bundled JRE loads its libraries); it is not notarized.
+
+## Releasing
+
+A tag `v<version>` builds, tests and publishes a GitHub release with the installers, the engine
+jars and `SHA256SUMS.txt` (job `release` in `build.yml`). It runs only when every other job passes.
+
+1. In [`CHANGELOG.md`](../CHANGELOG.md), rename *Unreleased* to `## [<version>] - <date>`, add a new
+   empty *Unreleased* section and update the links at the bottom. The release notes are this section.
+2. Set the version in the app files: `node app/scripts/set-version.mjs <version>`.
+3. Commit, then tag and push:
+
+   ```sh
+   git tag v<version>
+   git push origin main v<version>
+   ```
+
+The job fails if the tag does not match the version in `tauri.conf.json` or if the changelog has no
+section for it. A version with a suffix (`0.2.0-rc.1`) becomes a pre-release.
 
 ## Native image metadata
 

@@ -24,7 +24,8 @@ CPIWB_REQUIRE_ENGINES=1 cargo test --manifest-path app/src-tauri/Cargo.toml   # 
 
 The end-to-end browser tests (`app/e2e/*.mjs`) need running engines; the steps are in `docs/building.md`.
 Native images (`engine/native/build-native.sh`) need GraalVM and are usually left to CI
-(`.github/workflows/build.yml`).
+(`.github/workflows/build.yml`). A pushed tag `v<version>` publishes a GitHub release; the steps are
+in `docs/building.md` (*Releasing*).
 
 ## Layout
 
@@ -52,6 +53,7 @@ Native images (`engine/native/build-native.sh`) need GraalVM and are usually lef
 * **When behaviour changes:**
   * Update the tests.
   * Update `docs/fidelity.md` and `docs/status.md`.
+  * Add a line under *Unreleased* in `CHANGELOG.md` for changes users notice.
   * If a probe's output changes, update the probe and its baseline in `probes/baseline-simulator/`.
 * **Test-only secrets** in `platform/` files, test resources and examples. Never use real tenant credentials or keys.
 * Code, comments, commit messages and docs are in English. Match the surrounding code style.

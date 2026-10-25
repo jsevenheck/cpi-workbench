@@ -27,6 +27,11 @@
     "active": true,
     "targets": "all",
     "category": "DeveloperTool",
+    "publisher": "CPI Workbench contributors",
+    "copyright": "Copyright 2026 CPI Workbench contributors. Apache-2.0.",
+    "license": "Apache-2.0",
+    "licenseFile": "../../LICENSE",
+    "homepage": "https://github.com/jsevenheck/cpi-workbench",
     "shortDescription": "Local SAP Cloud Integration mapping simulator",
     "icon": [
       "icons/32x32.png",
@@ -45,7 +50,9 @@
       }
     },
     "macOS": {
-      "minimumSystemVersion": "11.0"
+      "minimumSystemVersion": "11.0",
+      "signingIdentity": "-",
+      "hardenedRuntime": false
     },
     "resources": {
       "resources/engines/": "engines/",

@@ -33,6 +33,17 @@ jobs:
           java -jar engine/xml-he99/target/cpiwb-xml-he99.jar test testdata/regression-project/tests
           java -jar engine/groovy-v1/target/cpiwb-groovy-v1.jar test testdata/regression-project/tests
           java -jar engine/groovy-v2/target/cpiwb-groovy-v2.jar test testdata/regression-project/tests
+      # The engine jars run on any Java 17+ (command line, CI pipelines); a release attaches them.
+      - if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: engine-jars
+          path: |
+            engine/xml-he99/target/cpiwb-xml-he99.jar
+            engine/xml-he12/target/cpiwb-xml-he12.jar
+            engine/groovy-v1/target/cpiwb-groovy-v1.jar
+            engine/groovy-v2/target/cpiwb-groovy-v2.jar
+          if-no-files-found: error
 
   desktop:
     needs: engine-tests
@@ -156,3 +167,70 @@ jobs:
           node app/e2e/smoke.mjs "$demo"
           rm -rf "$demo" && cp -r testdata/regression-project "$demo"
           node app/e2e/groovy.mjs "$demo"
+
+  # A pushed tag v<version> publishes a GitHub release with the installers and engine jars, once
+  # every build and test job is green. The tag must match the app version (app/scripts/set-version.mjs).
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [engine-tests, desktop, ui-e2e]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tag matches the app version
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          app="$(node -p "require('./app/src-tauri/tauri.conf.json').version")"
+          if [ "$version" != "$app" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match the app version $app (run app/scripts/set-version.mjs)"
+            exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+      - uses: actions/download-artifact@v4
+        with:
+          path: downloaded
+      - name: Collect assets
+        run: |
+          mkdir assets
+          # Spaces become dashes: "CPI Workbench_0.1.0_x64-setup.exe" -> "CPI-Workbench_0.1.0_x64-setup.exe".
+          find downloaded/cpi-workbench-* -type f \( -name '*.msi' -o -name '*.exe' -o -name '*.dmg' -o -name '*.deb' -o -name '*.rpm' \) \
+            -exec sh -c 'cp "$1" "assets/$(basename "$1" | tr " " "-")"' _ {} \;
+          for jar in downloaded/engine-jars/*/target/*.jar; do
+            name="$(basename "$jar" .jar)"
+            cp "$jar" "assets/$name-$VERSION.jar"
+          done
+          (cd assets && sha256sum * > SHA256SUMS.txt)
+          ls -la assets
+          for kind in msi exe dmg deb rpm jar; do
+            ls assets/*."$kind" >/dev/null 2>&1 || { echo "::error::no .$kind file to release"; exit 1; }
+          done
+      - name: Release notes
+        run: |
+          # The CHANGELOG section of this version, then the install notes.
+          awk -v head="## [$VERSION]" 'index($0, head) == 1 {on=1; next} on && /^## / {exit} on' CHANGELOG.md > notes.md
+          if [ ! -s notes.md ]; then
+            echo "::error::CHANGELOG.md has no section '## [$VERSION]'"
+            exit 1
+          fi
+          url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/blob/$GITHUB_REF_NAME/docs/install.md"
+          {
+            echo
+            echo "## Install"
+            echo
+            echo "| System | File |"
+            echo "|---|---|"
+            echo "| Windows 10/11 (x64) | \`CPI-Workbench_${VERSION}_x64-setup.exe\` (per user, no admin rights) or the \`.msi\` |"
+            echo "| macOS 11+ (Apple Silicon) | \`CPI-Workbench_${VERSION}_aarch64.dmg\` |"
+            echo "| Linux x64 | \`.deb\` (Ubuntu 22.04+, Debian 12+) or \`.rpm\` (Fedora) |"
+            echo "| Command line, any OS with Java 17+ | \`cpiwb-*-${VERSION}.jar\` |"
+            echo
+            echo "The installers are not code-signed yet, so Windows and macOS warn on the first start."
+            echo "See [installing CPI Workbench]($url) for the steps. Checksums: \`SHA256SUMS.txt\`."
+          } >> notes.md
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          pre=""; case "$VERSION" in *-*) pre="--prerelease";; esac
+          gh release create "$GITHUB_REF_NAME" assets/* --title "CPI Workbench $VERSION" --notes-file notes.md --verify-tag $pre

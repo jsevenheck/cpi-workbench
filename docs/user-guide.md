@@ -2,8 +2,9 @@
 
 ## Desktop app
 
-Download the installer for your platform from the CI artifacts (see [Building](building.md)),
-install it and open a project folder. Any folder works; **Init** adds `mappings/`, `schemas/`,
+Download the installer for your platform from the
+[latest release](https://github.com/jsevenheck/cpi-workbench/releases/latest) (see
+[Installing](install.md)), install it and open a project folder. Any folder works; **Init** adds `mappings/`, `schemas/`,
 `scripts/`, `tests/` and example files in `platform/`.
 
 * Open a `.xsl` or `.groovy` file in the tree and enter the input body, headers and properties on the left.
@@ -56,9 +57,8 @@ install it and open a project folder. Any folder works; **Init** adds `mappings/
 * Groovy scripts run as ordinary Java code with your user's rights; there is no sandbox. Run only
   scripts you trust.
 
-The installers are not code-signed yet. On macOS, right-click the app and choose *Open* the first
-time. On Windows, SmartScreen asks once ("More info" → "Run anyway"). The Windows installer
-installs per user and needs no admin rights.
+The installers are not code-signed yet; [Installing](install.md) shows how to start them the
+first time. The Windows installer installs per user and needs no admin rights.
 
 The Groovy runtime starts only when the Groovy tab is used and stops after 10 idle minutes.
 

@@ -56,8 +56,9 @@ jobs:
         os: [windows-latest, macos-26, ubuntu-22.04]
     runs-on: ${{ matrix.os }}
     env:
-      # Without it, clang targets the runner's macOS version and the native engines would not
-      # start on older Macs. Matches bundle.macOS.minimumSystemVersion in tauri.conf.json.
+      # Without it, clang targets the runner's macOS version and the app would not start on older
+      # Macs. Matches bundle.macOS.minimumSystemVersion in tauri.conf.json. native-image does not
+      # pass it on to its linker, so the native engines get it as a linker option below.
       MACOSX_DEPLOYMENT_TARGET: "11.0"
     steps:
       - uses: actions/checkout@v4
@@ -83,8 +84,9 @@ jobs:
         run: |
           mkdir -p engine/native/out
           ni=native-image; [ "$RUNNER_OS" = "Windows" ] && ni=native-image.cmd
+          opts=(); [ "$RUNNER_OS" = "macOS" ] && opts=("-H:NativeLinkerOption=-mmacosx-version-min=$MACOSX_DEPLOYMENT_TARGET")
           for id in he99 he12; do
-            "$ni" --no-fallback -march=compatibility -jar engine/xml-$id/target/cpiwb-xml-$id.jar -o engine/native/out/cpiwb-xml-$id
+            "$ni" --no-fallback -march=compatibility "${opts[@]}" -jar engine/xml-$id/target/cpiwb-xml-$id.jar -o engine/native/out/cpiwb-xml-$id
           done
       - name: Smoke-test native engines
         shell: bash

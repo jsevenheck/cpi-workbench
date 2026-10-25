@@ -56,7 +56,8 @@
     },
     "resources": {
       "resources/engines/": "engines/",
-      "resources/jre/": "jre/"
+      "resources/jre/": "jre/",
+      "resources/licenses/": "licenses/"
     }
   }
 }

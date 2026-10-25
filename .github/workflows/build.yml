@@ -178,7 +178,7 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Tag matches the app version
+      - name: Tag matches the app and engine versions
         run: |
           version="${GITHUB_REF_NAME#v}"
           app="$(node -p "require('./app/src-tauri/tauri.conf.json').version")"
@@ -186,6 +186,12 @@ jobs:
             echo "::error::Tag $GITHUB_REF_NAME does not match the app version $app (run app/scripts/set-version.mjs)"
             exit 1
           fi
+          for f in engine/xml/src/main/java/io/cpiwb/xml/XmlEngine.java engine/groovy/src/main/java/io/cpiwb/groovy/GroovyEngine.java; do
+            if ! grep -q "String VERSION = \"$version\";" "$f"; then
+              echo "::error::$f does not have VERSION $version (run app/scripts/set-version.mjs)"
+              exit 1
+            fi
+          done
           echo "VERSION=$version" >> "$GITHUB_ENV"
       - uses: actions/download-artifact@v4
         with:

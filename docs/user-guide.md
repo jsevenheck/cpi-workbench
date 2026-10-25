@@ -58,7 +58,8 @@ Download the installer for your platform from the
   scripts you trust.
 
 The installers are not code-signed yet; [Installing](install.md) shows how to start them the
-first time. The Windows installer installs per user and needs no admin rights.
+first time. The Windows `setup.exe` installs per user and needs no admin rights; the `.msi` installs
+per machine and needs admin rights.
 
 The Groovy runtime starts only when the Groovy tab is used and stops after 10 idle minutes.
 

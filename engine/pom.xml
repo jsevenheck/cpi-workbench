@@ -6,7 +6,7 @@
 
   <groupId>io.cpiwb</groupId>
   <artifactId>cpiwb-engine-parent</artifactId>
-  <version>0.1.0-SNAPSHOT</version>
+  <version>0.1.0</version>
   <packaging>pom</packaging>
   <name>CPI Workbench engine</name>
 
@@ -37,6 +37,14 @@
   </dependencyManagement>
 
   <build>
+    <!-- The engine jars carry the licence texts of the components they bundle (licenses/README.md). -->
+    <resources>
+      <resource><directory>src/main/resources</directory></resource>
+      <resource>
+        <directory>${project.basedir}/../../licenses</directory>
+        <targetPath>META-INF/third-party</targetPath>
+      </resource>
+    </resources>
     <pluginManagement>
       <plugins>
         <plugin>

@@ -100,6 +100,15 @@ After a second review round:
 * Not changed, out of scope for local projects: path checks are lexical (a symlink inside the
   project can point outside), and a failed iFlow import leaves the files it already wrote.
 
+Before the first release (third review):
+
+* The installers and engine jars ship the licence texts and notices of the bundled components
+  (`licenses/`, plus a generated list of the desktop app's Rust crates and npm packages).
+* `set-version.mjs` accepts SemVer only and also sets the Maven poms (no more `-SNAPSHOT`) and the
+  version the engines report; the release job checks the engines against the tag.
+* Install docs: the `.msi` installs per machine (Tauri's WiX template), only the `setup.exe` per
+  user. The macOS "damaged" hint asks for the checksum before lifting the quarantine.
+
 ## Next steps
 
 1. Run the probes on a test tenant (Appendix A of the plan) and turn "to verify" into facts.

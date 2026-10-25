@@ -6,7 +6,7 @@
   <parent>
     <groupId>io.cpiwb</groupId>
     <artifactId>cpiwb-engine-parent</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.1.0</version>
   </parent>
   <artifactId>cpiwb-groovy-v2</artifactId>
   <name>CPI Workbench Groovy engine 2.x (Groovy 4.0.29, Camel 3.14, Script API v2)</name>

@@ -2,9 +2,10 @@
 //   * native XSLT engines -> src-tauri/binaries/<name>-<target-triple>[.exe]  (Tauri externalBin)
 //   * Groovy engine jars  -> src-tauri/resources/engines/                    (Tauri resources)
 //   * Java runtime for Groovy (optional, from CPIWB_JRE_DIR) -> src-tauri/resources/jre/
+//   * licence texts: licenses/ and the desktop app's own dependencies -> src-tauri/resources/licenses/
 // Without a bundled JRE the app uses JAVA_HOME / java on PATH (Java 17+) for Groovy.
 //   node scripts/prepare-sidecars.mjs [engineOutDir]
-import { execSync } from 'node:child_process';
+import { execFileSync, execSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -54,3 +55,11 @@ if (process.env.CPIWB_JRE_DIR) {
     'No Java runtime bundled. Groovy engines use JAVA_HOME or java on PATH (Java 17+).\n');
   console.log('no CPIWB_JRE_DIR set: Groovy will use the system Java');
 }
+
+const licenses = path.join(tauri, 'resources/licenses');
+fs.rmSync(licenses, { recursive: true, force: true });
+fs.cpSync(path.join(repo, 'licenses'), licenses, { recursive: true });
+fs.copyFileSync(path.join(repo, 'LICENSE'), path.join(licenses, 'LICENSE-cpi-workbench.txt'));
+execFileSync(process.execPath, [path.join(here, 'third-party-licenses.mjs'),
+  path.join(licenses, 'THIRD-PARTY-LICENSES-desktop.txt')], { stdio: 'inherit' });
+console.log(`${path.join(repo, 'licenses')} -> ${licenses}`);

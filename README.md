@@ -85,5 +85,7 @@ Cloud Integration are trademarks of SAP SE; this project is not affiliated with 
 Saxon-HE: MPL-2.0 · Groovy, Apache Camel: Apache-2.0 · Tauri, Monaco: MIT/Apache-2.0 ·
 OpenJDK runtime and GraalVM Native Image runtime: GPLv2 with Classpath Exception · JavaBeans
 Activation (javax.activation): CDDL/GPLv2+CE · test corpus from pizug/cpi-groovy-examples: MIT.
+The licence texts and notices are in [`licenses/`](licenses/README.md); the installers and jars
+include them.
 No SAP code or jars are included; the `com.sap.*` classes in `engine/groovy` are clean-room
 simulations written from SAP's public documentation.

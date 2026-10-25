@@ -27,6 +27,7 @@ First public release.
 - Test cases (`case.json`) for the command line and CI, with the engine jars.
 - XML runs read files inside the project only; `xsl:result-document` and `collection()` are not
   supported.
+- The installers and engine jars include the licence texts and notices of the bundled components.
 
 [Unreleased]: https://github.com/jsevenheck/cpi-workbench/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/jsevenheck/cpi-workbench/releases/tag/v0.1.0

@@ -20,7 +20,8 @@ The installers are **not code-signed** yet, so Windows and macOS warn on the fir
 ## Windows
 
 1. Run `CPI-Workbench_<version>_x64-setup.exe`. It installs for your user only and needs no admin
-   rights. The `.msi` does the same for software distribution tools.
+   rights. The `.msi` installs for all users of the machine and needs admin rights; it is meant for
+   administrators and software distribution tools.
 2. If SmartScreen says "Windows protected your PC", choose **More info** → **Run anyway**.
 
 Managed company devices may block unsigned installers altogether. Ask your IT department, or use the
@@ -31,11 +32,22 @@ command-line jars.
 1. Open the `.dmg` and drag **CPI Workbench** to *Applications*.
 2. On the first start, right-click the app and choose **Open**, then **Open** again. On recent
    macOS versions, open *System Settings → Privacy & Security* and choose **Open Anyway** instead.
-3. If macOS says the app "is damaged", the download is quarantined. Remove the flag once:
+3. If macOS says the app "is damaged", this usually means Gatekeeper refuses the unsigned app in
+   quarantine, but it can also mean the download is corrupt or not the original. Before you lift
+   the quarantine, make sure the `.dmg` comes from the release page above and that its checksum
+   matches the line in `SHA256SUMS.txt`:
+
+   ```sh
+   shasum -a 256 ~/Downloads/CPI-Workbench_<version>_aarch64.dmg
+   ```
+
+   Only if both are right, remove the quarantine flag once:
 
    ```sh
    xattr -dr com.apple.quarantine "/Applications/CPI Workbench.app"
    ```
+
+   If the checksum differs, delete the download and do not open it.
 
 ## Linux
 
@@ -66,3 +78,9 @@ See the [user guide](user-guide.md#command-line-ci-friendly) and [test cases](te
 3. Open a mapping or script, enter the input message and press **Ctrl+Enter**.
 
 The [user guide](user-guide.md) explains the rest.
+
+## Licences
+
+The installers contain a `licenses` folder with the licence texts of every bundled component (on
+macOS inside the app bundle, under `Contents/Resources/licenses`). The engine jars carry the same
+texts under `META-INF/third-party/`. The list is in [`licenses/README.md`](../licenses/README.md).

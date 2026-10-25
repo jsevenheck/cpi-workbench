@@ -14,7 +14,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-14]
+        os: [ubuntu-latest, windows-latest, macos-26]
     runs-on: ${{ matrix.os }}
     defaults:
       run: { shell: bash }
@@ -50,9 +50,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # macos-14 is Apple Silicon (Intel runners are no longer reliably available).
-        os: [windows-latest, macos-14, ubuntu-22.04]
+        # macos-26 is Apple Silicon (Intel runners are no longer reliably available).
+        # ubuntu-22.04 on purpose: Linux binaries need at least the glibc they were built
+        # against, so the oldest supported runner keeps the packages usable on more distributions.
+        os: [windows-latest, macos-26, ubuntu-22.04]
     runs-on: ${{ matrix.os }}
+    env:
+      # Without it, clang targets the runner's macOS version and the native engines would not
+      # start on older Macs. Matches bundle.macOS.minimumSystemVersion in tauri.conf.json.
+      MACOSX_DEPLOYMENT_TARGET: "11.0"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -86,6 +92,15 @@ jobs:
           ext=""; [ "$RUNNER_OS" = "Windows" ] && ext=".exe"
           python3 engine/native/workload.py engine/native/out/cpiwb-xml-he99$ext serve --stdio
           python3 engine/native/workload.py engine/native/out/cpiwb-xml-he12$ext serve --stdio
+      - name: Native engines start on macOS 11 (minos)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          for id in he99 he12; do
+            minos=$(otool -l engine/native/out/cpiwb-xml-$id | awk '/LC_BUILD_VERSION/{f=1} f&&/minos/{print $2; exit}')
+            echo "cpiwb-xml-$id: minos $minos"
+            [ "${minos%%.*}" -le 11 ] || { echo "::error::cpiwb-xml-$id needs macOS $minos, the app promises 11.0"; exit 1; }
+          done
       - uses: actions/setup-node@v4
         with: { node-version: "22", cache: npm, cache-dependency-path: app/package-lock.json }
       - uses: dtolnay/rust-toolchain@stable

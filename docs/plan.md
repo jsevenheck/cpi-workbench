@@ -14,7 +14,7 @@ Decisions taken: build-vs-reuse principle accepted (§3), XSLT first, tenant pro
 
 | Phase | Status |
 |---|---|
-| 0 — Spikes | **Done.** (a) Saxon-HE 9.9.1-8 and 12.9 compile to GraalVM native executables (Linux measured; Windows/macOS via CI, not yet run). (b) CPI parameter binding and `hci:setHeader`/`setProperty` work as Saxon integrated extension functions in both versions — no `xsl:message` workaround needed. (d) Tauri ⇄ engine JSON-RPC over stdio works. (e) Budgets measured, see below. (c) Groovy spike: not started. |
+| 0 — Spikes | **Done.** (a) Saxon-HE 9.9.1-8 and 12.9 compile to GraalVM native executables (Linux measured; Windows/macOS built and smoke-tested in CI, not measured). (b) CPI parameter binding and `hci:setHeader`/`setProperty` work as Saxon integrated extension functions in both versions — no `xsl:message` workaround needed. (d) Tauri ⇄ engine JSON-RPC over stdio works. (e) Budgets measured, see below. (c) Groovy spike: skipped, Groovy was built directly in Phase 3. |
 | 1 — Probe kit | **Written** (`probes/`), simulator baseline recorded; waiting for a tenant run. |
 | 2 — XSLT MVP | **Done**: XSLT simulator with live mode, both Saxon profiles, parameter binding view, XSD validation, XPath 1.0/3.1, test cases + runner + CLI, desktop app and browser mode. |
 | 3 — Groovy MVP | **Done**: engines for Groovy Script 1.x (Groovy 2.4.21, Camel 2.24.3) and 2.x (Groovy 4.0.29, Camel 3.14.7), clean-room Script API, MPL, Secure Store + Value Mapping mocks, Groovy view in the app, test cases, bundled Java 17 runtime with AppCDS and idle shutdown. Message methods of v1 and v2 follow SAP's published interfaces (F29). |

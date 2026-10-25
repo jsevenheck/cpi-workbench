@@ -10,6 +10,8 @@ scripts locally: enter a message (body, headers, exchange properties), run an **
 without deploy → trace → monitor round trips.
 
 The goal is to behave like the real CPI step, not like a generic XSLT tester or Groovy console.
+That behaviour follows SAP's documentation, SAP's published interfaces and Saxon's and Camel's code;
+it has not been checked against a tenant yet ([Fidelity](docs/fidelity.md)).
 
 **XSLT Mapping**
 

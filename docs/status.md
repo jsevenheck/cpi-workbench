@@ -16,7 +16,7 @@ Automated checks:
 * Regression test cases (`testdata/regression-project`): 6.
 * Browser end-to-end tests: `app/e2e/smoke.mjs` and `groovy.mjs`.
 * UI unit tests (`npm --prefix app test`): the JSON, XSLT and Groovy formatters, test-case rows, path comparison.
-* CI runs the engine tests on Linux, Windows and macOS, the browser e2e tests on Linux and Windows, and the shell tests on all three before it builds the installers. All of them passed on Windows and macOS runners for the first time on 2026-10-25 (`d237e25`).
+* CI runs the engine tests on Linux, Windows and macOS, the browser e2e tests on Linux and Windows, and the shell tests on all three before it builds the installers. All of them passed on Windows and macOS runners for the first time on 2026-10-25 (`d237e25`). macOS runs on `macos-26` (GitHub deprecated `macos-14`); the native engines are built for macOS 11 and CI checks that.
 
 ## By area
 

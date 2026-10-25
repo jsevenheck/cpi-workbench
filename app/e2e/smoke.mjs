@@ -74,6 +74,8 @@ await page.getByRole('dialog').getByRole('button', { name: 'OK' }).click();
 await page.locator('section.mapping h2', { hasText: 'order-to-salesorder-copy.xsl' }).waitFor({ timeout: 10000 });
 if (fs.readFileSync(path.join(project, 'mappings/order-to-salesorder-copy.xsl'), 'utf8') !== xslBefore) fail('Save as wrote different content');
 if (fs.readFileSync(path.join(project, 'mappings/order-to-salesorder.xsl'), 'utf8') !== xslBefore) fail('Save as changed the open file');
+// The tree reloads after the save and the copy takes the original's row; a click before that lands on the copy.
+await page.locator('.tree .file', { hasText: 'order-to-salesorder-copy.xsl' }).waitFor();
 await mappingFile.click();
 await page.locator('section.mapping h2[title="mappings/order-to-salesorder.xsl"]').waitFor();
 

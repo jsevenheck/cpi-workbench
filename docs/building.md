@@ -75,6 +75,9 @@ node app/e2e/groovy.mjs /tmp/demo-project [screenshotDir]
 
 Pushes to `main`, tags `v*`, pull requests to `main` and manual runs (*Run workflow*,
 `workflow_dispatch`) run everything on Linux, Windows (e2e, .msi/.exe) and macOS (Apple Silicon, .dmg).
+The macOS runner is `macos-26`; `MACOSX_DEPLOYMENT_TARGET=11.0` keeps the native engines starting on
+macOS 11 (the app's `minimumSystemVersion`), and a CI step checks that. The Linux bundles are built on
+`ubuntu-22.04` on purpose, so they need only that release's glibc.
 
 Native images must be built on each target OS; there is no cross-compilation.
 The installers are not code-signed yet. On macOS the app is signed ad hoc (`signingIdentity: "-"`,

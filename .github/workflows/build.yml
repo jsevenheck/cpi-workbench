@@ -8,12 +8,18 @@ on:
 
 jobs:
   engine-tests:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-14]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run: { shell: bash }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: "17", cache: maven }
-      - name: Unit tests (Saxon 9.9 and Saxon 12 engines)
+      - name: Unit tests (both Saxon and both Groovy engines)
         run: mvn -B -f engine/pom.xml verify
       - name: Workload on the JVM engines
         run: |
@@ -80,13 +86,26 @@ jobs:
       - name: Type-check UI
         working-directory: app
         run: npm run check
+      - name: Stage sidecars
+        working-directory: app
+        env:
+          CPIWB_JRE_DIR: ${{ runner.temp }}/jre
+        run: node scripts/prepare-sidecars.mjs
+      # The shell's own path to the engines (stdio, native executables, bundled JRE) on this OS.
+      - name: Shell tests against the bundled engines
+        working-directory: app
+        env:
+          CPIWB_REQUIRE_ENGINES: "1"
+          JAVA_HOME: ${{ runner.temp }}/jre
+        run: |
+          npm run build
+          cargo test --manifest-path src-tauri/Cargo.toml
       # Default shell (pwsh on Windows): in Git bash, /usr/bin/link shadows MSVC's link.exe.
       - name: Bundle desktop app
         working-directory: app
         env:
           CPIWB_JRE_DIR: ${{ runner.temp }}/jre
         run: |
-          node scripts/prepare-sidecars.mjs
           npx tauri build ${{ runner.os == 'Linux' && '--bundles deb,rpm' || '' }}
       - uses: actions/upload-artifact@v4
         with:
@@ -101,7 +120,13 @@ jobs:
 
   ui-e2e:
     needs: engine-tests
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run: { shell: bash }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -117,8 +142,13 @@ jobs:
           java -jar engine/groovy-v1/target/cpiwb-groovy-v1.jar serve --http 7778 &
           java -jar engine/groovy-v2/target/cpiwb-groovy-v2.jar serve --http 7779 &
           java -jar engine/xml-he12/target/cpiwb-xml-he12.jar serve --http 7780 &
-          sleep 5
-          cp -r examples/demo-project /tmp/demo-project
-          node app/e2e/smoke.mjs /tmp/demo-project
-          rm -rf /tmp/demo-project && cp -r examples/demo-project /tmp/demo-project
-          node app/e2e/groovy.mjs /tmp/demo-project
+          for port in 7777 7778 7779 7780; do
+            for i in $(seq 60); do curl -s -o /dev/null "http://127.0.0.1:$port/" && break; sleep 1; done
+          done
+          # Forward slashes work for bash, Node and Java alike (cygpath exists only on Windows).
+          tmp="$RUNNER_TEMP"; command -v cygpath >/dev/null && tmp="$(cygpath -m "$tmp")"
+          demo="$tmp/demo-project"
+          cp -r examples/demo-project "$demo"
+          node app/e2e/smoke.mjs "$demo"
+          rm -rf "$demo" && cp -r examples/demo-project "$demo"
+          node app/e2e/groovy.mjs "$demo"

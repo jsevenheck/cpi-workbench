@@ -1,0 +1,8 @@
+# LF everywhere, also on Windows checkouts: golden files and test inputs are compared byte for byte.
+* text=auto eol=lf
+*.png binary
+*.ico binary
+*.icns binary
+*.p12 binary
+*.jar binary
+*.zip binary

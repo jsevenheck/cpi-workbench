@@ -25,6 +25,19 @@ npx tauri build                                      # installer for the current
 npx tauri dev                                        # development (UI hot reload)
 ```
 
+## Shell tests
+
+`cargo test` in `app/src-tauri` checks the desktop shell's path to the engines: each engine is
+started over stdio and runs the whole demo project. It needs `npm run build` (the shell embeds the
+UI bundle) and the engine builds; it looks for the native engines in `engine/native/out` and for
+the jars in the engine `target/` folders. `JAVA_HOME` selects the Java runtime, e.g. the trimmed
+one from `build-jre.sh`. Without `CPIWB_REQUIRE_ENGINES=1` the test is skipped.
+
+```sh
+npm --prefix app run build
+CPIWB_REQUIRE_ENGINES=1 JAVA_HOME=/tmp/jre cargo test --manifest-path app/src-tauri/Cargo.toml
+```
+
 ## End-to-end tests (browser mode)
 
 ```sh
@@ -40,8 +53,14 @@ node app/e2e/groovy.mjs /tmp/demo-project [screenshotDir]
 
 ## CI and installers
 
-`.github/workflows/build.yml` builds Windows (.msi/.exe), macOS (Apple Silicon and Intel, .dmg)
-and Linux bundles. Native images must be built on each target OS; there is no cross-compilation.
+`.github/workflows/build.yml`:
+
+* runs the engine tests and demo cases on Linux, Windows and macOS,
+* runs the browser e2e tests on Linux and Windows,
+* runs the shell tests against the native engines and the trimmed JRE, then builds Windows
+  (.msi/.exe), macOS (Apple Silicon, .dmg) and Linux bundles.
+
+ Native images must be built on each target OS; there is no cross-compilation.
 The installers are not code-signed yet.
 
 ## Native image metadata

@@ -358,4 +358,67 @@ mod tests {
         engines.stop_idle(Duration::from_secs(0));
         engines.shutdown();
     }
+
+    /// The installed app's path through the shell: every engine over stdio, on a copy of the demo
+    /// project in the OS temp folder (Windows paths on Windows). Skipped unless CPIWB_REQUIRE_ENGINES
+    /// is set; CI sets it with CPIWB_ENGINE_DIR (native executables, jars) and JAVA_HOME (bundled JRE).
+    #[test]
+    fn all_engines_run_the_demo_project() {
+        if std::env::var_os("CPIWB_REQUIRE_ENGINES").is_none() {
+            return;
+        }
+        let demo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/demo-project");
+        let project = std::env::temp_dir().join(format!("cpiwb-demo-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&project);
+        copy_dir(&demo, &project);
+        let cases = count_cases(&project.join("tests"));
+        assert!(cases > 0);
+
+        let engines = Engines::default();
+        let mut passed = std::collections::BTreeSet::new();
+        for (name, _, _) in PROFILES {
+            assert!(engines.locate(name).is_some(), "{}", missing_message(name));
+            let info = engines.call(name, "engine.info", json!({})).unwrap();
+            assert_eq!(info["profile"], *name, "{info}");
+            let opened = engines.call(name, "project.open", json!({ "dir": project.to_string_lossy() })).unwrap();
+            let files = opened["files"].as_array().unwrap();
+            assert!(files.iter().any(|f| f["path"] == "tests/groovy-attachment/case.json"),
+                "project paths use '/': {opened}");
+            let r = engines.call(name, "tests.run", json!({})).unwrap();
+            assert_eq!(r["failed"], 0, "{name}: {r}");
+            for c in r["results"].as_array().unwrap() {
+                if c["status"] == "passed" {
+                    passed.insert(c["dir"].as_str().unwrap().replace('\\', "/"));
+                }
+            }
+        }
+        // Cases without a profile (XSD) run on both XML engines; every case passes somewhere.
+        assert_eq!(passed.len() as u64, cases, "cases passed on some engine: {passed:?}");
+
+        // Files written through the engine land in the project, nested folders included.
+        let w = engines.call("saxon-he-9.9", "file.write",
+            json!({ "path": "tests/new-case/input.xml", "content": "<a/>" })).unwrap();
+        assert_eq!(w["saved"], true);
+        assert!(project.join("tests").join("new-case").join("input.xml").is_file());
+        engines.shutdown();
+        let _ = std::fs::remove_dir_all(&project);
+    }
+
+    fn copy_dir(from: &Path, to: &Path) {
+        std::fs::create_dir_all(to).unwrap();
+        for e in std::fs::read_dir(from).unwrap() {
+            let e = e.unwrap();
+            let target = to.join(e.file_name());
+            if e.file_type().unwrap().is_dir() {
+                copy_dir(&e.path(), &target);
+            } else {
+                std::fs::copy(e.path(), target).unwrap();
+            }
+        }
+    }
+
+    fn count_cases(dir: &Path) -> u64 {
+        std::fs::read_dir(dir).unwrap().filter_map(Result::ok)
+            .filter(|e| e.path().join("case.json").is_file()).count() as u64
+    }
 }

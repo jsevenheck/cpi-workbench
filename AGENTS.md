@@ -18,6 +18,7 @@ java -jar engine/groovy-v1/target/cpiwb-groovy-v1.jar test examples/demo-project
 java -jar engine/groovy-v2/target/cpiwb-groovy-v2.jar test examples/demo-project/tests
 npm --prefix app run check                      # Svelte/TypeScript checks
 npm --prefix app run build                      # UI bundle for browser mode and e2e
+CPIWB_REQUIRE_ENGINES=1 cargo test --manifest-path app/src-tauri/Cargo.toml   # shell ⇄ engines over stdio (needs the UI bundle, engine builds; JAVA_HOME picks the JRE)
 ```
 
 The end-to-end browser tests (`app/e2e/*.mjs`) need running engines; the steps are in `docs/building.md`.

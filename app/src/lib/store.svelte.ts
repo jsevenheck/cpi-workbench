@@ -34,7 +34,7 @@ export const SAMPLE_INPUT = `<Order id="4711">
 </Order>
 `;
 
-export type StepTool = 'xslt' | 'groovy' | 'xsd' | 'xpath';
+export type StepTool = 'xslt' | 'groovy' | 'xsd' | 'xpath' | 'jsonpath';
 
 export const app = $state({
   project: null as null | { root: string; files: FileEntry[] },
@@ -172,6 +172,31 @@ export const xpath = $state({
   namespaces: [] as Row[],
   body: SAMPLE_INPUT,
   result: null as null | { ok: boolean; items: any[]; count: number; diagnostics: Diagnostic[]; engine: string },
+  running: false,
+});
+
+export const SAMPLE_JSON = `{
+  "id": "4711",
+  "items": [
+    { "sku": "M-100", "qty": 2, "price": 15.50 },
+    { "sku": "M-200", "qty": 1, "price": 7.25 }
+  ]
+}
+`;
+
+export interface JsonPathResult {
+  ok: boolean;
+  definite?: boolean;
+  items: { path: string | null; value: string; type: string }[];
+  count: number;
+  diagnostics: Diagnostic[];
+  engine: string;
+}
+
+export const jsonpath = $state({
+  expression: '$.items[?(@.qty > 1)].sku',
+  body: SAMPLE_JSON,
+  result: null as JsonPathResult | null,
   running: false,
 });
 
@@ -414,19 +439,21 @@ export async function saveFileView(): Promise<boolean> {
 }
 
 function stepBody(tool: StepTool) {
-  return tool === 'xsd' ? xsd.body : tool === 'xpath' ? xpath.body : tool === 'groovy' ? groovy.body : xslt.body;
+  return tool === 'xsd' ? xsd.body : tool === 'xpath' ? xpath.body : tool === 'jsonpath' ? jsonpath.body
+    : tool === 'groovy' ? groovy.body : xslt.body;
 }
 
 function setInput(path: string, content: string) {
-  // XSLT, XSD and XPath read XML only; a JSON body can only feed a Groovy script.
+  // XSLT, XSD and XPath read XML only; a JSON body feeds a Groovy script or JSONPath (both on a Groovy engine).
   const json = /\.json$/i.test(path) || /^\s*[[{]/.test(content);
   if (json && !app.profiles.some((p) => p.kind === 'groovy' && p.available)) {
-    app.error = `${path} is JSON: only a Groovy script takes a JSON body, and no Groovy engine is available.`;
+    app.error = `${path} is JSON: only a Groovy script or JSONPath takes a JSON body, and no Groovy engine is available.`;
     return;
   }
-  const tool: StepTool = json ? 'groovy' : app.stepTool;
+  const tool: StepTool = app.stepTool === 'jsonpath' ? (json ? 'jsonpath' : 'xslt') : json ? 'groovy' : app.stepTool;
   if (tool === 'xsd') xsd.body = content;
   else if (tool === 'xpath') xpath.body = content;
+  else if (tool === 'jsonpath') jsonpath.body = content;
   else if (tool === 'groovy') groovy.body = content;
   else xslt.body = content;
   app.inputPaths[tool] = path;
@@ -751,6 +778,19 @@ export async function runXpath() {
     fail(e);
   } finally {
     xpath.running = false;
+  }
+}
+
+export async function runJsonpath() {
+  jsonpath.running = true;
+  app.error = '';
+  try {
+    jsonpath.result = await call('jsonpath.eval', { expression: jsonpath.expression, input: { body: jsonpath.body } },
+      app.groovyProfile);
+  } catch (e) {
+    fail(e);
+  } finally {
+    jsonpath.running = false;
   }
 }
 

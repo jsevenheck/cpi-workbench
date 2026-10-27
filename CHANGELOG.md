@@ -6,6 +6,12 @@ of its version.
 
 ## [Unreleased]
 
+### Added
+
+- **JSONPath** tab: evaluates an expression on a JSON document with Jayway JsonPath 2.10.0 on the
+  Groovy engine and lists each match with its path and type. No standard CPI step evaluates
+  JSONPath; the tab is meant for scripts that use the `json-path` library.
+
 ## [0.1.1] - 2026-10-26
 
 ### Fixed

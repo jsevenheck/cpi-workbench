@@ -136,6 +136,13 @@ await page.getByRole('button', { name: 'Evaluate' }).click();
 await page.locator('.res .item').first().waitFor({ timeout: 10000 });
 if (shots) await page.screenshot({ path: path.join(shots, '6-xpath.png') });
 
+// 7b) JSONPath on the Groovy engine, with its sample document.
+await page.getByRole('tab', { name: 'JSONPath' }).click();
+await page.getByLabel('JSONPath expression').fill('$.items[?(@.qty > 1)].sku');
+await page.getByRole('button', { name: 'Evaluate' }).click();
+await page.locator('.res .item', { hasText: 'M-100' }).waitFor({ timeout: 15000 });
+if (await page.locator('.res .item').count() !== 1) fail('JSONPath filter should match one item');
+
 // 8) Files that are not steps open in the File tab and leave the input alone; inputs/ holds saved inputs.
 await page.getByRole('tab', { name: 'XSLT Mapping' }).click();
 const inputEditor = page.locator('section.input .view-lines');

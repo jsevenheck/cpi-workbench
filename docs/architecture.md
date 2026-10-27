@@ -20,7 +20,7 @@ over stdio. Every engine can also serve HTTP on localhost (`serve --http <port>`
 browser mode. The main methods are:
 
 * `xslt.run`, `xsd.validate`, `xpath.eval` (XML engines),
-* `groovy.run` (Groovy engines),
+* `groovy.run`, `jsonpath.eval` (Groovy engines),
 * `tests.run`, and `project.*`, `file.*`, `iflow.*` for files (all engines).
 
 File methods and XML runs stay inside the open project (`ProjectFiles`, `ProjectResolver`). Over

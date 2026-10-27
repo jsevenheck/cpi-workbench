@@ -5,10 +5,11 @@
   import GroovyView from './components/GroovyView.svelte';
   import XsdView from './components/XsdView.svelte';
   import XPathView from './components/XPathView.svelte';
+  import JsonPathView from './components/JsonPathView.svelte';
   import Dialog from './components/Dialog.svelte';
   import FileView from './components/FileView.svelte';
   import { isDesktop } from './lib/engine';
-  import { app, xslt, groovy, fileView, init, runXslt, runXsd, runXpath, runGroovy, onGroovyProfileChange } from './lib/store.svelte';
+  import { app, xslt, groovy, fileView, init, runXslt, runXsd, runXpath, runJsonpath, runGroovy, onGroovyProfileChange } from './lib/store.svelte';
 
   onMount(async () => {
     await init();
@@ -21,10 +22,10 @@
   }
 
   $effect(() => {
-    if (app.tool === 'xslt' || app.tool === 'groovy' || app.tool === 'xsd' || app.tool === 'xpath') app.stepTool = app.tool;
+    if (app.tool !== 'file') app.stepTool = app.tool;
   });
 
-  let kind = $derived<'xslt' | 'groovy'>(app.tool === 'groovy' ? 'groovy' : 'xslt');
+  let kind = $derived<'xslt' | 'groovy'>(app.tool === 'groovy' || app.tool === 'jsonpath' ? 'groovy' : 'xslt');
   let profile = $derived(app.profiles.find((p) => p.id === (kind === 'groovy' ? app.groovyProfile : app.profile)));
   let kindProfiles = $derived(app.profiles.filter((p) => p.kind === kind));
 
@@ -33,14 +34,14 @@
     else if (app.tool === 'groovy') runGroovy();
     else if (app.tool === 'xsd') runXsd();
     else if (app.tool === 'xpath') runXpath();
+    else if (app.tool === 'jsonpath') runJsonpath();
   }
 
   function onProfile() {
     if (app.tool === 'xslt') runXslt();
-    if (app.tool === 'groovy') {
-      onGroovyProfileChange();
-      runGroovy();
-    }
+    if (kind === 'groovy') onGroovyProfileChange();
+    if (app.tool === 'groovy') runGroovy();
+    if (app.tool === 'jsonpath') runJsonpath();
   }
 
   function selectTool(id: typeof app.tool) {
@@ -60,6 +61,7 @@
     { id: 'groovy', label: 'Groovy Script', needs: 'groovy' },
     { id: 'xsd', label: 'XSD Validation', needs: 'xslt' },
     { id: 'xpath', label: 'XPath', needs: 'xslt' },
+    { id: 'jsonpath', label: 'JSONPath', needs: 'groovy' },
   ] as const;
 </script>
 
@@ -119,6 +121,7 @@
       {:else if app.tool === 'groovy'}<GroovyView />
       {:else if app.tool === 'xsd'}<XsdView />
       {:else if app.tool === 'xpath'}<XPathView />
+      {:else if app.tool === 'jsonpath'}<JsonPathView />
       {:else}<FileView />{/if}
     </main>
   </div>

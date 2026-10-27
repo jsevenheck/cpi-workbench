@@ -21,6 +21,14 @@ Finding numbers (F…) and questions (Q…) refer to the [plan](plan.md).
 | `unparsed-text()` encoding | The encoding argument is used; without it, files are read as UTF-8 (the spec also allows guessing from the content). |
 | `xsl:result-document`, `collection()` | Not supported (`UnsupportedInSimulator`); the simulator has no place for secondary results. What CPI does with them is **to verify**. |
 
+## JSONPath
+
+| Area | Status |
+|---|---|
+| Where CPI uses JSONPath | No SAP documentation of a standard step that evaluates JSONPath was found (searched 2026-10-27); the Router's non-XML conditions are Camel Simple. The tab tests expressions for scripts that add the `json-path` jar as a resource, or for Camel's `jsonpath` language, which uses the same library. Whether CPI's runtime ships `json-path` is **to verify**. |
+| Engine | Jayway JsonPath 2.10.0 with its default provider (json-smart), on the Groovy engine. Results are what `JsonPath.read` returns: one value for a definite path or a function, a list for an indefinite path. A missing definite path is reported, as `JsonPath.read` throws `PathNotFoundException`. An older `json-path` jar in an iFlow may differ in edge cases. |
+| Class path | The library is relocated inside the engine jar, so scripts do not see it (as on CPI without the jar). |
+
 ## Groovy Script
 
 | Area | Status |

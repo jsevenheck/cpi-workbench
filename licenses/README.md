@@ -17,6 +17,9 @@ and notices as their projects publish them. It is copied into every engine jar
 | JavaBeans Activation (`com.sun.activation`) | 1.2.0 | CDDL-1.1 or GPL-2.0 with Classpath Exception | Groovy engines | [`jakarta-activation-jaxb/`](jakarta-activation-jaxb/) |
 | JAXB (`com.sun.xml.bind`) | 2.3.0 | CDDL-1.1 or GPL-2.0 with Classpath Exception | Groovy engine 1.x | [`jakarta-activation-jaxb/`](jakarta-activation-jaxb/) |
 | SLF4J | 1.7.26 / 1.7.36 | MIT | Groovy engines | [`slf4j/`](slf4j/) |
+| Jayway JsonPath | 2.10.0 | Apache-2.0 | Groovy engines (JSONPath tab) | [`Apache-2.0.txt`](Apache-2.0.txt) |
+| json-smart, accessors-smart | 2.6.0 | Apache-2.0 | Groovy engines (JSONPath tab) | [`Apache-2.0.txt`](Apache-2.0.txt) |
+| ASM (OW2) | 9.7.1 | BSD-3-Clause | Groovy engines (used by accessors-smart) | [`groovy-4/asm-license.txt`](groovy-4/asm-license.txt) |
 | OpenJDK class library | 17 (JRE), 21 (native images) | GPL-2.0 with Classpath Exception | installers: bundled JRE and native XML engines | [`openjdk/`](openjdk/); the bundled JRE also has its own `legal/` folder |
 | GraalVM Native Image runtime (Community Edition) | 21.0.2 | GPL-2.0 with Classpath Exception | native XML engines | [`graalvm/`](graalvm/) |
 
@@ -31,10 +34,11 @@ The licences above let you obtain the source code of these components from their
 - Saxon-HE 12: <https://github.com/Saxonica/Saxon-HE> (folder `12/source`); Saxon-HE 9.9:
   <https://sourceforge.net/projects/saxon/files/Saxon-HE/9.9/>. Both are also on Maven Central as
   `net.sf.saxon:Saxon-HE` source jars.
-- Apache Groovy, Apache Camel, xmlresolver, SLF4J, JavaBeans Activation and JAXB: the source jars on
-  Maven Central for the versions above.
+- Apache Groovy, Apache Camel, xmlresolver, SLF4J, JavaBeans Activation, JAXB, JsonPath, json-smart,
+  accessors-smart and ASM: the source jars on Maven Central for the versions above.
 - OpenJDK: <https://github.com/adoptium/jdk17u> (the JRE comes from Eclipse Temurin 17) and
   <https://github.com/openjdk/jdk21u>.
 - GraalVM Community Edition: <https://github.com/oracle/graal> (tag `jdk-21.0.2`).
 
-CPI Workbench does not modify these components.
+CPI Workbench does not modify these components. The Groovy engines move JsonPath, json-smart,
+accessors-smart and ASM to other package names (`io.cpiwb.shaded.*`), so Groovy scripts do not see them.

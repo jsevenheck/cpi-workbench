@@ -26,7 +26,7 @@ Finding numbers (F…) and questions (Q…) refer to the [plan](plan.md).
 | Area | Status |
 |---|---|
 | Where CPI uses JSONPath | No SAP documentation of a standard step that evaluates JSONPath was found (searched 2026-10-27); the Router's non-XML conditions are Camel Simple. The tab tests expressions for scripts that add the `json-path` jar as a resource, or for Camel's `jsonpath` language, which uses the same library. Whether CPI's runtime ships `json-path` is **to verify**. |
-| Engine | Jayway JsonPath 2.10.0 with its default provider (json-smart), on the Groovy engine. Results are what `JsonPath.read` returns: one value for a definite path or a function, a list for an indefinite path. A missing definite path is reported, as `JsonPath.read` throws `PathNotFoundException`. An older `json-path` jar in an iFlow may differ in edge cases. |
+| Engine | Jayway JsonPath 2.10.0 with its default provider (json-smart), on the Groovy engine. Results are what `JsonPath.read` returns: one value for a definite path or a function, a list for an indefinite path. Numbers come back as json-smart reads them (`15.50` becomes the Double `15.5`). A missing definite path is reported, as `JsonPath.read` throws `PathNotFoundException`. An older `json-path` jar in an iFlow may differ in edge cases. |
 | Class path | The library is relocated inside the engine jar, so scripts do not see it (as on CPI without the jar). |
 
 ## Groovy Script

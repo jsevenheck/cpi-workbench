@@ -1,7 +1,6 @@
 package io.cpiwb.groovy;
 
 import com.jayway.jsonpath.Configuration;
-import com.jayway.jsonpath.DocumentContext;
 import com.jayway.jsonpath.InvalidJsonException;
 import com.jayway.jsonpath.InvalidPathException;
 import com.jayway.jsonpath.JsonPath;
@@ -47,6 +46,10 @@ public final class JsonPathStep {
         try {
             JsonPath path = JsonPath.compile(expr);
             result.with("definite", path.isDefinite());
+            // json-smart reads an empty text as "", but JsonPath.read(String, ...) rejects it.
+            if (body.isBlank()) {
+                throw new IllegalArgumentException("json string can not be null or empty");
+            }
             Object doc = JSON.jsonProvider().parse(body);
             Object value = path.read(doc, JSON);
             List<String> paths = paths(path, doc);

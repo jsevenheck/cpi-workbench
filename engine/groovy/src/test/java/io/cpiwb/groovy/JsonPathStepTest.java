@@ -67,5 +67,6 @@ class JsonPathStepTest {
     void invalidExpressionOrJsonIsReported() throws Exception {
         assertFalse(Json.bool(eval("$.items[?(@.qty >", ORDER), "ok", true));
         assertFalse(Json.bool(eval("$.id", "{\"id\": "), "ok", true));
+        assertFalse(Json.bool(eval("$", " "), "ok", true));
     }
 }

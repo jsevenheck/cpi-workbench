@@ -122,6 +122,19 @@ await page.locator('section.input').getByRole('button', { name: 'Format' }).clic
 await page.locator('section.input .view-lines', { hasText: '"items": [' }).waitFor({ timeout: 5000 })
   .catch(() => fail('Format did not pretty-print the JSON input'));
 
+// 6b) JSONPath runs on the Groovy engine; a JSON input opened while it is shown loads there.
+await page.getByRole('tab', { name: 'JSONPath' }).click();
+await page.getByLabel('JSONPath expression').fill('$.items[?(@.qty > 1)].sku');
+await page.getByRole('button', { name: 'Evaluate' }).click();
+await page.locator('.res .item', { hasText: 'M-100' }).waitFor({ timeout: 15000 });
+if (await page.locator('.res .item').count() !== 1) fail('JSONPath filter should match one item');
+await page.locator('.tree .file', { hasText: 'g-input.json' }).click();
+await page.getByLabel('JSONPath expression').fill('$.order.items[*]');
+await page.getByRole('button', { name: 'Evaluate' }).click();
+await page.locator('.res .item', { hasText: "$['order']['items'][1]" }).waitFor({ timeout: 10000 })
+  .catch(() => fail('JSON input did not load into the JSONPath tab'));
+if (shots) await page.screenshot({ path: path.join(shots, 'g4-jsonpath.png') });
+
 // 7) Closing the project closes it in the engines too: runs no longer see its platform data.
 await page.getByTitle('Close project').click();
 await page.getByLabel('Project folder').waitFor({ timeout: 5000 });

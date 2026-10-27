@@ -136,13 +136,6 @@ await page.getByRole('button', { name: 'Evaluate' }).click();
 await page.locator('.res .item').first().waitFor({ timeout: 10000 });
 if (shots) await page.screenshot({ path: path.join(shots, '6-xpath.png') });
 
-// 7b) JSONPath on the Groovy engine, with its sample document.
-await page.getByRole('tab', { name: 'JSONPath' }).click();
-await page.getByLabel('JSONPath expression').fill('$.items[?(@.qty > 1)].sku');
-await page.getByRole('button', { name: 'Evaluate' }).click();
-await page.locator('.res .item', { hasText: 'M-100' }).waitFor({ timeout: 15000 });
-if (await page.locator('.res .item').count() !== 1) fail('JSONPath filter should match one item');
-
 // 8) Files that are not steps open in the File tab and leave the input alone; inputs/ holds saved inputs.
 await page.getByRole('tab', { name: 'XSLT Mapping' }).click();
 const inputEditor = page.locator('section.input .view-lines');
@@ -163,7 +156,7 @@ await page.locator('.tree .file', { hasText: 'order.xml' }).waitFor({ timeout: 1
 if (!fs.existsSync(path.join(project, 'inputs/order.xml'))) fail('input not saved to inputs/order.xml');
 await (await menuOn('value-mappings.json')).getByRole('menuitem', { name: 'Use as input' }).click();
 // Only XML engines run here: a JSON body has nowhere to go and must not replace the XSLT input.
-await page.locator('.banner.error', { hasText: 'only a Groovy script takes a JSON body' }).waitFor({ timeout: 10000 })
+await page.locator('.banner.error', { hasText: 'only a Groovy script or JSONPath takes a JSON body' }).waitFor({ timeout: 10000 })
   .catch(() => fail('"Use as input" with JSON and no Groovy engine gave no error'));
 if ((await inputEditor.innerText()).includes('sourceAgency')) fail('JSON replaced the XSLT input');
 await page.locator('.banner.error').getByRole('button', { name: 'Dismiss' }).click();

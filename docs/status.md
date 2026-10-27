@@ -14,7 +14,7 @@ Automated checks:
 
 * Engine tests (`mvn -f engine/pom.xml verify`): core 11, XSLT/XSD/XPath 35 per Saxon version (13 of them on project boundaries), Groovy 28 per script version (5 of them JSONPath).
 * Regression test cases (`testdata/regression-project`): 6.
-* Browser end-to-end tests: `app/e2e/smoke.mjs` (including XPath and JSONPath) and `groovy.mjs`.
+* Browser end-to-end tests: `app/e2e/smoke.mjs` (XML tools) and `groovy.mjs` (Groovy and JSONPath).
 * UI unit tests (`npm --prefix app test`): the JSON, XSLT and Groovy formatters, test-case rows, path comparison.
 * CI runs the engine tests on Linux, Windows and macOS, the browser e2e tests on Linux and Windows, and the shell tests on all three before it builds the installers. All of them passed on Windows and macOS runners for the first time on 2026-10-25 (`d237e25`). macOS runs on `macos-26` (GitHub deprecated `macos-14`); the native engines are built for macOS 11 and CI checks that.
 

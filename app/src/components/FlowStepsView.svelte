@@ -148,7 +148,7 @@
         <p class="taken-line">→ <b>{flow.routerResult.taken}</b></p>
         {#each flow.router.routes as r, i}
           {@const s = flow.routerResult.routes[i]}
-          {#if s}<div class="row"><span class="st {s.status.replace(' ', '-')}">{s.status}</span> {r.name}{#if s.message}<div class="d error">{s.message}</div>{/if}</div>{/if}
+          {#if s}<div class="row"><span class="st {s.status.replace(' ', '-')}">{s.status}</span> {r.name}{#if s.camel}<div class="muted mono">as Camel: {s.camel}</div>{/if}{#if s.message}<div class="d error">{s.message}</div>{/if}</div>{/if}
         {/each}
       {:else if flow.step === 'splitter' && split}
         {#each split.diagnostics as d}<div class="d {d.severity}">{d.message}</div>{/each}

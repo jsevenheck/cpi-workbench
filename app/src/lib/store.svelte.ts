@@ -199,6 +199,8 @@ export interface Route {
 export interface RouteResult {
   status: 'true' | 'false' | 'error' | 'not evaluated' | 'default';
   message?: string;
+  /** The Camel spelling of a Non-XML condition, when CPI's had to be rewritten. */
+  camel?: string;
 }
 
 export const flow = $state({
@@ -874,8 +876,8 @@ async function runRouter() {
   for (const [i, r] of flow.router.routes.entries()) {
     if (r.default) continue;
     try {
-      const v = r.expressionType === 'xml' ? await xpathValue(r.condition, 'boolean') : (await simpleEval(r.condition, 'condition')).value;
-      routes[i] = { status: v === 'true' ? 'true' : 'false' };
+      const s = r.expressionType === 'xml' ? { value: await xpathValue(r.condition, 'boolean') } : await simpleEval(r.condition, 'condition');
+      routes[i] = { status: s.value === 'true' ? 'true' : 'false', camel: (s as { evaluated?: string }).evaluated };
     } catch (e) {
       routes[i] = { status: 'error', message: (e as Error).message };
       taken = 'Error: the route condition failed, so CPI raises an exception.';

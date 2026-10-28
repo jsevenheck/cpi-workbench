@@ -25,7 +25,7 @@ Automated checks:
 | XSLT Mapping step (both Saxon profiles, parameter binding, `hci:` functions, includes, `java:` calls, error lines) | ≈ 90 % | `java:` calls: JDK classes only (no classes from the iFlow's jars), Saxon-EE argument conversion only in simple cases. |
 | XSD validation | ≈ 90 % | XML Schema 1.0 only (JDK validator). |
 | XPath tester | ≈ 95 % | — |
-| Camel Simple tester (Router Non-XML condition, Content Modifier expression) | ≈ 85 % | CPI's own spellings (`=`, `and`, `or`, `property`) are rewritten to Camel's on an assumption; no probe yet. No CLI command, no test-case step. |
+| Camel Simple tester (Router / Looping Process Call condition, Content Modifier expression) | ≈ 85 % | CPI's own spellings (`=`, `and`, `or`, `property`) are rewritten to Camel's on an assumption (F35); no probe yet. Content Modifier *Data Type* conversion not simulated. No CLI command, no test-case step. |
 | Groovy Script 1.x (Groovy 2.4.21, Camel 2.24.3, Script API v1) | ≈ 90 % | Overloads that take Camel's `Attachment` type. Camel 3.14 variant in case the fingerprint shows it (F30). |
 | Groovy Script 2.x (Groovy 4.0.29, Camel 3.14.7, Script API v2) | ≈ 90 % | ProcessDirect raises `UnsupportedInSimulator`. Methods the runtime class may have beyond the interface. |
 | MPL, console, API call log | ≈ 95 % | — |

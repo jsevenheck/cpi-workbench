@@ -17,20 +17,28 @@
 
   let language = $derived(/^\s*[[{]/.test(simple.body) ? 'json' : 'xml');
 
+  /** Enter runs a condition; an expression (a Content Modifier body, say) may span lines, so it runs on Ctrl+Enter. */
   function key(e: KeyboardEvent) {
-    if (e.key === 'Enter') runSimple();
+    if (e.key === 'Enter' && (simple.mode === 'condition' || e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      runSimple();
+    }
   }
+
+  /** SAP: tenant software 8.x (Cloud Foundry) and 7.x (Neo) run on Camel 3, 6.x and 5.x on Camel 2. */
+  let tenants = $derived(simple.result?.engine.startsWith('Camel 2') ? 'tenant software 5.x / 6.x' : 'tenant software 7.x / 8.x');
 </script>
 
 <div class="sp">
   <div class="bar">
     <label class="expr">{simple.mode === 'condition' ? 'Condition' : 'Expression'}
-      <input class="mono" bind:value={simple.expression} onkeydown={key} aria-label="Camel Simple expression"
-        placeholder={simple.mode === 'condition' ? "${header.SenderId} = '1'" : '${header.SenderId}-${date:now:yyyyMMdd}'} />
+      <textarea class="mono" bind:value={simple.expression} onkeydown={key} aria-label="Camel Simple expression"
+        rows={simple.mode === 'condition' ? 1 : 3} spellcheck="false"
+        placeholder={simple.mode === 'condition' ? "${header.SenderId} = '1'" : '${header.SenderId}-${date:now:yyyyMMdd}'}></textarea>
     </label>
     <label>Used as
       <select bind:value={simple.mode} onchange={runSimple}>
-        <option value="condition">Router condition (Non-XML)</option>
+        <option value="condition">Router / Looping Process Call condition (Non-XML)</option>
         <option value="expression">Content Modifier / Write Variables (Expression)</option>
       </select>
     </label>
@@ -51,7 +59,7 @@
       <div class="kv"><KeyValueTable bind:rows={simple.headers} emptyText="No headers. ${'{'}header.name{'}'} reads them." /></div>
       <header><h2>Exchange properties</h2></header>
       <div class="kv"><KeyValueTable bind:rows={simple.properties} emptyText="No properties. ${'{'}property.name{'}'} reads them." /></div>
-      <header><h2>Result{#if simple.result} <span class="muted">· {simple.result.engine}</span>{/if}</h2></header>
+      <header><h2>Result{#if simple.result} <span class="muted" title="Choose the Camel line of your tenant under Runtime">· {simple.result.engine} ({tenants})</span>{/if}</h2></header>
       <div class="res">
         {#if simple.result}
           {#each simple.result.diagnostics as d}<div class:err={d.severity === 'error'} class:muted={d.severity !== 'error'}>{d.message}</div>{/each}
@@ -60,7 +68,7 @@
               <pre class:true={simple.mode === 'condition' && simple.result.value === 'true'}>{simple.result.value ?? 'null'}</pre></div>
           {/if}
           {#if simple.result.evaluated}<p class="muted">Evaluated as Camel <code>{simple.result.evaluated}</code></p>{/if}
-        {:else}<p class="muted">Press Enter in the expression field.</p>{/if}
+        {:else}<p class="muted">Press Enter in the condition field (Ctrl+Enter for an expression).</p>{/if}
       </div>
     </section>
   </div>
@@ -71,7 +79,9 @@
   .bar { display: flex; gap: 12px; align-items: end; padding: 8px 10px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
   .bar label { display: flex; flex-direction: column; font-size: 11px; color: var(--muted); gap: 2px; }
   .expr { flex: 1; min-width: 240px; }
-  .expr input { width: 100%; box-sizing: border-box; font-size: 13px; padding: 5px 6px; }
+  .expr textarea { width: 100%; box-sizing: border-box; font: inherit; font-family: var(--mono); font-size: 13px; padding: 5px 6px; resize: vertical;
+    border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--fg); }
+  .expr textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
   .grid { flex: 1; display: grid; gap: 0; background: var(--border); min-height: 0; }
   .pane { background: var(--bg); display: flex; flex-direction: column; min-height: 0; min-width: 0; }
   header { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-bottom: 1px solid var(--border); min-height: 34px; box-sizing: border-box; }

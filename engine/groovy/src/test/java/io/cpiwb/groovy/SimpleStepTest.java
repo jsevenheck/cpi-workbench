@@ -63,8 +63,10 @@ class SimpleStepTest {
     void errorsAndWarnings() throws Exception {
         Map<String, Object> r = eval("condition", "${header.SenderId} = ");
         assertFalse(Json.bool(r, "ok", true));
-        r = eval("condition", "${exchangeProperty.Partner} == 'ACME'");
-        assertEquals("true", value(r));
-        assertTrue(Json.arr(r, "diagnostics").toString().contains("reported to fail"));
+        assertFalse(Json.bool(eval("condition", " "), "ok", true));
+        assertEquals("true", value(eval("condition", "${exchangeProperty.Partner} == 'ACME'")));
+        // OGNL calls, as in SAP's Content Modifier table (Camel 3 needs camel-bean for them).
+        assertEquals("acme", value(eval("expression", "${property.Partner.toLowerCase()}")));
+        assertEquals("true", value(eval("condition", "${in.header.SenderId.length} = 1")));
     }
 }

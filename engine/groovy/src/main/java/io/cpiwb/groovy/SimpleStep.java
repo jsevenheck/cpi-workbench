@@ -13,22 +13,22 @@ import java.util.Map;
 import java.util.regex.Pattern;
 
 /**
- * Camel Simple as CPI uses it (SAP: "Using Camel Simple Expression Language"): a Router condition
- * (Expression Type Non-XML) or a Content Modifier / Write Variables value of type Expression. The
- * engine's own Camel evaluates it against the input message. Two documented CPI spellings that plain
+ * Camel Simple as CPI uses it (SAP: "Using Camel Simple Expression Language"): a Router or Looping Process
+ * Call condition (Expression Type Non-XML) or a Content Modifier / Write Variables value of type Expression. The
+ * engine's own Camel evaluates it against the input message. CPI spellings from SAP's docs that plain
  * Camel rejects are rewritten first, and the result says so:
  * <ul>
  * <li>{@code =} as an operator (SAP's Router operator table) becomes Camel's {@code ==}.</li>
  * <li>{@code and} / {@code or} (same table) become {@code &&} / {@code ||} on Camel 3, which dropped them.</li>
  * <li>{@code ${property.x}} (SAP's Router example) becomes {@code ${exchangeProperty.x}} on Camel 3,
- * which dropped {@code property}. Camel 2 still has it.</li>
+ * which dropped {@code property}. Camel 2 still has it. CPI does the same (SAP patch notes, August 2024:
+ * "The conversion from property to exchangeProperty ...").</li>
  * </ul>
- * That CPI evaluates these exactly like the Camel spellings is an assumption.
+ * That CPI evaluates {@code =}, {@code and} and {@code or} exactly like the Camel spellings is an assumption.
  */
 public final class SimpleStep {
 
     private static final Pattern PROPERTY = Pattern.compile("\\$\\{property\\.");
-    private static final Pattern EXCHANGE_PROPERTY = Pattern.compile("\\$\\{exchangeProperty\\.");
 
     /**
      * Request: {@code {"expression": "${header.SenderId} = '1'", "mode": "condition"|"expression",
@@ -48,12 +48,11 @@ public final class SimpleStep {
         if (!camel.equals(expr)) {
             result.with("evaluated", camel);
         }
-        if (condition && EXCHANGE_PROPERTY.matcher(expr).find()) {
-            diags.add(Diagnostic.warning("${exchangeProperty.…} works here, but is reported to fail in a CPI Router "
-                    + "condition (SAP Community, not verified). ${property.…} is the spelling SAP documents.").toJson());
-        }
         boolean ok = true;
         try {
+            if (expr.isBlank()) {
+                throw new IllegalArgumentException("Enter an expression.");
+            }
             SimExchange in = SimExchange.fromJson(Json.obj(req, "input"));
             Exchange exchange = Exchanges.create();
             exchange.getIn().setBody(in.getBodyAsString());

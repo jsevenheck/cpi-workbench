@@ -8,9 +8,10 @@ of its version.
 
 ### Added
 
-- **Camel Simple** tab: evaluates a Router condition (Non-XML) or a Content Modifier expression
-  against a body, headers and properties with the Groovy engine's Camel. CPI's `=`, `and`, `or` and
-  `${property.x}` are accepted on both Camel lines.
+- **Camel Simple** tab: evaluates a Router or Looping Process Call condition (Non-XML) or a Content
+  Modifier expression against a body, headers and properties with the Groovy engine's Camel. CPI's
+  `=`, `and`, `or` and `${property.x}` are accepted on both Camel lines, and so are OGNL calls such
+  as `${in.header.name.split(',')[0]}` (the Groovy 2.x engine now bundles `camel-bean`).
 
 ## [0.1.1] - 2026-10-26
 

@@ -21,13 +21,16 @@ Finding numbers (F…) and questions (Q…) refer to the [plan](plan.md).
 | `unparsed-text()` encoding | The encoding argument is used; without it, files are read as UTF-8 (the spec also allows guessing from the content). |
 | `xsl:result-document`, `collection()` | Not supported (`UnsupportedInSimulator`); the simulator has no place for secondary results. What CPI does with them is **to verify**. |
 
-## JSONPath
+## Camel Simple (Router, Content Modifier)
 
 | Area | Status |
 |---|---|
-| Where CPI uses JSONPath | No SAP documentation of a standard step that evaluates JSONPath was found (searched 2026-10-27); the Router's non-XML conditions are Camel Simple. The tab tests expressions for scripts that add the `json-path` jar as a resource, or for Camel's `jsonpath` language, which uses the same library. Whether CPI's runtime ships `json-path` is **to verify**. |
-| Engine | Jayway JsonPath 2.10.0 with its default provider (json-smart), on the Groovy engine. Results are what `JsonPath.read` returns: one value for a definite path or a function, a list for an indefinite path. Numbers come back as json-smart reads them (`15.50` becomes the Double `15.5`). A missing definite path is reported, as `JsonPath.read` throws `PathNotFoundException`. An older `json-path` jar in an iFlow may differ in edge cases. |
-| Class path | The library is relocated inside the engine jar, so scripts do not see it (as on CPI without the jar). |
+| Where CPI uses it | Router conditions with *Expression Type* Non-XML, and Content Modifier / Write Variables values of type *Expression* (SAP: [Using Camel Simple Expression Language](https://help.sap.com/docs/cloud-integration/sap-cloud-integration/using-camel-simple-expression-language)). The Content Filter also takes it; the simulator has no Content Filter. |
+| Engine | The Groovy engine's own Camel evaluates the expression: 2.24.3 or 3.14.7, chosen under *Runtime*. Which Camel line runs a tenant's iFlows is the same open question as F30. |
+| CPI spellings plain Camel rejects | SAP's Router table ([Define Router](https://help.sap.com/docs/r/368c481cd6954bdfa5d0435479fd4eaf/Cloud/en-US/d7fddbd52e3944d3a6d4e5b228c7e63b.html)) uses `=`, `and`, `or` and `${property.x}`. Camel has no `=` operator, and Camel 3 dropped `and`, `or` and `property`. The simulator rewrites them to `==`, `&&`, `||` and `${exchangeProperty.x}` and shows the rewritten expression. That CPI evaluates them exactly like these Camel spellings is an **assumption**. |
+| `${exchangeProperty.x}` in a Router condition | Works in the simulator; a [SAP Community post](https://community.sap.com/t5/technology-blog-posts-by-members/get-to-know-camel-s-simple-expression-language-in-sap-cloud-integration/ba-p/13292822) reportedly says it fails on CPI (seen only in a search summary; the page could not be opened from the build environment). The simulator warns. **To verify.** |
+| Content Modifier | SAP: it does not process equality or comparison expressions. In *Expression* mode, operators stay text (Camel's expression parser). SAP lists a subset of Camel's functions for it; the simulator does not reject the others. |
+| `${exception.…}`, `${exchangeId}`, `${date:now}` | There is no exception in the tester, so `${exception.message}` is empty. IDs and dates come from the simulator's run. |
 
 ## Groovy Script
 

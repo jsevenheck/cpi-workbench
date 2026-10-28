@@ -156,7 +156,7 @@ await page.locator('.tree .file', { hasText: 'order.xml' }).waitFor({ timeout: 1
 if (!fs.existsSync(path.join(project, 'inputs/order.xml'))) fail('input not saved to inputs/order.xml');
 await (await menuOn('value-mappings.json')).getByRole('menuitem', { name: 'Use as input' }).click();
 // Only XML engines run here: a JSON body has nowhere to go and must not replace the XSLT input.
-await page.locator('.banner.error', { hasText: 'only a Groovy script or JSONPath takes a JSON body' }).waitFor({ timeout: 10000 })
+await page.locator('.banner.error', { hasText: 'only a Groovy script takes a JSON body' }).waitFor({ timeout: 10000 })
   .catch(() => fail('"Use as input" with JSON and no Groovy engine gave no error'));
 if ((await inputEditor.innerText()).includes('sourceAgency')) fail('JSON replaced the XSLT input');
 await page.locator('.banner.error').getByRole('button', { name: 'Dismiss' }).click();

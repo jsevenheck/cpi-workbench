@@ -34,7 +34,7 @@ export const SAMPLE_INPUT = `<Order id="4711">
 </Order>
 `;
 
-export type StepTool = 'xslt' | 'groovy' | 'xsd' | 'xpath' | 'jsonpath';
+export type StepTool = 'xslt' | 'groovy' | 'xsd' | 'xpath' | 'simple';
 
 export const app = $state({
   project: null as null | { root: string; files: FileEntry[] },
@@ -175,28 +175,23 @@ export const xpath = $state({
   running: false,
 });
 
-export const SAMPLE_JSON = `{
-  "id": "4711",
-  "items": [
-    { "sku": "M-100", "qty": 2, "price": 15.50 },
-    { "sku": "M-200", "qty": 1, "price": 7.25 }
-  ]
-}
-`;
-
-export interface JsonPathResult {
+export interface SimpleResult {
   ok: boolean;
-  definite?: boolean;
-  items: { path: string | null; value: string; type: string }[];
-  count: number;
+  value?: string | null;
+  type?: string;
+  /** The Camel spelling that was evaluated, when CPI's spelling had to be rewritten. */
+  evaluated?: string;
   diagnostics: Diagnostic[];
   engine: string;
 }
 
-export const jsonpath = $state({
-  expression: '$.items[?(@.qty > 1)].sku',
-  body: SAMPLE_JSON,
-  result: null as JsonPathResult | null,
+export const simple = $state({
+  expression: "${header.SenderId} = 'ERP_100' and ${property.Partner} != ''",
+  mode: 'condition' as 'condition' | 'expression',
+  body: SAMPLE_INPUT,
+  headers: [{ name: 'SenderId', value: 'ERP_100', type: 'String' }] as Row[],
+  properties: [{ name: 'Partner', value: 'ACME', type: 'String' }] as Row[],
+  result: null as SimpleResult | null,
   running: false,
 });
 
@@ -439,21 +434,21 @@ export async function saveFileView(): Promise<boolean> {
 }
 
 function stepBody(tool: StepTool) {
-  return tool === 'xsd' ? xsd.body : tool === 'xpath' ? xpath.body : tool === 'jsonpath' ? jsonpath.body
+  return tool === 'xsd' ? xsd.body : tool === 'xpath' ? xpath.body : tool === 'simple' ? simple.body
     : tool === 'groovy' ? groovy.body : xslt.body;
 }
 
 function setInput(path: string, content: string) {
-  // XSLT, XSD and XPath read XML only; a JSON body feeds a Groovy script or JSONPath (both on a Groovy engine).
+  // XSLT, XSD and XPath read XML only; a JSON body can only feed a Groovy script (or Camel Simple, on the same engine).
   const json = /\.json$/i.test(path) || /^\s*[[{]/.test(content);
   if (json && !app.profiles.some((p) => p.kind === 'groovy' && p.available)) {
-    app.error = `${path} is JSON: only a Groovy script or JSONPath takes a JSON body, and no Groovy engine is available.`;
+    app.error = `${path} is JSON: only a Groovy script takes a JSON body, and no Groovy engine is available.`;
     return;
   }
-  const tool: StepTool = app.stepTool === 'jsonpath' ? (json ? 'jsonpath' : 'xslt') : json ? 'groovy' : app.stepTool;
+  const tool: StepTool = json && app.stepTool !== 'simple' ? 'groovy' : app.stepTool;
   if (tool === 'xsd') xsd.body = content;
   else if (tool === 'xpath') xpath.body = content;
-  else if (tool === 'jsonpath') jsonpath.body = content;
+  else if (tool === 'simple') simple.body = content;
   else if (tool === 'groovy') groovy.body = content;
   else xslt.body = content;
   app.inputPaths[tool] = path;
@@ -781,16 +776,16 @@ export async function runXpath() {
   }
 }
 
-export async function runJsonpath() {
-  jsonpath.running = true;
+export async function runSimple() {
+  simple.running = true;
   app.error = '';
   try {
-    jsonpath.result = await call('jsonpath.eval', { expression: jsonpath.expression, input: { body: jsonpath.body } },
-      app.groovyProfile);
+    simple.result = await call('simple.eval', { expression: simple.expression, mode: simple.mode,
+      input: { body: simple.body, headers: clean(simple.headers), properties: clean(simple.properties) } }, app.groovyProfile);
   } catch (e) {
     fail(e);
   } finally {
-    jsonpath.running = false;
+    simple.running = false;
   }
 }
 

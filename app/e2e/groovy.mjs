@@ -122,18 +122,18 @@ await page.locator('section.input').getByRole('button', { name: 'Format' }).clic
 await page.locator('section.input .view-lines', { hasText: '"items": [' }).waitFor({ timeout: 5000 })
   .catch(() => fail('Format did not pretty-print the JSON input'));
 
-// 6b) JSONPath runs on the Groovy engine; a JSON input opened while it is shown loads there.
-await page.getByRole('tab', { name: 'JSONPath' }).click();
-await page.getByLabel('JSONPath expression').fill('$.items[?(@.qty > 1)].sku');
+// 6b) Camel Simple on the Groovy engine: CPI's Router spelling (=, and, ${property.…}) and a Content Modifier expression.
+await page.getByRole('tab', { name: 'Camel Simple' }).click();
+await page.getByLabel('Camel Simple expression').fill("${header.SenderId} = 'ERP_100' and ${property.Partner} = 'ACME'");
 await page.getByRole('button', { name: 'Evaluate' }).click();
-await page.locator('.res .item', { hasText: 'M-100' }).waitFor({ timeout: 15000 });
-if (await page.locator('.res .item').count() !== 1) fail('JSONPath filter should match one item');
-await page.locator('.tree .file', { hasText: 'g-input.json' }).click();
-await page.getByLabel('JSONPath expression').fill('$.order.items[*]');
+await page.locator('.res pre', { hasText: 'true' }).waitFor({ timeout: 15000 })
+  .catch(() => fail('Router condition did not evaluate to true'));
+await page.getByLabel('Used as').selectOption('expression');
+await page.getByLabel('Camel Simple expression').fill('${header.SenderId}/${property.Partner}');
 await page.getByRole('button', { name: 'Evaluate' }).click();
-await page.locator('.res .item', { hasText: "$['order']['items'][1]" }).waitFor({ timeout: 10000 })
-  .catch(() => fail('JSON input did not load into the JSONPath tab'));
-if (shots) await page.screenshot({ path: path.join(shots, 'g4-jsonpath.png') });
+await page.locator('.res pre', { hasText: 'ERP_100/ACME' }).waitFor({ timeout: 10000 })
+  .catch(() => fail('Content Modifier expression did not evaluate'));
+if (shots) await page.screenshot({ path: path.join(shots, 'g4-simple.png') });
 
 // 7) Closing the project closes it in the engines too: runs no longer see its platform data.
 await page.getByTitle('Close project').click();

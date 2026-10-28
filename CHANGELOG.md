@@ -8,9 +8,9 @@ of its version.
 
 ### Added
 
-- **JSONPath** tab: evaluates an expression on a JSON document with Jayway JsonPath 2.10.0 on the
-  Groovy engine and lists each match with its path and type. No standard CPI step evaluates
-  JSONPath; the tab is meant for scripts that use the `json-path` library.
+- **Camel Simple** tab: evaluates a Router condition (Non-XML) or a Content Modifier expression
+  against a body, headers and properties with the Groovy engine's Camel. CPI's `=`, `and`, `or` and
+  `${property.x}` are accepted on both Camel lines.
 
 ## [0.1.1] - 2026-10-26
 

@@ -39,11 +39,6 @@
       <version>${slf4j.version}</version>
     </dependency>
     <dependency>
-      <groupId>com.jayway.jsonpath</groupId>
-      <artifactId>json-path</artifactId>
-      <version>2.10.0</version>
-    </dependency>
-    <dependency>
       <groupId>org.junit.jupiter</groupId>
       <artifactId>junit-jupiter</artifactId>
     </dependency>
@@ -111,12 +106,6 @@
                   <resource>META-INF/groovy/org.codehaus.groovy.runtime.ExtensionModule</resource>
                 </transformer>
               </transformers>
-              <!-- The JSONPath tester's library stays off the classpath scripts see (CPI has no such jar unless a script adds it). -->
-              <relocations>
-                <relocation><pattern>com.jayway.jsonpath</pattern><shadedPattern>io.cpiwb.shaded.jsonpath</shadedPattern></relocation>
-                <relocation><pattern>net.minidev</pattern><shadedPattern>io.cpiwb.shaded.minidev</shadedPattern></relocation>
-                <relocation><pattern>org.objectweb.asm</pattern><shadedPattern>io.cpiwb.shaded.asm</shadedPattern></relocation>
-              </relocations>
               <filters>
                 <filter>
                   <artifact>*:*</artifact>

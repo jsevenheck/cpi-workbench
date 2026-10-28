@@ -37,10 +37,11 @@ Download the installer for your platform from the
   a case file can hold (attachments, SOAP headers, platform overrides) are kept while the case is
   open and are shown below the input.
 * **XSD** validates a document against a schema; **XPath** evaluates an expression (1.0 or 3.1).
-* **JSONPath** evaluates an expression on a JSON document with Jayway JsonPath, the library behind
-  Camel's `jsonpath` language and the `json-path` jar. It runs on the Groovy engine chosen under
-  *Runtime*. No standard CPI step evaluates JSONPath; see [Fidelity](fidelity.md#jsonpath).
-  Opening a JSON file from `inputs/` while this tab is shown loads it here instead of into Groovy.
+* **Camel Simple** evaluates a Router condition (*Expression Type* Non-XML) or a Content Modifier
+  value of type *Expression* against a body, headers and exchange properties, with the Camel of
+  the Groovy engine chosen under *Runtime*. CPI's spellings `=`, `and`, `or` and `${property.x}`
+  work; when they had to be rewritten for Camel, the result shows the Camel expression. See
+  [Fidelity](fidelity.md#camel-simple-router-content-modifier).
 * **Import iFlow** unpacks an iFlow exported from Integration Suite (zip) into `iflows/` and lists
   its Groovy Script, XSLT Mapping and XML Validator steps. Clicking a step opens its file with the
   step's function name and script version. Steps that choose their mapping from a header at runtime
@@ -65,7 +66,7 @@ The installers are not code-signed yet; [Installing](install.md) shows how to st
 first time. The Windows `setup.exe` installs per user and needs no admin rights; the `.msi` installs
 per machine and needs admin rights.
 
-The Groovy runtime starts only when the Groovy or JSONPath tab is used and stops after 10 idle minutes.
+The Groovy runtime starts only when the Groovy or Camel Simple tab is used and stops after 10 idle minutes.
 
 ## Command line (CI-friendly)
 

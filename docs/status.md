@@ -1,4 +1,4 @@
-# Implementation status (2026-10-27)
+# Implementation status (2026-10-28)
 
 ## How to read the numbers
 
@@ -12,9 +12,9 @@
 
 Automated checks:
 
-* Engine tests (`mvn -f engine/pom.xml verify`): core 11, XSLT/XSD/XPath 35 per Saxon version (13 of them on project boundaries), Groovy 28 per script version (5 of them JSONPath).
+* Engine tests (`mvn -f engine/pom.xml verify`): core 11, XSLT/XSD/XPath 35 per Saxon version (13 of them on project boundaries), Groovy 27 per script version (4 of them Camel Simple).
 * Regression test cases (`testdata/regression-project`): 6.
-* Browser end-to-end tests: `app/e2e/smoke.mjs` (XML tools) and `groovy.mjs` (Groovy and JSONPath).
+* Browser end-to-end tests: `app/e2e/smoke.mjs` (XML tools) and `groovy.mjs` (Groovy and Camel Simple).
 * UI unit tests (`npm --prefix app test`): the JSON, XSLT and Groovy formatters, test-case rows, path comparison.
 * CI runs the engine tests on Linux, Windows and macOS, the browser e2e tests on Linux and Windows, and the shell tests on all three before it builds the installers. All of them passed on Windows and macOS runners for the first time on 2026-10-25 (`d237e25`). macOS runs on `macos-26` (GitHub deprecated `macos-14`); the native engines are built for macOS 11 and CI checks that.
 
@@ -25,7 +25,7 @@ Automated checks:
 | XSLT Mapping step (both Saxon profiles, parameter binding, `hci:` functions, includes, `java:` calls, error lines) | ≈ 90 % | `java:` calls: JDK classes only (no classes from the iFlow's jars), Saxon-EE argument conversion only in simple cases. |
 | XSD validation | ≈ 90 % | XML Schema 1.0 only (JDK validator). |
 | XPath tester | ≈ 95 % | — |
-| JSONPath tester (Jayway JsonPath on the Groovy engines) | ≈ 95 % | No CLI command. No standard CPI step uses JSONPath, so there is nothing to verify on a tenant beyond whether `json-path` is on the class path. |
+| Camel Simple tester (Router Non-XML condition, Content Modifier expression) | ≈ 85 % | CPI's own spellings (`=`, `and`, `or`, `property`) are rewritten to Camel's on an assumption; no probe yet. No CLI command, no test-case step. |
 | Groovy Script 1.x (Groovy 2.4.21, Camel 2.24.3, Script API v1) | ≈ 90 % | Overloads that take Camel's `Attachment` type. Camel 3.14 variant in case the fingerprint shows it (F30). |
 | Groovy Script 2.x (Groovy 4.0.29, Camel 3.14.7, Script API v2) | ≈ 90 % | ProcessDirect raises `UnsupportedInSimulator`. Methods the runtime class may have beyond the interface. |
 | MPL, console, API call log | ≈ 95 % | — |

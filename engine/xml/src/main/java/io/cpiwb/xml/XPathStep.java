@@ -39,9 +39,9 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * XPath evaluation against the message body. Version 1.0 uses the JDK's XPath engine (as used for
- * XPath expressions in simple iFlow steps); 2.0/3.1 use Saxon. Namespace prefixes are declared like
- * the iFlow's "Namespace Mapping" setting.
+ * XPath evaluation against the message body. Version 1.0 uses the JDK's XPath engine, 3.1 uses Saxon,
+ * as CPI's Content Modifier and Router do (SAP documents XPath 3.1; F37). Namespace prefixes are declared
+ * like the iFlow's "Namespace Mapping" setting.
  */
 public final class XPathStep {
 
@@ -55,6 +55,9 @@ public final class XPathStep {
      * Request: {@code {"expression": "...", "version": "1.0"|"3.1", "namespaces": {"p": "uri"},
      * "baseDir": "/abs/project", "input": {"body": "..."}}}. {@code doc()}, {@code unparsed-text()} and
      * external entities read files inside {@code baseDir} only.
+     * <p>With {@code "as"} (XPath 3.1 only) the result also has one {@code value}, as the Flow Steps use it:
+     * {@code "boolean"} the effective boolean value (a Router condition), {@code "string"} the string value
+     * of the first item, {@code "nodes"} all items serialized (Content Modifier XPath with a DOM data type).
      */
     public synchronized Map<String, Object> run(Map<String, Object> req) {
         String baseDirStr = Json.str(req, "baseDir", null);
@@ -82,7 +85,10 @@ public final class XPathStep {
                 evalJdk(expr, ns, input.getBody(), items, resolver);
                 result.with("engine", "JDK XPath 1.0");
             } else {
-                evalSaxon(expr, ns, input.getBody(), items, resolver);
+                String value = evalSaxon(expr, ns, input.getBody(), items, resolver, Json.str(req, "as", null));
+                if (value != null) {
+                    result.with("value", value);
+                }
                 result.with("engine", XsltStep.engineVersion() + " (XPath 3.1)");
             }
             result.with("ok", true);
@@ -105,23 +111,7 @@ public final class XPathStep {
         in.setSystemId(ProjectResolver.MEMORY_BASE + "input.xml");
         Document doc = builder.parse(in);
         XPath xp = XPathFactory.newDefaultInstance().newXPath();
-        xp.setNamespaceContext(new NamespaceContext() {
-            @Override
-            public String getNamespaceURI(String prefix) {
-                return ns.getOrDefault(prefix, "");
-            }
-
-            @Override
-            public String getPrefix(String uri) {
-                return ns.entrySet().stream().filter(e -> e.getValue().equals(uri)).map(Map.Entry::getKey)
-                        .findFirst().orElse(null);
-            }
-
-            @Override
-            public Iterator<String> getPrefixes(String uri) {
-                return ns.entrySet().stream().filter(e -> e.getValue().equals(uri)).map(Map.Entry::getKey).iterator();
-            }
-        });
+        xp.setNamespaceContext(namespaceContext(ns));
         XPathEvaluationResult<?> res = xp.evaluateExpression(expr, doc);
         switch (res.type()) {
             case NODESET:
@@ -146,6 +136,27 @@ public final class XPathStep {
         }
     }
 
+    /** The iFlow's namespace mapping (prefix to URI) for the JDK's XPath. */
+    static NamespaceContext namespaceContext(Map<String, String> ns) {
+        return new NamespaceContext() {
+            @Override
+            public String getNamespaceURI(String prefix) {
+                return ns.getOrDefault(prefix, "");
+            }
+
+            @Override
+            public String getPrefix(String uri) {
+                return ns.entrySet().stream().filter(e -> e.getValue().equals(uri)).map(Map.Entry::getKey)
+                        .findFirst().orElse(null);
+            }
+
+            @Override
+            public Iterator<String> getPrefixes(String uri) {
+                return ns.entrySet().stream().filter(e -> e.getValue().equals(uri)).map(Map.Entry::getKey).iterator();
+            }
+        };
+    }
+
     private static Map<String, Object> describeDom(Node n) throws Exception {
         if (n.getNodeType() == Node.ELEMENT_NODE || n.getNodeType() == Node.DOCUMENT_NODE) {
             Transformer t = TransformerFactory.newDefaultInstance().newTransformer();
@@ -158,8 +169,8 @@ public final class XPathStep {
                 .with("name", n.getNodeName()).with("value", n.getNodeValue());
     }
 
-    private void evalSaxon(String expr, Map<String, String> ns, byte[] body, List<Object> items,
-                           ProjectResolver resolver) throws SaxonApiException, TransformerException {
+    private String evalSaxon(String expr, Map<String, String> ns, byte[] body, List<Object> items,
+                             ProjectResolver resolver, String as) throws SaxonApiException, TransformerException {
         DocumentBuilder db = processor.newDocumentBuilder();
         XdmNode doc = db.build(resolver.source(new InputSource(new ByteArrayInputStream(body)),
                 ProjectResolver.MEMORY_BASE + "input.xml"));
@@ -170,6 +181,9 @@ public final class XPathStep {
         XPathSelector sel = xc.compile(expr).load();
         sel.setURIResolver(resolver);
         sel.setContextItem(doc);
+        if ("boolean".equals(as)) {
+            return String.valueOf(sel.effectiveBooleanValue());
+        }
         XdmValue value = sel.evaluate();
         for (XdmItem item : value) {
             if (item.isAtomicValue()) {
@@ -187,6 +201,17 @@ public final class XPathStep {
                 items.add(Json.o().with("kind", "item").with("value", item.toString()));
             }
         }
+        if ("string".equals(as)) {
+            return value.size() == 0 ? "" : value.itemAt(0).getStringValue();
+        }
+        if ("nodes".equals(as)) {
+            StringBuilder all = new StringBuilder();
+            for (XdmItem item : value) {
+                all.append(item instanceof XdmNode ? item.toString() : item.getStringValue());
+            }
+            return all.toString();
+        }
+        return null;
     }
 
     /** Pretty-prints an XML document (used by the UI's "Format" button). */

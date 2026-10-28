@@ -93,6 +93,11 @@ if (process.env.CPIWB_IFLOW_ZIP) {
   const prof = await page.getByLabel('Runtime profile').inputValue();
   if (prof !== 'groovy-2.x') fail('profile from iFlow step: ' + prof);
   if (shots) await page.screenshot({ path: path.join(shots, 'g5-iflow.png') });
+  // A Content Modifier of the iFlow opens in Flow Steps with its rows.
+  await page.locator('.steps .step', { hasText: 'Set headers' }).click();
+  await page.locator('.src', { hasText: 'Set headers' }).waitFor({ timeout: 10000 })
+    .catch(() => fail('Content Modifier from the iFlow did not open in Flow Steps'));
+  await page.getByRole('tab', { name: 'Groovy Script' }).click();
 }
 
 // 4c) Another script starts with processData again, not with the function set for the previous one.
@@ -122,18 +127,22 @@ await page.locator('section.input').getByRole('button', { name: 'Format' }).clic
 await page.locator('section.input .view-lines', { hasText: '"items": [' }).waitFor({ timeout: 5000 })
   .catch(() => fail('Format did not pretty-print the JSON input'));
 
-// 6b) Camel Simple on the Groovy engine: CPI's Router spelling (=, and, ${property.…}) and a Content Modifier expression.
-await page.getByRole('tab', { name: 'Camel Simple' }).click();
-await page.getByLabel('Camel Simple expression').fill("${header.SenderId} = 'ERP_100' and ${property.Partner} = 'ACME'");
-await page.getByRole('button', { name: 'Evaluate' }).click();
-await page.locator('.res pre', { hasText: 'true' }).waitFor({ timeout: 15000 })
-  .catch(() => fail('Router condition did not evaluate to true'));
-await page.getByLabel('Used as').selectOption('expression');
-await page.getByLabel('Camel Simple expression').fill('${header.SenderId}/${property.Partner}');
-await page.getByRole('button', { name: 'Evaluate' }).click();
-await page.locator('.res pre', { hasText: 'ERP_100/ACME' }).waitFor({ timeout: 10000 })
-  .catch(() => fail('Content Modifier expression did not evaluate'));
-if (shots) await page.screenshot({ path: path.join(shots, 'g4-simple.png') });
+// 6b) Flow Steps with their sample settings: Content Modifier (XPath on the XML engine, Simple on Camel),
+// Router (CPI's Non-XML spelling) and General Splitter.
+await page.getByRole('tab', { name: 'Flow Steps' }).click();
+await page.getByRole('button', { name: 'Run step' }).click();
+// Both the sample and the imported iFlow's Content Modifier set the header OrderId from /Order/@id.
+await page.locator('.res .row', { hasText: 'OrderId' }).filter({ hasText: '4711' }).waitFor({ timeout: 20000 })
+  .catch(() => fail('Content Modifier: header OrderId is not 4711'));
+await page.getByRole('tab', { name: 'Router' }).click();
+await page.getByRole('button', { name: 'Run step' }).click();
+await page.locator('.taken-line', { hasText: 'ERP' }).waitFor({ timeout: 10000 })
+  .catch(() => fail('Router did not take the ERP route'));
+await page.getByRole('tab', { name: 'Splitter' }).click();
+await page.getByRole('button', { name: 'Run step' }).click();
+await page.locator('.res h3', { hasText: '2 message(s)' }).waitFor({ timeout: 10000 })
+  .catch(() => fail('General Splitter did not create 2 messages'));
+if (shots) await page.screenshot({ path: path.join(shots, 'g4-flow-steps.png') });
 
 // 7) Closing the project closes it in the engines too: runs no longer see its platform data.
 await page.getByTitle('Close project').click();

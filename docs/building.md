@@ -65,6 +65,9 @@ node app/e2e/smoke.mjs /tmp/demo-project [screenshotDir]
 node app/e2e/groovy.mjs /tmp/demo-project [screenshotDir]
 ```
 
+With `CPIWB_IFLOW_ZIP` set to a zip of `engine/core/src/test/resources/iflow`, `groovy.mjs` also imports
+that iFlow and opens its Groovy and Content Modifier steps.
+
 ## CI and installers
 
 `.github/workflows/build.yml`:

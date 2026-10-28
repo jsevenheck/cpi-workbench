@@ -37,14 +37,22 @@ Download the installer for your platform from the
   a case file can hold (attachments, SOAP headers, platform overrides) are kept while the case is
   open and are shown below the input.
 * **XSD** validates a document against a schema; **XPath** evaluates an expression (1.0 or 3.1).
-* **Camel Simple** evaluates a Router condition (*Expression Type* Non-XML) or a Content Modifier
-  value of type *Expression* against a body, headers and exchange properties, with the Camel of
-  the Groovy engine chosen under *Runtime*. CPI's spellings `=`, `and`, `or` and `${property.x}`
-  work; when they had to be rewritten for Camel, the result shows the Camel expression. See
-  [Fidelity](fidelity.md#camel-simple-router-content-modifier).
+* **Flow Steps** runs a **Content Modifier**, **Router** or **General / Iterating Splitter** on an
+  input message (body, headers, properties, namespace mapping):
+  * Content Modifier: header and property rows with their source types and data types, and the
+    message body; the result shows each row's value and the output message.
+  * Router: routes in order, XML (XPath) or Non-XML (Camel Simple, with CPI's `=`, `and`, `or` and
+    `${property.x}`) conditions, default route; the result shows which route the message takes.
+  * Splitter: XPath, Line Break or Token, grouping; the result lists the messages.
+
+  XPath runs on the XML engine chosen on the XSLT tab, Camel on the Groovy engine chosen under
+  *Runtime*. *Use as input* passes a result on to the next step. See
+  [Fidelity](fidelity.md#flow-steps-content-modifier-router-splitter).
 * **Import iFlow** unpacks an iFlow exported from Integration Suite (zip) into `iflows/` and lists
-  its Groovy Script, XSLT Mapping and XML Validator steps. Clicking a step opens its file with the
-  step's function name and script version. Steps that choose their mapping from a header at runtime
+  its Groovy Script, XSLT Mapping, XML Validator, Content Modifier, Router and Splitter steps.
+  Clicking a script or mapping step opens its file with the step's function name and script
+  version; a Content Modifier, Router or Splitter opens in Flow Steps with its settings, with
+  `{{parameters}}` filled in from the iFlow's `parameters.prop`. Steps that choose their mapping from a header at runtime
   are marked. The `.iflw` format is not publicly documented, so this is read generically (best effort).
 * **Lint** shows hints about what breaks when a script moves from 1.x to 2.x:
   * `XmlSlurper` or `XmlParser` used without a `groovy.xml` import,
@@ -66,7 +74,7 @@ The installers are not code-signed yet; [Installing](install.md) shows how to st
 first time. The Windows `setup.exe` installs per user and needs no admin rights; the `.msi` installs
 per machine and needs admin rights.
 
-The Groovy runtime starts only when the Groovy or Camel Simple tab is used and stops after 10 idle minutes.
+The Groovy runtime starts only when the Groovy or Flow Steps tab is used and stops after 10 idle minutes.
 
 ## Command line (CI-friendly)
 

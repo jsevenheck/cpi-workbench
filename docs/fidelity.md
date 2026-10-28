@@ -17,11 +17,14 @@ Finding numbers (F…) and questions (Q…) refer to the [plan](plan.md).
 | Typed parameter values | Passed as Java objects, so Saxon converts them (F21). **To verify** (Q-X3). |
 | Reflexive Java calls (`java:` namespaces) | Supported for JDK classes, since SAP's own samples use them (F32). Classes from the iFlow's jars are not available to XSLT. Argument conversion follows simple rules, not all of Saxon-EE's. |
 | XSD validation | JDK validator, XML Schema 1.0. CPI's validator is **to verify** (Q-V1). |
+| XPath tab | 3.1 (Saxon) by default, as SAP documents for the Content Modifier and Filter and as Router conditions in real iFlows need (F37). 1.0 (JDK) stays available; no CPI step is known to use it. |
 | File access (includes, `doc()`, `unparsed-text()`, external entities, also in `parse-xml()`) | Inside the project folder only, no network: a simulator rule, standing in for the iFlow's resources. Whether CPI resolves external entities and DTDs is **to verify**. |
 | `unparsed-text()` encoding | The encoding argument is used; without it, files are read as UTF-8 (the spec also allows guessing from the content). |
 | `xsl:result-document`, `collection()` | Not supported (`UnsupportedInSimulator`); the simulator has no place for secondary results. What CPI does with them is **to verify**. |
 
-## Camel Simple (Router, Content Modifier)
+## Flow Steps: Content Modifier, Router, Splitter
+
+Camel Simple (Non-XML conditions and *Expression* values):
 
 | Area | Status |
 |---|---|
@@ -29,8 +32,23 @@ Finding numbers (F…) and questions (Q…) refer to the [plan](plan.md).
 | Engine | The Groovy engine's own Camel evaluates the expression: 2.24.3 or 3.14.7, chosen under *Runtime*. The Camel line belongs to the tenant, not to the script version: SAP numbers tenant software 8.x / 7.x for Camel 3 and 6.x / 5.x for Camel 2, and has been migrating tenants to Camel 3.14.7 (F34). OGNL calls such as `${in.header.fname.split(',')[0]}` (in SAP's table) work on both; the 2.x engine bundles `camel-bean` for them. |
 | CPI spellings plain Camel rejects | SAP's Router table ([Define Router](https://help.sap.com/docs/r/368c481cd6954bdfa5d0435479fd4eaf/Cloud/en-US/d7fddbd52e3944d3a6d4e5b228c7e63b.html)) uses `=`, `and`, `or` and `${property.x}`. Camel has no `=` operator, and Camel 3 dropped `and`, `or` and `property`. The simulator rewrites them to `==`, `&&`, `\|\|` and `${exchangeProperty.x}` and shows the rewritten expression. CPI converts `property` to `exchangeProperty` itself (SAP patch notes, August 2024, 7.28.14 / 6.55.13). That it treats `=`, `and` and `or` exactly like `==`, `&&` and `\|\|` is an **assumption** (F35). |
 | `${exchangeProperty.x}` | SAP's documentation uses `${property.x}` (180 times) and never `${exchangeProperty.x}` (SAP-docs repository, 2026-10-22). It works in the simulator. A [SAP Community post](https://community.sap.com/t5/technology-blog-posts-by-members/get-to-know-camel-s-simple-expression-language-in-sap-cloud-integration/ba-p/13292822) reportedly says it fails in a CPI Router condition (seen only in a search summary; the page could not be opened from the build environment). **To verify.** |
-| Content Modifier | SAP: it does not process equality or comparison expressions. In *Expression* mode, operators stay text (Camel's expression parser). SAP lists a subset of Camel's functions for it; the simulator does not reject the others. The *Data Type* column (conversion of the result) is not simulated. |
+| Content Modifier expressions | SAP: it does not process equality or comparison expressions; operators stay text (Camel's expression parser). SAP lists a subset of Camel's functions for it; the simulator does not reject the others. |
 | `${exception.…}`, `${exchangeId}`, `${date:now}` | There is no exception in the tester, so `${exception.message}` is empty. IDs and dates come from the simulator's run. |
+
+The steps (SAP: *Define Content Modifier*, *Define Router*, *Define General Splitter*, *Define Iterating Splitter*):
+
+| Area | Status |
+|---|---|
+| XPath | Saxon, XPath 3.1, in the XML engine: SAP documents XPath 3.1 for the Content Modifier, and Router conditions in real iFlows use XPath 2.0 syntax such as `/node()/*:IDOC` (F37). Namespace prefixes come from the namespace mapping (the iFlow's *Runtime Configuration*), shared with the XPath tab. The Router's XPath version is not documented; 3.1 is an assumption. |
+| Content Modifier rows | Run top to bottom (SAP); the header table before the property table, both before the body (SAP Community blog, seen only in a search summary: **to verify**). An XPath row reads the incoming body. Constant values are not evaluated. *Data Type* is resolved by Camel, so `String` works as well as `java.lang.String`; a DOM type (`org.w3c.dom.NodeList`) keeps the XML as text. An XPath that returns several items gives the first one's string value: **to verify**. An empty body field leaves the body as it is. |
+| Content Modifier sources the simulator lacks | Local and global variables: no variable store, so the *Default Value* is used, as CPI does when the variable is not found. Number Range and External Parameter: `UnsupportedInSimulator`. |
+| Delete rows | The iFlow stores `$name=X` or `$include=pattern,$exclude=pattern` (F36); Camel's `removeHeaders` / `removeProperties` apply the patterns. That CPI uses these Camel methods is an assumption. |
+| Router | Conditions run in the order of the gateway's outgoing flows in the iFlow (an assumption; the model has no order field), and the first true one wins. Without a match the default route is taken, or, with *Throw Exception*, an exception (SAP). A condition that fails to evaluate is shown as an error. |
+| General Splitter | Each message keeps the envelope of the **first** split point: its ancestors and, on every level, the siblings before it. Later siblings are dropped, and every split point goes under the first one's parent. This reproduces all of SAP's examples (`SplitStepTest`); other cases are inferred from them. |
+| Iterating Splitter | Each message holds only the split point(s); with grouping above 1 they are concatenated (an assumption). *Token* splits at elements with that local name (CPI may use Camel's text-based `tokenizeXML`: **to verify**). |
+| Line Break | General puts the first line in front of every message (SAP); Iterating does not. Like SAP's example, the text `\n` also counts as a line break. Messages have no trailing line break (**to verify**). |
+| Splitter XPath | Paths only, as SAP documents; `\| + * > = <= [ ] @` are rejected. A trailing `/` is accepted (seen in real iFlows). `${header.x}` and `${property.x}` in the XPath or grouping are resolved first. No match gives no message (SAP: the flow ends as *Completed*). |
+| Split messages | Serialized without an XML declaration; attribute order can differ from the input (the JDK's DOM). `CamelSplitIndex`, `CamelSplitComplete` and `CamelSplitSize` (only on the last message with streaming, SAP) are shown, not set. Parallel processing, timeouts and *Stop On Exception* are not simulated. |
 
 ## Groovy Script
 

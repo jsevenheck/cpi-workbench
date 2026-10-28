@@ -5,11 +5,11 @@
   import GroovyView from './components/GroovyView.svelte';
   import XsdView from './components/XsdView.svelte';
   import XPathView from './components/XPathView.svelte';
-  import SimpleView from './components/SimpleView.svelte';
+  import FlowStepsView from './components/FlowStepsView.svelte';
   import Dialog from './components/Dialog.svelte';
   import FileView from './components/FileView.svelte';
   import { isDesktop } from './lib/engine';
-  import { app, xslt, groovy, fileView, init, runXslt, runXsd, runXpath, runSimple, runGroovy, onGroovyProfileChange } from './lib/store.svelte';
+  import { app, xslt, groovy, fileView, init, runXslt, runXsd, runXpath, runFlowStep, runGroovy, onGroovyProfileChange } from './lib/store.svelte';
 
   onMount(async () => {
     await init();
@@ -25,7 +25,7 @@
     if (app.tool !== 'file') app.stepTool = app.tool;
   });
 
-  let kind = $derived<'xslt' | 'groovy'>(app.tool === 'groovy' || app.tool === 'simple' ? 'groovy' : 'xslt');
+  let kind = $derived<'xslt' | 'groovy'>(app.tool === 'groovy' || app.tool === 'flow' ? 'groovy' : 'xslt');
   let profile = $derived(app.profiles.find((p) => p.id === (kind === 'groovy' ? app.groovyProfile : app.profile)));
   let kindProfiles = $derived(app.profiles.filter((p) => p.kind === kind));
 
@@ -34,14 +34,14 @@
     else if (app.tool === 'groovy') runGroovy();
     else if (app.tool === 'xsd') runXsd();
     else if (app.tool === 'xpath') runXpath();
-    else if (app.tool === 'simple') runSimple();
+    else if (app.tool === 'flow') runFlowStep();
   }
 
   function onProfile() {
     if (app.tool === 'xslt') runXslt();
     if (kind === 'groovy') onGroovyProfileChange();
     if (app.tool === 'groovy') runGroovy();
-    if (app.tool === 'simple') runSimple();
+    if (app.tool === 'flow') runFlowStep();
   }
 
   function selectTool(id: typeof app.tool) {
@@ -61,7 +61,7 @@
     { id: 'groovy', label: 'Groovy Script', needs: 'groovy' },
     { id: 'xsd', label: 'XSD Validation', needs: 'xslt' },
     { id: 'xpath', label: 'XPath', needs: 'xslt' },
-    { id: 'simple', label: 'Camel Simple', needs: 'groovy' },
+    { id: 'flow', label: 'Flow Steps', needs: 'groovy' },
   ] as const;
 </script>
 
@@ -121,7 +121,7 @@
       {:else if app.tool === 'groovy'}<GroovyView />
       {:else if app.tool === 'xsd'}<XsdView />
       {:else if app.tool === 'xpath'}<XPathView />
-      {:else if app.tool === 'simple'}<SimpleView />
+      {:else if app.tool === 'flow'}<FlowStepsView />
       {:else}<FileView />{/if}
     </main>
   </div>

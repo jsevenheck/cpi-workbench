@@ -91,6 +91,13 @@ def main():
         ("xpath.eval", {"expression": "/x", "version": "1.0", "input": {"body": BODY}}, lambda r: r["ok"] and r["items"][0]["kind"] == "element"),
         ("xpath.eval", {"expression": "//i[position() = last()]/@g | //i[1]/@g", "version": "1.0", "input": {"body": BODY}}, lambda r: r["ok"] and r["count"] == 2),
         ("xml.format", {"text": BODY}, lambda r: r["ok"]),
+        # Flow Steps: XPath values for Router and Content Modifier, General and Iterating Splitter.
+        ("xpath.eval", {"expression": "//i[@g='b']", "version": "3.1", "as": "boolean", "input": {"body": BODY}}, lambda r: r["value"] == "true"),
+        ("xpath.eval", {"expression": "//i/@v", "version": "3.1", "as": "string", "input": {"body": BODY}}, lambda r: r["value"] == "1"),
+        ("split.run", {"splitter": "general", "expressionType": "xpath", "expression": "/x/i", "grouping": 2, "input": {"body": BODY}},
+         lambda r: r["count"] == 2 and r["messages"][1]["body"].startswith("<x>")),
+        ("split.run", {"splitter": "iterating", "expressionType": "token", "expression": "i", "input": {"body": BODY}}, lambda r: r["count"] == 3),
+        ("split.run", {"splitter": "general", "expressionType": "xpath", "expression": "/r", "input": {"body": entity_doc}}, no_leak),
         ("xpath.eval", {"expression": "string(/r)", "version": "1.0", "input": {"body": entity_doc}}, no_leak),
         ("xpath.eval", {"expression": "string(/r)", "version": "3.1", "input": {"body": entity_doc}}, no_leak),
         ("xpath.eval", {"expression": f"unparsed-text('{secret_uri}')", "version": "3.1", "input": {"body": "<a/>"}}, no_leak),

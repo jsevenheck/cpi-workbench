@@ -8,10 +8,17 @@ of its version.
 
 ### Added
 
-- **Camel Simple** tab: evaluates a Router or Looping Process Call condition (Non-XML) or a Content
-  Modifier expression against a body, headers and properties with the Groovy engine's Camel. CPI's
-  `=`, `and`, `or` and `${property.x}` are accepted on both Camel lines, and so are OGNL calls such
-  as `${in.header.name.split(',')[0]}` (the Groovy 2.x engine now bundles `camel-bean`).
+- **Flow Steps** tab: runs a Content Modifier, Router or General / Iterating Splitter on an input
+  message. XPath uses Saxon (XPath 3.1), Camel Simple the Groovy engine's Camel; CPI's `=`, `and`,
+  `or` and `${property.x}` work on both Camel lines, and so do OGNL calls such as
+  `${in.header.name.split(',')[0]}` (the Groovy 2.x engine now bundles `camel-bean`).
+- iFlow import lists Content Modifier, Router and Splitter steps and opens them in Flow Steps with
+  their settings and the iFlow's externalized parameters.
+
+### Changed
+
+- The XPath tab starts with XPath 3.1 (Saxon), as CPI's Content Modifier and Router use it. Its
+  1.0 option no longer claims to be what simple iFlow steps use; that had no source.
 
 ## [0.1.1] - 2026-10-26
 

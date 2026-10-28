@@ -40,11 +40,7 @@ public final class SimpleStep {
         boolean condition = !"expression".equals(Json.str(req, "mode", "condition"));
         List<Object> diags = new ArrayList<>();
         Json.Obj result = Json.o();
-        boolean camel3 = !Exchanges.camelVersion().startsWith("2.");
-        String camel = condition ? operatorsToCamel(expr, camel3) : expr;
-        if (camel3) {
-            camel = PROPERTY.matcher(camel).replaceAll("\\${exchangeProperty.");
-        }
+        String camel = toCamel(expr, condition);
         if (!camel.equals(expr)) {
             result.with("evaluated", camel);
         }
@@ -53,11 +49,7 @@ public final class SimpleStep {
             if (expr.isBlank()) {
                 throw new IllegalArgumentException("Enter an expression.");
             }
-            SimExchange in = SimExchange.fromJson(Json.obj(req, "input"));
-            Exchange exchange = Exchanges.create();
-            exchange.getIn().setBody(in.getBodyAsString());
-            exchange.getIn().getHeaders().putAll(in.getHeaders());
-            exchange.getProperties().putAll(in.getProperties());
+            Exchange exchange = exchange(SimExchange.fromJson(Json.obj(req, "input")));
             Language simple = exchange.getContext().resolveLanguage("simple");
             if (condition) {
                 result.with("value", String.valueOf(simple.createPredicate(camel).matches(exchange))).with("type", "Boolean");
@@ -74,6 +66,22 @@ public final class SimpleStep {
                 .with("diagnostics", diags)
                 .with("engine", "Camel " + Exchanges.camelVersion())
                 .with("timing", Json.o().with("totalMs", (System.nanoTime() - t0) / 1_000_000.0));
+    }
+
+    /** CPI's spelling of a condition or expression in Camel's spelling for the engine's Camel line. */
+    static String toCamel(String expr, boolean condition) {
+        boolean camel3 = !Exchanges.camelVersion().startsWith("2.");
+        String camel = condition ? operatorsToCamel(expr, camel3) : expr;
+        return camel3 ? PROPERTY.matcher(camel).replaceAll("\\${exchangeProperty.") : camel;
+    }
+
+    /** A Camel exchange with the input message (body as text). */
+    static Exchange exchange(SimExchange in) {
+        Exchange exchange = Exchanges.create();
+        exchange.getIn().setBody(in.getBodyAsString());
+        exchange.getIn().getHeaders().putAll(in.getHeaders());
+        exchange.getProperties().putAll(in.getProperties());
+        return exchange;
     }
 
     /**

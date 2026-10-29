@@ -5,8 +5,8 @@
 [![license](https://img.shields.io/github/license/jsevenheck/cpi-workbench)](LICENSE)
 
 A lean, offline desktop app for testing **SAP Integration Suite (Cloud Integration)** mappings and
-scripts locally: enter a message (body, headers, exchange properties), run an **XSLT mapping** or a
-**Groovy script** and see the resulting body, headers, properties and log entries immediately,
+scripts locally: enter a message (body, headers, exchange properties), run an **XSLT mapping**, a
+**Groovy script** or a **Content Modifier, Router or Splitter** and see the resulting body, headers, properties and log entries immediately,
 without deploy → trace → monitor round trips.
 
 The goal is to behave like the real CPI step, not like a generic XSLT tester or Groovy console.
@@ -33,11 +33,21 @@ it has not been checked against a tenant yet ([Fidelity](docs/fidelity.md)).
 * Compile and runtime errors point to the script line; `println` output is captured.
 * Groovy 1.x → 2.x differences surface for real (e.g. `groovy.util.XmlSlurper` no longer exists in Groovy 4).
 
+**Flow Steps**
+
+* **Content Modifier**, **Router** and **General / Iterating Splitter** with their CPI settings, on the
+  tenant's Camel line (3.14 or 2.24): Camel Simple with CPI's spellings (`=`, `and`, `${property.x}`),
+  XPath 3.1 on Saxon, split messages with `CamelSplit*` information.
+* **Import iFlow** lists an exported iFlow's scripts, mappings and these steps and opens them with
+  their settings.
+
 Everything runs locally; the app never connects to a tenant.
 
 ![XSLT view](docs/images/screenshot-xslt.png)
 
 ![Groovy view](docs/images/screenshot-groovy.png)
+
+![Flow Steps view](docs/images/screenshot-flow-steps.png)
 
 ## Install
 

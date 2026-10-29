@@ -36,7 +36,7 @@ Download the installer for your platform from the
   the app has no test runner. Opening a `case.json` loads the case into its editor view. Inputs only
   a case file can hold (attachments, SOAP headers, platform overrides) are kept while the case is
   open and are shown below the input.
-* **XSD** validates a document against a schema; **XPath** evaluates an expression (1.0 or 3.1).
+* **XSD** validates a document against a schema; **XPath** evaluates an expression (3.1 by default, or 1.0).
 * **Flow Steps** runs a **Content Modifier**, **Router** or **General / Iterating Splitter** on an
   input message (body, headers, properties, namespace mapping):
   * Content Modifier: header and property rows with their source types and data types, and the

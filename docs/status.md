@@ -1,4 +1,4 @@
-# Implementation status (2026-10-28)
+# Implementation status (2026-10-29)
 
 ## How to read the numbers
 
@@ -14,7 +14,7 @@ Automated checks:
 
 * Engine tests (`mvn -f engine/pom.xml verify`): core 11, XSLT/XSD/XPath/Splitter 44 per Saxon version (13 of them on project boundaries, 8 splitter cases from SAP's examples), Groovy 31 per script version (4 Camel Simple, 4 Content Modifier).
 * Regression test cases (`testdata/regression-project`): 6.
-* Browser end-to-end tests: `app/e2e/smoke.mjs` (XML tools) and `groovy.mjs` (Groovy and Flow Steps).
+* Browser end-to-end tests: `app/e2e/smoke.mjs` (XML tools) and `groovy.mjs` (Groovy, Flow Steps and the iFlow import, which CI runs with the iFlow fixture as a zip).
 * UI unit tests (`npm --prefix app test`): the JSON, XSLT and Groovy formatters, test-case rows, path comparison.
 * CI runs the engine tests on Linux, Windows and macOS, the browser e2e tests on Linux and Windows, and the shell tests on all three before it builds the installers. All of them passed on Windows and macOS runners for the first time on 2026-10-25 (`d237e25`). macOS runs on `macos-26` (GitHub deprecated `macos-14`); the native engines are built for macOS 11 and CI checks that.
 
@@ -53,6 +53,10 @@ Automated checks:
 * The browser e2e tests waited for a stale result badge and could read the previous case's output
   (seen on Windows); they now wait for the expected content.
 * XSD test cases open in the XSD view.
+* Two more e2e races: the smoke test could validate the scratch output instead of the test case's
+  (both bind `SenderSystem`), and `groovy.mjs` read the Groovy output before Monaco drew it.
+* Opening a Flow Step right after a Groovy step could log an uncaught `Canceled` error (Monaco's
+  cancellation of pending work in the closed editors); the app now ignores it, as Monaco does.
 * Corrected: earlier docs said XSLT `java:` calls could use the project's jars; they cannot.
 
 From the first manual test of the desktop window on Windows:

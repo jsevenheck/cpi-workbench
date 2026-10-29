@@ -19,7 +19,9 @@ import java.util.regex.Pattern;
  * Content Modifier, Router and Splitter settings from an iFlow model. The keys are the ones seen in the
  * exported iFlows of SAP's public sample repository (SAP-samples/cloud-integration-flow, 2026-10-28):
  * Content Modifier {@code activityType=Enricher} with {@code headerTable}, {@code propertyTable} (rows of
- * {@code <cell id='Action|Type|Value|Default|Name|Datatype'>}), {@code bodyType} and {@code wrapContent};
+ * {@code <cell id='Action|Type|Value|Default|Name|Datatype'>}), {@code bodyType} and {@code wrapContent}
+ * (versions up to 1.3 have no {@code bodyType}: their body is an expression, as SAP's sample "Externalizing
+ * Additional Parameter" shows with {@code ${header.x}} in a 1.2 body);
  * Splitter {@code splitType}, {@code exprType}, {@code splitExprValue} or {@code tokenValue},
  * {@code grouping}, {@code Streaming}; Router {@code exclusiveGateway} with {@code throwException}, its
  * outgoing sequence flows ({@code expressionType} XML or NonXML, {@code conditionExpression}) and the
@@ -40,7 +42,7 @@ final class FlowSteps {
             return step(act, "contentModifier", props).with("config", Json.o()
                     .with("headers", rows(props.get("headerTable"), params))
                     .with("properties", rows(props.get("propertyTable"), params))
-                    .with("bodyType", props.getOrDefault("bodyType", "constant").toLowerCase())
+                    .with("bodyType", param(props.getOrDefault("bodyType", "expression"), params).toLowerCase())
                     .with("body", param(props.getOrDefault("wrapContent", ""), params)));
         }
         String split = props.getOrDefault("splitType", "");

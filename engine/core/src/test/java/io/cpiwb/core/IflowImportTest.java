@@ -87,6 +87,20 @@ class IflowImportTest {
     }
 
     @Test
+    void contentModifierBodyType() throws Exception {
+        org.w3c.dom.Element act = javax.xml.parsers.DocumentBuilderFactory.newDefaultInstance().newDocumentBuilder()
+                .newDocument().createElement("callActivity");
+        java.util.Properties params = new java.util.Properties();
+        params.setProperty("type", "Constant");
+        // Versions up to 1.3 have no bodyType; their body is an expression (SAP's sample iFlows rely on it).
+        Map<String, Object> old = FlowSteps.of(act, Map.of("activityType", "Enricher", "componentVersion", "1.2",
+                "wrapContent", "Header = ${header.x}"), params);
+        assertEquals("expression", Json.obj(old, "config").get("bodyType"));
+        Map<String, Object> param = FlowSteps.of(act, Map.of("activityType", "Enricher", "bodyType", "{{type}}"), params);
+        assertEquals("constant", Json.obj(param, "config").get("bodyType"));
+    }
+
+    @Test
     void rejectsZipSlip(@TempDir Path tmp) throws Exception {
         Path zip = tmp.resolve("evil.zip");
         try (ZipOutputStream z = new ZipOutputStream(Files.newOutputStream(zip))) {

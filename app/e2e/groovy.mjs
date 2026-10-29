@@ -26,8 +26,9 @@ await page.locator('.status', { hasText: 'engine(s) available' }).waitFor({ time
 // 1) Sample script on Groovy 1.x.
 await page.getByRole('tab', { name: 'Groovy Script' }).click();
 await page.locator('section.output .badge.ok').waitFor({ timeout: 20000 });
-const body = await page.locator('section.output .view-lines').innerText();
-if (!body.includes('ProcessedOrder')) fail('groovy output: ' + body.slice(0, 200));
+// Monaco renders the output a moment after the badge, so wait for the text itself.
+await page.locator('section.output .view-lines', { hasText: 'ProcessedOrder' }).waitFor({ timeout: 10000 })
+  .catch(async () => fail('groovy output: ' + (await page.locator('section.output .view-lines').innerText()).slice(0, 200)));
 await page.getByRole('tab', { name: /^MPL/ }).click();
 if (!(await page.locator('section.output .pad').innerText()).includes('Order')) fail('MPL property missing');
 await page.getByRole('tab', { name: /^Console/ }).click();

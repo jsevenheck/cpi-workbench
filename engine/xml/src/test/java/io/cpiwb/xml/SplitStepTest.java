@@ -41,9 +41,18 @@ class SplitStepTest {
         return out;
     }
 
+    /** The bodies without the XML declaration the General Splitter writes. */
+    static List<String> content(Map<String, Object> r) {
+        List<String> out = new ArrayList<>();
+        for (String b : bodies(r)) {
+            out.add(b.replaceFirst("^<\\?xml[^>]*\\?>\\s*", ""));
+        }
+        return out;
+    }
+
     @Test
     void generalKeepsTheEnvelope() {
-        List<String> b = bodies(split("general", "xpath", "/n1:customer/n1:order", null, CUSTOMER,
+        List<String> b = content(split("general", "xpath", "/n1:customer/n1:order", null, CUSTOMER,
                 Json.o().with("n1", "http://myCustomer.com")));
         assertEquals(2, b.size());
         assertEquals("<customer xmlns=\"http://myCustomer.com\"><customerNumber>0001</customerNumber>"
@@ -55,9 +64,9 @@ class SplitStepTest {
     void generalWithRelativePaths() {
         assertEquals(List.of("<root><shop><product><id>1</id><id>2</id></product><customerReview><id>3</id></customerReview></shop></root>",
                 "<root><shop><product><id>1</id><id>2</id></product><customerReview><id>4</id></customerReview></shop></root>"),
-                bodies(split("general", "xpath", "//customerReview/id", null, SHOP, null)));
+                content(split("general", "xpath", "//customerReview/id", null, SHOP, null)));
         // SAP: with //id all four ids end up under the first parent, product.
-        List<String> all = bodies(split("general", "xpath", "//id", null, SHOP, null));
+        List<String> all = content(split("general", "xpath", "//id", null, SHOP, null));
         assertEquals(4, all.size());
         assertEquals("<root><shop><product><id>3</id></product></shop></root>", all.get(2));
     }
@@ -65,7 +74,22 @@ class SplitStepTest {
     @Test
     void generalDropsElementsAfterTheSplitPoint() {
         assertEquals(List.of("<A><B><C>1</C></B></A>", "<A><B><C>2</C></B></A>"),
-                bodies(split("general", "xpath", "/A/B/C", "", "<A><B><C>1</C><C>2</C><E>e</E></B></A>", null)));
+                content(split("general", "xpath", "/A/B/C", "", "<A><B><C>1</C><C>2</C><E>e</E></B></A>", null)));
+    }
+
+    @Test
+    void namespaceDeclaredAfterThePath() {
+        // SAP: "Using XPath Expressions in the Splitter Step", Default XML Namespaces.
+        String doc = "<root xmlns=\"demo.sap.com\"><shop><customerReview><id>001</id></customerReview>"
+                + "<customerReview><id>002</id></customerReview></shop></root>";
+        Map<String, Object> r = split("general", "xpath", "/ns1:root/shop/customerReview xmlns:ns1=\"demo.sap.com\"", null, doc, null);
+        List<String> b = bodies(r);
+        assertEquals(2, b.size());
+        assertEquals("<?xml version='1.0' encoding='UTF-8'?><root xmlns=\"demo.sap.com\"><shop><customerReview><id>002</id>"
+                + "</customerReview></shop></root>", b.get(1));
+        assertFalse(Json.bool(split("general", "xpath", "/root/shop/customerReview xmlns=\"demo.sap.com\"", null, doc, null), "ok", true));
+        assertEquals("/a:x//a:y/a:z", SplitStep.inheritPrefixes("/a:x//y/z"));
+        assertEquals("//id", SplitStep.inheritPrefixes("//id"));
     }
 
     @Test

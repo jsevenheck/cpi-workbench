@@ -9,7 +9,7 @@
   import Dialog from './components/Dialog.svelte';
   import FileView from './components/FileView.svelte';
   import { isDesktop } from './lib/engine';
-  import { app, xslt, groovy, fileView, init, runXslt, runXsd, runXpath, runFlowStep, runGroovy, onGroovyProfileChange } from './lib/store.svelte';
+  import { app, xslt, groovy, flow, fileView, init, runXslt, runXsd, runXpath, runFlowStep, runGroovy, onGroovyProfileChange } from './lib/store.svelte';
 
   onMount(async () => {
     await init();
@@ -39,10 +39,14 @@
 
   function onProfile() {
     if (app.tool === 'xslt') runXslt();
-    if (kind === 'groovy') onGroovyProfileChange();
-    if (app.tool === 'groovy') runGroovy();
-    if (app.tool === 'flow') runFlowStep();
+    if (app.tool === 'groovy') {
+      onGroovyProfileChange();
+      runGroovy();
+    }
   }
+
+  /** SAP: tenant software 7.x / 8.x runs on Camel 3, 5.x / 6.x on Camel 2. */
+  const CAMEL: Record<string, string> = { 'groovy-2.x': 'Camel 3.14 (tenant 7.x / 8.x)', 'groovy-1.x': 'Camel 2.24 (tenant 5.x / 6.x)' };
 
   function selectTool(id: typeof app.tool) {
     app.tool = id;
@@ -80,7 +84,15 @@
       {/if}
     </div>
     <div class="spacer"></div>
-    {#if app.tool !== 'file'}
+    {#if app.tool === 'flow'}
+      <label class="profile" title="Content Modifier, Router and Splitter have no Groovy version; what matters is the tenant's Camel line">Camel
+        <select bind:value={flow.camel} onchange={runFlowStep} aria-label="Camel version">
+          {#each [...kindProfiles].reverse() as p}
+            <option value={p.id} disabled={!p.available}>{CAMEL[p.id] ?? p.label}{p.available ? '' : ' (not installed)'}</option>
+          {/each}
+        </select>
+      </label>
+    {:else if app.tool !== 'file'}
       <label class="profile" title={profile?.note ?? ''}>Runtime
         {#if kind === 'groovy'}
         <select bind:value={app.groovyProfile} onchange={onProfile} aria-label="Runtime profile">

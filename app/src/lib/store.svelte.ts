@@ -205,6 +205,11 @@ export interface RouteResult {
 
 export const flow = $state({
   step: 'contentModifier' as FlowStep,
+  /**
+   * The Camel line, from the Groovy engine that carries it. These steps have no Groovy version: the Camel
+   * line belongs to the tenant, and SAP has moved tenants to Camel 3.14 (F34), hence the default.
+   */
+  camel: 'groovy-2.x' as Profile,
   /** The iFlow step each step's settings came from, if any. */
   sources: {} as Partial<Record<FlowStep, string>>,
   body: SAMPLE_INPUT,
@@ -824,18 +829,23 @@ function namespaceMap() {
   return ns;
 }
 
+/** XPath and the splitter use CPI's Saxon line (9.9) when it is installed, whatever the XSLT tab is set to. */
+function flowXmlProfile(): Profile {
+  return hasProfile('saxon-he-9.9') ? 'saxon-he-9.9' : app.profile;
+}
+
 function flowInput() {
   return { body: flow.body, headers: clean(flow.headers), properties: clean(flow.properties) };
 }
 
 async function xpathValue(expression: string, as: 'boolean' | 'string' | 'nodes') {
-  const r = await call('xpath.eval', { expression, version: '3.1', as, namespaces: namespaceMap(), input: { body: flow.body } }, app.profile);
+  const r = await call('xpath.eval', { expression, version: '3.1', as, namespaces: namespaceMap(), input: { body: flow.body } }, flowXmlProfile());
   if (!r.ok) throw new Error(r.diagnostics?.[0]?.message ?? 'XPath failed');
   return r.value as string;
 }
 
 async function simpleEval(expression: string, mode: 'condition' | 'expression') {
-  const r = await call('simple.eval', { expression, mode, input: flowInput() }, app.groovyProfile);
+  const r = await call('simple.eval', { expression, mode, input: flowInput() }, flow.camel);
   if (!r.ok) throw new Error(r.diagnostics?.[0]?.message ?? 'Camel Simple failed');
   return r as { value: string | null; evaluated?: string };
 }
@@ -867,7 +877,7 @@ async function runContentModifier() {
   flow.cmResult = await call('contentModifier.run', {
     headers: await rows(flow.cm.headers), properties: await rows(flow.cm.properties),
     bodyType: flow.cm.bodyType, body: flow.cm.body, input: flowInput(),
-  }, app.groovyProfile);
+  }, flow.camel);
 }
 
 async function runRouter() {
@@ -903,7 +913,7 @@ async function runSplitter() {
   flow.splitResult = await call('split.run', {
     splitter: s.splitter, expressionType: s.expressionType, expression: await resolve(s.expression),
     grouping: await resolve(String(s.grouping ?? '')), streaming: s.streaming, namespaces: namespaceMap(), input: { body: flow.body },
-  }, app.profile);
+  }, flowXmlProfile());
 }
 
 /** A result message becomes the next input, to try steps one after another. */

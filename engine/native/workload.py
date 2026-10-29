@@ -95,7 +95,7 @@ def main():
         ("xpath.eval", {"expression": "//i[@g='b']", "version": "3.1", "as": "boolean", "input": {"body": BODY}}, lambda r: r["value"] == "true"),
         ("xpath.eval", {"expression": "//i/@v", "version": "3.1", "as": "string", "input": {"body": BODY}}, lambda r: r["value"] == "1"),
         ("split.run", {"splitter": "general", "expressionType": "xpath", "expression": "/x/i", "grouping": 2, "input": {"body": BODY}},
-         lambda r: r["count"] == 2 and r["messages"][1]["body"].startswith("<x>")),
+         lambda r: r["count"] == 2 and "<x>" in r["messages"][1]["body"]),
         ("split.run", {"splitter": "iterating", "expressionType": "token", "expression": "i", "input": {"body": BODY}}, lambda r: r["count"] == 3),
         ("split.run", {"splitter": "general", "expressionType": "xpath", "expression": "/r", "input": {"body": entity_doc}}, no_leak),
         ("xpath.eval", {"expression": "string(/r)", "version": "1.0", "input": {"body": entity_doc}}, no_leak),

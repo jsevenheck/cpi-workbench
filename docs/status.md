@@ -12,7 +12,7 @@
 
 Automated checks:
 
-* Engine tests (`mvn -f engine/pom.xml verify`): core 11, XSLT/XSD/XPath/Splitter 43 per Saxon version (13 of them on project boundaries, 7 splitter cases from SAP's examples), Groovy 31 per script version (4 Camel Simple, 4 Content Modifier).
+* Engine tests (`mvn -f engine/pom.xml verify`): core 11, XSLT/XSD/XPath/Splitter 44 per Saxon version (13 of them on project boundaries, 8 splitter cases from SAP's examples), Groovy 31 per script version (4 Camel Simple, 4 Content Modifier).
 * Regression test cases (`testdata/regression-project`): 6.
 * Browser end-to-end tests: `app/e2e/smoke.mjs` (XML tools) and `groovy.mjs` (Groovy and Flow Steps).
 * UI unit tests (`npm --prefix app test`): the JSON, XSLT and Groovy formatters, test-case rows, path comparison.

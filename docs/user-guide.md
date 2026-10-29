@@ -45,8 +45,8 @@ Download the installer for your platform from the
     `${property.x}`) conditions, default route; the result shows which route the message takes.
   * Splitter: XPath, Line Break or Token, grouping; the result lists the messages.
 
-  XPath runs on the XML engine chosen on the XSLT tab, Camel on the Groovy engine chosen under
-  *Runtime*. *Use as input* passes a result on to the next step. See
+  These steps have no Groovy version: *Camel* in the top bar picks the tenant's Camel line (3.14
+  for tenant software 7.x / 8.x, the default; 2.24 for 5.x / 6.x). XPath runs on Saxon-HE 9.9. *Use as input* passes a result on to the next step. See
   [Fidelity](fidelity.md#flow-steps-content-modifier-router-splitter).
 * **Import iFlow** unpacks an iFlow exported from Integration Suite (zip) into `iflows/` and lists
   its Groovy Script, XSLT Mapping, XML Validator, Content Modifier, Router and Splitter steps.

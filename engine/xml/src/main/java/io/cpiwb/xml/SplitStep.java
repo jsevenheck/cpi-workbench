@@ -45,6 +45,7 @@ public final class SplitStep {
 
     /** SAP: these characters are not supported in a splitter XPath. */
     private static final String UNSUPPORTED = "|+*>=[]@";
+    private static final Pattern DECLARATION = Pattern.compile("\\s+xmlns(?::([\\w.-]+))?\\s*=\\s*[\"']([^\"']*)[\"']");
     private static final Pattern LINES = Pattern.compile("\\r\\n|\\r|\\n|\\\\r\\\\n|\\\\n|\\\\r");
 
     /**
@@ -148,7 +149,8 @@ public final class SplitStep {
             if (general) {
                 Document msg = builder.newDocument();
                 msg.appendChild(envelope(msg, points.get(0), group));
-                out.add(serialize(msg));
+                // As in SAP's example of the General Splitter's result messages.
+                out.add("<?xml version='1.0' encoding='UTF-8'?>\n" + serialize(msg));
             } else {
                 StringBuilder sb = new StringBuilder();
                 for (Element e : group) {
@@ -162,9 +164,23 @@ public final class SplitStep {
         return out;
     }
 
-    private static List<Element> select(Document doc, String expr, Map<String, String> ns) throws Exception {
+    private static List<Element> select(Document doc, String expr, Map<String, String> mapping) throws Exception {
+        // SAP: a prefix can be declared after the path: /ns1:root/shop xmlns:ns1="demo.sap.com".
+        Map<String, String> ns = new java.util.LinkedHashMap<>(mapping);
+        java.util.regex.Matcher decl = DECLARATION.matcher(expr);
+        String path = expr;
+        while (decl.find()) {
+            if (decl.group(1) == null) {
+                throw new IllegalArgumentException("Declare a prefix (xmlns:ns1=\"...\"), not a default namespace: "
+                        + "CPI rejects xmlns=\"...\" in a splitter XPath (SAP).");
+            }
+            ns.put(decl.group(1), decl.group(2));
+            path = path.replace(decl.group(), "");
+        }
+        path = path.trim();
         // Real iFlows write paths with a trailing slash (/Participants/Participant/); CPI accepts them.
-        String path = expr.endsWith("/") && expr.length() > 1 ? expr.substring(0, expr.length() - 1) : expr;
+        path = path.endsWith("/") && path.length() > 1 ? path.substring(0, path.length() - 1) : path;
+        path = inheritPrefixes(path);
         for (char c : path.toCharArray()) {
             if (UNSUPPORTED.indexOf(c) >= 0) {
                 throw new IllegalArgumentException("'" + c + "' is not supported in a splitter XPath (SAP: only absolute "
@@ -182,6 +198,29 @@ public final class SplitStep {
             out.add((Element) nodes.item(i));
         }
         return out;
+    }
+
+    /**
+     * Steps without a prefix take the prefix of the step before them: in SAP's example
+     * {@code /ns1:root/shop/customerReview} splits a document whose elements are all in ns1's namespace.
+     * (Matching any namespace would explain the example too; which one CPI does is not documented.)
+     */
+    static String inheritPrefixes(String path) {
+        String[] steps = path.split("/", -1);
+        String prefix = null;
+        for (int i = 0; i < steps.length; i++) {
+            String step = steps[i];
+            if (step.isEmpty() || step.startsWith(".") || step.contains("(")) {
+                continue;
+            }
+            int colon = step.indexOf(':');
+            if (colon > 0) {
+                prefix = step.substring(0, colon);
+            } else if (prefix != null) {
+                steps[i] = prefix + ":" + step;
+            }
+        }
+        return String.join("/", steps);
     }
 
     /** Elements with this local name in document order, not those inside an earlier match. */

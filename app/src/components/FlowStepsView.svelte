@@ -109,11 +109,13 @@
         <label class="field">Incoming Format
           <select value={flow.gather.messageType} onchange={(e) => setFormat(e.currentTarget.value)} aria-label="Incoming Format">
             <option value="sameXml">XML (Same Format)</option><option value="differentXml">XML (Different Format)</option><option value="plainText">Plain Text</option>
+            {#if !ALGORITHMS[flow.gather.messageType]}<option value={flow.gather.messageType}>{flow.gather.messageType} (not simulated)</option>{/if}
           </select>
         </label>
         <label class="field">Aggregation Algorithm
           <select bind:value={flow.gather.algorithm} aria-label="Aggregation Algorithm">
             {#each ALGORITHMS[flow.gather.messageType] ?? [] as [v, l]}<option value={v}>{l}</option>{/each}
+            {#if !(ALGORITHMS[flow.gather.messageType] ?? []).some(([v]) => v === flow.gather.algorithm)}<option value={flow.gather.algorithm}>{flow.gather.algorithm} (not simulated)</option>{/if}
           </select>
         </label>
         {#if flow.gather.algorithm === 'combineAtXPath'}

@@ -223,9 +223,10 @@ export const flow = $state({
   },
   router: {
     routes: [
+      // SAP: all routes use the same condition type; XML and Non-XML mixed make the evaluation fail.
       { name: 'ERP', expressionType: 'nonxml', condition: "${header.SenderId} = 'ERP_100'", default: false },
-      { name: 'Large order', expressionType: 'xml', condition: 'count(/Order/Item) > 5', default: false },
-      { name: 'Default', expressionType: 'xml', condition: '', default: true },
+      { name: 'Web shop', expressionType: 'nonxml', condition: "${header.SenderId} = 'WEBSHOP' and ${header.Priority} = 'high'", default: false },
+      { name: 'Default', expressionType: 'nonxml', condition: '', default: true },
     ] as Route[],
     throwException: false,
   },
@@ -288,6 +289,7 @@ export async function init() {
     const firstGroovy = profiles.find((p) => p.available && p.kind === 'groovy');
     if (firstXslt && !profiles.find((p) => p.id === app.profile)?.available) app.profile = firstXslt.id;
     if (firstGroovy && !profiles.find((p) => p.id === app.groovyProfile)?.available) app.groovyProfile = firstGroovy.id;
+    if (firstGroovy && !profiles.find((p) => p.id === flow.camel)?.available) flow.camel = firstGroovy.id;
     if (!firstXslt && firstGroovy) app.tool = 'groovy';
     const saved = safeGet('cpiwb.project');
     if (saved) await open(saved).catch(() => undefined);
@@ -843,9 +845,9 @@ function flowInput() {
   return { body: flow.body, headers: clean(flow.headers), properties: clean(flow.properties) };
 }
 
-async function xpathValue(expression: string, as: 'boolean' | 'string' | 'nodes') {
-  // Headers and properties are XPath variables ($name), as in CPI's Camel.
-  const r = await call('xpath.eval', { expression, version: '3.1', as, namespaces: namespaceMap(), input: flowInput() }, flowXmlProfile());
+async function xpathValue(expression: string, as: 'boolean' | 'string' | 'nodes', input = flowInput()) {
+  // Headers and properties are XPath variables ($name), as Camel's XPath resolver provides them (F39).
+  const r = await call('xpath.eval', { expression, version: '3.1', as, namespaces: namespaceMap(), input }, flowXmlProfile());
   if (!r.ok) throw new Error(r.diagnostics?.[0]?.message ?? 'XPath failed');
   return r.value as string;
 }
@@ -873,23 +875,43 @@ export async function runFlowStep() {
 }
 
 async function runContentModifier() {
-  // XPath rows read the incoming body, which the step changes only after all header and property rows.
-  const rows = async (list: CmRow[]) => Promise.all(list.map(async (r) => {
-    if (r.action !== 'Create' || r.type !== 'xpath') return { ...r };
-    try {
-      return { ...r, resolved: await xpathValue(r.value, r.datatype.startsWith('org.w3c.dom.') ? 'nodes' : 'string') };
-    } catch (e) {
-      throw new Error(`XPath of ${r.name}: ${(e as Error).message}`);
+  // XPath rows read the incoming body, which the step changes only after all header and property rows. Rows run
+  // top to bottom (SAP), so an XPath that uses $name sees the headers and properties of the rows above it.
+  const input = flowInput();
+  let state = input;
+  const done: Record<'headers' | 'properties', any[]> = { headers: [], properties: [] };
+  let pending: Record<'headers' | 'properties', any[]> = { headers: [], properties: [] };
+  for (const table of ['headers', 'properties'] as const) {
+    for (const r of flow.cm[table]) {
+      let row: any = { ...r };
+      if (r.action === 'Create' && r.type === 'xpath') {
+        if (r.value.includes('$') && (pending.headers.length || pending.properties.length)) {
+          const s = await call('contentModifier.run', { ...pending, bodyType: 'constant', body: '', input: state }, flow.camel);
+          if (s.ok) state = { body: input.body, headers: s.output.headers, properties: s.output.properties };
+          pending = { headers: [], properties: [] };
+        }
+        try {
+          row = { ...r, resolved: await xpathValue(r.value, r.datatype.startsWith('org.w3c.dom.') ? 'nodes' : 'string', state) };
+        } catch (e) {
+          throw new Error(`XPath of ${r.name}: ${(e as Error).message}`);
+        }
+      }
+      done[table].push(row);
+      pending[table].push(row);
     }
-  }));
+  }
   flow.cmResult = await call('contentModifier.run', {
-    headers: await rows(flow.cm.headers), properties: await rows(flow.cm.properties),
-    bodyType: flow.cm.bodyType, body: flow.cm.body, input: flowInput(),
+    ...done, bodyType: flow.cm.bodyType, body: flow.cm.body, input,
   }, flow.camel);
 }
 
 async function runRouter() {
   const routes: RouteResult[] = flow.router.routes.map((r) => ({ status: r.default ? 'default' : 'not evaluated' }));
+  if (new Set(flow.router.routes.filter((r) => !r.default).map((r) => r.expressionType)).size > 1) {
+    flow.routerResult = { routes, diagnostics: [],
+      taken: 'Error: the routes mix XML and Non-XML conditions; SAP: "the evaluation fails" (Define Router).' };
+    return;
+  }
   let taken = '';
   for (const [i, r] of flow.router.routes.entries()) {
     if (r.default) continue;

@@ -31,7 +31,7 @@
     <label>Version
       <select bind:value={xpath.version}>
         <option value="1.0">1.0 (JDK)</option>
-        <option value="3.1">3.1 (Saxon, as in Content Modifier and Router)</option>
+        <option value="3.1">3.1 (Saxon, as in Content Modifier and Filter)</option>
       </select>
     </label>
     <button class="primary" onclick={runXpath} disabled={xpath.running}>Evaluate</button>

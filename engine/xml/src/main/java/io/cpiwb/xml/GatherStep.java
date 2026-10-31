@@ -83,6 +83,10 @@ public final class GatherStep {
 
     private static String gather(String format, String algorithm, List<String> messages, String source, String target,
                                  Map<String, String> ns, ProjectResolver resolver) throws Exception {
+        if (!List.of("sameXml", "differentXml", "plainText").contains(format)) {
+            throw new IllegalArgumentException("UnsupportedInSimulator: the Incoming Format '" + format
+                    + "' (Any combines into Zip or Tar archives, which are not simulated).");
+        }
         boolean xml = !"plainText".equals(format);
         switch (algorithm) {
             case "concatenate":
@@ -158,6 +162,12 @@ public final class GatherStep {
                 throw new IllegalArgumentException("Message " + (i + 1) + " is not XML: " + e.getMessage(), e);
             }
             NodeList found = (NodeList) xp.evaluate(source, doc, XPathConstants.NODESET);
+            for (int j = 0; j < found.getLength(); j++) {
+                if (!(found.item(j) instanceof Element)) {
+                    throw new IllegalArgumentException("The source XPath " + source + " must select elements; it selected a "
+                            + found.item(j).getNodeName() + " node in message " + (i + 1) + ".");
+                }
+            }
             if (i == 0) {
                 result = doc;
                 Node t = (Node) xp.evaluate(target, doc, XPathConstants.NODE);

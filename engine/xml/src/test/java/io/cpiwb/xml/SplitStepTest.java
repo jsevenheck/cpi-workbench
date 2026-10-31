@@ -66,8 +66,12 @@ class SplitStepTest {
                 "<root><shop><product><id>1</id><id>2</id></product><customerReview><id>4</id></customerReview></shop></root>"),
                 content(split("general", "xpath", "//customerReview/id", null, SHOP, null)));
         // SAP: with //id all four ids end up under the first parent, product.
-        List<String> all = content(split("general", "xpath", "//id", null, SHOP, null));
+        Map<String, Object> mixed = split("general", "xpath", "//id", null, SHOP, null);
+        List<String> all = content(mixed);
         assertEquals(4, all.size());
+        assertTrue(Json.arr(mixed, "diagnostics").toString().contains("different parent elements"));
+        assertFalse(Json.arr(split("general", "xpath", "//customerReview/id", null, SHOP, null), "diagnostics").toString()
+                .contains("different parent"));
         assertEquals("<root><shop><product><id>3</id></product></shop></root>", all.get(2));
     }
 

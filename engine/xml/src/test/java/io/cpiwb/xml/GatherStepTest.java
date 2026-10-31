@@ -64,5 +64,8 @@ class GatherStepTest {
                 body(gather("sameXml", "combineAtXPath", "/PurchaseOrder/Items/Item", "", parts)));
         assertFalse(Json.bool(gather("sameXml", "combineAtXPath", "/PurchaseOrder/X", "", parts), "ok", true));
         assertFalse(Json.bool(gather("sameXml", "combineAtXPath", "/PurchaseOrder/Items/Item", "/Nope", parts), "ok", true));
+        Map<String, Object> attr = gather("sameXml", "combineAtXPath", "/PurchaseOrder/Items/Item/@x", "/PurchaseOrder", List.of("<PurchaseOrder><Items><Item x='1'/></Items></PurchaseOrder>"));
+        assertTrue(Json.arr(attr, "diagnostics").toString().contains("must select elements"));
+        assertTrue(Json.arr(gather("any", "zip", "", "", List.of("a")), "diagnostics").toString().contains("UnsupportedInSimulator"));
     }
 }

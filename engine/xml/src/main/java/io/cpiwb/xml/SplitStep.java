@@ -74,7 +74,7 @@ public final class SplitStep {
                     throw new IllegalArgumentException("The General Splitter has no Token expression type (SAP); use the Iterating Splitter.");
                 }
                 bodies = splitXml(input.getBody(), general, type, expr, grouping,
-                        XsltStep.stringMap(Json.obj(req, "namespaces")), resolver);
+                        XsltStep.stringMap(Json.obj(req, "namespaces")), resolver, diags);
             }
             if (bodies.isEmpty()) {
                 diags.add(Diagnostic.info("No split point found: CPI creates no message and ends the flow as Completed (SAP).").toJson());
@@ -130,7 +130,7 @@ public final class SplitStep {
     }
 
     private static List<String> splitXml(byte[] body, boolean general, String type, String expr, int grouping,
-                                         Map<String, String> ns, ProjectResolver resolver) throws Exception {
+                                         Map<String, String> ns, ProjectResolver resolver, List<Object> diags) throws Exception {
         if (expr.isEmpty()) {
             throw new IllegalArgumentException("token".equals(type) ? "Enter a token (an element name)." : "Enter an XPath expression.");
         }
@@ -143,6 +143,11 @@ public final class SplitStep {
         Document doc = builder.parse(in);
         List<Element> points = "token".equals(type) ? byName(doc.getDocumentElement(), expr, new ArrayList<>())
                 : select(doc, expr, ns);
+        if (general && points.stream().map(Node::getParentNode).distinct().count() > 1) {
+            diags.add(Diagnostic.warning("The split points have different parent elements. SAP supports relative paths only "
+                    + "for split points on the same level under the same path and recommends naming the parent "
+                    + "(e.g. //customerReview/id); every message gets the first split point's envelope, as in SAP's example.").toJson());
+        }
         List<String> out = new ArrayList<>();
         for (int i = 0; i < points.size(); i += grouping) {
             List<Element> group = points.subList(i, Math.min(points.size(), i + grouping));

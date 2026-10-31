@@ -85,7 +85,7 @@
     </div>
     <div class="spacer"></div>
     {#if app.tool === 'flow'}
-      <label class="profile" title="Content Modifier, Router and Splitter have no Groovy version; what matters is the tenant's Camel line">Camel
+      <label class="profile" title="Flow steps have no Groovy version; what matters is the tenant's Camel line">Camel
         <select bind:value={flow.camel} onchange={runFlowStep} aria-label="Camel version">
           {#each [...kindProfiles].reverse() as p}
             <option value={p.id} disabled={!p.available}>{CAMEL[p.id] ?? p.label}{p.available ? '' : ' (not installed)'}</option>

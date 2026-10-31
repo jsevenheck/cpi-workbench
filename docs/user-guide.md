@@ -49,7 +49,8 @@ Download the installer for your platform from the
   * Gather: Combine (SAP's multi-mapping format), Combine at XPath or Concatenate of the messages from
     the splitter or added by hand.
 
-  In XPath, `$name` is the header of that name, else the exchange property, as in CPI.
+  In XPath, `$name` is the header of that name, else the exchange property, as Camel's XPath variable
+  resolver provides them ([Fidelity](fidelity.md), F39).
 
   These steps have no Groovy version: *Camel* in the top bar picks the tenant's Camel line (3.14
   for tenant software 7.x / 8.x, the default; 2.24 for 5.x / 6.x). XPath runs on Saxon-HE 9.9. *Use as input* passes a result on to the next step. See

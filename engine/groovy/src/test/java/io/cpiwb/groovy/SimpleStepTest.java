@@ -48,6 +48,8 @@ class SimpleStepTest {
                 SimpleStep.operatorsToCamel("${header.a} = 'x=y or z' or ${header.b} >= 2", true));
         assertEquals("${header.a} == 1 and ${header.order} != 2", SimpleStep.operatorsToCamel("${header.a} = 1 and ${header.order} != 2", false));
         assertEquals("${body} =~ 'abc' && ${header.android} == 1", SimpleStep.operatorsToCamel("${body} =~ 'abc' and ${header.android} = 1", true));
+        // A quoted '}' inside ${...} does not end the function.
+        assertEquals("${header.a.replace('}', 'x')} == 'axb'", SimpleStep.operatorsToCamel("${header.a.replace('}', 'x')} = 'axb'", true));
     }
 
     @Test

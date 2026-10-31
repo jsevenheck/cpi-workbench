@@ -103,7 +103,7 @@ final class FlowSteps {
             }
         }
         return step(gw, "router", props).with("config", Json.o().with("routes", routes)
-                .with("throwException", "true".equals(props.get("throwException"))));
+                .with("throwException", "true".equals(param(props.getOrDefault("throwException", ""), params))));
     }
 
     private static Json.Obj step(Element el, String type, Map<String, String> props) {
@@ -127,7 +127,7 @@ final class FlowSteps {
             for (int j = 0; j < cells.getLength(); j++) {
                 Element cell = (Element) cells.item(j);
                 String key = cell.getAttribute("id").toLowerCase();
-                row.with("datatype".equals(key) ? "datatype" : key, param(cell.getTextContent(), params));
+                row.with(key, param(cell.getTextContent(), params));
             }
             out.add(row);
         }

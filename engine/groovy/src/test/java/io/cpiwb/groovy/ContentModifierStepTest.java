@@ -81,6 +81,8 @@ class ContentModifierStepTest {
         assertFalse(h.containsKey("X-Trace"));
         assertFalse(h.containsKey("SenderId"));
         assertTrue(values(r, "properties").containsKey("Partner"));
+        // A Delete row without a name is an error, not a silent no-op.
+        assertFalse(Json.bool(run(List.of(row("Delete", " ", "constant", "", "")), List.of(), "constant", ""), "ok", true));
     }
 
     @Test

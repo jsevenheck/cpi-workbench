@@ -66,7 +66,7 @@ node app/e2e/groovy.mjs /tmp/demo-project [screenshotDir]
 ```
 
 With `CPIWB_IFLOW_ZIP` set to a zip of `engine/core/src/test/resources/iflow`, `groovy.mjs` also imports
-that iFlow and opens its Groovy and Content Modifier steps. CI does this; locally:
+that iFlow and opens its Groovy, Content Modifier, Filter and Gather steps. CI does this; locally:
 `jar --create --no-manifest --file /tmp/iflow.zip -C engine/core/src/test/resources/iflow .`
 
 ## CI and installers

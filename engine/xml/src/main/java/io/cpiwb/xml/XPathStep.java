@@ -42,8 +42,9 @@ import java.util.Map;
 import java.util.regex.Pattern;
 
 /**
- * XPath evaluation against the message body. Version 1.0 uses the JDK's XPath engine, 3.1 uses Saxon,
- * as CPI's Content Modifier and Router do (SAP documents XPath 3.1; F37). Namespace prefixes are declared
+ * XPath evaluation against the message body. Version 1.0 uses the JDK's XPath engine, 3.1 uses Saxon, as
+ * SAP documents for the Content Modifier and the Filter; Router conditions in real iFlows use XPath 2.0+ syntax
+ * (F37), and 3.1 there is an assumption. Namespace prefixes are declared
  * like the iFlow's "Namespace Mapping" setting.
  */
 public final class XPathStep {

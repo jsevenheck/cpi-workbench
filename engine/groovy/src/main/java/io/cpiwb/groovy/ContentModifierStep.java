@@ -79,6 +79,9 @@ public final class ContentModifierStep {
         String where = (header ? "Header " : "Property ") + name;
         Json.Obj step = Json.o().with("table", header ? "header" : "property").with("name", name);
         if ("delete".equalsIgnoreCase(Json.str(row, "action", "Create"))) {
+            if (name.isEmpty()) {
+                throw new IllegalArgumentException((header ? "A header" : "A property") + " Delete row has no name or pattern.");
+            }
             delete(exchange, header, name);
             return step.with("deleted", true);
         }

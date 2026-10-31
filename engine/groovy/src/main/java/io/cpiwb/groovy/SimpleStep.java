@@ -99,7 +99,8 @@ public final class SimpleStep {
                     quote = 0;
                 }
             } else if (c == '\'' || c == '"') {
-                quote = depth == 0 ? c : 0;
+                // Also inside ${...}: a quoted '}' (e.g. in replace('}', 'x')) does not close the function.
+                quote = c;
             } else if (c == '$' && i + 1 < expr.length() && expr.charAt(i + 1) == '{') {
                 depth++;
             } else if (c == '}' && depth > 0) {

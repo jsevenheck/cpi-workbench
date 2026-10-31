@@ -6,22 +6,44 @@ of its version.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-31
+
 ### Added
 
-- **Flow Steps** tab: runs a Content Modifier, Filter, Router, General / Iterating Splitter or Gather on
-  an input message. These steps have no Groovy version: the tab picks the tenant's Camel line (3.14 by
-  default, or 2.24). XPath uses Saxon (XPath 3.1) and sees headers and properties as variables (`$name`),
-  as Camel's XPath variable resolver provides them. CPI's `=`, `and`, `or` and `${property.x}` work on both Camel lines, and so do OGNL
-  calls such as `${in.header.name.split(',')[0]}` (the Groovy 2.x engine now bundles `camel-bean`).
-  Gather writes SAP's multi-mapping format and takes a splitter's result with one click; its messages
-  are numbered body tabs in the input pane. Each step keeps its settings and result when you switch steps.
-- iFlow import lists Content Modifier, Filter, Router, Splitter and Gather steps and opens them in Flow Steps with
-  their settings and the iFlow's externalized parameters.
+- **Flow Steps** tab: runs a Content Modifier, Filter, Router, General / Iterating Splitter or Gather
+  on an input message (body, headers, properties, namespace mapping). *Use as input* passes a result
+  on to the next step; each step keeps its settings and last result when you switch steps.
+  - These steps have no Groovy version: *Camel* picks the tenant's Camel line (3.14, the default, or
+    2.24). Camel Simple runs on the engines' real Camel; CPI's `=`, `and`, `or` and `${property.x}`
+    work on both lines, and so do OGNL calls such as `${in.header.name.split(',')[0]}`.
+  - XPath runs on Saxon (XPath 3.1) and sees headers and properties as variables (`$name`), as
+    Camel's XPath variable resolver provides them.
+  - Content Modifier: header and property rows top to bottom with CPI's source types and data types,
+    Delete rows with `$include=` / `$exclude=` patterns, and the message body (Constant or Expression).
+  - Filter: XPath with the Value Types String, Integer, Boolean, Node and Nodelist; SAP's
+    `function:simple(...)` works.
+  - Router: routes in order with XML or Non-XML conditions and a default route; the result shows
+    which route the message takes and the Camel spelling of CPI's operators. Routes that mix XML and
+    Non-XML conditions are an error, as in CPI.
+  - General and Iterating Splitter: XPath, Line Break and Token, grouping and `CamelSplit*` values,
+    with the rules of SAP's documented examples.
+  - Gather: Combine in SAP's multi-mapping format, Combine at XPath and Concatenate. A splitter's
+    result goes to Gather with one click; its messages are numbered body tabs in the input pane.
+- iFlow import lists Content Modifier, Filter, Router, Splitter and Gather steps and opens them in
+  Flow Steps with their settings and the iFlow's externalized parameters (`{{name}}` from
+  `parameters.prop`). The body of a Content Modifier up to version 1.3 is read as an expression.
 
 ### Changed
 
-- The XPath tab starts with XPath 3.1 (Saxon), as SAP documents for the Content Modifier and the Filter. Its
-  1.0 option no longer claims to be what simple iFlow steps use; that had no source.
+- The XPath tab starts with XPath 3.1 (Saxon), as SAP documents for the Content Modifier and the
+  Filter. Its 1.0 option no longer claims to be what simple iFlow steps use; that had no source.
+- The Groovy 2.x engine bundles Camel's `camel-bean`, which Camel 3 needs for OGNL calls in Camel
+  Simple.
+
+### Fixed
+
+- Opening a flow step right after a Groovy step no longer logs an uncaught `Canceled` error from the
+  editor in the browser console.
 
 ## [0.1.1] - 2026-10-26
 
@@ -57,5 +79,7 @@ First public release.
   supported.
 - The installers and engine jars include the licence texts and notices of the bundled components.
 
-[Unreleased]: https://github.com/jsevenheck/cpi-workbench/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/jsevenheck/cpi-workbench/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/jsevenheck/cpi-workbench/compare/v0.1.1...v0.2.0
+[0.1.1]: https://github.com/jsevenheck/cpi-workbench/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/jsevenheck/cpi-workbench/releases/tag/v0.1.0

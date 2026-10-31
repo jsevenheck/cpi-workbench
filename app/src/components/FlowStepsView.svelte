@@ -17,6 +17,24 @@
   };
 
   let inputTab = $state<'body' | 'headers' | 'properties' | 'namespaces'>('body');
+  // Gather takes several messages: their bodies are numbered tabs on the left, with one set of headers and properties.
+  let gathering = $derived(flow.step === 'gather');
+  let msg = $state(0);
+  let msgIndex = $derived(Math.min(msg, Math.max(0, flow.gather.messages.length - 1)));
+
+  function addMessage() {
+    flow.gather.messages = [...flow.gather.messages, flow.body];
+    msg = flow.gather.messages.length - 1;
+    inputTab = 'body';
+  }
+  function removeMessage(i: number) {
+    flow.gather.messages = flow.gather.messages.filter((_, j) => j !== i);
+  }
+  function fromSplitter() {
+    gatherSplitResult();
+    msg = 0;
+    inputTab = 'body';
+  }
   let cmTab = $state<'headers' | 'properties' | 'body'>('headers');
   let language = $derived(/^\s*[[{]/.test(flow.body) ? 'json' : 'xml');
   let cm = $derived(flow.cmResult);
@@ -44,20 +62,43 @@
 <div class="flow" style:grid-template-columns={paneColumns(panes.sizes)}>
   <section class="pane" aria-label="Input message">
     <header>
-      <h2 title={app.inputPaths.flow ?? ''}>Input message{#if app.inputPaths.flow} <span class="from">· {app.inputPaths.flow.split('/').pop()}</span>{/if}</h2>
+      {#if gathering}
+        <h2>Input messages</h2>
+      {:else}
+        <h2 title={app.inputPaths.flow ?? ''}>Input message{#if app.inputPaths.flow} <span class="from">· {app.inputPaths.flow.split('/').pop()}</span>{/if}</h2>
+      {/if}
       <div class="tabs" role="tablist">
-        <button role="tab" class:active={inputTab === 'body'} onclick={() => (inputTab = 'body')}>Body</button>
+        {#if gathering}
+          {#each flow.gather.messages as _, i}
+            <button role="tab" class:active={inputTab === 'body' && msgIndex === i} onclick={() => { msg = i; inputTab = 'body'; }}
+              title={'Body of message ' + (i + 1)}>Body {i + 1}</button>
+          {/each}
+          <button class="icon" onclick={addMessage} title="Add the current input body as another message" aria-label="Add message">+</button>
+        {:else}
+          <button role="tab" class:active={inputTab === 'body'} onclick={() => (inputTab = 'body')}>Body</button>
+        {/if}
         <button role="tab" class:active={inputTab === 'headers'} onclick={() => (inputTab = 'headers')}>Headers <span class="count">{flow.headers.length}</span></button>
         <button role="tab" class:active={inputTab === 'properties'} onclick={() => (inputTab = 'properties')}>Properties <span class="count">{flow.properties.length}</span></button>
         <button role="tab" class:active={inputTab === 'namespaces'} onclick={() => (inputTab = 'namespaces')}
           title="The iFlow's Namespace Mapping (Runtime Configuration); shared with the XPath tab">Namespaces <span class="count">{xpath.namespaces.length}</span></button>
       </div>
       <div class="spacer"></div>
+      {#if gathering}
+        <button class="small" onclick={fromSplitter} disabled={!split?.messages?.length}>From Splitter result</button>
+        {#if flow.gather.messages.length && inputTab === 'body'}
+          <button class="small" onclick={() => removeMessage(msgIndex)} title="Remove this message">Remove</button>
+        {/if}
+      {:else}
       <button class="small" onclick={useGroovyInput}>Use Groovy input</button>
       <button class="small" onclick={saveInput} disabled={!app.project} title={app.project ? 'Save the input body under inputs/' : 'Open a project to save'}>Save…</button>
+      {/if}
     </header>
     <div class="body">
-      {#if inputTab === 'body'}<Editor bind:value={flow.body} {language} onrun={runFlowStep} label="Input body" />
+      {#if inputTab === 'body' && gathering}
+        {#if flow.gather.messages.length}
+          {#key msgIndex}<Editor bind:value={flow.gather.messages[msgIndex]} language="xml" onrun={runFlowStep} label={'Body of message ' + (msgIndex + 1)} />{/key}
+        {:else}<p class="hint pad">No messages yet: run a splitter and press <i>Gather</i> there, take <i>From Splitter result</i>, or add the input body with +.</p>{/if}
+      {:else if inputTab === 'body'}<Editor bind:value={flow.body} {language} onrun={runFlowStep} label="Input body" />
       {:else if inputTab === 'headers'}<KeyValueTable bind:rows={flow.headers} emptyText="No headers." />
       {:else if inputTab === 'properties'}<KeyValueTable bind:rows={flow.properties} emptyText="No exchange properties." />
       {:else}<KeyValueTable bind:rows={xpath.namespaces} emptyText="Prefix → namespace URI, like the iFlow's Namespace Mapping." />{/if}
@@ -126,16 +167,7 @@
             <input class="mono" bind:value={flow.gather.targetXPath} aria-label="Combine at target" placeholder="empty: the source's parent" />
           </label>
         {/if}
-        <h3>{flow.gather.messages.length} message(s)
-          <button class="small" onclick={gatherSplitResult} disabled={!split?.messages?.length}>From Splitter result</button>
-          <button class="small" onclick={() => (flow.gather.messages = [...flow.gather.messages, flow.body])}>+ Input body</button></h3>
-        {#each flow.gather.messages as _, i}
-          <div class="gmsg">
-            <textarea class="mono" bind:value={flow.gather.messages[i]} rows="3" spellcheck="false" aria-label={'Message ' + (i + 1)}></textarea>
-            <button class="icon" onclick={() => (flow.gather.messages = flow.gather.messages.filter((_, j) => j !== i))} aria-label="Remove message">✕</button>
-          </div>
-        {/each}
-        <p class="hint">Headers and properties are not aggregated (SAP).</p>
+        <p class="hint">The messages are on the left. Headers and properties of the individual messages are not aggregated (SAP); the ones on the left stay with the result.</p>
       {:else if flow.step === 'router'}
         <table class="routes">
           <colgroup><col style="width: 24%" /><col style="width: 92px" /><col /><col style="width: 52px" /><col style="width: 28px" /></colgroup>
@@ -262,7 +294,7 @@
   .d.warning { color: var(--warn); }
   .d.info { color: var(--muted); }
   .msg { border-bottom: 1px solid var(--border-soft); padding: 4px 0; }
-  .gmsg { display: flex; gap: 4px; align-items: flex-start; }
+  .pad { padding: 8px 10px; }
   .taken-line { font-size: 13px; margin: 4px 0 8px; }
   .st { display: inline-block; min-width: 86px; font-size: 10px; text-transform: uppercase; font-weight: 600; color: var(--muted); }
   .st.true { color: var(--ok); }

@@ -13,7 +13,8 @@ of its version.
   default, or 2.24). XPath uses Saxon (XPath 3.1) and sees headers and properties as variables (`$name`),
   as Camel's XPath variable resolver provides them. CPI's `=`, `and`, `or` and `${property.x}` work on both Camel lines, and so do OGNL
   calls such as `${in.header.name.split(',')[0]}` (the Groovy 2.x engine now bundles `camel-bean`).
-  Gather writes SAP's multi-mapping format and takes a splitter's result with one click.
+  Gather writes SAP's multi-mapping format and takes a splitter's result with one click; its messages
+  are numbered body tabs in the input pane.
 - iFlow import lists Content Modifier, Filter, Router, Splitter and Gather steps and opens them in Flow Steps with
   their settings and the iFlow's externalized parameters.
 

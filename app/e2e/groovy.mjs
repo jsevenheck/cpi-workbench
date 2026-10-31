@@ -150,6 +150,9 @@ await page.locator('.res h3', { hasText: '2 message(s)' }).waitFor({ timeout: 10
   .catch(() => fail('General Splitter did not create 2 messages'));
 // The split messages go to Gather; Combine writes SAP's multi-mapping format.
 await page.locator('.res h3').getByRole('button', { name: 'Gather' }).click();
+// The split messages are the input on the left, one body tab each.
+await page.getByRole('tab', { name: 'Body 2' }).waitFor({ timeout: 5000 })
+  .catch(() => fail('Gather: the split messages are not on the left as Body 1 and Body 2'));
 // Set explicitly: opening the iFlow's Gather (4b) loaded Combine at XPath.
 await page.getByLabel('Incoming Format').selectOption('sameXml');
 await page.getByLabel('Aggregation Algorithm').selectOption('combine');

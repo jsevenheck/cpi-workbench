@@ -46,8 +46,9 @@ Download the installer for your platform from the
   * Filter: an XPath and its Value Type (String, Integer, Boolean, Node, Nodelist); the result is the
     new body. `function:simple('${property.x}')` takes the value from Camel Simple.
   * Splitter: XPath, Line Break or Token, grouping; the result lists the messages. *Gather* passes them on.
-  * Gather: Combine (SAP's multi-mapping format), Combine at XPath or Concatenate of the messages from
-    the splitter or added by hand.
+  * Gather: Combine (SAP's multi-mapping format), Combine at XPath or Concatenate. The messages are on
+    the left as *Body 1*, *Body 2*, …: from the splitter's *Gather* button, *From Splitter result*, or `+`
+    for the current input body. Headers, properties and namespaces are there once, as for the other steps.
 
   In XPath, `$name` is the header of that name, else the exchange property, as Camel's XPath variable
   resolver provides them ([Fidelity](fidelity.md), F39).

@@ -5,6 +5,7 @@ import io.cpiwb.core.Json;
 import io.cpiwb.core.SimExchange;
 import net.sf.saxon.s9api.DocumentBuilder;
 import net.sf.saxon.s9api.Processor;
+import net.sf.saxon.s9api.QName;
 import net.sf.saxon.s9api.SaxonApiException;
 import net.sf.saxon.s9api.Serializer;
 import net.sf.saxon.s9api.XPathCompiler;
@@ -35,8 +36,10 @@ import java.net.URI;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 /**
  * XPath evaluation against the message body. Version 1.0 uses the JDK's XPath engine, 3.1 uses Saxon,
@@ -45,6 +48,7 @@ import java.util.Map;
  */
 public final class XPathStep {
 
+    private static final Pattern NAME = Pattern.compile("[A-Za-z_][\\w.-]*");
     private final Processor processor = new Processor(false);
 
     public XPathStep() {
@@ -85,7 +89,7 @@ public final class XPathStep {
                 evalJdk(expr, ns, input.getBody(), items, resolver);
                 result.with("engine", "JDK XPath 1.0");
             } else {
-                String value = evalSaxon(expr, ns, input.getBody(), items, resolver, Json.str(req, "as", null));
+                String value = evalSaxon(expr, ns, input, items, resolver, Json.str(req, "as", null));
                 if (value != null) {
                     result.with("value", value);
                 }
@@ -169,16 +173,16 @@ public final class XPathStep {
                 .with("name", n.getNodeName()).with("value", n.getNodeValue());
     }
 
-    private String evalSaxon(String expr, Map<String, String> ns, byte[] body, List<Object> items,
+    private String evalSaxon(String expr, Map<String, String> ns, SimExchange input, List<Object> items,
                              ProjectResolver resolver, String as) throws SaxonApiException, TransformerException {
         DocumentBuilder db = processor.newDocumentBuilder();
-        XdmNode doc = db.build(resolver.source(new InputSource(new ByteArrayInputStream(body)),
+        XdmNode doc = db.build(resolver.source(new InputSource(new ByteArrayInputStream(input.getBody())),
                 ProjectResolver.MEMORY_BASE + "input.xml"));
         XPathCompiler xc = processor.newXPathCompiler();
         // Relative URIs in doc() and unparsed-text() resolve against the project folder.
         xc.setBaseURI(URI.create(resolver.resolveAgainst(".", null)));
         ns.forEach(xc::declareNamespace);
-        XPathSelector sel = xc.compile(expr).load();
+        XPathSelector sel = compile(xc, expr, input);
         sel.setURIResolver(resolver);
         sel.setContextItem(doc);
         if ("boolean".equals(as)) {
@@ -212,6 +216,39 @@ public final class XPathStep {
             return all.toString();
         }
         return null;
+    }
+
+    /**
+     * Compiles the XPath with the message's headers and properties as variables: {@code $name} is the header
+     * of that name, else the exchange property, as Camel's XPath variable resolver (MessageVariableResolver,
+     * Camel 2.24 and 3.14) does for CPI's Filter, Router and Content Modifier. Real iFlows use it, e.g.
+     * {@code Student[Age > $AgeLimit_Header]}.
+     */
+    static XPathSelector compile(XPathCompiler xc, String expr, SimExchange input) throws SaxonApiException {
+        Map<String, Object> vars = new LinkedHashMap<>();
+        input.getProperties().forEach((k, v) -> putVariable(vars, k, v));
+        input.getHeaders().forEach((k, v) -> putVariable(vars, k, v));
+        for (String name : vars.keySet()) {
+            xc.declareVariable(new QName(name));
+        }
+        XPathSelector sel = xc.compile(expr).load();
+        for (Map.Entry<String, Object> v : vars.entrySet()) {
+            Object o = v.getValue();
+            XdmAtomicValue value;
+            try {
+                value = XdmAtomicValue.makeAtomicValue(o);
+            } catch (IllegalArgumentException e) {
+                value = new XdmAtomicValue(String.valueOf(o));
+            }
+            sel.setVariable(new QName(v.getKey()), value);
+        }
+        return sel;
+    }
+
+    private static void putVariable(Map<String, Object> vars, String name, Object value) {
+        if (value != null && name != null && NAME.matcher(name).matches()) {
+            vars.put(name, value);
+        }
     }
 
     /** Pretty-prints an XML document (used by the UI's "Format" button). */

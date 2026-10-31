@@ -8,12 +8,13 @@ of its version.
 
 ### Added
 
-- **Flow Steps** tab: runs a Content Modifier, Router or General / Iterating Splitter on an input
-  message. These steps have no Groovy version: the tab picks the tenant's Camel line (3.14 by
-  default, or 2.24). XPath uses Saxon (XPath 3.1); CPI's `=`, `and`,
-  `or` and `${property.x}` work on both Camel lines, and so do OGNL calls such as
-  `${in.header.name.split(',')[0]}` (the Groovy 2.x engine now bundles `camel-bean`).
-- iFlow import lists Content Modifier, Router and Splitter steps and opens them in Flow Steps with
+- **Flow Steps** tab: runs a Content Modifier, Filter, Router, General / Iterating Splitter or Gather on
+  an input message. These steps have no Groovy version: the tab picks the tenant's Camel line (3.14 by
+  default, or 2.24). XPath uses Saxon (XPath 3.1) and sees headers and properties as variables (`$name`),
+  as CPI's Camel does. CPI's `=`, `and`, `or` and `${property.x}` work on both Camel lines, and so do OGNL
+  calls such as `${in.header.name.split(',')[0]}` (the Groovy 2.x engine now bundles `camel-bean`).
+  Gather writes SAP's multi-mapping format and takes a splitter's result with one click.
+- iFlow import lists Content Modifier, Filter, Router, Splitter and Gather steps and opens them in Flow Steps with
   their settings and the iFlow's externalized parameters.
 
 ### Changed

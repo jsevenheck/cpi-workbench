@@ -4,16 +4,25 @@
   import Editor from './Editor.svelte';
   import KeyValueTable from './KeyValueTable.svelte';
   import CmTable from './CmTable.svelte';
-  import { app, flow, groovy, xpath, runFlowStep, useAsFlowInput, saveInput, type FlowStep } from '../lib/store.svelte';
+  import { app, flow, groovy, xpath, runFlowStep, useAsFlowInput, gatherSplitResult, saveInput, type FlowStep } from '../lib/store.svelte';
 
   const panes = paneSizes('flow', [1, 1.2, 1]);
-  const STEPS: [FlowStep, string][] = [['contentModifier', 'Content Modifier'], ['router', 'Router'], ['splitter', 'Splitter']];
+  const STEPS: [FlowStep, string][] = [['contentModifier', 'Content Modifier'], ['filter', 'Filter'], ['router', 'Router'],
+    ['splitter', 'Splitter'], ['gather', 'Gather']];
+  // SAP: which Aggregation Algorithm each Incoming Format allows.
+  const ALGORITHMS: Record<string, [string, string][]> = {
+    sameXml: [['combine', 'Combine'], ['combineAtXPath', 'Combine at XPath']],
+    differentXml: [['combine', 'Combine']],
+    plainText: [['concatenate', 'Concatenate']],
+  };
 
   let inputTab = $state<'body' | 'headers' | 'properties' | 'namespaces'>('body');
   let cmTab = $state<'headers' | 'properties' | 'body'>('headers');
   let language = $derived(/^\s*[[{]/.test(flow.body) ? 'json' : 'xml');
   let cm = $derived(flow.cmResult);
   let split = $derived(flow.splitResult);
+  let filtered = $derived(flow.filterResult);
+  let gathered = $derived(flow.gatherResult);
 
   function useGroovyInput() {
     useAsFlowInput(groovy.body, groovy.headers, groovy.properties);
@@ -25,6 +34,10 @@
   }
   function setDefault(i: number) {
     flow.router.routes = flow.router.routes.map((r, j) => ({ ...r, default: i === j }));
+  }
+  function setFormat(format: string) {
+    flow.gather.messageType = format;
+    if (!ALGORITHMS[format]?.some(([a]) => a === flow.gather.algorithm)) flow.gather.algorithm = ALGORITHMS[format]?.[0][0] ?? 'combine';
   }
 </script>
 
@@ -81,6 +94,46 @@
             placeholder="Empty: the body stays as it is. With Expression, ${'{'}in.body{'}'} and ${'{'}property.x{'}'} are replaced."></textarea>
         {/if}
         <p class="hint">Rows run top to bottom, headers before properties, then the body. XPath rows read the incoming body.</p>
+      {:else if flow.step === 'filter'}
+        <label class="field">XPath Expression
+          <input class="mono" bind:value={flow.filter.expression} aria-label="Filter XPath" placeholder="/Order/Item[@qty > 1]" />
+        </label>
+        <label class="field">Value Type
+          <select bind:value={flow.filter.valueType} aria-label="Value Type">
+            <option value="string">String</option><option value="integer">Integer</option><option value="boolean">Boolean</option>
+            <option value="node">Node</option><option value="nodelist">Nodelist</option>
+          </select>
+        </label>
+        <p class="hint">XPath 3.1 on the body; the result becomes the new body. <code>function:simple('${'{'}property.x{'}'}')</code> takes the value from Camel Simple.</p>
+      {:else if flow.step === 'gather'}
+        <label class="field">Incoming Format
+          <select value={flow.gather.messageType} onchange={(e) => setFormat(e.currentTarget.value)} aria-label="Incoming Format">
+            <option value="sameXml">XML (Same Format)</option><option value="differentXml">XML (Different Format)</option><option value="plainText">Plain Text</option>
+          </select>
+        </label>
+        <label class="field">Aggregation Algorithm
+          <select bind:value={flow.gather.algorithm} aria-label="Aggregation Algorithm">
+            {#each ALGORITHMS[flow.gather.messageType] ?? [] as [v, l]}<option value={v}>{l}</option>{/each}
+          </select>
+        </label>
+        {#if flow.gather.algorithm === 'combineAtXPath'}
+          <label class="field">Combine from source (XPath)
+            <input class="mono" bind:value={flow.gather.sourceXPath} aria-label="Combine from source" placeholder="/Order/Item" />
+          </label>
+          <label class="field">Combine at target (XPath)
+            <input class="mono" bind:value={flow.gather.targetXPath} aria-label="Combine at target" placeholder="empty: the source's parent" />
+          </label>
+        {/if}
+        <h3>{flow.gather.messages.length} message(s)
+          <button class="small" onclick={gatherSplitResult} disabled={!split?.messages?.length}>From Splitter result</button>
+          <button class="small" onclick={() => (flow.gather.messages = [...flow.gather.messages, flow.body])}>+ Input body</button></h3>
+        {#each flow.gather.messages as _, i}
+          <div class="gmsg">
+            <textarea class="mono" bind:value={flow.gather.messages[i]} rows="3" spellcheck="false" aria-label={'Message ' + (i + 1)}></textarea>
+            <button class="icon" onclick={() => (flow.gather.messages = flow.gather.messages.filter((_, j) => j !== i))} aria-label="Remove message">✕</button>
+          </div>
+        {/each}
+        <p class="hint">Headers and properties are not aggregated (SAP).</p>
       {:else if flow.step === 'router'}
         <table class="routes">
           <colgroup><col style="width: 24%" /><col style="width: 92px" /><col /><col style="width: 52px" /><col style="width: 28px" /></colgroup>
@@ -152,7 +205,8 @@
         {/each}
       {:else if flow.step === 'splitter' && split}
         {#each split.diagnostics as d}<div class="d {d.severity}">{d.message}</div>{/each}
-        {#if split.ok}<h3>{split.count} message(s) <span class="muted">· {split.engine}</span></h3>{/if}
+        {#if split.ok}<h3>{split.count} message(s) <span class="muted">· {split.engine}</span>
+          {#if split.count}<button class="small" onclick={gatherSplitResult} title="Pass the messages to a Gather step">Gather</button>{/if}</h3>{/if}
         {#each split.messages as m}
           <div class="msg">
             <div class="k">CamelSplitIndex {m.index} · CamelSplitComplete {m.complete}{#if m.size !== undefined} · CamelSplitSize {m.size}{/if}
@@ -160,7 +214,15 @@
             <pre>{m.body}</pre>
           </div>
         {/each}
-      {:else}<p class="hint">Run the step (Ctrl+Enter in the body). Open a Content Modifier, Router or Splitter from an imported iFlow to load its settings.</p>{/if}
+      {:else if (flow.step === 'filter' && filtered) || (flow.step === 'gather' && gathered)}
+        {@const r = flow.step === 'filter' ? filtered : gathered}
+        {#each r.diagnostics as d}<div class="d {d.severity}">{d.message}</div>{/each}
+        {#if r.ok}
+          <h3>Output <span class="muted" title={r.engine}>· {r.count ?? 1} {flow.step === 'filter' ? 'item(s) selected' : 'message(s) gathered'}</span>
+            <button class="small" onclick={() => useAsFlowInput(r.body)}>Use as input</button></h3>
+          <pre>{r.body}</pre>
+        {/if}
+      {:else}<p class="hint">Run the step (Ctrl+Enter in the body). Open a flow step from an imported iFlow to load its settings.</p>{/if}
     </div>
   </section>
 </div>
@@ -198,6 +260,7 @@
   .d.warning { color: var(--warn); }
   .d.info { color: var(--muted); }
   .msg { border-bottom: 1px solid var(--border-soft); padding: 4px 0; }
+  .gmsg { display: flex; gap: 4px; align-items: flex-start; }
   .taken-line { font-size: 13px; margin: 4px 0 8px; }
   .st { display: inline-block; min-width: 86px; font-size: 10px; text-transform: uppercase; font-weight: 600; color: var(--muted); }
   .st.true { color: var(--ok); }

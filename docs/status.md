@@ -1,4 +1,4 @@
-# Implementation status (2026-10-29)
+# Implementation status (2026-10-31)
 
 ## How to read the numbers
 
@@ -12,7 +12,7 @@
 
 Automated checks:
 
-* Engine tests (`mvn -f engine/pom.xml verify`): core 12, XSLT/XSD/XPath/Splitter 44 per Saxon version (13 of them on project boundaries, 8 splitter cases from SAP's examples), Groovy 31 per script version (4 Camel Simple, 4 Content Modifier).
+* Engine tests (`mvn -f engine/pom.xml verify`): core 12, XSLT/XSD/XPath/Splitter/Filter/Gather 52 per Saxon version (13 of them on project boundaries, 8 splitter cases from SAP's examples, 5 Filter and 3 Gather tests), Groovy 31 per script version (4 Camel Simple, 4 Content Modifier).
 * Regression test cases (`testdata/regression-project`): 6.
 * Browser end-to-end tests: `app/e2e/smoke.mjs` (XML tools) and `groovy.mjs` (Groovy, Flow Steps and the iFlow import, which CI runs with the iFlow fixture as a zip).
 * UI unit tests (`npm --prefix app test`): the JSON, XSLT and Groovy formatters, test-case rows, path comparison.
@@ -25,7 +25,7 @@ Automated checks:
 | XSLT Mapping step (both Saxon profiles, parameter binding, `hci:` functions, includes, `java:` calls, error lines) | ≈ 90 % | `java:` calls: JDK classes only (no classes from the iFlow's jars), Saxon-EE argument conversion only in simple cases. |
 | XSD validation | ≈ 90 % | XML Schema 1.0 only (JDK validator). |
 | XPath tester | ≈ 95 % | — |
-| Flow Steps: Content Modifier, Router, General / Iterating Splitter (with Camel Simple) | ≈ 80 % | `=`, `and`, `or` are rewritten to Camel's spelling on an assumption (F35). Splitter rules are inferred from SAP's examples. Number Range and External Parameter sources raise `UnsupportedInSimulator`; variables use their default. No probe yet, no CLI command, no test-case step. |
+| Flow Steps: Content Modifier, Filter, Router, General / Iterating Splitter, Gather (with Camel Simple) | ≈ 80 % | `=`, `and`, `or` are rewritten to Camel's spelling on an assumption (F35). Splitter rules are inferred from SAP's examples. Gather's Combine at XPath has no SAP example (an assumption); Zip and Tar are not simulated. Number Range and External Parameter sources raise `UnsupportedInSimulator`; variables use their default. No probe yet, no CLI command, no test-case step. |
 | Groovy Script 1.x (Groovy 2.4.21, Camel 2.24.3, Script API v1) | ≈ 90 % | Overloads that take Camel's `Attachment` type. Camel 3.14 variant in case the fingerprint shows it (F30). |
 | Groovy Script 2.x (Groovy 4.0.29, Camel 3.14.7, Script API v2) | ≈ 90 % | ProcessDirect raises `UnsupportedInSimulator`. Methods the runtime class may have beyond the interface. |
 | MPL, console, API call log | ≈ 95 % | — |
@@ -33,7 +33,7 @@ Automated checks:
 | Test cases, runner, CLI | ≈ 90 % | No test case from an exported MPL trace (format unknown, F18). Cases are written by hand and run from the CLI; the app only opens them (the Tests tab and *Save as test* were removed on 2026-10-25 because they were not needed). |
 | Runtime comparison (9.9 ↔ 12, 1.x ↔ 2.x) | ≈ 95 % | — |
 | Lint (1.x → 2.x) | ≈ 80 % | Covers the known breaks (F26, v1-only methods, imports). Others appear only as compile or runtime errors. On the 1.x runtime, the compile error for a Script API v2 or `groovy.xml.XmlSlurper` import says that it needs 2.x. |
-| iFlow-zip import | ≈ 80 % | Groovy, XSLT, XML Validator, Content Modifier, Router and General / Iterating Splitter steps (`{{parameters}}` from `parameters.prop`); other steps are not listed. Header-driven mappings are flagged, not resolved. The format is undocumented (best effort; checked against 24 SAP sample iFlows). |
+| iFlow-zip import | ≈ 80 % | Groovy, XSLT, XML Validator, Content Modifier, Filter, Router, General / Iterating Splitter and Gather steps (`{{parameters}}` from `parameters.prop`); other steps are not listed. Header-driven mappings are flagged, not resolved. The format is undocumented (best effort; checked against 389 exported iFlows from SAP's samples, F36, F38, F39). |
 | Desktop app and browser mode | ≈ 90 % | Engines, shell and browser mode are tested on Windows and macOS in CI. On Windows, the desktop window (WebView2, `tauri dev`) was tried by hand on 2026-10-25 with XSLT, Groovy 1.x/2.x, XSD validation and iFlow import. Not yet tried by hand: the installers, macOS (WKWebView). |
 | Distribution | ≈ 40 % | No code signing, no auto-update. On a managed Windows laptop, the unsigned MSI is refused as untrusted, so it could not be tried there. One all-in-one installer instead of a base app plus a separate Groovy pack (plan §5.3). |
 | Large messages | ≈ 70 % | Messages go through JSON-RPC, not temp files (plan §5.3). 7.4 MB worked (XSLT 1.3 s, Groovy 0.45 s); larger ones are untested. |

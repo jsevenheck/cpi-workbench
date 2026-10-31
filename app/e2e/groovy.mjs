@@ -98,6 +98,10 @@ if (process.env.CPIWB_IFLOW_ZIP) {
   await page.locator('.steps .step', { hasText: 'Set headers' }).click();
   await page.locator('.src', { hasText: 'Set headers' }).waitFor({ timeout: 10000 })
     .catch(() => fail('Content Modifier from the iFlow did not open in Flow Steps'));
+  await page.locator('.steps .step', { hasText: 'Keep items' }).click();
+  if ((await page.getByLabel('Filter XPath').inputValue()) !== '/Order/Item') fail('Filter XPath from the iFlow');
+  await page.locator('.steps .step', { hasText: 'Gather items' }).click();
+  if ((await page.getByLabel('Aggregation Algorithm').inputValue()) !== 'combineAtXPath') fail('Gather algorithm from the iFlow');
   await page.getByRole('tab', { name: 'Groovy Script' }).click();
 }
 
@@ -131,6 +135,7 @@ await page.locator('section.input .view-lines', { hasText: '"items": [' }).waitF
 // 6b) Flow Steps with their sample settings: Content Modifier (XPath on the XML engine, Simple on Camel),
 // Router (CPI's Non-XML spelling) and General Splitter.
 await page.getByRole('tab', { name: 'Flow Steps' }).click();
+await page.getByRole('tab', { name: 'Content Modifier' }).click();
 await page.getByRole('button', { name: 'Run step' }).click();
 // Both the sample and the imported iFlow's Content Modifier set the header OrderId from /Order/@id.
 await page.locator('.res .row', { hasText: 'OrderId' }).filter({ hasText: '4711' }).waitFor({ timeout: 20000 })
@@ -143,6 +148,20 @@ await page.getByRole('tab', { name: 'Splitter' }).click();
 await page.getByRole('button', { name: 'Run step' }).click();
 await page.locator('.res h3', { hasText: '2 message(s)' }).waitFor({ timeout: 10000 })
   .catch(() => fail('General Splitter did not create 2 messages'));
+// The split messages go to Gather; Combine writes SAP's multi-mapping format.
+await page.locator('.res h3').getByRole('button', { name: 'Gather' }).click();
+// Set explicitly: opening the iFlow's Gather (4b) loaded Combine at XPath.
+await page.getByLabel('Incoming Format').selectOption('sameXml');
+await page.getByLabel('Aggregation Algorithm').selectOption('combine');
+await page.getByRole('button', { name: 'Run step' }).click();
+await page.locator('.res pre', { hasText: 'multimap:Message1' }).waitFor({ timeout: 10000 })
+  .catch(() => fail('Gather did not combine the split messages'));
+await page.getByRole('tab', { name: 'Filter' }).click();
+await page.getByLabel('Filter XPath').fill('/Order/Item[@qty > 1]');
+await page.getByLabel('Value Type').selectOption('nodelist');
+await page.getByRole('button', { name: 'Run step' }).click();
+await page.locator('.res h3', { hasText: '1 item(s) selected' }).waitFor({ timeout: 10000 })
+  .catch(() => fail('Filter did not select the one item with qty > 1'));
 if (shots) await page.screenshot({ path: path.join(shots, 'g4-flow-steps.png') });
 
 // 7) Closing the project closes it in the engines too: runs no longer see its platform data.

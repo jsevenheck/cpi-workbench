@@ -39,7 +39,7 @@ class IflowImportTest {
         Map<String, Object> r = IflowImport.importZip(zip, project, null);
         assertEquals("iflows/Order_Replication", r.get("imported"));
         List<Object> steps = (List<Object>) r.get("steps");
-        assertEquals(8, steps.size(), () -> Json.write(r));
+        assertEquals(10, steps.size(), () -> Json.write(r));
         Map<String, Object> g = (Map<String, Object>) steps.get(0);
         assertEquals("groovy", g.get("type"));
         assertEquals("enrich", g.get("function"));
@@ -61,7 +61,7 @@ class IflowImportTest {
         assertEquals("xsd", xsd.get("type"));
         assertEquals("iflows/Order_Replication/src/main/resources/xsd/order.xsd", xsd.get("file"));
 
-        // Content Modifier, Splitter and Router, with {{parameters}} from parameters.prop.
+        // Content Modifier, Splitter, Gather, Filter and Router, with {{parameters}} from parameters.prop.
         Map<String, Object> cm = (Map<String, Object>) steps.get(5);
         assertEquals("contentModifier", cm.get("type"));
         Map<String, Object> cmConfig = Json.obj(cm, "config");
@@ -77,7 +77,16 @@ class IflowImportTest {
         assertEquals("general", split.get("splitter"));
         assertEquals("/Order/Item/", split.get("expression"));
         assertEquals("2", split.get("grouping"));
-        Map<String, Object> router = (Map<String, Object>) steps.get(7);
+        Map<String, Object> gather = (Map<String, Object>) steps.get(7);
+        assertEquals("gather", gather.get("type"));
+        assertEquals("combineAtXPath", Json.obj(gather, "config").get("algorithm"));
+        assertEquals("sameXml", Json.obj(gather, "config").get("messageType"));
+        assertEquals("/Order/Item", Json.obj(gather, "config").get("sourceXPath"));
+        Map<String, Object> filter = (Map<String, Object>) steps.get(8);
+        assertEquals("filter", filter.get("type"));
+        assertEquals("nodelist", Json.obj(filter, "config").get("valueType"));
+        assertEquals("/Order/Item", Json.obj(filter, "config").get("expression"));
+        Map<String, Object> router = (Map<String, Object>) steps.get(9);
         assertEquals("router", router.get("type"));
         List<Object> routes = Json.arr(Json.obj(router, "config"), "routes");
         assertEquals("ERP", ((Map<String, Object>) routes.get(0)).get("name"));

@@ -25,8 +25,11 @@ import java.util.regex.Pattern;
  * Splitter {@code splitType}, {@code exprType}, {@code splitExprValue} or {@code tokenValue},
  * {@code grouping}, {@code Streaming}; Router {@code exclusiveGateway} with {@code throwException}, its
  * outgoing sequence flows ({@code expressionType} XML or NonXML, {@code conditionExpression}) and the
- * {@code default} flow. The format is not documented. {@code {{name}}} placeholders take the value from
- * parameters.prop.
+ * {@code default} flow; Filter {@code xpathType} (String, Integer, Boolean, Node, Nodelist) and the XPath in
+ * {@code wrapContent}; Gather {@code messageType} (SameXMLFormat, DiffXMLFormat, PlainText),
+ * {@code aggregationAlgorithm} (sap-identical-multi-mapping, sap-pi-multi-mapping, xpath-merge-strategy,
+ * concatenate-strategy), {@code sourceXPath} and {@code targetXPath}. The format is not documented.
+ * {@code {{name}}} placeholders take the value from parameters.prop.
  */
 final class FlowSteps {
 
@@ -35,7 +38,7 @@ final class FlowSteps {
     private FlowSteps() {
     }
 
-    /** A Content Modifier or a General / Iterating Splitter; null for other activities. */
+    /** A Content Modifier, Filter, Gather or General / Iterating Splitter; null for other activities. */
     static Json.Obj of(Element act, Map<String, String> props, Properties params) throws Exception {
         String activity = props.getOrDefault("activityType", "");
         if ("Enricher".equals(activity)) {
@@ -44,6 +47,23 @@ final class FlowSteps {
                     .with("properties", rows(props.get("propertyTable"), params))
                     .with("bodyType", param(props.getOrDefault("bodyType", "expression"), params).toLowerCase())
                     .with("body", param(props.getOrDefault("wrapContent", ""), params)));
+        }
+        if ("Filter".equals(activity)) {
+            return step(act, "filter", props).with("config", Json.o()
+                    .with("expression", param(props.getOrDefault("wrapContent", ""), params))
+                    .with("valueType", param(props.getOrDefault("xpathType", "Nodelist"), params).toLowerCase()));
+        }
+        if ("Gather".equals(activity)) {
+            String format = param(props.getOrDefault("messageType", "SameXMLFormat"), params);
+            String algorithm = param(props.getOrDefault("aggregationAlgorithm", ""), params);
+            return step(act, "gather", props).with("config", Json.o()
+                    .with("messageType", format.equals("PlainText") ? "plainText" : format.equals("DiffXMLFormat") ? "differentXml"
+                            : format.equals("SameXMLFormat") ? "sameXml" : format)
+                    .with("algorithm", algorithm.equals("concatenate-strategy") ? "concatenate"
+                            : algorithm.equals("xpath-merge-strategy") ? "combineAtXPath"
+                            : algorithm.endsWith("multi-mapping") ? "combine" : algorithm)
+                    .with("sourceXPath", param(props.getOrDefault("sourceXPath", ""), params))
+                    .with("targetXPath", param(props.getOrDefault("targetXPath", ""), params)));
         }
         String split = props.getOrDefault("splitType", "");
         if ("Splitter".equals(activity) && (split.equals("GeneralSplitter") || split.equals("IteratingSplitter"))) {

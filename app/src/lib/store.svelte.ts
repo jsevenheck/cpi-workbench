@@ -57,9 +57,9 @@ export interface IflowStep {
   iflow: string;
   id: string;
   name: string;
-  type: 'groovy' | 'xslt' | 'xsd' | 'contentModifier' | 'router' | 'splitter' | 'error';
+  type: 'groovy' | 'xslt' | 'xsd' | FlowStep | 'error';
   note?: string;
-  /** Content Modifier, Router and Splitter settings as the iFlow stores them. */
+  /** Flow step settings (Content Modifier, Filter, Router, Splitter, Gather) as the iFlow stores them. */
   config?: any;
   componentVersion?: string;
   file?: string;
@@ -177,7 +177,7 @@ export const xpath = $state({
   running: false,
 });
 
-export type FlowStep = 'contentModifier' | 'router' | 'splitter';
+export type FlowStep = 'contentModifier' | 'filter' | 'router' | 'splitter' | 'gather';
 
 /** A Content Modifier row in the iFlow's encoding (type: constant, header, property, xpath, expression, ...). */
 export interface CmRow {
@@ -231,9 +231,14 @@ export const flow = $state({
   },
   splitter: { splitter: 'general' as 'general' | 'iterating', expressionType: 'xpath' as 'xpath' | 'token' | 'lineBreak',
     expression: '/Order/Item', grouping: '', streaming: true },
+  filter: { expression: "/Order/Item[@qty > 1]", valueType: 'nodelist' },
+  /** The messages to gather: a splitter's result or bodies added by hand. */
+  gather: { messageType: 'sameXml', algorithm: 'combine', sourceXPath: '', targetXPath: '', messages: [] as string[] },
   cmResult: null as any,
   routerResult: null as null | { routes: RouteResult[]; taken: string; diagnostics: string[] },
   splitResult: null as any,
+  filterResult: null as any,
+  gatherResult: null as any,
   running: false,
 });
 
@@ -352,7 +357,7 @@ export async function importIflow(zip: string) {
 
 /** Opens the file of an imported iFlow step with the step's settings (function, script version). */
 export async function openIflowStep(step: IflowStep) {
-  if (step.type === 'contentModifier' || step.type === 'router' || step.type === 'splitter') return openFlowStep(step);
+  if (step.config) return openFlowStep(step);
   if (!step.file || !step.fileFound) {
     app.error = step.note ? `Step "${step.name}": ${step.note}`
       : `The file of step "${step.name}" was not found in the export (${step.file ?? 'no reference'}).`;
@@ -839,7 +844,8 @@ function flowInput() {
 }
 
 async function xpathValue(expression: string, as: 'boolean' | 'string' | 'nodes') {
-  const r = await call('xpath.eval', { expression, version: '3.1', as, namespaces: namespaceMap(), input: { body: flow.body } }, flowXmlProfile());
+  // Headers and properties are XPath variables ($name), as in CPI's Camel.
+  const r = await call('xpath.eval', { expression, version: '3.1', as, namespaces: namespaceMap(), input: flowInput() }, flowXmlProfile());
   if (!r.ok) throw new Error(r.diagnostics?.[0]?.message ?? 'XPath failed');
   return r.value as string;
 }
@@ -855,8 +861,10 @@ export async function runFlowStep() {
   app.error = '';
   try {
     if (flow.step === 'contentModifier') await runContentModifier();
+    else if (flow.step === 'filter') await runFilter();
     else if (flow.step === 'router') await runRouter();
-    else await runSplitter();
+    else if (flow.step === 'splitter') await runSplitter();
+    else await runGather();
   } catch (e) {
     fail(e);
   } finally {
@@ -916,6 +924,38 @@ async function runSplitter() {
   }, flowXmlProfile());
 }
 
+/** SAP: `function:simple('${property.x}')` in a Filter XPath; Camel Simple gives the value, as an XPath string. */
+async function resolveSimpleFunctions(xpathExpr: string) {
+  let out = xpathExpr;
+  for (const m of xpathExpr.matchAll(/function:simple\(\s*(?:'([^']*)'|"([^"]*)")\s*\)/g)) {
+    const v = (await simpleEval(m[1] ?? m[2], 'expression')).value ?? '';
+    out = out.replace(m[0], "'" + v.replaceAll("'", "''") + "'");
+  }
+  return out;
+}
+
+async function runFilter() {
+  flow.filterResult = await call('filter.run', {
+    expression: await resolveSimpleFunctions(flow.filter.expression), valueType: flow.filter.valueType,
+    namespaces: namespaceMap(), input: flowInput(),
+  }, flowXmlProfile());
+}
+
+async function runGather() {
+  const g = flow.gather;
+  flow.gatherResult = await call('gather.run', {
+    messageType: g.messageType, algorithm: g.algorithm, sourceXPath: g.sourceXPath, targetXPath: g.targetXPath,
+    namespaces: namespaceMap(), messages: g.messages,
+  }, flowXmlProfile());
+}
+
+/** The splitter's messages go to the Gather step, as in an iFlow's Splitter → … → Gather. */
+export function gatherSplitResult() {
+  flow.gather.messages = (flow.splitResult?.messages ?? []).map((m: { body: string }) => m.body);
+  flow.gatherResult = null;
+  flow.step = 'gather';
+}
+
 /** A result message becomes the next input, to try steps one after another. */
 export function useAsFlowInput(body: string, headers?: Row[], properties?: Row[]) {
   flow.body = body;
@@ -933,13 +973,19 @@ function openFlowStep(step: IflowStep) {
       bodyType: c.bodyType === 'expression' ? 'expression' : 'constant', body: c.body ?? '' };
   } else if (step.type === 'router') {
     flow.router = { routes: c.routes ?? [], throwException: !!c.throwException };
+  } else if (step.type === 'filter') {
+    flow.filter = { expression: c.expression ?? '', valueType: c.valueType ?? 'nodelist' };
+  } else if (step.type === 'gather') {
+    // The messages stay: they come from the splitter, not from the iFlow.
+    flow.gather = { ...flow.gather, messageType: c.messageType ?? 'sameXml', algorithm: c.algorithm ?? 'combine',
+      sourceXPath: c.sourceXPath ?? '', targetXPath: c.targetXPath ?? '' };
   } else {
     flow.splitter = { splitter: c.splitter, expressionType: c.expressionType, expression: c.expression ?? '',
       grouping: c.grouping ?? '', streaming: c.streaming !== false };
   }
   flow.step = step.type as FlowStep;
   flow.sources[step.type as FlowStep] = `${step.iflow} · ${step.name || step.id}`;
-  flow.cmResult = flow.routerResult = flow.splitResult = null;
+  flow.cmResult = flow.routerResult = flow.splitResult = flow.filterResult = flow.gatherResult = null;
   app.tool = 'flow';
   app.status = `Loaded ${step.name || step.id} from ${step.iflow}`;
 }

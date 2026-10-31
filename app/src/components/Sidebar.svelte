@@ -1,6 +1,6 @@
 <script lang="ts">
-  const KIND: Record<string, string> = { groovy: 'G', xslt: 'X', xsd: 'V', contentModifier: 'C', router: 'R', splitter: 'S' };
-  const LABEL: Record<string, string> = { contentModifier: 'Content Modifier', router: 'Router', splitter: 'Splitter' };
+  const KIND: Record<string, string> = { groovy: 'G', xslt: 'X', xsd: 'V', contentModifier: 'C', filter: 'F', router: 'R', splitter: 'S', gather: 'A' };
+  const LABEL: Record<string, string> = { contentModifier: 'Content Modifier', filter: 'Filter', router: 'Router', splitter: 'Splitter', gather: 'Gather' };
   import { isDesktop, pickFolder, pickZip } from '../lib/engine';
   import { app, open, closeProject, openFile, mayDiscard, mayOverwrite, freePath, refreshFiles, writeFile, ask, xslt, xsd, groovy, SAMPLE_GROOVY_V1, SAMPLE_GROOVY_V2,
     importIflow, openIflowStep, loadIflowSteps, deleteFile, copyFile, useAsInput, fileView } from '../lib/store.svelte';
@@ -190,6 +190,6 @@
   .kind.xslt { color: var(--accent); }
   .kind.xsd { color: var(--warn); }
   .kind.error { color: var(--err); }
-  .kind.contentModifier, .kind.router, .kind.splitter { color: var(--muted); }
+  .kind.contentModifier, .kind.filter, .kind.router, .kind.splitter, .kind.gather { color: var(--muted); }
   @media (max-width: 800px) { .side { width: 100%; border-right: none; border-bottom: 1px solid var(--border); max-height: 35vh; } }
 </style>

@@ -48,7 +48,11 @@ Download the installer for your platform from the
   * Splitter: XPath, Line Break or Token, grouping; the result lists the messages. *Gather* passes them on.
   * Gather: Combine (SAP's multi-mapping format), Combine at XPath or Concatenate. The messages are on
     the left as *Body 1*, *Body 2*, …: from the splitter's *Gather* button, *From Splitter result*, or `+`
-    for the current input body. Headers, properties and namespaces are there once, as for the other steps.
+    for the current input body. Gather combines bodies only (SAP does not aggregate headers and properties),
+    so the input pane shows no header or property tabs for it; the namespaces stay for *Combine at XPath*.
+
+  Each step keeps its settings and its last result when you switch between the steps or tabs; the input
+  message is shared by all steps but Gather. Nothing is kept after the app restarts.
 
   In XPath, `$name` is the header of that name, else the exchange property, as Camel's XPath variable
   resolver provides them ([Fidelity](fidelity.md), F39).

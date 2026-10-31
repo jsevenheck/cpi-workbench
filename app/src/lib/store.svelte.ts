@@ -1007,7 +1007,9 @@ function openFlowStep(step: IflowStep) {
   }
   flow.step = step.type as FlowStep;
   flow.sources[step.type as FlowStep] = `${step.iflow} · ${step.name || step.id}`;
-  flow.cmResult = flow.routerResult = flow.splitResult = flow.filterResult = flow.gatherResult = null;
+  // Only this step's result is out of date; the other steps keep theirs.
+  const results = { contentModifier: 'cmResult', filter: 'filterResult', router: 'routerResult', splitter: 'splitResult', gather: 'gatherResult' } as const;
+  flow[results[step.type as FlowStep]] = null;
   app.tool = 'flow';
   app.status = `Loaded ${step.name || step.id} from ${step.iflow}`;
 }

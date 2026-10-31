@@ -21,6 +21,7 @@
   let gathering = $derived(flow.step === 'gather');
   let msg = $state(0);
   let msgIndex = $derived(Math.min(msg, Math.max(0, flow.gather.messages.length - 1)));
+  let shownTab = $derived(gathering && (inputTab === 'headers' || inputTab === 'properties') ? 'body' : inputTab);
 
   function addMessage() {
     flow.gather.messages = [...flow.gather.messages, flow.body];
@@ -70,22 +71,22 @@
       <div class="tabs" role="tablist">
         {#if gathering}
           {#each flow.gather.messages as _, i}
-            <button role="tab" class:active={inputTab === 'body' && msgIndex === i} onclick={() => { msg = i; inputTab = 'body'; }}
+            <button role="tab" class:active={shownTab === 'body' && msgIndex === i} onclick={() => { msg = i; inputTab = 'body'; }}
               title={'Body of message ' + (i + 1)}>Body {i + 1}</button>
           {/each}
           <button class="icon" onclick={addMessage} title="Add the current input body as another message" aria-label="Add message">+</button>
         {:else}
           <button role="tab" class:active={inputTab === 'body'} onclick={() => (inputTab = 'body')}>Body</button>
+          <button role="tab" class:active={inputTab === 'headers'} onclick={() => (inputTab = 'headers')}>Headers <span class="count">{flow.headers.length}</span></button>
+          <button role="tab" class:active={inputTab === 'properties'} onclick={() => (inputTab = 'properties')}>Properties <span class="count">{flow.properties.length}</span></button>
         {/if}
-        <button role="tab" class:active={inputTab === 'headers'} onclick={() => (inputTab = 'headers')}>Headers <span class="count">{flow.headers.length}</span></button>
-        <button role="tab" class:active={inputTab === 'properties'} onclick={() => (inputTab = 'properties')}>Properties <span class="count">{flow.properties.length}</span></button>
         <button role="tab" class:active={inputTab === 'namespaces'} onclick={() => (inputTab = 'namespaces')}
           title="The iFlow's Namespace Mapping (Runtime Configuration); shared with the XPath tab">Namespaces <span class="count">{xpath.namespaces.length}</span></button>
       </div>
       <div class="spacer"></div>
       {#if gathering}
         <button class="small" onclick={fromSplitter} disabled={!split?.messages?.length}>From Splitter result</button>
-        {#if flow.gather.messages.length && inputTab === 'body'}
+        {#if flow.gather.messages.length && shownTab === 'body'}
           <button class="small" onclick={() => removeMessage(msgIndex)} title="Remove this message">Remove</button>
         {/if}
       {:else}
@@ -94,13 +95,13 @@
       {/if}
     </header>
     <div class="body">
-      {#if inputTab === 'body' && gathering}
+      {#if shownTab === 'body' && gathering}
         {#if flow.gather.messages.length}
           {#key msgIndex}<Editor bind:value={flow.gather.messages[msgIndex]} language="xml" onrun={runFlowStep} label={'Body of message ' + (msgIndex + 1)} />{/key}
         {:else}<p class="hint pad">No messages yet: run a splitter and press <i>Gather</i> there, take <i>From Splitter result</i>, or add the input body with +.</p>{/if}
-      {:else if inputTab === 'body'}<Editor bind:value={flow.body} {language} onrun={runFlowStep} label="Input body" />
-      {:else if inputTab === 'headers'}<KeyValueTable bind:rows={flow.headers} emptyText="No headers." />
-      {:else if inputTab === 'properties'}<KeyValueTable bind:rows={flow.properties} emptyText="No exchange properties." />
+      {:else if shownTab === 'body'}<Editor bind:value={flow.body} {language} onrun={runFlowStep} label="Input body" />
+      {:else if shownTab === 'headers'}<KeyValueTable bind:rows={flow.headers} emptyText="No headers." />
+      {:else if shownTab === 'properties'}<KeyValueTable bind:rows={flow.properties} emptyText="No exchange properties." />
       {:else}<KeyValueTable bind:rows={xpath.namespaces} emptyText="Prefix → namespace URI, like the iFlow's Namespace Mapping." />{/if}
     </div>
   </section>
@@ -167,7 +168,7 @@
             <input class="mono" bind:value={flow.gather.targetXPath} aria-label="Combine at target" placeholder="empty: the source's parent" />
           </label>
         {/if}
-        <p class="hint">The messages are on the left. Headers and properties of the individual messages are not aggregated (SAP); the ones on the left stay with the result.</p>
+        <p class="hint">The messages are on the left. Gather combines their bodies; headers and properties are not aggregated (SAP).</p>
       {:else if flow.step === 'router'}
         <table class="routes">
           <colgroup><col style="width: 24%" /><col style="width: 92px" /><col /><col style="width: 52px" /><col style="width: 28px" /></colgroup>

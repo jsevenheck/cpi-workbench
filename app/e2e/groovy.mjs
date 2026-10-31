@@ -165,6 +165,13 @@ await page.getByLabel('Value Type').selectOption('nodelist');
 await page.getByRole('button', { name: 'Run step' }).click();
 await page.locator('.res h3', { hasText: '1 item(s) selected' }).waitFor({ timeout: 10000 })
   .catch(() => fail('Filter did not select the one item with qty > 1'));
+// Jumping between the steps keeps each step's settings and result.
+await page.getByRole('tab', { name: 'Content Modifier' }).click();
+await page.locator('.res .row', { hasText: 'OrderId' }).filter({ hasText: '4711' }).waitFor({ timeout: 5000 })
+  .catch(() => fail('the Content Modifier result was lost after running the other steps'));
+await page.getByRole('tab', { name: 'Gather' }).click();
+await page.locator('.res pre', { hasText: 'multimap:Message1' }).waitFor({ timeout: 5000 })
+  .catch(() => fail('the Gather result was lost after switching steps'));
 if (shots) await page.screenshot({ path: path.join(shots, 'g4-flow-steps.png') });
 
 // 7) Closing the project closes it in the engines too: runs no longer see its platform data.

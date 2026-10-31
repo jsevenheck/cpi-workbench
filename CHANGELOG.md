@@ -14,7 +14,7 @@ of its version.
   as Camel's XPath variable resolver provides them. CPI's `=`, `and`, `or` and `${property.x}` work on both Camel lines, and so do OGNL
   calls such as `${in.header.name.split(',')[0]}` (the Groovy 2.x engine now bundles `camel-bean`).
   Gather writes SAP's multi-mapping format and takes a splitter's result with one click; its messages
-  are numbered body tabs in the input pane.
+  are numbered body tabs in the input pane. Each step keeps its settings and result when you switch steps.
 - iFlow import lists Content Modifier, Filter, Router, Splitter and Gather steps and opens them in Flow Steps with
   their settings and the iFlow's externalized parameters.
 

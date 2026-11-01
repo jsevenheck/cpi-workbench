@@ -7,8 +7,8 @@
 //!   under 2026-07-28 (`server/discover`, `resultType`, caching hints); a client that opens with
 //!   `initialize` gets the negotiated legacy revision (2025-11-25 back to 2024-11-05).
 //! * Features: tools only (see `tools.rs`). No resources, prompts, logging, sampling or roots.
-//! * Scope: one project folder (`--project`, default: the working directory). Files are read through
-//!   the engines, which refuse paths outside the project. Groovy scripts run without a sandbox, as in
+//! * Scope: one project folder (`--project`; default `CLAUDE_PROJECT_DIR`, else the working directory).
+//!   Files are read through the engines, which refuse paths outside the project. Groovy scripts run without a sandbox, as in
 //!   the app; docs/mcp.md says so.
 
 mod flow;
@@ -91,7 +91,9 @@ fn parse_args(args: &[String]) -> Result<Option<PathBuf>, String> {
             other => return Err(format!("unknown argument '{other}'")),
         }
     }
-    let dir = match project {
+    // Default: the project Claude Code runs in (it sets CLAUDE_PROJECT_DIR for the servers it starts),
+    // else the working directory.
+    let dir = match project.or_else(|| std::env::var("CLAUDE_PROJECT_DIR").ok().filter(|d| !d.is_empty())) {
         Some(p) => PathBuf::from(p),
         None => std::env::current_dir().map_err(|e| e.to_string())?,
     };

@@ -7,8 +7,10 @@ calls as the desktop app, offline.
 
 ## Setup
 
-The server is part of the installed desktop app; nothing else needs to be installed. Start the
-app's executable with `mcp` and the project folder:
+The installed app brings the server. Any MCP client that starts local (stdio) servers can use it,
+for example Claude Code (terminal or the Code tab of the Claude desktop app), Claude Desktop or
+Codex. The client starts `cpi-workbench mcp` itself, in the background: the app window does not
+need to be open, and runs by the agent do not appear in it. The two share only the project's files.
 
 | OS | Executable (default install location) |
 |---|---|
@@ -17,15 +19,26 @@ app's executable with `mcp` and the project folder:
 | macOS | `/Applications/CPI Workbench.app/Contents/MacOS/cpi-workbench` |
 | Linux (`.deb`, `.rpm`) | `/usr/bin/cpi-workbench` |
 
-If you installed somewhere else, use the `cpi-workbench` executable in your install folder.
+**Claude Code:** a `.mcp.json` in the project folder (Windows, `setup.exe`):
 
-**Claude Code** (run in the project folder; on Windows use the path from the table):
-
-```sh
-claude mcp add cpi-workbench -- /usr/bin/cpi-workbench mcp --project /path/to/project
+```json
+{
+  "mcpServers": {
+    "cpi-workbench": {
+      "command": "${LOCALAPPDATA}\\CPI Workbench\\cpi-workbench.exe",
+      "args": ["mcp"]
+    }
+  }
+}
 ```
 
-**Other clients** take the same command in their JSON configuration, for example:
+Claude Code expands `${LOCALAPPDATA}` and tells the server its project folder (`CLAUDE_PROJECT_DIR`),
+so the file can be committed with the project. On macOS or Linux, use the path from the table. Claude
+Code asks once before it starts the servers of a project's `.mcp.json`. Instead of the file, one
+command adds the server for you alone: `claude mcp add cpi-workbench -- <executable> mcp`.
+
+**Claude Desktop** (*Settings → Developer → Edit Config*, `claude_desktop_config.json`) and other
+clients without a project folder need `--project`:
 
 ```json
 {
@@ -38,10 +51,17 @@ claude mcp add cpi-workbench -- /usr/bin/cpi-workbench mcp --project /path/to/pr
 }
 ```
 
-`--project` is the folder of a CPI Workbench project (mappings, scripts, `platform/`, `tests/`,
-`iflows/`). Without it, the server uses its working directory. From a repository checkout, a
-debug build works too: `app/src-tauri/target/debug/cpi-workbench mcp --project …` finds the engine
-jars of the checkout.
+**Codex** (`~/.codex/config.toml`):
+
+```toml
+[mcp_servers.cpi-workbench]
+command = 'C:\Users\me\AppData\Local\CPI Workbench\cpi-workbench.exe'
+args = ["mcp", "--project", 'C:\work\my-cpi-project']
+```
+
+The project folder is `--project`, else `CLAUDE_PROJECT_DIR`, else the server's working directory.
+From a repository checkout, a debug build works too (`app/src-tauri/target/debug/cpi-workbench mcp`);
+it finds the checkout's engine jars.
 
 ## Tools
 

@@ -66,6 +66,11 @@ Download the installer for your platform from the
   version; a Content Modifier, Filter, Router, Splitter or Gather opens in Flow Steps with its settings, with
   `{{parameters}}` filled in from the iFlow's `parameters.prop`. Steps that choose their mapping from a header at runtime
   are marked. The `.iflw` format is not publicly documented, so this is read generically (best effort).
+* **Completions** in Groovy scripts: after `message.` (or a variable declared as `Message`),
+  `messageLogFactory.`, a message log (`MessageLog log`, or `def log = messageLogFactory.getMessageLog(...)`,
+  also with `log?.`) and `ITApiFactory.`, the editor lists the methods of SAP's Script API with their
+  parameters, for the script's API version (v1 or v2 imports). The editor has no type information, so
+  other variable names get no suggestions. Ctrl+Space opens the list again.
 * **Lint** shows hints about what breaks when a script moves from 1.x to 2.x:
   * `XmlSlurper` or `XmlParser` used without a `groovy.xml` import,
   * Script API v1 imports or v1-only methods in a 2.x step,

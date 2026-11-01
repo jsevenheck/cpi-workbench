@@ -29,6 +29,8 @@ of its version.
     with the rules of SAP's documented examples.
   - Gather: Combine in SAP's multi-mapping format, Combine at XPath and Concatenate. A splitter's
     result goes to Gather with one click; its messages are numbered body tabs in the input pane.
+- Completions in Groovy scripts: the methods of SAP's Script API (v1 or v2, from the script's imports)
+  after `message.`, `messageLogFactory.`, a message log and `ITApiFactory.`, with their parameters.
 - iFlow import lists Content Modifier, Filter, Router, Splitter and Gather steps and opens them in
   Flow Steps with their settings and the iFlow's externalized parameters (`{{name}}` from
   `parameters.prop`). The body of a Content Modifier up to version 1.3 is read as an expression.

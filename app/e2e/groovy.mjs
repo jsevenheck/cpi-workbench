@@ -53,6 +53,15 @@ const diag = await page.locator('section.output .diag.error').first().innerText(
 if (!diag.includes('line 4') || !diag.includes('NullPointerException')) fail('runtime error: ' + diag);
 if (shots) await page.screenshot({ path: path.join(shots, 'g2-groovy-error.png') });
 
+// 3b) Script API completions after `message.` (v2 members for a v2 script).
+await page.locator('section.script .view-lines').click({ position: { x: 40, y: 10 } });
+await page.keyboard.press('Control+End');
+await page.keyboard.type('message.reset');
+await page.locator('.suggest-widget .monaco-list-row', { hasText: 'resetBodyStream' }).first().waitFor({ timeout: 5000 })
+  .catch(() => fail('no Script API completions after message.'));
+if (shots) await page.screenshot({ path: path.join(shots, 'g2b-completions.png') });
+await page.keyboard.press('Escape');
+
 // 4) Open the demo project and run the Groovy test case.
 await page.getByLabel('Project folder').fill(project);
 await page.getByRole('button', { name: 'Open' }).click();

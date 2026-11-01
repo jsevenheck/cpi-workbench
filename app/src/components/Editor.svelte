@@ -35,7 +35,7 @@
   let originalModel: monaco.editor.ITextModel | null = null;
   let applying = false;
 
-  const common: monaco.editor.IEditorOptions = {
+  const common: monaco.editor.IEditorOptions & monaco.editor.IGlobalEditorOptions = {
     automaticLayout: true,
     minimap: { enabled: false },
     fontSize: 13,
@@ -43,6 +43,9 @@
     wordWrap: 'off',
     renderWhitespace: 'selection',
     fixedOverflowWidgets: true,
+    // Suggestions only where the app provides them (Script API after a dot) or on Ctrl+Space.
+    quickSuggestions: false,
+    wordBasedSuggestions: 'off',
   };
 
   function create() {

@@ -336,6 +336,29 @@ Later convenience: open an **iFlow export (zip)** and list its script and XSLT s
 | **4 — Productivity** | Platform API mocks, linting, both-profiles comparison, CLI, iFlow-zip import | Usable for regression tests |
 | **5 — Distribution** | Signed installers (`.msi`, notarized `.dmg`), offline installer, auto-update | Shareable with colleagues |
 
+### 10.1 Later: an MCP server for coding agents (not started)
+
+Idea: let a coding agent (e.g. Claude Code) run a script or mapping on the simulator while it writes
+it, through the [Model Context Protocol](https://modelcontextprotocol.io). Assessment from 2026-11-01:
+
+* **Feasible.** The engines already speak line-delimited JSON over stdio (`RpcServer`,
+  `{"id","method","params"}`); MCP's stdio transport is line-delimited JSON-RPC 2.0. The Rust shell
+  (`engine.rs`) already starts, calls and stops the engines.
+* **Shape.** One MCP server in front of all engines, not one per engine: e.g. a headless mode
+  `cpi-workbench mcp --project <folder>` or a small separate sidecar binary, using the bundled JRE and
+  native images. Tools: `xslt_run`, `groovy_run` (1.x / 2.x), `xsd_validate`, `xpath_eval`,
+  `simple_eval`, `flow_step_run`, `compare_runtimes`, `lint`, `tests_run`, `iflow_steps`.
+* **Before it:** flow steps need a CLI command and a test-case step (status: open), so that an agent and
+  CI can run them the same way. A cheap first step without MCP: a short docs section on how an agent
+  calls the CLI jars (`xslt`, `xpath`, `validate`, `test`, Groovy `run`).
+* **To check:** the shell binary uses `windows_subsystem = "windows"`; whether inherited stdio pipes work
+  for an MCP client on Windows is unverified. A separate small binary avoids the question.
+* **Security:** Groovy runs without a sandbox, so an MCP client can run arbitrary code. Compared with an
+  agent that already has a shell this adds little, but the server must stay bound to one project folder,
+  open no network access, and the docs must say so. Payload files may carry prompt injection.
+* **Dependency:** the official [MCP Java SDK](https://modelcontextprotocol.io/sdk/java/mcp-overview) has a
+  stdio transport; the protocol is also small enough to implement without a new dependency.
+
 ---
 
 ## 11. Testing strategy

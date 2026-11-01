@@ -1,4 +1,4 @@
-# Implementation status (2026-10-31)
+# Implementation status (2026-11-01)
 
 ## How to read the numbers
 

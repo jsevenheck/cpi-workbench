@@ -31,6 +31,7 @@ it has not been checked against a tenant yet ([Fidelity](docs/fidelity.md)).
   `ITApiFactory` with **Secure Store**, **Value Mapping**, **Partner Directory**, **Keystore** and
   **number range** mocks fed from the project's `platform/` folder, following SAP's published API interfaces.
 * Compile and runtime errors point to the script line; `println` output is captured.
+* The editor completes SAP's Script API (`message.`, `messageLog.`, `ITApiFactory.`) for 1.x or 2.x.
 * Groovy 1.x → 2.x differences surface for real (e.g. `groovy.util.XmlSlurper` no longer exists in Groovy 4).
 
 **Flow Steps**

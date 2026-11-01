@@ -1,5 +1,5 @@
-//! Flow steps for the MCP server. This follows the Flow Steps tab (`app/src/lib/store.svelte.ts`, section
-//! "flow steps") call for call, so that both give the same result; change the two together:
+//! Flow steps for the MCP server. The Flow Steps tab leads (`app/src/lib/store.svelte.ts`, section "flow steps");
+//! this follows it call for call, so that both give the same result. Change the tab first, then this:
 //! * XPath (Content Modifier rows, XML Router conditions, Filter, Splitter, Gather) runs on the XML engine,
 //!   9.9 when installed; headers and properties are XPath variables (F39).
 //! * Camel Simple and the Content Modifier run on the Camel of a Groovy engine.
@@ -24,9 +24,9 @@ pub fn run(server: &Server, args: &Args) -> Result<Value, String> {
         (None, None) => return Err("Give iflowStep (from project_info) or step.".into()),
     };
     let kind = step["type"].as_str().unwrap_or_default().to_string();
-    // Script, XSLT and XML Validator steps of an iFlow run with their file.
-    if kind == "groovy" || kind == "xslt" || kind == "xsd" {
-        return file_step(server, &step, args);
+    if step.get("file").is_some() {
+        return Err(format!("'{}' is a {kind} step with a file: run it with run_groovy, run_xslt or validate_xsd \
+            and the file, function and profile that project_info lists.", s(&step, "name")));
     }
     let config = step.get("config").cloned().unwrap_or(json!({}));
     if !config.is_object() {
@@ -50,7 +50,7 @@ pub fn run(server: &Server, args: &Args) -> Result<Value, String> {
         "gather" => gather(&ctx, &config, args)?,
         "" => return Err("The step has no type.".into()),
         other => return Err(format!("UnsupportedInSimulator: the step type '{other}' (simulated: contentModifier, filter, \
-            router, splitter, gather, and the groovy, xslt and xsd steps of an iFlow).")),
+            router, splitter, gather).")),
     };
     result["step"] = json!({ "type": kind, "name": step.get("name"), "config": config });
     Ok(result)
@@ -66,39 +66,6 @@ fn iflow_step(server: &Server, name: &str) -> Result<Value, String> {
         [one] => Ok((*one).clone()),
         [] => Err(format!("No iFlow step named '{name}'. project_info lists the steps under iflowSteps.")),
         _ => Err(format!("Several iFlow steps are named '{name}'; give the step's id.")),
-    }
-}
-
-fn file_step(server: &Server, step: &Value, args: &Args) -> Result<Value, String> {
-    let file = step["file"].as_str().ok_or_else(|| match step["note"].as_str() {
-        Some(note) => format!("The iFlow step has no file: {note}"),
-        None => "The iFlow step has no file.".to_string(),
-    })?;
-    if step["fileFound"] == false {
-        return Err(format!("The step's file {file} is not in the project."));
-    }
-    let mut a = args.clone();
-    a.remove("iflowStep");
-    a.remove("camel");
-    a.remove("namespaces");
-    if a.contains_key("messages") || a.contains_key("step") {
-        return Err("messages and step do not apply to a script, XSLT or XML Validator step.".into());
-    }
-    if step["type"] == "groovy" {
-        a.insert("scriptPath".into(), json!(file));
-        a.insert("function".into(), step["function"].clone());
-        if let Some(p) = step["profile"].as_str() {
-            a.insert("runtime".into(), json!(p));
-        }
-        tools::call(server, "run_groovy", &a)
-    } else if step["type"] == "xsd" {
-        a.remove("headers");
-        a.remove("properties");
-        a.insert("schemaPath".into(), json!(file));
-        tools::call(server, "validate_xsd", &a)
-    } else {
-        a.insert("mappingPath".into(), json!(file));
-        tools::call(server, "run_xslt", &a)
     }
 }
 

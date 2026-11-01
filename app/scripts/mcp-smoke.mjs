@@ -49,7 +49,7 @@ check(init.result?.protocolVersion === '2025-11-25', 'initialize (2025-11-25)', 
 child.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
 
 const list = await request('tools/list', {});
-check(list.result?.tools?.length === 8, 'tools/list', list);
+check(list.result?.tools?.length === 6, 'tools/list', list);
 
 async function tool(name, args) {
   const r = await request('tools/call', { name, arguments: args, _meta: meta });
@@ -63,15 +63,17 @@ check(info.runtimes.every((r) => r.installed), 'all runtimes installed', info.ru
 const xslt = await tool('run_xslt', { runtime: 'both', body: '<a/>', headers: { h: 'hello' },
   mapping: "<xsl:stylesheet version='2.0' xmlns:xsl='http://www.w3.org/1999/XSL/Transform'><xsl:param name='h'/>"
     + "<xsl:output method='text'/><xsl:template match='/'><xsl:value-of select='$h'/></xsl:template></xsl:stylesheet>" });
-check(xslt.sameBody && xslt.runs[0].result.output.body === 'hello', 'run_xslt on both Saxon lines', xslt);
+check(xslt.runs.every((r) => r.result?.output?.body === 'hello'), 'run_xslt on both Saxon lines', xslt);
 
 for (const runtime of ['groovy-1.x', 'groovy-2.x']) {
   const g = await tool('run_groovy', { runtime, body: 'abc', script: 'def processData(m) { m.setBody(m.getBody(String).reverse()); m }' });
   check(g.output?.body === 'cba', `run_groovy on ${runtime}`, g);
 }
 
-const tests = await tool('run_tests', {});
-check(tests.failed === 0 && tests.notRun === 0 && tests.passed > 0, `run_tests (${tests.passed} passed)`, tests);
+const route = await tool('run_flow_step', { headers: { SenderId: 'ERP' }, step: { type: 'router', config: { routes: [
+  { name: 'ERP', expressionType: 'nonxml', condition: "${header.SenderId} = 'ERP'", default: false },
+  { name: 'Other', expressionType: 'nonxml', condition: '', default: true }] } } });
+check(route.taken === 'ERP', 'run_flow_step (Router, Camel Simple)', route);
 
 clearTimeout(timer);
 child.stdin.end();

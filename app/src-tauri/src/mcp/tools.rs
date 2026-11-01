@@ -1,9 +1,9 @@
-//! The MCP tools: thin wrappers around the engines' JSON-RPC methods (the same calls the app makes).
-//! Each tool reads its own arguments; a wrong argument is an error message the model can act on.
+//! The MCP tools: one per tab of the app (XSLT, Groovy, XSD, XPath, Flow Steps) plus the project view,
+//! making the same engine calls with the same inputs. The app's features lead: the tools add none of
+//! their own. A wrong argument is an error message the model can act on.
 
 use super::{flow, Server};
 use serde_json::{json, Map, Value};
-use std::collections::BTreeMap;
 
 pub type Args = Map<String, Value>;
 
@@ -89,7 +89,7 @@ pub fn definitions() -> Vec<Value> {
     ]);
     message_properties(&mut xslt, true);
     xslt.insert("runtime".into(), runtime(XSLT_RUNTIMES, true, Some("saxon-he-9.9"),
-        "saxon-he-9.9 is CPI's Saxon line; both runs 9.9 and 12 and reports whether the bodies differ."));
+        "saxon-he-9.9 is CPI's Saxon line; both runs 9.9 and 12 side by side (the app's runtime comparison)."));
 
     let mut groovy = obj(vec![
         ("scriptPath", json!({ "type": "string", "description": "Project-relative .groovy file. Use scriptPath or script." })),
@@ -108,25 +108,16 @@ pub fn definitions() -> Vec<Value> {
     xsd.insert("runtime".into(), runtime(XSLT_RUNTIMES, false, Some("saxon-he-9.9"), "The XML engine."));
 
     let mut xpath = obj(vec![
-        ("expression", json!({ "type": "string", "description": "The XPath. Headers and properties are variables ($name), as in CPI's Camel." })),
+        ("expression", json!({ "type": "string", "description": "The XPath." })),
         ("version", json!({ "type": "string", "enum": ["1.0", "3.1"], "default": "3.1" })),
         ("namespaces", ns.clone()),
     ]);
-    message_properties(&mut xpath, true);
+    message_properties(&mut xpath, false);
     xpath.insert("runtime".into(), runtime(XSLT_RUNTIMES, false, Some("saxon-he-9.9"), "The XML engine."));
-
-    let mut simple = obj(vec![
-        ("expression", json!({ "type": "string", "description": "Camel Simple, e.g. ${header.SenderSystem} or ${property.count} > 3." })),
-        ("mode", json!({ "type": "string", "enum": ["expression", "condition"], "default": "expression",
-            "description": "condition evaluates a predicate (Router, Filter), expression a value (Content Modifier)." })),
-    ]);
-    message_properties(&mut simple, true);
-    simple.insert("camel".into(), runtime(GROOVY_RUNTIMES, false, Some("groovy-2.x"),
-        "The Camel line: groovy-1.x carries Camel 2.24, groovy-2.x Camel 3.14."));
 
     let mut step = obj(vec![
         ("iflowStep", json!({ "type": "string", "description": "Name or id of a step that project_info lists under iflowSteps. Use iflowStep or step." })),
-        ("step", json!({ "type": "object", "description": "A step given directly: {\"type\": \"contentModifier\"|\"filter\"|\"router\"|\"splitter\"|\"gather\", \"config\": {...}}, config shaped as project_info shows it for iFlow steps.",
+        ("step", json!({ "type": "object", "description": "A step given directly (as edited in the Flow Steps tab): {\"type\": \"contentModifier\"|\"filter\"|\"router\"|\"splitter\"|\"gather\", \"config\": {...}}, config shaped as project_info shows it for iFlow steps.",
             "properties": {
                 "type": { "type": "string", "enum": ["contentModifier", "filter", "router", "splitter", "gather"] },
                 "config": { "type": "object" } },
@@ -138,10 +129,6 @@ pub fn definitions() -> Vec<Value> {
     message_properties(&mut step, true);
     step.insert("camel".into(), runtime(GROOVY_RUNTIMES, false, Some("groovy-2.x"),
         "The Camel line for Camel Simple in the step."));
-
-    let tests = obj(vec![
-        ("path", json!({ "type": "string", "description": "Project-relative test case folder or folder of cases. Default: tests/." })),
-    ]);
 
     vec![
         tool("project_info", "Project, runtimes and iFlow steps",
@@ -163,20 +150,12 @@ pub fn definitions() -> Vec<Value> {
         tool("evaluate_xpath", "Evaluate an XPath",
             "Evaluates an XPath on the body, with headers and properties as variables. Returns the value or the selected nodes.",
             xpath, &["expression"], true),
-        tool("evaluate_simple", "Evaluate Camel Simple",
-            "Evaluates a Camel Simple expression or condition on the message, as CPI's Content Modifier, Router and \
-             Filter steps use it.",
-            simple, &["expression"], false),
         tool("run_flow_step", "Run a flow step",
-            "Runs a Content Modifier, Filter, Router, General or Iterating Splitter, or Gather step on a message, from an \
-             iFlow of the project or from a config given here. Script, XSLT and XML Validator steps of an iFlow run with \
-             their file. \
-             Returns the output message(s), or for a Router each route's result and the route taken.",
+            "Runs a Content Modifier, Filter, Router, General or Iterating Splitter, or Gather step on a message, like the \
+             Flow Steps tab, from an iFlow of the project or from a config given here. Returns the output message(s), or \
+             for a Router each route's result and the route taken. For an iFlow's script, XSLT or XML Validator step, \
+             use run_groovy, run_xslt or validate_xsd with the step's file, function and profile from project_info.",
             step, &[], false),
-        tool("run_tests", "Run the project's test cases",
-            "Runs the test cases (tests/<case>/case.json) on every installed runtime and reports each case once, with \
-             the runtime it ran on. Test cases may run Groovy scripts.",
-            tests, &[], false),
     ]
 }
 
@@ -194,9 +173,7 @@ pub fn call(server: &Server, name: &str, args: &Args) -> Result<Value, String> {
         "run_groovy" => run_groovy(server, args),
         "validate_xsd" => validate_xsd(server, args),
         "evaluate_xpath" => evaluate_xpath(server, args),
-        "evaluate_simple" => evaluate_simple(server, args),
         "run_flow_step" => flow::run(server, args),
-        "run_tests" => run_tests(server, args),
         _ => Err(format!("Unknown tool: {name}")),
     }
 }
@@ -322,24 +299,16 @@ fn source(args: &Args, inline: &str, path: &str, default_name: &str) -> Result<V
     })
 }
 
-/// Runs on one runtime, or on both and compares the output bodies.
+/// Runs on one runtime, or on both (the app's runtime comparison).
 fn on_runtimes(server: &Server, runtimes: &[&str], method: &str, params: Value) -> Result<Value, String> {
     if runtimes.len() == 1 {
         return engine_call(server, runtimes[0], method, params);
     }
-    let mut runs = Vec::new();
-    let mut bodies = Vec::new();
-    for rt in runtimes {
-        match engine_call(server, rt, method, params.clone()) {
-            Ok(r) => {
-                bodies.push(r["output"]["body"].clone());
-                runs.push(json!({ "runtime": rt, "result": r }));
-            }
-            Err(e) => runs.push(json!({ "runtime": rt, "error": e })),
-        }
-    }
-    let same = bodies.len() == runtimes.len() && bodies.windows(2).all(|w| w[0] == w[1]);
-    Ok(json!({ "runs": runs, "sameBody": same }))
+    let runs: Vec<Value> = runtimes.iter().map(|rt| match engine_call(server, rt, method, params.clone()) {
+        Ok(r) => json!({ "runtime": rt, "result": r }),
+        Err(e) => json!({ "runtime": rt, "error": e }),
+    }).collect();
+    Ok(json!({ "runs": runs }))
 }
 
 fn pick<'a>(args: &'a Args, key: &str, choices: &'a [&'a str], default: &'a str) -> Vec<&'a str> {
@@ -414,61 +383,7 @@ fn evaluate_xpath(server: &Server, args: &Args) -> Result<Value, String> {
         "expression": str_arg(args, "expression").unwrap_or_default(),
         "version": str_arg(args, "version").unwrap_or("3.1"),
         "namespaces": args.get("namespaces").cloned().unwrap_or(json!({})),
-        "input": message(server, args)?,
+        "input": { "body": message(server, args)?["body"] },
     });
     engine_call(server, str_arg(args, "runtime").unwrap_or("saxon-he-9.9"), "xpath.eval", params)
-}
-
-fn evaluate_simple(server: &Server, args: &Args) -> Result<Value, String> {
-    let params = json!({
-        "expression": str_arg(args, "expression").unwrap_or_default(),
-        "mode": str_arg(args, "mode").unwrap_or("expression"),
-        "input": message(server, args)?,
-    });
-    engine_call(server, str_arg(args, "camel").unwrap_or("groovy-2.x"), "simple.eval", params)
-}
-
-/// Runs the cases on every installed runtime. Each engine skips cases for another runtime, so a case
-/// is reported where it ran; XSD cases without a runtime run on both XML engines.
-fn run_tests(server: &Server, args: &Args) -> Result<Value, String> {
-    let root = server.project().ok_or("No project is open; start the server with --project <folder>.")?.to_path_buf();
-    let path = str_arg(args, "path").unwrap_or("tests");
-    if std::path::Path::new(path).is_absolute() {
-        return Err("path must be relative to the project.".into());
-    }
-    let mut ran: BTreeMap<String, Vec<Value>> = BTreeMap::new();
-    let mut skipped: BTreeMap<String, Vec<Value>> = BTreeMap::new();
-    let mut not_installed = Vec::new();
-    for (rt, _) in RUNTIME_LABELS {
-        if server.engines().locate(rt).is_none() {
-            not_installed.push(*rt);
-            continue;
-        }
-        let r = engine_call(server, rt, "tests.run", json!({ "path": path }))?;
-        for c in r["results"].as_array().into_iter().flatten() {
-            let dir = c["dir"].as_str().unwrap_or_default();
-            let rel = std::path::Path::new(dir).strip_prefix(&root).map(|p| p.to_string_lossy().replace('\\', "/"))
-                .unwrap_or_else(|_| dir.to_string());
-            let mut entry = c.clone();
-            entry["dir"] = json!(rel);
-            entry["runtime"] = json!(rt);
-            let target = if c["status"] == "skipped" { &mut skipped } else { &mut ran };
-            target.entry(rel).or_default().push(entry);
-        }
-    }
-    let mut cases = Vec::new();
-    let (mut passed, mut failed) = (0, 0);
-    for entries in ran.values() {
-        for e in entries {
-            if e["status"] == "passed" { passed += 1 } else { failed += 1 }
-            cases.push(e.clone());
-        }
-    }
-    // Cases that no installed engine ran (e.g. a Groovy case without its runtime).
-    let not_run: Vec<Value> = skipped.into_iter().filter(|(dir, _)| !ran.contains_key(dir))
-        .map(|(dir, entries)| json!({ "dir": dir, "name": entries[0]["name"],
-            "messages": entries.iter().flat_map(|e| e["messages"].as_array().cloned().unwrap_or_default()).collect::<Vec<_>>() }))
-        .collect();
-    Ok(json!({ "passed": passed, "failed": failed, "notRun": not_run.len(), "cases": cases,
-        "notRunCases": not_run, "runtimesNotInstalled": not_installed }))
 }

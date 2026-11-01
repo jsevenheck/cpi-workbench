@@ -6,7 +6,8 @@
 //!   A request that carries `_meta["io.modelcontextprotocol/protocolVersion"]` is served statelessly
 //!   under 2026-07-28 (`server/discover`, `resultType`, caching hints); a client that opens with
 //!   `initialize` gets the negotiated legacy revision (2025-11-25 back to 2024-11-05).
-//! * Features: tools only (see `tools.rs`). No resources, prompts, logging, sampling or roots.
+//! * Features: tools only, one per tab of the app (see `tools.rs`); the app's features lead and the
+//!   tools add none of their own. No resources, prompts, logging, sampling or roots.
 //! * Scope: one project folder (`--project`; default `CLAUDE_PROJECT_DIR`, else the working directory).
 //!   Files are read through the engines, which refuse paths outside the project. Groovy scripts run without a sandbox, as in
 //!   the app; docs/mcp.md says so.
@@ -42,8 +43,8 @@ const LIST_TTL_MS: u64 = 3_600_000;
 
 const INSTRUCTIONS: &str = "CPI Workbench simulates SAP Integration Suite (Cloud Integration) steps locally: \
 XSLT mappings (Saxon-HE 9.9 like CPI, or 12), Groovy scripts (Script API 1.x on Groovy 2.4 / Camel 2.24, \
-2.x on Groovy 4 / Camel 3.14), XSD validation, XPath, Camel Simple and the flow steps Content Modifier, \
-Filter, Router, Splitter and Gather. Paths are relative to the project folder; files outside it cannot be \
+2.x on Groovy 4 / Camel 3.14), XSD validation, XPath and the flow steps Content Modifier, Filter, Router, \
+Splitter and Gather, as the tabs of the CPI Workbench app do. Paths are relative to the project folder; files outside it cannot be \
 read. Call project_info first to see the project's files, iFlow steps and installed runtimes. The simulator \
 is not a tenant: messages starting with 'UnsupportedInSimulator' name behaviour it does not simulate, and \
 docs/fidelity.md in the CPI Workbench repository lists what is verified against CPI.";

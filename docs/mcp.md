@@ -65,18 +65,19 @@ it finds the checkout's engine jars.
 
 ## Tools
 
-| Tool | What it does |
-|---|---|
-| `project_info` | The project's files, the steps of the iFlows under `iflows/` (flow steps with their configuration) and the installed runtimes. |
-| `run_xslt` | Runs an XSLT mapping (`mappingPath` or `mapping`) on a message. `runtime: "both"` runs Saxon-HE 9.9 and 12 and reports whether the bodies differ. |
-| `run_groovy` | Runs a Groovy script with the Script API and the project's `platform/` mocks. The runtime (1.x or 2.x) follows the script's imports unless given; `both` runs both. |
-| `validate_xsd` | Validates the body against an XSD. |
-| `evaluate_xpath` | Evaluates an XPath (1.0 or 3.1) on the body; headers and properties are variables (`$name`). |
-| `evaluate_simple` | Evaluates Camel Simple as an expression or a condition, on Camel 2.24 or 3.14. |
-| `run_flow_step` | Runs a Content Modifier, Filter, Router, Splitter or Gather step from an iFlow (`iflowStep`: name or id) or from a configuration (`step`). Script, XSLT and XML Validator steps of an iFlow run with their file. |
-| `run_tests` | Runs the project's test cases on every installed runtime and reports each case once. |
+The tools are the app's tabs, with the same inputs and the same engine calls. The app leads: the
+server adds no function of its own.
 
-A message is `body` (or `bodyPath`, a project file), `headers` and `properties`. A header or
+| Tool | Tab in the app |
+|---|---|
+| `project_info` | The project: its files, the steps of the iFlows under `iflows/` (flow steps with their configuration; script, XSLT and XML Validator steps with file, function and runtime) and the installed runtimes. |
+| `run_xslt` | XSLT (`mappingPath` or `mapping`). `runtime: "both"` runs Saxon-HE 9.9 and 12, as the runtime comparison does. |
+| `run_groovy` | Groovy, with the Script API and the project's `platform/` mocks. The runtime (1.x or 2.x) follows the script's imports unless given; `both` runs both. |
+| `validate_xsd` | XSD. |
+| `evaluate_xpath` | XPath (1.0 or 3.1, with namespaces). |
+| `run_flow_step` | Flow Steps: a Content Modifier, Filter, Router, Splitter or Gather step from an iFlow (`iflowStep`: name or id) or from a configuration (`step`). |
+
+A message is `body` (or `bodyPath`, a project file) and, where the tab has them, `headers` and `properties`. A header or
 property is a string, or `{"value": "…", "type": "Integer"}` for another type (the types of
 [test cases](test-cases.md)). Results are the engines' JSON, the same data the app shows: the output
 message, diagnostics with lines, `xsl:message` output, the message log, timings.
@@ -93,9 +94,8 @@ lists what is verified against CPI.
   engines, which refuse paths outside the project, as in the app ([What a run can access](user-guide.md#what-a-run-can-access)).
   The tools write nothing into the project; the engines keep caches in the temp folder and the
   user's cache folder, as in the app. Groovy scripts can write files (next point).
-* **Code:** Groovy scripts and test cases that run them execute as ordinary Java code with your
-  user's rights, without a sandbox; Camel Simple can call methods too. An agent that can call
-  `run_groovy` can run any code. The tools say so in their MCP annotations: only the XML tools
+* **Code:** Groovy scripts execute as ordinary Java code with your user's rights, without a sandbox;
+  Camel Simple in flow steps can call methods too. An agent that can call `run_groovy` can run any code. The tools say so in their MCP annotations: only the XML tools
   (`project_info`, `run_xslt`, `validate_xsd`, `evaluate_xpath`) are marked read-only and closed-world;
   a client that uses these hints can ask before the others run.
 * **Network:** the server opens no port and connects nowhere. XML runs block the network; Groovy

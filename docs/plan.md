@@ -351,10 +351,11 @@ Decisions:
   dual-era as the 2026-07-28 specification allows: stateless 2026-07-28 requests and the `initialize`
   handshake of 2025-11-25 back to 2024-11-05, which the official SDKs still negotiate (TypeScript
   1.32.2 and Python 2.3.0, tried on 2026-11-01).
-* **Tools, not resources:** `project_info`, `run_xslt`, `run_groovy`, `validate_xsd`,
-  `evaluate_xpath`, `evaluate_simple`, `run_flow_step`, `run_tests`. The agent reads and writes files
-  with its own tools; the server writes nothing into the project. A `lint` tool was left out: the
-  1.x → 2.x lint already comes with every `run_groovy` result as diagnostics.
+* **The app leads; the server adds no function.** One tool per tab: `project_info`, `run_xslt`,
+  `run_groovy`, `validate_xsd`, `evaluate_xpath`, `run_flow_step`, with the tabs' inputs. Left out on
+  purpose because the app has no such tab: running test cases (CLI only), Camel Simple on its own,
+  a lint tool (the lint comes with every `run_groovy` result). The agent reads and writes files with
+  its own tools; the server writes nothing into the project.
 * **Flow steps** run like the Flow Steps tab, call for call (`mcp/flow.rs` follows
   `store.svelte.ts`), so no CLI command was needed first. A test-case step for flow steps stays open.
 * **Security:** the server is bound to one project folder, opens no port, and marks only the XML

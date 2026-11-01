@@ -47,7 +47,7 @@ fn legacy_handshake_negotiates_the_version() {
     assert_eq!(by_id(&msgs, 3)["result"], json!({}));
     let list = &by_id(&msgs, 4)["result"];
     assert!(list.get("resultType").is_none() && list.get("ttlMs").is_none(), "legacy results stay legacy: {list}");
-    assert_eq!(list["tools"].as_array().unwrap().len(), 8);
+    assert_eq!(list["tools"].as_array().unwrap().len(), 6);
 }
 
 #[test]
@@ -96,8 +96,7 @@ fn protocol_errors() {
 fn tool_definitions_follow_the_spec() {
     let tools = tools::definitions();
     let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
-    assert_eq!(names, ["project_info", "run_xslt", "run_groovy", "validate_xsd", "evaluate_xpath",
-        "evaluate_simple", "run_flow_step", "run_tests"]);
+    assert_eq!(names, ["project_info", "run_xslt", "run_groovy", "validate_xsd", "evaluate_xpath", "run_flow_step"]);
     for t in &tools {
         let name = t["name"].as_str().unwrap();
         assert!(name.len() <= 128 && name.chars().all(|c| c.is_ascii_alphanumeric() || "_-.".contains(c)));
@@ -112,19 +111,21 @@ fn tool_definitions_follow_the_spec() {
 
 #[test]
 fn wrong_arguments_are_tool_errors() {
-    let call = |args: Value| {
+    let call_tool = |name: &str, args: Value| {
         let msgs = session(bare(), &[json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/call",
-            "params": { "name": "evaluate_xpath", "arguments": args } })]);
+            "params": { "name": name, "arguments": args } })]);
         let r = msgs[0]["result"].clone();
         assert_eq!(r["isError"], true, "{r}");
         r["content"][0]["text"].as_str().unwrap().to_string()
     };
+    let call = |args: Value| call_tool("evaluate_xpath", args);
     assert!(call(json!({ "expresion": "/a" })).contains("Unknown argument 'expresion'"));
     assert!(call(json!({})).contains("Missing argument 'expression'"));
     assert!(call(json!({ "expression": "/a", "version": "2.0" })).contains("must be one of"));
     assert!(call(json!({ "expression": "/a", "body": 1 })).contains("must be of type string"));
     assert!(call(json!({ "expression": "/a", "body": "<a/>", "bodyPath": "x.xml" })).contains("not both"));
-    assert!(call(json!({ "expression": "/a", "headers": { "h": 1 } })).contains("headers.h"));
+    assert!(call(json!({ "expression": "/a", "headers": {} })).contains("Unknown argument 'headers'"), "the XPath tab has no headers");
+    assert!(call_tool("run_groovy", json!({ "script": "x", "headers": { "h": 1 } })).contains("headers.h"));
     assert!(call(json!({ "expression": "/a", "bodyPath": "x.xml" })).contains("No project is open"));
 }
 
@@ -213,8 +214,8 @@ fn tools_run_on_the_engines() {
     let x = c.ok("run_xslt", json!({ "runtime": "both", "body": "<a/>", "headers": { "h": "hello" },
         "mapping": "<xsl:stylesheet version='2.0' xmlns:xsl='http://www.w3.org/1999/XSL/Transform'><xsl:param name='h'/>\
             <xsl:output method='text'/><xsl:template match='/'><xsl:value-of select='$h'/></xsl:template></xsl:stylesheet>" }));
-    assert_eq!(x["sameBody"], true, "{x}");
-    assert_eq!(x["runs"][0]["result"]["output"]["body"], "hello");
+    assert_eq!(x["runs"][0]["result"]["output"]["body"], "hello", "{x}");
+    assert_eq!(x["runs"][1]["result"]["output"]["body"], "hello", "{x}");
     assert_eq!(x["runs"][1]["runtime"], "saxon-he-12");
 
     // Groovy: the runtime follows the script's imports; typed property.
@@ -227,11 +228,8 @@ fn tools_run_on_the_engines() {
     let v = c.ok("validate_xsd", json!({ "schemaPath": "schemas/salesorder.xsd", "body": "<nope/>" }));
     assert_eq!(v["valid"], false, "{v}");
 
-    let xp = c.ok("evaluate_xpath", json!({ "expression": "concat(/a/@x, $h)", "body": "<a x='1'/>", "headers": { "h": "2" } }));
+    let xp = c.ok("evaluate_xpath", json!({ "expression": "concat(/a/@x, '2')", "body": "<a x='1'/>" }));
     assert_eq!(xp["items"][0]["value"], "12", "{xp}");
-
-    let s = c.ok("evaluate_simple", json!({ "expression": "${header.h} == 'x'", "mode": "condition", "headers": { "h": "x" } }));
-    assert_eq!(s["value"], "true", "{s}");
 
     // Flow steps from the iFlow.
     let order = "<Order id=\"7\"><Item>a</Item><Item>b</Item><Item>c</Item></Order>";
@@ -261,24 +259,12 @@ fn tools_run_on_the_engines() {
         "step": { "type": "filter", "config": { "expression": "/Order/Item[. = function:simple('${property.want}')]", "valueType": "string" } } }));
     assert_eq!(f["body"], "b", "{f}");
 
-    // Script and XML Validator steps run with their file.
-    let enrich = c.ok("run_flow_step", json!({ "iflowStep": "CallActivity_1", "body": order }));
-    assert!(enrich["ok"].is_boolean(), "{enrich}");
-    let valid = c.ok("run_flow_step", json!({ "iflowStep": "Validate", "body": order }));
-    assert!(valid["valid"].is_boolean(), "{valid}");
-    assert!(c.err("run_flow_step", json!({ "iflowStep": "Dynamic mapping" })).contains("xsltmappingname"));
+    // Script, XSLT and XML Validator steps run in their own tools, as their file opens in its tab.
+    assert!(c.err("run_flow_step", json!({ "iflowStep": "CallActivity_1", "body": order })).contains("run_groovy"));
     assert!(c.err("run_flow_step", json!({ "iflowStep": "No such step" })).contains("No iFlow step"));
 
     // Files outside the project are refused by the engine.
     assert!(c.err("evaluate_xpath", json!({ "expression": "/", "bodyPath": "../outside.xml" })).contains("outside the project"));
-
-    let t = c.ok("run_tests", json!({}));
-    assert_eq!(t["failed"], 0, "{t}");
-    assert_eq!(t["notRun"], 0, "{t}");
-    let cases = std::fs::read_dir(dir.join("tests")).unwrap().filter(|e| e.as_ref().unwrap().path().join("case.json").is_file()).count();
-    let dirs: std::collections::BTreeSet<&str> = t["cases"].as_array().unwrap().iter().map(|c| c["dir"].as_str().unwrap()).collect();
-    assert_eq!(dirs.len(), cases, "every case ran somewhere: {t}");
-    assert!(dirs.iter().all(|d| d.starts_with("tests/")), "{dirs:?}");
 
     engines.shutdown();
     let _ = std::fs::remove_dir_all(&dir);

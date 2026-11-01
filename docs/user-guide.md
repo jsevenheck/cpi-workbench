@@ -95,8 +95,8 @@ The Groovy runtime starts only when the Groovy or Flow Steps tab is used and sto
 
 ## Coding agents (MCP)
 
-`cpi-workbench mcp --project <folder>` serves the simulator to a coding agent such as Claude Code over
-the Model Context Protocol. Setup, tools and what the server can access: [MCP server](mcp.md).
+`cpi-workbench mcp` gives a coding agent such as Claude Code the app's tabs (XSLT, Groovy, XSD, XPath,
+Flow Steps) over the Model Context Protocol. Setup, tools and what the server can access: [MCP server](mcp.md).
 
 ## Command line (CI-friendly)
 

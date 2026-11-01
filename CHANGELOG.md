@@ -8,9 +8,9 @@ of its version.
 
 ### Added
 
-- **MCP server** for coding agents: `cpi-workbench mcp --project <folder>` serves the simulator over
-  the Model Context Protocol (stdio), with the tools `project_info`, `run_xslt`, `run_groovy`,
-  `validate_xsd`, `evaluate_xpath`, `evaluate_simple`, `run_flow_step` and `run_tests`. It speaks the
+- **MCP server** for coding agents: `cpi-workbench mcp` serves the app's tabs over the Model Context
+  Protocol (stdio) as the tools `project_info`, `run_xslt`, `run_groovy`, `validate_xsd`,
+  `evaluate_xpath` and `run_flow_step`, with the same inputs and engine calls as the app. It speaks the
   2026-07-28 revision and, for clients that open with `initialize`, 2025-11-25 back to 2024-11-05.
   Setup and what the server can access: [docs/mcp.md](docs/mcp.md).
 

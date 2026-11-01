@@ -44,7 +44,8 @@ need an `X-Cpiwb` header, which forces a CORS preflight, and the origin's host i
 The shell's executable also runs headless as an MCP server (`cpi-workbench mcp`, [MCP server](mcp.md)):
 it starts the same engines through the same supervisor (`engine.rs`), opens the project in each engine
 when it starts, and maps each tool to engine calls. Its flow-step tool repeats the UI's orchestration
-of `xpath.eval`, `simple.eval` and `contentModifier.run` (`mcp/flow.rs`).
+of `xpath.eval`, `simple.eval` and `contentModifier.run` (`mcp/flow.rs`). The app leads: the tools
+add no function of their own.
 
 The design reasons and the build-vs-reuse principle are in the [plan](plan.md) §3 and §5.
 

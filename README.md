@@ -45,8 +45,8 @@ it has not been checked against a tenant yet ([Fidelity](docs/fidelity.md)).
 
 **Coding agents**
 
-* `cpi-workbench mcp` is an [MCP server](docs/mcp.md): an agent such as Claude Code runs mappings,
-  scripts, flow steps and the project's test cases on the simulator while it writes them.
+* `cpi-workbench mcp` is an [MCP server](docs/mcp.md): an agent such as Claude Code uses the app's
+  tabs (XSLT, Groovy, XSD, XPath, Flow Steps) on the simulator while it writes mappings and scripts.
 
 Everything runs locally; the app never connects to a tenant.
 

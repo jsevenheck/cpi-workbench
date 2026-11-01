@@ -6,7 +6,7 @@ Start with the [project README](../README.md) for what the tool is and a quick s
 |---|---|
 | [Installing](install.md) | install the desktop app or the command-line jars from a release |
 | [User guide](user-guide.md) | use the desktop app, the command line or the browser mode |
-| [MCP server](mcp.md) | let a coding agent (e.g. Claude Code) run mappings, scripts, flow steps and test cases on the simulator |
+| [MCP server](mcp.md) | let a coding agent (e.g. Claude Code) use the app's tabs on the simulator |
 | [Test cases and platform data](test-cases.md) | write `case.json` files, mock Secure Store, Partner Directory, Keystore, number ranges, attachments, SOAP headers, libraries |
 | [Fidelity](fidelity.md) | know what behaves like CPI, what does not, and what is not verified yet |
 | [Implementation status](status.md) | see how complete each feature is and which gaps remain |

@@ -75,7 +75,8 @@ that iFlow and opens its Groovy, Content Modifier, Filter and Gather steps. CI d
 
 * runs the engine tests and the regression cases in `testdata/regression-project`,
 * runs the browser e2e tests,
-* runs the shell tests against the native engines and the trimmed JRE, then builds the bundles.
+* runs the shell tests against the native engines and the trimmed JRE, then builds the bundles,
+* starts the release executable as an MCP server (`app/scripts/mcp-smoke.mjs`), as a client would.
 
 Pushes to `main`, tags `v*`, pull requests to `main` and manual runs (*Run workflow*,
 `workflow_dispatch`) run everything on Linux, Windows (e2e, .msi/.exe) and macOS (Apple Silicon, .dmg).

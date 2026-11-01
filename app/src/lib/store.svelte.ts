@@ -829,6 +829,7 @@ export async function runXpath() {
 // ------------------------------------------------------------------ flow steps
 // XPath runs in the XML engine (Saxon, XPath 3.1 as SAP documents for the Content Modifier), Camel Simple and
 // the Content Modifier in the Groovy engine's Camel. The Router is evaluated here, route by route.
+// The MCP server repeats these calls (app/src-tauri/src/mcp/flow.rs); change the two together.
 
 function namespaceMap() {
   const ns: Record<string, string> = {};

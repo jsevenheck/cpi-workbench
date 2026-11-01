@@ -68,6 +68,9 @@ pub struct Engines {
     pub resource_dir: Mutex<Option<PathBuf>>,
     /// Where JVM class-data archives (AppCDS) are kept for faster starts.
     pub cache_dir: Mutex<Option<PathBuf>>,
+    /// A call sent to every engine right after it starts (the MCP server opens its project with it),
+    /// so an engine that restarted after a timeout is in the same state as before.
+    pub on_start: Mutex<Option<(String, Value)>>,
 }
 
 impl Engines {
@@ -113,7 +116,16 @@ impl Engines {
         let mut guard = slot.lock().map_err(|_| "engine lock poisoned".to_string())?;
         if guard.is_none() {
             let cache = self.cache_dir.lock().unwrap().clone();
-            *guard = Some(start(&launch, profile, cache.as_deref())?);
+            let mut proc = start(&launch, profile, cache.as_deref())?;
+            let init = self.on_start.lock().unwrap().clone();
+            if let Some((method, params)) = init {
+                match exchange(&mut proc, &method, params) {
+                    Ok(Exchange::Result(_)) => {}
+                    Ok(Exchange::Error { message, .. }) => return Err(format!("{method} failed: {message}")),
+                    Err(e) => return Err(format!("Engine stopped unexpectedly: {e}")),
+                }
+            }
+            *guard = Some(proc);
         }
         let proc = guard.as_mut().unwrap();
         proc.last_used = Instant::now();
@@ -189,7 +201,9 @@ fn start(launch: &Launch, profile: &str, cache_dir: Option<&Path>) -> Result<Pro
             let mut c = Command::new(java);
             c.arg("-XX:+UseSerialGC").arg("-Xmx512m").arg("-Xss4m").arg("-Xshare:auto")
                 // JVM log output must never reach stdout (the protocol channel).
-                .arg("-Xlog:disable").arg("-Xlog:all=warning:stderr");
+                .arg("-Xlog:disable").arg("-Xlog:all=warning:stderr")
+                // Class-data archive notes ("Skipping ...: Old class has been linked") are not problems.
+                .arg("-Xlog:cds*=off:stderr");
             // AppCDS: reuse the class-data archive of an earlier run, or create it on exit.
             // On Windows the JVM reads these options in the ANSI code page; with characters outside
             // it (user name in the cache path) it cannot create the archive and exits with code 1.

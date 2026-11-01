@@ -93,6 +93,11 @@ per machine and needs admin rights.
 
 The Groovy runtime starts only when the Groovy or Flow Steps tab is used and stops after 10 idle minutes.
 
+## Coding agents (MCP)
+
+`cpi-workbench mcp --project <folder>` serves the simulator to a coding agent such as Claude Code over
+the Model Context Protocol. Setup, tools and what the server can access: [MCP server](mcp.md).
+
 ## Command line (CI-friendly)
 
 ```sh

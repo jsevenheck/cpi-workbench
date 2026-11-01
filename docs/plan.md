@@ -336,28 +336,30 @@ Later convenience: open an **iFlow export (zip)** and list its script and XSLT s
 | **4 — Productivity** | Platform API mocks, linting, both-profiles comparison, CLI, iFlow-zip import | Usable for regression tests |
 | **5 — Distribution** | Signed installers (`.msi`, notarized `.dmg`), offline installer, auto-update | Shareable with colleagues |
 
-### 10.1 Later: an MCP server for coding agents (not started)
+### 10.1 MCP server for coding agents (built, 2026-11-01)
 
-Idea: let a coding agent (e.g. Claude Code) run a script or mapping on the simulator while it writes
-it, through the [Model Context Protocol](https://modelcontextprotocol.io). Assessment from 2026-11-01:
+`cpi-workbench mcp` ([MCP server](mcp.md)) lets a coding agent run mappings, scripts, flow steps and
+test cases on the simulator through the [Model Context Protocol](https://modelcontextprotocol.io).
+Decisions:
 
-* **Feasible.** The engines already speak line-delimited JSON over stdio (`RpcServer`,
-  `{"id","method","params"}`); MCP's stdio transport is line-delimited JSON-RPC 2.0. The Rust shell
-  (`engine.rs`) already starts, calls and stops the engines.
-* **Shape.** One MCP server in front of all engines, not one per engine: e.g. a headless mode
-  `cpi-workbench mcp --project <folder>` or a small separate sidecar binary, using the bundled JRE and
-  native images. Tools: `xslt_run`, `groovy_run` (1.x / 2.x), `xsd_validate`, `xpath_eval`,
-  `simple_eval`, `flow_step_run`, `compare_runtimes`, `lint`, `tests_run`, `iflow_steps`.
-* **Before it:** flow steps need a CLI command and a test-case step (status: open), so that an agent and
-  CI can run them the same way. A cheap first step without MCP: a short docs section on how an agent
-  calls the CLI jars (`xslt`, `xpath`, `validate`, `test`, Groovy `run`).
-* **To check:** the shell binary uses `windows_subsystem = "windows"`; whether inherited stdio pipes work
-  for an MCP client on Windows is unverified. A separate small binary avoids the question.
-* **Security:** Groovy runs without a sandbox, so an MCP client can run arbitrary code. Compared with an
-  agent that already has a shell this adds little, but the server must stay bound to one project folder,
-  open no network access, and the docs must say so. Payload files may carry prompt injection.
-* **Dependency:** the official [MCP Java SDK](https://modelcontextprotocol.io/sdk/java/mcp-overview) has a
-  stdio transport; the protocol is also small enough to implement without a new dependency.
+* **One server in front of all engines**, as a subcommand of the desktop executable: it reuses the
+  shell's engine supervisor, the bundled JRE and native images, and the Windows junction for
+  non-ASCII install folders, and the installers need no new file. On Windows the executable is a
+  GUI-subsystem program; CI starts the release build with piped stdio on all three OSes
+  (`app/scripts/mcp-smoke.mjs`), which answers the open question from the first assessment.
+* **No new dependency:** the protocol is implemented on `serde_json` (`app/src-tauri/src/mcp/`). It is
+  dual-era as the 2026-07-28 specification allows: stateless 2026-07-28 requests and the `initialize`
+  handshake of 2025-11-25 back to 2024-11-05, which the official SDKs still negotiate (TypeScript
+  1.32.2 and Python 2.3.0, tried on 2026-11-01).
+* **Tools, not resources:** `project_info`, `run_xslt`, `run_groovy`, `validate_xsd`,
+  `evaluate_xpath`, `evaluate_simple`, `run_flow_step`, `run_tests`. The agent reads and writes files
+  with its own tools; the server writes nothing into the project. A `lint` tool was left out: the
+  1.x → 2.x lint already comes with every `run_groovy` result as diagnostics.
+* **Flow steps** run like the Flow Steps tab, call for call (`mcp/flow.rs` follows
+  `store.svelte.ts`), so no CLI command was needed first. A test-case step for flow steps stays open.
+* **Security:** the server is bound to one project folder, opens no port, and marks only the XML
+  tools read-only; Groovy runs without a sandbox, as in the app. Payload files may carry prompt
+  injection; the docs say so.
 
 ---
 

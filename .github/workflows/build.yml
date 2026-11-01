@@ -138,6 +138,10 @@ jobs:
           CPIWB_JRE_DIR: ${{ runner.temp }}/jre
         run: |
           npx tauri build ${{ runner.os == 'Linux' && '--bundles deb,rpm' || '' }}
+      # The release executable as an MCP client starts it (piped stdio; a GUI-subsystem program on Windows).
+      - name: MCP server from the release build
+        working-directory: app
+        run: node scripts/mcp-smoke.mjs src-tauri/target/release/cpi-workbench${{ runner.os == 'Windows' && '.exe' || '' }} ../testdata/regression-project
       - uses: actions/upload-artifact@v7
         with:
           name: cpi-workbench-${{ matrix.os }}

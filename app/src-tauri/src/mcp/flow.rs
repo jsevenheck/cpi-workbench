@@ -1,0 +1,312 @@
+//! Flow steps for the MCP server. This follows the Flow Steps tab (`app/src/lib/store.svelte.ts`, section
+//! "flow steps") call for call, so that both give the same result; change the two together:
+//! * XPath (Content Modifier rows, XML Router conditions, Filter, Splitter, Gather) runs on the XML engine,
+//!   9.9 when installed; headers and properties are XPath variables (F39).
+//! * Camel Simple and the Content Modifier run on the Camel of a Groovy engine.
+
+use super::tools::{self, engine_call, str_arg, Args};
+use super::Server;
+use serde_json::{json, Value};
+
+struct Ctx<'a> {
+    server: &'a Server,
+    xml: &'static str,
+    camel: &'a str,
+    namespaces: Value,
+    input: Value,
+}
+
+pub fn run(server: &Server, args: &Args) -> Result<Value, String> {
+    let step = match (str_arg(args, "iflowStep"), args.get("step")) {
+        (Some(_), Some(_)) => return Err("Give iflowStep or step, not both.".into()),
+        (Some(name), None) => iflow_step(server, name)?,
+        (None, Some(s)) => s.clone(),
+        (None, None) => return Err("Give iflowStep (from project_info) or step.".into()),
+    };
+    let kind = step["type"].as_str().unwrap_or_default().to_string();
+    // Script, XSLT and XML Validator steps of an iFlow run with their file.
+    if kind == "groovy" || kind == "xslt" || kind == "xsd" {
+        return file_step(server, &step, args);
+    }
+    let config = step.get("config").cloned().unwrap_or(json!({}));
+    if !config.is_object() {
+        return Err("step.config must be an object.".into());
+    }
+    let ctx = Ctx {
+        server,
+        xml: tools::xml_runtime(server),
+        camel: str_arg(args, "camel").unwrap_or("groovy-2.x"),
+        namespaces: args.get("namespaces").cloned().unwrap_or(json!({})),
+        input: tools::message(server, args)?,
+    };
+    if kind != "gather" && args.contains_key("messages") {
+        return Err("messages is for a Gather step; the other steps take body (or bodyPath).".into());
+    }
+    let mut result = match kind.as_str() {
+        "contentModifier" => content_modifier(&ctx, &config)?,
+        "filter" => filter(&ctx, &config)?,
+        "router" => router(&ctx, &config)?,
+        "splitter" => splitter(&ctx, &config)?,
+        "gather" => gather(&ctx, &config, args)?,
+        "" => return Err("The step has no type.".into()),
+        other => return Err(format!("UnsupportedInSimulator: the step type '{other}' (simulated: contentModifier, filter, \
+            router, splitter, gather, and the groovy, xslt and xsd steps of an iFlow).")),
+    };
+    result["step"] = json!({ "type": kind, "name": step.get("name"), "config": config });
+    Ok(result)
+}
+
+/// A step of the project's iFlows, by name or id.
+fn iflow_step(server: &Server, name: &str) -> Result<Value, String> {
+    let r = engine_call(server, tools::xml_runtime(server), "iflow.steps", json!({}))?;
+    let steps = r["steps"].as_array().cloned().unwrap_or_default();
+    let found: Vec<&Value> = steps.iter().filter(|s| s["id"] == name).collect();
+    let found = if found.is_empty() { steps.iter().filter(|s| s["name"] == name).collect() } else { found };
+    match found.as_slice() {
+        [one] => Ok((*one).clone()),
+        [] => Err(format!("No iFlow step named '{name}'. project_info lists the steps under iflowSteps.")),
+        _ => Err(format!("Several iFlow steps are named '{name}'; give the step's id.")),
+    }
+}
+
+fn file_step(server: &Server, step: &Value, args: &Args) -> Result<Value, String> {
+    let file = step["file"].as_str().ok_or_else(|| match step["note"].as_str() {
+        Some(note) => format!("The iFlow step has no file: {note}"),
+        None => "The iFlow step has no file.".to_string(),
+    })?;
+    if step["fileFound"] == false {
+        return Err(format!("The step's file {file} is not in the project."));
+    }
+    let mut a = args.clone();
+    a.remove("iflowStep");
+    a.remove("camel");
+    a.remove("namespaces");
+    if a.contains_key("messages") || a.contains_key("step") {
+        return Err("messages and step do not apply to a script, XSLT or XML Validator step.".into());
+    }
+    if step["type"] == "groovy" {
+        a.insert("scriptPath".into(), json!(file));
+        a.insert("function".into(), step["function"].clone());
+        if let Some(p) = step["profile"].as_str() {
+            a.insert("runtime".into(), json!(p));
+        }
+        tools::call(server, "run_groovy", &a)
+    } else if step["type"] == "xsd" {
+        a.remove("headers");
+        a.remove("properties");
+        a.insert("schemaPath".into(), json!(file));
+        tools::call(server, "validate_xsd", &a)
+    } else {
+        a.insert("mappingPath".into(), json!(file));
+        tools::call(server, "run_xslt", &a)
+    }
+}
+
+fn s<'a>(v: &'a Value, key: &str) -> &'a str {
+    v.get(key).and_then(Value::as_str).unwrap_or("")
+}
+
+/// The value, or the tab's default when the config leaves it out.
+fn or<'a>(v: &'a Value, key: &str, default: &'a str) -> &'a str {
+    match s(v, key) {
+        "" => default,
+        x => x,
+    }
+}
+
+fn first_message(r: &Value, fallback: &str) -> String {
+    r["diagnostics"][0]["message"].as_str().unwrap_or(fallback).to_string()
+}
+
+impl Ctx<'_> {
+    fn xpath_value(&self, expression: &str, as_: &str, input: &Value) -> Result<String, String> {
+        let r = engine_call(self.server, self.xml, "xpath.eval", json!({
+            "expression": expression, "version": "3.1", "as": as_, "namespaces": self.namespaces, "input": input,
+        }))?;
+        if r["ok"] != true {
+            return Err(first_message(&r, "XPath failed"));
+        }
+        Ok(r["value"].as_str().unwrap_or_default().to_string())
+    }
+
+    fn simple(&self, expression: &str, mode: &str) -> Result<Value, String> {
+        let r = engine_call(self.server, self.camel, "simple.eval",
+            json!({ "expression": expression, "mode": mode, "input": self.input }))?;
+        if r["ok"] != true {
+            return Err(first_message(&r, "Camel Simple failed"));
+        }
+        Ok(r)
+    }
+}
+
+/// A row as the Flow Steps tab keeps it (`openFlowStep`).
+fn cm_row(r: &Value) -> Value {
+    json!({
+        "action": if s(r, "action") == "Delete" { "Delete" } else { "Create" },
+        "name": s(r, "name"),
+        "type": or(r, "type", "constant"),
+        "value": s(r, "value"),
+        "datatype": s(r, "datatype"),
+        "default": s(r, "default"),
+    })
+}
+
+/// XPath rows read the incoming body, which the step changes only after all header and property rows.
+/// Rows run top to bottom (SAP), so an XPath that uses $name sees the headers and properties above it.
+fn content_modifier(ctx: &Ctx, config: &Value) -> Result<Value, String> {
+    let input = &ctx.input;
+    let mut state = input.clone();
+    let mut done = json!({ "headers": [], "properties": [] });
+    let mut pending = json!({ "headers": [], "properties": [] });
+    for table in ["headers", "properties"] {
+        for r in config[table].as_array().into_iter().flatten() {
+            let mut row = cm_row(r);
+            if row["action"] == "Create" && row["type"] == "xpath" {
+                let value = s(&row, "value").to_string();
+                let has_pending = pending.as_object().unwrap().values().any(|v| !v.as_array().unwrap().is_empty());
+                if value.contains('$') && has_pending {
+                    let mut p = pending.clone();
+                    p["bodyType"] = json!("constant");
+                    p["body"] = json!("");
+                    p["input"] = state.clone();
+                    let st = engine_call(ctx.server, ctx.camel, "contentModifier.run", p)?;
+                    if st["ok"] == true {
+                        state = json!({ "body": input["body"], "headers": st["output"]["headers"], "properties": st["output"]["properties"] });
+                    }
+                    pending = json!({ "headers": [], "properties": [] });
+                }
+                let as_ = if s(&row, "datatype").starts_with("org.w3c.dom.") { "nodes" } else { "string" };
+                let v = ctx.xpath_value(&value, as_, &state).map_err(|e| format!("XPath of {}: {e}", s(&row, "name")))?;
+                row["resolved"] = json!(v);
+            }
+            done[table].as_array_mut().unwrap().push(row.clone());
+            pending[table].as_array_mut().unwrap().push(row);
+        }
+    }
+    let body_type = if s(config, "bodyType") == "expression" { "expression" } else { "constant" };
+    engine_call(ctx.server, ctx.camel, "contentModifier.run", json!({
+        "headers": done["headers"], "properties": done["properties"],
+        "bodyType": body_type, "body": s(config, "body"), "input": input,
+    }))
+}
+
+fn router(ctx: &Ctx, config: &Value) -> Result<Value, String> {
+    let routes = config["routes"].as_array().cloned().unwrap_or_default();
+    let mut out: Vec<Value> = routes.iter().map(|r| json!({ "name": r["name"],
+        "status": if r["default"] == true { "default" } else { "not evaluated" } })).collect();
+    let kinds: std::collections::BTreeSet<&str> = routes.iter().filter(|r| r["default"] != true)
+        .map(|r| s(r, "expressionType")).collect();
+    if kinds.len() > 1 {
+        return Ok(json!({ "routes": out,
+            "taken": "Error: the routes mix XML and Non-XML conditions; SAP: \"the evaluation fails\" (Define Router)." }));
+    }
+    let mut taken = String::new();
+    for (i, r) in routes.iter().enumerate() {
+        if r["default"] == true {
+            continue;
+        }
+        let evaluated = if s(r, "expressionType") == "xml" {
+            ctx.xpath_value(s(r, "condition"), "boolean", &ctx.input).map(|v| (v, Value::Null))
+        } else {
+            ctx.simple(s(r, "condition"), "condition").map(|v| (s(&v, "value").to_string(), v["evaluated"].clone()))
+        };
+        match evaluated {
+            Ok((v, camel)) => {
+                out[i]["status"] = json!(if v == "true" { "true" } else { "false" });
+                if !camel.is_null() {
+                    out[i]["camel"] = camel;
+                }
+            }
+            Err(e) => {
+                out[i]["status"] = json!("error");
+                out[i]["message"] = json!(e);
+                taken = "Error: the route condition failed, so CPI raises an exception.".into();
+                break;
+            }
+        }
+        if out[i]["status"] == "true" {
+            taken = s(r, "name").to_string();
+            break;
+        }
+    }
+    if taken.is_empty() {
+        let d = routes.iter().find(|r| r["default"] == true);
+        taken = if config["throwException"] == true {
+            "No route matched: Throw Exception is set, so the Router raises an exception.".into()
+        } else if let Some(d) = d {
+            format!("{} (default route)", s(d, "name"))
+        } else {
+            "No route matched and there is no default route.".into()
+        };
+    }
+    Ok(json!({ "routes": out, "taken": taken }))
+}
+
+/// XPath and grouping may refer to a header or property (SAP); Camel Simple resolves the reference first.
+fn splitter(ctx: &Ctx, config: &Value) -> Result<Value, String> {
+    let resolve = |v: String| -> Result<String, String> {
+        if v.contains("${") { Ok(s(&ctx.simple(&v, "expression")?, "value").to_string()) } else { Ok(v) }
+    };
+    let grouping = match &config["grouping"] {
+        Value::Null => String::new(),
+        Value::String(g) => g.clone(),
+        other => other.to_string(),
+    };
+    engine_call(ctx.server, ctx.xml, "split.run", json!({
+        "splitter": or(config, "splitter", "general"), "expressionType": or(config, "expressionType", "xpath"),
+        "expression": resolve(s(config, "expression").to_string())?, "grouping": resolve(grouping)?,
+        "streaming": config["streaming"] != false,
+        "namespaces": ctx.namespaces, "input": { "body": ctx.input["body"] },
+    }))
+}
+
+fn filter(ctx: &Ctx, config: &Value) -> Result<Value, String> {
+    let expression = resolve_simple_functions(s(config, "expression"), |e| Ok(s(&ctx.simple(e, "expression")?, "value").to_string()))?;
+    engine_call(ctx.server, ctx.xml, "filter.run", json!({
+        "expression": expression, "valueType": or(config, "valueType", "nodelist"),
+        "namespaces": ctx.namespaces, "input": ctx.input,
+    }))
+}
+
+fn gather(ctx: &Ctx, config: &Value, args: &Args) -> Result<Value, String> {
+    let messages = args.get("messages").cloned().ok_or("A Gather step needs messages (the bodies to gather).")?;
+    engine_call(ctx.server, ctx.xml, "gather.run", json!({
+        "messageType": or(config, "messageType", "sameXml"), "algorithm": or(config, "algorithm", "combine"),
+        "sourceXPath": s(config, "sourceXPath"), "targetXPath": s(config, "targetXPath"),
+        "namespaces": ctx.namespaces, "messages": messages,
+    }))
+}
+
+/// SAP: `function:simple('${property.x}')` in a Filter XPath. Camel Simple gives the value, which goes into
+/// the XPath as a string literal (the tab's `resolveSimpleFunctions`).
+pub fn resolve_simple_functions(xpath: &str, mut eval: impl FnMut(&str) -> Result<String, String>) -> Result<String, String> {
+    const CALL: &str = "function:simple(";
+    let mut out = String::new();
+    let mut rest = xpath;
+    while let Some(at) = rest.find(CALL) {
+        let after = &rest[at + CALL.len()..];
+        let trimmed = after.trim_start();
+        let quote = trimmed.chars().next().filter(|c| *c == '\'' || *c == '"');
+        let parsed = quote.and_then(|q| {
+            let inner = &trimmed[1..];
+            let end = inner.find(q)?;
+            let tail = inner[end + 1..].trim_start();
+            tail.strip_prefix(')').map(|t| (&inner[..end], t))
+        });
+        match parsed {
+            Some((expr, tail)) => {
+                out.push_str(&rest[..at]);
+                out.push('\'');
+                out.push_str(&eval(expr)?.replace('\'', "''"));
+                out.push('\'');
+                rest = tail;
+            }
+            None => {
+                out.push_str(&rest[..at + CALL.len()]);
+                rest = after;
+            }
+        }
+    }
+    out.push_str(rest);
+    Ok(out)
+}

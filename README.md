@@ -43,6 +43,11 @@ it has not been checked against a tenant yet ([Fidelity](docs/fidelity.md)).
 * **Import iFlow** lists an exported iFlow's scripts, mappings and these steps and opens them with
   their settings.
 
+**Coding agents**
+
+* `cpi-workbench mcp` is an [MCP server](docs/mcp.md): an agent such as Claude Code runs mappings,
+  scripts, flow steps and the project's test cases on the simulator while it writes them.
+
 Everything runs locally; the app never connects to a tenant.
 
 ![XSLT view](docs/images/screenshot-xslt.png)

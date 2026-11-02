@@ -31,6 +31,7 @@ pub const LEGACY: &[&str] = &["2025-11-25", "2025-06-18", "2025-03-26", "2024-11
 
 const META_VERSION: &str = "io.modelcontextprotocol/protocolVersion";
 const META_SERVER: &str = "io.modelcontextprotocol/serverInfo";
+const META_CAPABILITIES: &str = "io.modelcontextprotocol/clientCapabilities";
 
 const PARSE_ERROR: i64 = -32700;
 const INVALID_REQUEST: i64 = -32600;
@@ -128,8 +129,20 @@ pub fn serve<R: BufRead, W: Write + Send + 'static>(server: Arc<Server>, input: 
             continue;
         };
         let Some(method) = obj.get("method").and_then(Value::as_str).map(str::to_string) else {
-            continue; // a response; this server sends no requests
+            // A response (this server sends no requests, so it is ignored), or no valid message at all.
+            if !obj.contains_key("result") && !obj.contains_key("error") {
+                let id = obj.get("id").filter(|i| i.is_string() || i.is_i64() || i.is_u64()).cloned().unwrap_or(Value::Null);
+                send(&out, error(id, INVALID_REQUEST, "Invalid Request: no method", None));
+            }
+            continue;
         };
+        if obj.get("jsonrpc").and_then(Value::as_str) != Some("2.0") {
+            // A notification gets no answer, even an error (JSON-RPC 2.0).
+            if let Some(id) = obj.get("id").filter(|i| i.is_string() || i.is_i64() || i.is_u64()) {
+                send(&out, error(id.clone(), INVALID_REQUEST, "Invalid Request: jsonrpc must be \"2.0\"", None));
+            }
+            continue;
+        }
         let params = obj.get("params").cloned().unwrap_or(Value::Null);
         let Some(id) = obj.get("id").cloned() else {
             if method == "notifications/cancelled" {
@@ -205,12 +218,17 @@ impl Server {
     }
 
     fn handle(&self, id: Value, method: &str, params: &Value) -> Value {
-        let requested = params.get("_meta").and_then(|m| m.get(META_VERSION)).and_then(Value::as_str);
+        let meta = params.get("_meta");
+        let requested = meta.and_then(|m| m.get(META_VERSION)).and_then(Value::as_str);
         let modern = requested.is_some();
         if let Some(v) = requested {
             if v != MODERN && method != "initialize" {
                 return error(id, UNSUPPORTED_PROTOCOL_VERSION, "Unsupported protocol version",
                     Some(json!({ "supported": supported_versions(), "requested": v })));
+            }
+            // 2026-07-28: every request carries its capabilities ({} for none).
+            if method != "initialize" && !meta.and_then(|m| m.get(META_CAPABILITIES)).is_some_and(Value::is_object) {
+                return error(id, INVALID_PARAMS, &format!("Invalid params: _meta needs \"{META_CAPABILITIES}\" (an object)"), None);
             }
         }
         let result = match method {

@@ -19,7 +19,8 @@ struct Ctx<'a> {
 pub fn run(server: &Server, args: &Args) -> Result<Value, String> {
     let step = match (str_arg(args, "iflowStep"), args.get("step")) {
         (Some(_), Some(_)) => return Err("Give iflowStep or step, not both.".into()),
-        (Some(name), None) => iflow_step(server, name)?,
+        (Some(name), None) => iflow_step(server, name, str_arg(args, "iflow"))?,
+        (None, Some(_)) if args.contains_key("iflow") => return Err("iflow goes with iflowStep.".into()),
         (None, Some(s)) => s.clone(),
         (None, None) => return Err("Give iflowStep (from project_info) or step.".into()),
     };
@@ -35,7 +36,7 @@ pub fn run(server: &Server, args: &Args) -> Result<Value, String> {
     let ctx = Ctx {
         server,
         xml: tools::xml_runtime(server),
-        camel: str_arg(args, "camel").unwrap_or("groovy-2.x"),
+        camel: str_arg(args, "camel").unwrap_or(tools::camel_runtime(server)),
         namespaces: args.get("namespaces").cloned().unwrap_or(json!({})),
         input: tools::message(server, args)?,
     };
@@ -57,15 +58,17 @@ pub fn run(server: &Server, args: &Args) -> Result<Value, String> {
 }
 
 /// A step of the project's iFlows, by name or id.
-fn iflow_step(server: &Server, name: &str) -> Result<Value, String> {
+fn iflow_step(server: &Server, name: &str, iflow: Option<&str>) -> Result<Value, String> {
     let r = engine_call(server, tools::xml_runtime(server), "iflow.steps", json!({}))?;
-    let steps = r["steps"].as_array().cloned().unwrap_or_default();
+    let steps: Vec<Value> = r["steps"].as_array().cloned().unwrap_or_default().into_iter()
+        .filter(|s| iflow.is_none_or(|f| s["iflow"] == f)).collect();
     let found: Vec<&Value> = steps.iter().filter(|s| s["id"] == name).collect();
     let found = if found.is_empty() { steps.iter().filter(|s| s["name"] == name).collect() } else { found };
     match found.as_slice() {
         [one] => Ok((*one).clone()),
         [] => Err(format!("No iFlow step named '{name}'. project_info lists the steps under iflowSteps.")),
-        _ => Err(format!("Several iFlow steps are named '{name}'; give the step's id.")),
+        _ => Err(format!("Several iFlow steps are named '{name}' ({}); give the step's iflow too.",
+            found.iter().map(|s| s["iflow"].as_str().unwrap_or("?")).collect::<Vec<_>>().join(", "))),
     }
 }
 
@@ -164,7 +167,7 @@ fn router(ctx: &Ctx, config: &Value) -> Result<Value, String> {
     let kinds: std::collections::BTreeSet<&str> = routes.iter().filter(|r| r["default"] != true)
         .map(|r| s(r, "expressionType")).collect();
     if kinds.len() > 1 {
-        return Ok(json!({ "routes": out,
+        return Ok(json!({ "routes": out, "diagnostics": [],
             "taken": "Error: the routes mix XML and Non-XML conditions; SAP: \"the evaluation fails\" (Define Router)." }));
     }
     let mut taken = String::new();
@@ -206,7 +209,7 @@ fn router(ctx: &Ctx, config: &Value) -> Result<Value, String> {
             "No route matched and there is no default route.".into()
         };
     }
-    Ok(json!({ "routes": out, "taken": taken }))
+    Ok(json!({ "routes": out, "taken": taken, "diagnostics": [] }))
 }
 
 /// XPath and grouping may refer to a header or property (SAP); Camel Simple resolves the reference first.

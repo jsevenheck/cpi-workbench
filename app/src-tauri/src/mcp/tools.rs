@@ -90,7 +90,7 @@ pub fn definitions() -> Vec<Value> {
     ]);
     message_properties(&mut xslt, true);
     xslt.insert("runtime".into(), runtime(XSLT_RUNTIMES, true, Some("saxon-he-9.9"),
-        "saxon-he-9.9 is CPI's Saxon line; both runs 9.9 and 12 side by side (the app's runtime comparison)."));
+        "Default saxon-he-9.9, CPI's Saxon line (12 if 9.9 is not installed); both runs 9.9 and 12 side by side (the app's runtime comparison)."));
 
     let mut groovy = obj(vec![
         ("scriptPath", json!({ "type": "string", "description": "Project-relative .groovy file. Use scriptPath or script." })),
@@ -120,6 +120,7 @@ pub fn definitions() -> Vec<Value> {
 
     let mut step = obj(vec![
         ("iflowStep", json!({ "type": "string", "description": "Name or id of a step that project_info lists under iflowSteps. Use iflowStep or step." })),
+        ("iflow", json!({ "type": "string", "description": "The iFlow of iflowStep, when several iFlows have a step with that name or id." })),
         ("step", json!({ "type": "object", "description": "A step given directly (as edited in the Flow Steps tab): {\"type\": \"contentModifier\"|\"filter\"|\"router\"|\"splitter\"|\"gather\", \"config\": {...}}, config shaped as project_info shows it for iFlow steps.",
             "properties": {
                 "type": { "type": "string", "enum": ["contentModifier", "filter", "router", "splitter", "gather"] },
@@ -151,7 +152,7 @@ pub fn definitions() -> Vec<Value> {
             "Validates the body against an XML schema like CPI's XML Validator. Returns valid and the errors with lines.",
             xsd, &[], true),
         tool("evaluate_xpath", "Evaluate an XPath",
-            "Evaluates an XPath on the body, with headers and properties as variables. Returns the value or the selected nodes.",
+            "Evaluates an XPath on the body, like the XPath tab. Returns the value or the selected nodes.",
             xpath, &["expression"], true),
         tool("run_flow_step", "Run a flow step",
             "Runs a Content Modifier, Filter, Router, General or Iterating Splitter, or Gather step on a message, like the \
@@ -221,9 +222,22 @@ pub fn str_arg<'a>(args: &'a Args, key: &str) -> Option<&'a str> {
     args.get(key).and_then(Value::as_str)
 }
 
-/// The XML engine for files and flow steps: 9.9 (CPI's Saxon line) when installed.
+/// The default runtime of a kind: `preferred` when installed, else the other one, as the app falls back
+/// at start to the first installed runtime. The XML engine for files and flow steps is 9.9 (CPI's Saxon line)
+/// when installed.
+pub fn installed_or<'a>(server: &Server, preferred: &'a str, kind: &[&'a str]) -> &'a str {
+    if server.engines().locate(preferred).is_some() {
+        return preferred;
+    }
+    kind.iter().copied().find(|p| server.engines().locate(p).is_some()).unwrap_or(preferred)
+}
+
 pub fn xml_runtime(server: &Server) -> &'static str {
-    if server.engines().locate("saxon-he-9.9").is_some() { "saxon-he-9.9" } else { "saxon-he-12" }
+    installed_or(server, "saxon-he-9.9", XSLT_RUNTIMES)
+}
+
+pub fn camel_runtime(server: &Server) -> &'static str {
+    installed_or(server, "groovy-2.x", GROOVY_RUNTIMES)
 }
 
 /// Any installed engine that can read project files.
@@ -348,7 +362,7 @@ fn run_xslt(server: &Server, args: &Args) -> Result<Value, String> {
         "xslt": source(args, "mapping", "mappingPath", "mapping.xsl")?,
         "input": message(server, args)?,
     });
-    on_runtimes(server, &pick(args, "runtime", XSLT_RUNTIMES, "saxon-he-9.9"), "xslt.run", params)
+    on_runtimes(server, &pick(args, "runtime", XSLT_RUNTIMES, xml_runtime(server)), "xslt.run", params)
 }
 
 fn run_groovy(server: &Server, args: &Args) -> Result<Value, String> {
@@ -356,8 +370,8 @@ fn run_groovy(server: &Server, args: &Args) -> Result<Value, String> {
     // Without a runtime, the script's imports decide, as when the app opens a script.
     let detected = match (str_arg(args, "runtime"), str_arg(args, "script")) {
         (Some(_), _) => "groovy-1.x", // not used
-        (None, Some(text)) => api_runtime(text),
-        (None, None) => api_runtime(&read_file(server, str_arg(args, "scriptPath").unwrap_or_default())?),
+        (None, Some(text)) => installed_or(server, api_runtime(text), GROOVY_RUNTIMES),
+        (None, None) => installed_or(server, api_runtime(&read_file(server, str_arg(args, "scriptPath").unwrap_or_default())?), GROOVY_RUNTIMES),
     };
     let params = json!({
         "script": script,
@@ -379,7 +393,7 @@ fn api_runtime(script: &str) -> &'static str {
 fn validate_xsd(server: &Server, args: &Args) -> Result<Value, String> {
     let m = message(server, args)?;
     let params = json!({ "schema": source(args, "schema", "schemaPath", "schema.xsd")?, "input": { "body": m["body"] } });
-    engine_call(server, str_arg(args, "runtime").unwrap_or("saxon-he-9.9"), "xsd.validate", params)
+    engine_call(server, str_arg(args, "runtime").unwrap_or(xml_runtime(server)), "xsd.validate", params)
 }
 
 fn evaluate_xpath(server: &Server, args: &Args) -> Result<Value, String> {
@@ -389,5 +403,5 @@ fn evaluate_xpath(server: &Server, args: &Args) -> Result<Value, String> {
         "namespaces": args.get("namespaces").cloned().unwrap_or(json!({})),
         "input": { "body": message(server, args)?["body"] },
     });
-    engine_call(server, str_arg(args, "runtime").unwrap_or("saxon-he-9.9"), "xpath.eval", params)
+    engine_call(server, str_arg(args, "runtime").unwrap_or(xml_runtime(server)), "xpath.eval", params)
 }

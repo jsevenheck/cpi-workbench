@@ -75,7 +75,10 @@ server adds no function of its own.
 | `run_groovy` | Groovy, with the Script API and the project's `platform/` mocks, and the body type (`bodyType`). The runtime (1.x or 2.x) follows the script's imports unless given; `both` runs both. |
 | `validate_xsd` | XSD. |
 | `evaluate_xpath` | XPath (1.0 or 3.1, with namespaces). |
-| `run_flow_step` | Flow Steps: a Content Modifier, Filter, Router, Splitter or Gather step from an iFlow (`iflowStep`: name or id) or from a configuration (`step`). |
+| `run_flow_step` | Flow Steps: a Content Modifier, Filter, Router, Splitter or Gather step from an iFlow (`iflowStep`: name or id, with `iflow` when several iFlows share it) or from a configuration (`step`). |
+
+Without `runtime` or `camel`, a tool uses the app's default (Saxon-HE 9.9, Camel 3.14; Groovy from the
+script's imports), or the other runtime of that kind when the default is not installed, as the app does.
 
 A message is `body` (or `bodyPath`, a project file) and, where the tab has them, `headers` and `properties`. A header or
 property is a string, or `{"value": "…", "type": "Integer"}` for another type (the types of
@@ -100,8 +103,9 @@ lists what is verified against CPI.
   call `run_groovy` or `run_xslt` can run any code. The MCP annotations say so: only `project_info`,
   `validate_xsd` and `evaluate_xpath` are marked read-only and closed-world; a client that uses these
   hints can ask before the others run.
-* **Network:** the server opens no port and connects nowhere. XML runs block the network; Groovy
-  scripts are not restricted.
+* **Network:** the server opens no port and connects nowhere. XML runs resolve includes, documents
+  and entities in the project only, so they fetch nothing from the network; reflexive `java:` calls
+  in XSLT and Groovy scripts are not restricted.
 * **Input from files:** message bodies and test data may contain text written to steer an agent
   (prompt injection). The server passes results through as they are.
 

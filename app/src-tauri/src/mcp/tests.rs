@@ -90,6 +90,20 @@ fn protocol_errors() {
     assert_eq!(code(json!(5)), vec![json!(METHOD_NOT_FOUND)]);
     assert_eq!(code(json!(6)), vec![json!(INVALID_PARAMS)]);
     assert_eq!(code(json!(7)), vec![json!(INVALID_PARAMS)]);
+
+    // JSON-RPC 2.0 only; an object with an id but neither method nor result is no message; modern requests
+    // carry their client capabilities.
+    let msgs = session(bare(), &[
+        json!({ "jsonrpc": "1.0", "id": 1, "method": "ping" }),
+        json!({ "jsonrpc": "2.0", "id": 2 }),
+        json!({ "jsonrpc": "2.0", "id": 3, "method": "tools/list", "params": { "_meta": { META_VERSION: MODERN } } }),
+        json!({ "jsonrpc": "2.0", "id": 4, "result": {} }),
+        json!({ "jsonrpc": "1.0", "method": "notifications/initialized" }),
+    ]);
+    assert_eq!(msgs.len(), 3, "a response and a notification get no answer: {msgs:?}");
+    assert_eq!(by_id(&msgs, 1)["error"]["code"], INVALID_REQUEST);
+    assert_eq!(by_id(&msgs, 2)["error"]["code"], INVALID_REQUEST);
+    assert_eq!(by_id(&msgs, 3)["error"]["code"], INVALID_PARAMS);
 }
 
 #[test]
@@ -251,6 +265,10 @@ fn tools_run_on_the_engines() {
 
     let route = c.ok("run_flow_step", json!({ "iflowStep": "Check sender", "headers": { "SenderId": "ERP" } }));
     assert_eq!(route["taken"], "ERP", "{route}");
+    assert_eq!(route["diagnostics"], json!([]), "the tab's result shape: {route}");
+    let same = c.ok("run_flow_step", json!({ "iflowStep": "Check sender", "iflow": "Order_Replication", "headers": { "SenderId": "ERP" } }));
+    assert_eq!(same["taken"], "ERP");
+    assert!(c.err("run_flow_step", json!({ "iflowStep": "Check sender", "iflow": "Other_Flow" })).contains("No iFlow step"));
     let other = c.ok("run_flow_step", json!({ "iflowStep": "Check sender", "headers": { "SenderId": "Shop" } }));
     assert_eq!(other["taken"], "Other (default route)", "{other}");
 
@@ -291,6 +309,24 @@ fn a_restarted_engine_reopens_the_project() {
     let r = Call(&server).ok("run_groovy", json!({ "runtime": "groovy-1.x", "scriptPath": "scripts/enrich-order.groovy", "body": "<a/>" }));
     assert!(r["ok"].is_boolean(), "{r}");
     assert!(!r.to_string().contains("NoSuchFile"), "{r}");
+    engines.shutdown();
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Two iFlows with the same step: the name or id alone is ambiguous, `iflow` picks one.
+#[test]
+fn iflow_picks_among_equal_step_names() {
+    let Some(engines) = engines() else { return };
+    let dir = project("dup");
+    let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    copy_dir(&repo.join("engine/core/src/test/resources/iflow"), &dir.join("iflows").join("Order_Copy"));
+    *engines.on_start.lock().unwrap() = Some(("project.open".into(), json!({ "dir": dir.to_string_lossy() })));
+    let server = Server::new(engines.clone(), Some(dir.clone()));
+    let c = Call(&server);
+    let e = c.err("run_flow_step", json!({ "iflowStep": "CallActivity_9", "body": "<Order/>" }));
+    assert!(e.contains("Order_Copy") && e.contains("Order_Replication"), "{e}");
+    let r = c.ok("run_flow_step", json!({ "iflowStep": "CallActivity_9", "iflow": "Order_Copy", "body": "<Order><Item>a</Item></Order>" }));
+    assert_eq!(r["body"], "<Item>a</Item>", "{r}");
     engines.shutdown();
     let _ = std::fs::remove_dir_all(&dir);
 }

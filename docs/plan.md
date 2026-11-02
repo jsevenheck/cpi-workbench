@@ -358,9 +358,9 @@ Decisions:
   its own tools; the server writes nothing into the project.
 * **Flow steps** run like the Flow Steps tab, call for call (`mcp/flow.rs` follows
   `store.svelte.ts`), so no CLI command was needed first. A test-case step for flow steps stays open.
-* **Security:** the server is bound to one project folder, opens no port, and marks only the XML
-  tools read-only; Groovy runs without a sandbox, as in the app. Payload files may carry prompt
-  injection; the docs say so.
+* **Security:** the server is bound to one project folder, opens no port, and marks only the project,
+  XSD and XPath tools read-only (XSLT's reflexive `java:` calls and Groovy run code without a sandbox,
+  as in the app). Payload files may carry prompt injection; the docs say so.
 
 ---
 

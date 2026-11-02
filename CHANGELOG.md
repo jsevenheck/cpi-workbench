@@ -21,6 +21,11 @@ of its version.
 - The Groovy engines no longer print the JVM's class-data archive notes ("Skipping …: Old class has
   been linked") to stderr.
 
+### Fixed
+
+- XSD and XPath: when a run starts while another is still open (Ctrl+Enter), only the latest run's
+  result is shown, as in the XSLT and Groovy tabs.
+
 ## [0.2.0] - 2026-11-01
 
 ### Added

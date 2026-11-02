@@ -796,33 +796,42 @@ function clean(rows: Row[]) {
   return rows.filter((r) => r.name.trim() !== '').map((r) => ({ ...r, name: r.name.trim() }));
 }
 
+// Ctrl+Enter can start a run while one is open; only the latest run's answer is shown, as for XSLT and Groovy.
+let xsdSeq = 0;
+
 export async function runXsd() {
+  const seq = ++xsdSeq;
   xsd.running = true;
   app.error = '';
   try {
-    xsd.result = await call('xsd.validate', {
+    const r = await call('xsd.validate', {
       schema: { content: xsd.schema, path: xsd.schemaPath ?? 'schema.xsd' },
       input: { body: xsd.body },
     }, app.profile);
+    if (seq === xsdSeq) xsd.result = r;
   } catch (e) {
-    fail(e);
+    if (seq === xsdSeq) fail(e);
   } finally {
-    xsd.running = false;
+    if (seq === xsdSeq) xsd.running = false;
   }
 }
 
+let xpathSeq = 0;
+
 export async function runXpath() {
+  const seq = ++xpathSeq;
   xpath.running = true;
   app.error = '';
   const ns: Record<string, string> = {};
   for (const r of xpath.namespaces) if (r.name.trim() && !r.disabled) ns[r.name.trim()] = r.value;
   try {
-    xpath.result = await call('xpath.eval', { expression: xpath.expression, version: xpath.version,
+    const r = await call('xpath.eval', { expression: xpath.expression, version: xpath.version,
       namespaces: ns, input: { body: xpath.body } }, app.profile);
+    if (seq === xpathSeq) xpath.result = r;
   } catch (e) {
-    fail(e);
+    if (seq === xpathSeq) fail(e);
   } finally {
-    xpath.running = false;
+    if (seq === xpathSeq) xpath.running = false;
   }
 }
 

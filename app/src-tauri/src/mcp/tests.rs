@@ -97,6 +97,10 @@ fn tool_definitions_follow_the_spec() {
     let tools = tools::definitions();
     let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
     assert_eq!(names, ["project_info", "run_xslt", "run_groovy", "validate_xsd", "evaluate_xpath", "run_flow_step"]);
+    // Only tools that cannot run code are read-only: XSLT's java: calls and Groovy can (JavaExtensions).
+    let read_only: Vec<&str> = tools.iter().filter(|t| t["annotations"]["readOnlyHint"] == true)
+        .map(|t| t["name"].as_str().unwrap()).collect();
+    assert_eq!(read_only, ["project_info", "validate_xsd", "evaluate_xpath"]);
     for t in &tools {
         let name = t["name"].as_str().unwrap();
         assert!(name.len() <= 128 && name.chars().all(|c| c.is_ascii_alphanumeric() || "_-.".contains(c)));
@@ -224,6 +228,9 @@ fn tools_run_on_the_engines() {
             def Message processData(Message m) { m.setBody(m.getBody(String) * m.getProperty('n')); m }" }));
     assert_eq!(g["runtime"], "groovy-2.x");
     assert_eq!(g["output"]["body"], "abcabc", "{g}");
+    let typed = c.ok("run_groovy", json!({ "body": "x", "bodyType": "InputStream",
+        "script": "def processData(m) { m.setBody(m.getBody() instanceof InputStream ? 'stream' : 'other'); m }" }));
+    assert_eq!(typed["output"]["body"], "stream", "the Groovy tab's Body type: {typed}");
 
     let v = c.ok("validate_xsd", json!({ "schemaPath": "schemas/salesorder.xsd", "body": "<nope/>" }));
     assert_eq!(v["valid"], false, "{v}");

@@ -72,7 +72,7 @@ server adds no function of its own.
 |---|---|
 | `project_info` | The project: its files, the steps of the iFlows under `iflows/` (flow steps with their configuration; script, XSLT and XML Validator steps with file, function and runtime) and the installed runtimes. |
 | `run_xslt` | XSLT (`mappingPath` or `mapping`). `runtime: "both"` runs Saxon-HE 9.9 and 12, as the runtime comparison does. |
-| `run_groovy` | Groovy, with the Script API and the project's `platform/` mocks. The runtime (1.x or 2.x) follows the script's imports unless given; `both` runs both. |
+| `run_groovy` | Groovy, with the Script API and the project's `platform/` mocks, and the body type (`bodyType`). The runtime (1.x or 2.x) follows the script's imports unless given; `both` runs both. |
 | `validate_xsd` | XSD. |
 | `evaluate_xpath` | XPath (1.0 or 3.1, with namespaces). |
 | `run_flow_step` | Flow Steps: a Content Modifier, Filter, Router, Splitter or Gather step from an iFlow (`iflowStep`: name or id) or from a configuration (`step`). |
@@ -92,12 +92,14 @@ lists what is verified against CPI.
 
 * **Files:** only the project folder. Bodies, mappings, scripts and schemas are read through the
   engines, which refuse paths outside the project, as in the app ([What a run can access](user-guide.md#what-a-run-can-access)).
+  The check compares paths, so a symbolic link inside the project can point outside it.
   The tools write nothing into the project; the engines keep caches in the temp folder and the
   user's cache folder, as in the app. Groovy scripts can write files (next point).
 * **Code:** Groovy scripts execute as ordinary Java code with your user's rights, without a sandbox;
-  Camel Simple in flow steps can call methods too. An agent that can call `run_groovy` can run any code. The tools say so in their MCP annotations: only the XML tools
-  (`project_info`, `run_xslt`, `validate_xsd`, `evaluate_xpath`) are marked read-only and closed-world;
-  a client that uses these hints can ask before the others run.
+  Camel Simple in flow steps and reflexive `java:` calls in XSLT can call methods too. An agent that can
+  call `run_groovy` or `run_xslt` can run any code. The MCP annotations say so: only `project_info`,
+  `validate_xsd` and `evaluate_xpath` are marked read-only and closed-world; a client that uses these
+  hints can ask before the others run.
 * **Network:** the server opens no port and connects nowhere. XML runs block the network; Groovy
   scripts are not restricted.
 * **Input from files:** message bodies and test data may contain text written to steer an agent

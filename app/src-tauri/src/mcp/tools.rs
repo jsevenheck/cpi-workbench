@@ -66,8 +66,9 @@ fn tool(name: &str, title: &str, description: &str, props: Map<String, Value>, r
         "description": description,
         "inputSchema": { "type": "object", "properties": props, "required": required, "additionalProperties": false },
     });
-    // XML tools read only project files and cannot write (xsl:result-document is refused). Groovy and Camel
-    // Simple run code without a sandbox, so their tools carry no hints and clients assume the worst.
+    // XSD and XPath read only project files and cannot write. XSLT is not among them: reflexive java: calls run
+    // any public JDK method (JavaExtensions). Groovy and Camel Simple run code without a sandbox. Tools without
+    // hints get the protocol's defaults, so clients assume the worst.
     if read_only {
         t["annotations"] = json!({ "readOnlyHint": true, "openWorldHint": false });
     }
@@ -97,6 +98,8 @@ pub fn definitions() -> Vec<Value> {
         ("function", json!({ "type": "string", "default": "processData", "description": "The function the step calls (Script Function)." })),
     ]);
     message_properties(&mut groovy, true);
+    groovy.insert("bodyType".into(), json!({ "type": "string", "enum": ["String", "byte[]", "InputStream"], "default": "String",
+        "description": "The Java type of the incoming body, as the Groovy tab's Body type." }));
     groovy.insert("runtime".into(), runtime(GROOVY_RUNTIMES, true, None,
         "groovy-1.x (Script API v1) or groovy-2.x (v2). Default: from the script's imports (com.sap.it.script.v2.api → 2.x), else 1.x. both runs the two."));
 
@@ -138,7 +141,7 @@ pub fn definitions() -> Vec<Value> {
         tool("run_xslt", "Run an XSLT mapping",
             "Runs an XSLT mapping like CPI's XSLT Mapping step: headers and properties are xsl:param values, the result \
              is the new body. Returns the output message, xsl:message output and diagnostics.",
-            xslt, &[], true),
+            xslt, &[], false),
         tool("run_groovy", "Run a Groovy script",
             "Runs a Groovy script like CPI's Groovy Script step with the clean-room Script API (Message, MessageLog, \
              ITApiFactory with the project's platform/ files). Returns the output message, log entries and diagnostics. \
@@ -360,6 +363,7 @@ fn run_groovy(server: &Server, args: &Args) -> Result<Value, String> {
         "script": script,
         "function": str_arg(args, "function").unwrap_or("processData"),
         "input": message(server, args)?,
+        "options": { "bodyType": str_arg(args, "bodyType").unwrap_or("String") },
     });
     let mut r = on_runtimes(server, &pick(args, "runtime", GROOVY_RUNTIMES, detected), "groovy.run", params)?;
     if str_arg(args, "runtime").is_none() {

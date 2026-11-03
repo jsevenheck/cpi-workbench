@@ -73,8 +73,15 @@ class GatherStepTest {
             assertFalse(Json.bool(overlap, "ok", true), () -> Json.write(overlap));
             assertTrue(Json.arr(overlap, "diagnostics").toString().contains("replaces"));
         }
-        Map<String, Object> dtd = gather("sameXml", "combine", "", "", List.of("<?xml version='1.0'?><!-- c --><!DOCTYPE r [<!ENTITY e 'A'>]><r>&e;</r>"));
-        assertFalse(Json.bool(dtd, "ok", true), () -> Json.write(dtd));
-        assertTrue(Json.arr(dtd, "diagnostics").toString().contains("UnsupportedInSimulator"));
+        for (String format : List.of("sameXml", "differentXml")) {
+            for (String msg : List.of("<?xml version='1.0'?><!-- c --><!DOCTYPE r [<!ENTITY e 'A'>]><r>&e;</r>",
+                    "\uFEFF<!DOCTYPE r [<!ENTITY e 'A'>]><r>&e;</r>", "\uFEFF<?xml version='1.0'?><!DOCTYPE r><r/>")) {
+                Map<String, Object> dtd = gather(format, "combine", "", "", List.of(msg));
+                assertFalse(Json.bool(dtd, "ok", true), () -> Json.write(dtd));
+                assertTrue(Json.arr(dtd, "diagnostics").toString().contains("UnsupportedInSimulator"));
+            }
+        }
+        // A byte order mark alone is dropped like the declaration.
+        assertTrue(body(gather("sameXml", "combine", "", "", List.of("\uFEFF<?xml version='1.0'?><r/>"))).contains("<multimap:Message1><r/>"));
     }
 }

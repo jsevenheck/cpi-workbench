@@ -119,7 +119,9 @@ public final class GatherStep {
             sb.append("<multimap:Message1>");
         }
         for (int i = 0; i < messages.size(); i++) {
-            String body = DECLARATION.matcher(messages.get(i)).replaceFirst("");
+            // A byte order mark may come first (XML 1.0, 4.3.3); it belongs to the encoding, not to the body.
+            String raw = messages.get(i).startsWith("\uFEFF") ? messages.get(i).substring(1) : messages.get(i);
+            String body = DECLARATION.matcher(raw).replaceFirst("");
             if (DOCTYPE.matcher(body).find()) {
                 // Inside the multimap wrapper the declaration would make the result malformed.
                 throw new IllegalArgumentException("UnsupportedInSimulator: message " + (i + 1) + " has a DOCTYPE; "

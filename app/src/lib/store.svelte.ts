@@ -2,6 +2,7 @@ import { call, openProject, closeProject as closeEngineProject, availableProfile
 import type { Diagnostic, FileEntry, GroovyResult, Row, XsltResult } from './types';
 import { toRows } from './rows';
 import { pathKey } from './paths';
+import { resolveSimpleFunctions } from './simple';
 
 export const SAMPLE_XSL = `<?xml version="1.0" encoding="UTF-8"?>
 <!-- Headers and exchange properties arrive as xsl:param with the same name, like in Cloud Integration.
@@ -855,15 +856,26 @@ function flowInput() {
   return { body: flow.body, headers: clean(flow.headers), properties: clean(flow.properties) };
 }
 
-async function xpathValue(expression: string, as: 'boolean' | 'string' | 'nodes', input = flowInput()) {
+/**
+ * Everything a flow run reads, taken when it starts: the message, the namespaces, the engines and the step's
+ * settings. Edits while the run waits for the engines do not leak into it (the MCP server's Ctx does the same).
+ */
+interface FlowRun {
+  input: ReturnType<typeof flowInput>;
+  namespaces: Record<string, string>;
+  xml: Profile;
+  camel: Profile;
+}
+
+async function xpathValue(run: FlowRun, expression: string, as: 'boolean' | 'string' | 'nodes', input = run.input) {
   // Headers and properties are XPath variables ($name), as Camel's XPath resolver provides them (F39).
-  const r = await call('xpath.eval', { expression, version: '3.1', as, namespaces: namespaceMap(), input }, flowXmlProfile());
+  const r = await call('xpath.eval', { expression, version: '3.1', as, namespaces: run.namespaces, input }, run.xml);
   if (!r.ok) throw new Error(r.diagnostics?.[0]?.message ?? 'XPath failed');
   return r.value as string;
 }
 
-async function simpleEval(expression: string, mode: 'condition' | 'expression') {
-  const r = await call('simple.eval', { expression, mode, input: flowInput() }, flow.camel);
+async function simpleEval(run: FlowRun, expression: string, mode: 'condition' | 'expression') {
+  const r = await call('simple.eval', { expression, mode, input: run.input }, run.camel);
   if (!r.ok) throw new Error(r.diagnostics?.[0]?.message ?? 'Camel Simple failed');
   return r as { value: string | null; evaluated?: string };
 }
@@ -871,18 +883,21 @@ async function simpleEval(expression: string, mode: 'condition' | 'expression') 
 // A run's result goes to the step it was started for, and only if no newer run or newly opened step came since.
 let flowSeq = 0;
 const flowResultKey = { contentModifier: 'cmResult', filter: 'filterResult', router: 'routerResult', splitter: 'splitResult', gather: 'gatherResult' } as const;
+const flowConfigKey = { contentModifier: 'cm', filter: 'filter', router: 'router', splitter: 'splitter', gather: 'gather' } as const;
 
 export async function runFlowStep() {
   const seq = ++flowSeq;
   const step = flow.step;
+  const run: FlowRun = { input: $state.snapshot(flowInput()), namespaces: namespaceMap(), xml: flowXmlProfile(), camel: flow.camel };
+  const config: any = $state.snapshot(flow[flowConfigKey[step]]);
   flow.running = true;
   app.error = '';
   try {
-    const r = step === 'contentModifier' ? await runContentModifier()
-      : step === 'filter' ? await runFilter()
-      : step === 'router' ? await runRouter()
-      : step === 'splitter' ? await runSplitter()
-      : await runGather();
+    const r = step === 'contentModifier' ? await runContentModifier(run, config)
+      : step === 'filter' ? await runFilter(run, config)
+      : step === 'router' ? await runRouter(run, config)
+      : step === 'splitter' ? await runSplitter(run, config)
+      : await runGather(run, config);
     if (seq === flowSeq) flow[flowResultKey[step]] = r;
   } catch (e) {
     if (seq === flowSeq) fail(e);
@@ -891,13 +906,10 @@ export async function runFlowStep() {
   }
 }
 
-async function runContentModifier() {
+async function runContentModifier(run: FlowRun, cm: typeof flow.cm) {
   // XPath rows read the incoming body, which the step changes only after all header and property rows. Rows run
   // top to bottom (SAP), so an XPath that uses $name sees the headers and properties of the rows above it.
-  // The run uses the settings it started with, even if they are edited while it waits for the engines.
-  const cm = $state.snapshot(flow.cm);
-  const camel = flow.camel;
-  const input = flowInput();
+  const input = run.input;
   let state = input;
   const done: Record<'headers' | 'properties', any[]> = { headers: [], properties: [] };
   let pending: Record<'headers' | 'properties', any[]> = { headers: [], properties: [] };
@@ -906,12 +918,12 @@ async function runContentModifier() {
       let row: any = { ...r };
       if (r.action === 'Create' && r.type === 'xpath') {
         if (r.value.includes('$') && (pending.headers.length || pending.properties.length)) {
-          const s = await call('contentModifier.run', { ...pending, bodyType: 'constant', body: '', input: state }, camel);
+          const s = await call('contentModifier.run', { ...pending, bodyType: 'constant', body: '', input: state }, run.camel);
           if (s.ok) state = { body: input.body, headers: s.output.headers, properties: s.output.properties };
           pending = { headers: [], properties: [] };
         }
         try {
-          row = { ...r, resolved: await xpathValue(r.value, r.datatype.startsWith('org.w3c.dom.') ? 'nodes' : 'string', state) };
+          row = { ...r, resolved: await xpathValue(run, r.value, r.datatype.startsWith('org.w3c.dom.') ? 'nodes' : 'string', state) };
         } catch (e) {
           throw new Error(`XPath of ${r.name}: ${(e as Error).message}`);
         }
@@ -922,20 +934,20 @@ async function runContentModifier() {
   }
   return await call('contentModifier.run', {
     ...done, bodyType: cm.bodyType, body: cm.body, input,
-  }, camel);
+  }, run.camel);
 }
 
-async function runRouter() {
-  const routes: RouteResult[] = flow.router.routes.map((r) => ({ status: r.default ? 'default' : 'not evaluated' }));
-  if (new Set(flow.router.routes.filter((r) => !r.default).map((r) => r.expressionType)).size > 1) {
+async function runRouter(run: FlowRun, router: typeof flow.router) {
+  const routes: RouteResult[] = router.routes.map((r) => ({ status: r.default ? 'default' : 'not evaluated' }));
+  if (new Set(router.routes.filter((r) => !r.default).map((r) => r.expressionType)).size > 1) {
     return { routes, diagnostics: [],
       taken: 'Error: the routes mix XML and Non-XML conditions; SAP: "the evaluation fails" (Define Router).' };
   }
   let taken = '';
-  for (const [i, r] of flow.router.routes.entries()) {
+  for (const [i, r] of router.routes.entries()) {
     if (r.default) continue;
     try {
-      const s = r.expressionType === 'xml' ? { value: await xpathValue(r.condition, 'boolean') } : await simpleEval(r.condition, 'condition');
+      const s = r.expressionType === 'xml' ? { value: await xpathValue(run, r.condition, 'boolean') } : await simpleEval(run, r.condition, 'condition');
       routes[i] = { status: s.value === 'true' ? 'true' : 'false', camel: (s as { evaluated?: string }).evaluated };
     } catch (e) {
       routes[i] = { status: 'error', message: (e as Error).message };
@@ -948,47 +960,34 @@ async function runRouter() {
     }
   }
   if (!taken) {
-    const d = flow.router.routes.find((r) => r.default);
-    taken = flow.router.throwException ? 'No route matched: Throw Exception is set, so the Router raises an exception.'
+    const d = router.routes.find((r) => r.default);
+    taken = router.throwException ? 'No route matched: Throw Exception is set, so the Router raises an exception.'
       : d ? d.name + ' (default route)' : 'No route matched and there is no default route.';
   }
   return { routes, taken, diagnostics: [] };
 }
 
-async function runSplitter() {
+async function runSplitter(run: FlowRun, s: typeof flow.splitter) {
   // XPath and grouping may refer to a header or property (SAP); Camel Simple resolves the reference first.
-  const resolve = async (v: string) => (v.includes('${') ? (await simpleEval(v, 'expression')).value ?? '' : v);
-  const s = flow.splitter;
+  const resolve = async (v: string) => (v.includes('${') ? (await simpleEval(run, v, 'expression')).value ?? '' : v);
   return await call('split.run', {
     splitter: s.splitter, expressionType: s.expressionType, expression: await resolve(s.expression),
-    grouping: await resolve(String(s.grouping ?? '')), streaming: s.streaming, namespaces: namespaceMap(), input: { body: flow.body },
-  }, flowXmlProfile());
+    grouping: await resolve(String(s.grouping ?? '')), streaming: s.streaming, namespaces: run.namespaces, input: { body: run.input.body },
+  }, run.xml);
 }
 
-/** SAP: `function:simple('${property.x}')` in a Filter XPath; Camel Simple gives the value, as an XPath string. */
-async function resolveSimpleFunctions(xpathExpr: string) {
-  let out = xpathExpr;
-  for (const m of xpathExpr.matchAll(/function:simple\(\s*(?:'([^']*)'|"([^"]*)")\s*\)/g)) {
-    const v = (await simpleEval(m[1] ?? m[2], 'expression')).value ?? '';
-    // A function, not a string: in a replacement string, $$, $& and $1 are patterns, and the value would change.
-    out = out.replace(m[0], () => "'" + v.replaceAll("'", "''") + "'");
-  }
-  return out;
-}
-
-async function runFilter() {
+async function runFilter(run: FlowRun, f: typeof flow.filter) {
   return await call('filter.run', {
-    expression: await resolveSimpleFunctions(flow.filter.expression), valueType: flow.filter.valueType,
-    namespaces: namespaceMap(), input: flowInput(),
-  }, flowXmlProfile());
+    expression: await resolveSimpleFunctions(f.expression, async (e) => (await simpleEval(run, e, 'expression')).value ?? ''),
+    valueType: f.valueType, namespaces: run.namespaces, input: run.input,
+  }, run.xml);
 }
 
-async function runGather() {
-  const g = flow.gather;
+async function runGather(run: FlowRun, g: typeof flow.gather) {
   return await call('gather.run', {
     messageType: g.messageType, algorithm: g.algorithm, sourceXPath: g.sourceXPath, targetXPath: g.targetXPath,
-    namespaces: namespaceMap(), messages: g.messages,
-  }, flowXmlProfile());
+    namespaces: run.namespaces, messages: g.messages,
+  }, run.xml);
 }
 
 /** The splitter's messages go to the Gather step, as in an iFlow's Splitter → … → Gather. */

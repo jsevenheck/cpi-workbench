@@ -868,35 +868,45 @@ async function simpleEval(expression: string, mode: 'condition' | 'expression') 
   return r as { value: string | null; evaluated?: string };
 }
 
+// A run's result goes to the step it was started for, and only if no newer run or newly opened step came since.
+let flowSeq = 0;
+const flowResultKey = { contentModifier: 'cmResult', filter: 'filterResult', router: 'routerResult', splitter: 'splitResult', gather: 'gatherResult' } as const;
+
 export async function runFlowStep() {
+  const seq = ++flowSeq;
+  const step = flow.step;
   flow.running = true;
   app.error = '';
   try {
-    if (flow.step === 'contentModifier') await runContentModifier();
-    else if (flow.step === 'filter') await runFilter();
-    else if (flow.step === 'router') await runRouter();
-    else if (flow.step === 'splitter') await runSplitter();
-    else await runGather();
+    const r = step === 'contentModifier' ? await runContentModifier()
+      : step === 'filter' ? await runFilter()
+      : step === 'router' ? await runRouter()
+      : step === 'splitter' ? await runSplitter()
+      : await runGather();
+    if (seq === flowSeq) flow[flowResultKey[step]] = r;
   } catch (e) {
-    fail(e);
+    if (seq === flowSeq) fail(e);
   } finally {
-    flow.running = false;
+    if (seq === flowSeq) flow.running = false;
   }
 }
 
 async function runContentModifier() {
   // XPath rows read the incoming body, which the step changes only after all header and property rows. Rows run
   // top to bottom (SAP), so an XPath that uses $name sees the headers and properties of the rows above it.
+  // The run uses the settings it started with, even if they are edited while it waits for the engines.
+  const cm = $state.snapshot(flow.cm);
+  const camel = flow.camel;
   const input = flowInput();
   let state = input;
   const done: Record<'headers' | 'properties', any[]> = { headers: [], properties: [] };
   let pending: Record<'headers' | 'properties', any[]> = { headers: [], properties: [] };
   for (const table of ['headers', 'properties'] as const) {
-    for (const r of flow.cm[table]) {
+    for (const r of cm[table]) {
       let row: any = { ...r };
       if (r.action === 'Create' && r.type === 'xpath') {
         if (r.value.includes('$') && (pending.headers.length || pending.properties.length)) {
-          const s = await call('contentModifier.run', { ...pending, bodyType: 'constant', body: '', input: state }, flow.camel);
+          const s = await call('contentModifier.run', { ...pending, bodyType: 'constant', body: '', input: state }, camel);
           if (s.ok) state = { body: input.body, headers: s.output.headers, properties: s.output.properties };
           pending = { headers: [], properties: [] };
         }
@@ -910,17 +920,16 @@ async function runContentModifier() {
       pending[table].push(row);
     }
   }
-  flow.cmResult = await call('contentModifier.run', {
-    ...done, bodyType: flow.cm.bodyType, body: flow.cm.body, input,
-  }, flow.camel);
+  return await call('contentModifier.run', {
+    ...done, bodyType: cm.bodyType, body: cm.body, input,
+  }, camel);
 }
 
 async function runRouter() {
   const routes: RouteResult[] = flow.router.routes.map((r) => ({ status: r.default ? 'default' : 'not evaluated' }));
   if (new Set(flow.router.routes.filter((r) => !r.default).map((r) => r.expressionType)).size > 1) {
-    flow.routerResult = { routes, diagnostics: [],
+    return { routes, diagnostics: [],
       taken: 'Error: the routes mix XML and Non-XML conditions; SAP: "the evaluation fails" (Define Router).' };
-    return;
   }
   let taken = '';
   for (const [i, r] of flow.router.routes.entries()) {
@@ -943,14 +952,14 @@ async function runRouter() {
     taken = flow.router.throwException ? 'No route matched: Throw Exception is set, so the Router raises an exception.'
       : d ? d.name + ' (default route)' : 'No route matched and there is no default route.';
   }
-  flow.routerResult = { routes, taken, diagnostics: [] };
+  return { routes, taken, diagnostics: [] };
 }
 
 async function runSplitter() {
   // XPath and grouping may refer to a header or property (SAP); Camel Simple resolves the reference first.
   const resolve = async (v: string) => (v.includes('${') ? (await simpleEval(v, 'expression')).value ?? '' : v);
   const s = flow.splitter;
-  flow.splitResult = await call('split.run', {
+  return await call('split.run', {
     splitter: s.splitter, expressionType: s.expressionType, expression: await resolve(s.expression),
     grouping: await resolve(String(s.grouping ?? '')), streaming: s.streaming, namespaces: namespaceMap(), input: { body: flow.body },
   }, flowXmlProfile());
@@ -961,13 +970,14 @@ async function resolveSimpleFunctions(xpathExpr: string) {
   let out = xpathExpr;
   for (const m of xpathExpr.matchAll(/function:simple\(\s*(?:'([^']*)'|"([^"]*)")\s*\)/g)) {
     const v = (await simpleEval(m[1] ?? m[2], 'expression')).value ?? '';
-    out = out.replace(m[0], "'" + v.replaceAll("'", "''") + "'");
+    // A function, not a string: in a replacement string, $$, $& and $1 are patterns, and the value would change.
+    out = out.replace(m[0], () => "'" + v.replaceAll("'", "''") + "'");
   }
   return out;
 }
 
 async function runFilter() {
-  flow.filterResult = await call('filter.run', {
+  return await call('filter.run', {
     expression: await resolveSimpleFunctions(flow.filter.expression), valueType: flow.filter.valueType,
     namespaces: namespaceMap(), input: flowInput(),
   }, flowXmlProfile());
@@ -975,7 +985,7 @@ async function runFilter() {
 
 async function runGather() {
   const g = flow.gather;
-  flow.gatherResult = await call('gather.run', {
+  return await call('gather.run', {
     messageType: g.messageType, algorithm: g.algorithm, sourceXPath: g.sourceXPath, targetXPath: g.targetXPath,
     namespaces: namespaceMap(), messages: g.messages,
   }, flowXmlProfile());
@@ -1018,8 +1028,10 @@ function openFlowStep(step: IflowStep) {
   flow.step = step.type as FlowStep;
   flow.sources[step.type as FlowStep] = `${step.iflow} · ${step.name || step.id}`;
   // Only this step's result is out of date; the other steps keep theirs.
-  const results = { contentModifier: 'cmResult', filter: 'filterResult', router: 'routerResult', splitter: 'splitResult', gather: 'gatherResult' } as const;
-  flow[results[step.type as FlowStep]] = null;
+  flow[flowResultKey[step.type as FlowStep]] = null;
+  // A run still open for the step this replaces must not write its result here.
+  flowSeq++;
+  flow.running = false;
   app.tool = 'flow';
   app.status = `Loaded ${step.name || step.id} from ${step.iflow}`;
 }

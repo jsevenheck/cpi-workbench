@@ -46,6 +46,8 @@ public final class GatherStep {
 
     private static final String MULTIMAP = "http://sap.com/xi/XI/SplitAndMerge";
     private static final Pattern DECLARATION = Pattern.compile("^\\s*<\\?xml[^>]*\\?>\\s*");
+    /** A document type declaration in the prolog (after comments and processing instructions). */
+    private static final Pattern DOCTYPE = Pattern.compile("^\\s*(?:(?:<!--.*?-->|<\\?.*?\\?>)\\s*)*<!DOCTYPE", Pattern.DOTALL);
     private static final String XML_DECLARATION = "<?xml version='1.0' encoding='UTF-8'?>";
 
     /**
@@ -117,10 +119,16 @@ public final class GatherStep {
             sb.append("<multimap:Message1>");
         }
         for (int i = 0; i < messages.size(); i++) {
+            String body = DECLARATION.matcher(messages.get(i)).replaceFirst("");
+            if (DOCTYPE.matcher(body).find()) {
+                // Inside the multimap wrapper the declaration would make the result malformed.
+                throw new IllegalArgumentException("UnsupportedInSimulator: message " + (i + 1) + " has a DOCTYPE; "
+                        + "Combine cannot place it inside multimap:Messages.");
+            }
             if (different) {
                 sb.append("<multimap:Message").append(i + 1).append('>');
             }
-            sb.append(DECLARATION.matcher(messages.get(i)).replaceFirst("").stripTrailing());
+            sb.append(body.stripTrailing());
             if (different) {
                 sb.append("</multimap:Message").append(i + 1).append('>');
             }
@@ -175,6 +183,15 @@ public final class GatherStep {
                     throw new IllegalArgumentException("The target XPath " + target + " selects no element in the first message.");
                 }
                 at = (Element) t;
+                for (int j = 0; j < found.getLength(); j++) {
+                    // The target would leave the document with the nodes it replaces, and the result lose them.
+                    for (Node a = at; a != null; a = a.getParentNode()) {
+                        if (a == found.item(j)) {
+                            throw new IllegalArgumentException("The target XPath " + target + " selects a node that the "
+                                    + "source XPath " + source + " replaces; choose a target outside the gathered nodes.");
+                        }
+                    }
+                }
                 for (int j = 0; j < found.getLength(); j++) {
                     found.item(j).getParentNode().removeChild(found.item(j));
                 }

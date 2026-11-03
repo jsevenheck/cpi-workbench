@@ -104,8 +104,9 @@ lists what is verified against CPI.
   `validate_xsd` and `evaluate_xpath` are marked read-only and closed-world; a client that uses these
   hints can ask before the others run.
 * **Network:** the server opens no port and connects nowhere. XML runs resolve includes, documents
-  and entities in the project only, so they fetch nothing from the network; reflexive `java:` calls
-  in XSLT and Groovy scripts are not restricted.
+  and entities in the project only, so they fetch nothing from the network; XPath refuses
+  `fn:transform()`, which could escape that. Reflexive `java:` calls and `fn:transform()` in XSLT,
+  and Groovy scripts, are not restricted.
 * **Input from files:** message bodies and test data may contain text written to steer an agent
   (prompt injection). The server passes results through as they are.
 

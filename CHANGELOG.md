@@ -56,6 +56,8 @@ of its version.
   editor in the browser console.
 - XSD and XPath: when a run starts while another is still open (Ctrl+Enter), only the latest run's
   result is shown, as in the XSLT and Groovy tabs.
+- XPath (tab and flow steps) refuses `fn:transform()`, and on Saxon 12 `fn:function-lookup()`: with a
+  configuration of its own, a nested transformation could read files outside the project.
 
 ## [0.1.1] - 2026-10-26
 

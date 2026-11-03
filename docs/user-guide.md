@@ -82,8 +82,10 @@ Download the installer for your platform from the
 
 * XSLT, XSD and XPath runs read files inside the open project only: includes, `doc()`,
   `document()`, `unparsed-text()`, external entities and DTDs. The network is blocked.
-  `xsl:result-document` and `collection()` are not supported. Reflexive `java:` calls are the
-  exception: they run JDK code and are not restricted.
+  `xsl:result-document` and `collection()` are not supported. XPath runs (the XPath tab and flow
+  steps) also refuse `fn:transform()`, and on Saxon 12 `fn:function-lookup()`: with a configuration of
+  its own, a nested transformation would not be bound to the project. In XSLT, reflexive `java:` calls
+  and `fn:transform()` are the exception: they are not restricted.
 * Groovy scripts run as ordinary Java code with your user's rights; there is no sandbox. Run only
   scripts you trust.
 

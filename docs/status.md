@@ -43,6 +43,16 @@ Automated checks:
 
 ## Small gaps closed in this round
 
+* A review on 2026-11-03 (PR #2) found, and the tests now cover:
+  * XPath could read files outside the project through `fn:transform()` with a configuration of its
+    own in `vendor-options`. XPath refuses `fn:transform()` (and `fn:function-lookup()` on Saxon 12).
+  * A Content Modifier row with a DOM data type got the nodes indented; they are now serialized as in
+    the body.
+  * Gather: a target XPath among the gathered nodes lost them (the result said ok); a message with a
+    DOCTYPE made Combine's result malformed. Both are errors now.
+  * Filter: `function:simple()` values with `$$` or `$&` changed on their way into the XPath.
+  * Flow Steps: a run still open when another step is opened no longer writes its result there.
+
 * The Partner Directory, Keystore, Secure Store and `ITApiFactory` now follow SAP's published `generic.api` Javadoc:
   * Unknown keystore aliases return `null`.
   * Unsupported Partner Directory types throw `IllegalArgumentException`.

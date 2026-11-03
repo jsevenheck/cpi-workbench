@@ -91,6 +91,8 @@ class XmlToolsTest {
         assertEquals("42", eval.apply("//DOCNUM/text()", "string"));
         assertEquals("a", eval.apply("//E", "string"));
         assertEquals("<E xmlns:ns=\"urn:i\">a</E><E xmlns:ns=\"urn:i\">b</E>", eval.apply("//E", "nodes"));
+        // Nested elements stay as they are in the body, without indentation (review 2026-11-03).
+        assertEquals("<IDOC xmlns:ns=\"urn:i\"><DOCNUM>42</DOCNUM><E>a</E><E>b</E></IDOC>", eval.apply("//IDOC", "nodes"));
     }
 
     @Test

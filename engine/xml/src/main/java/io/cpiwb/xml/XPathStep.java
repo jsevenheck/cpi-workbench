@@ -210,13 +210,25 @@ public final class XPathStep {
             return value.size() == 0 ? "" : value.itemAt(0).getStringValue();
         }
         if ("nodes".equals(as)) {
+            // The nodes as they are in the body: XdmNode.toString() indents, which would add whitespace text nodes
+            // to the Content Modifier's DOM value.
             StringBuilder all = new StringBuilder();
             for (XdmItem item : value) {
-                all.append(item instanceof XdmNode ? item.toString() : item.getStringValue());
+                all.append(item instanceof XdmNode ? serialize((XdmNode) item) : item.getStringValue());
             }
             return all.toString();
         }
         return null;
+    }
+
+    private String serialize(XdmNode node) throws SaxonApiException {
+        java.io.StringWriter w = new java.io.StringWriter();
+        net.sf.saxon.s9api.Serializer ser = processor.newSerializer(w);
+        ser.setOutputProperty(net.sf.saxon.s9api.Serializer.Property.METHOD, "xml");
+        ser.setOutputProperty(net.sf.saxon.s9api.Serializer.Property.INDENT, "no");
+        ser.setOutputProperty(net.sf.saxon.s9api.Serializer.Property.OMIT_XML_DECLARATION, "yes");
+        ser.serializeNode(node);
+        return w.toString();
     }
 
     /**
@@ -232,6 +244,7 @@ public final class XPathStep {
         for (String name : vars.keySet()) {
             xc.declareVariable(new QName(name));
         }
+        io.cpiwb.xml.compat.SaxonCompat.withoutTransform(xc);
         XPathSelector sel = xc.compile(expr).load();
         for (Map.Entry<String, Object> v : vars.entrySet()) {
             Object o = v.getValue();

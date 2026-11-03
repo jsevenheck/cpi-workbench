@@ -158,10 +158,28 @@ pub fn serve<R: BufRead, W: Write + Send + 'static>(server: Arc<Server>, input: 
             send(&out, error(Value::Null, INVALID_REQUEST, "Invalid Request: the id must be a string or an integer", None));
             continue;
         }
+        // JSON-RPC: params is an object or an array; MCP requests take an object.
+        match &params {
+            Value::Null | Value::Object(_) => {}
+            Value::Array(_) => {
+                send(&out, error(id, INVALID_PARAMS, "Invalid params: MCP requests take an object", None));
+                continue;
+            }
+            _ => {
+                send(&out, error(id, INVALID_REQUEST, "Invalid Request: params must be an object", None));
+                continue;
+            }
+        }
         let key = id.to_string();
-        if in_flight.lock().unwrap().insert(key.clone(), false).is_some() {
-            send(&out, error(id, INVALID_REQUEST, "Invalid Request: this id is already in use by a running request", None));
-            continue;
+        {
+            // Check and claim the id under one lock, without touching a running request's entry.
+            let mut flight = in_flight.lock().unwrap();
+            if flight.contains_key(&key) {
+                drop(flight);
+                send(&out, error(id, INVALID_REQUEST, "Invalid Request: this id is already in use by a running request", None));
+                continue;
+            }
+            flight.insert(key.clone(), false);
         }
         let (server, out, in_flight) = (server.clone(), out.clone(), in_flight.clone());
         workers.push(std::thread::spawn(move || {
@@ -220,6 +238,10 @@ impl Server {
     fn handle(&self, id: Value, method: &str, params: &Value) -> Value {
         let meta = params.get("_meta");
         let requested = meta.and_then(|m| m.get(META_VERSION)).and_then(Value::as_str);
+        // server/discover exists only in 2026-07-28, so it always needs that revision's _meta.
+        if method == "server/discover" && requested.is_none() {
+            return error(id, INVALID_PARAMS, &format!("Invalid params: server/discover needs _meta \"{META_VERSION}\" and \"{META_CAPABILITIES}\""), None);
+        }
         let modern = requested.is_some();
         if let Some(v) = requested {
             if v != MODERN && method != "initialize" {

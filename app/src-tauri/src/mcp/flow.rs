@@ -76,11 +76,12 @@ fn s<'a>(v: &'a Value, key: &str) -> &'a str {
     v.get(key).and_then(Value::as_str).unwrap_or("")
 }
 
-/// The value, or the tab's default when the config leaves it out.
+/// The value, or the tab's default when the config leaves it out or sets null (`??` in the tab); an empty
+/// string stays empty, as in the tab.
 fn or<'a>(v: &'a Value, key: &str, default: &'a str) -> &'a str {
-    match s(v, key) {
-        "" => default,
-        x => x,
+    match v.get(key) {
+        None | Some(Value::Null) => default,
+        Some(x) => x.as_str().unwrap_or(""),
     }
 }
 

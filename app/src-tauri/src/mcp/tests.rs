@@ -104,6 +104,16 @@ fn protocol_errors() {
     assert_eq!(by_id(&msgs, 1)["error"]["code"], INVALID_REQUEST);
     assert_eq!(by_id(&msgs, 2)["error"]["code"], INVALID_REQUEST);
     assert_eq!(by_id(&msgs, 3)["error"]["code"], INVALID_PARAMS);
+
+    // params is an object; server/discover is a 2026-07-28 method and needs its _meta.
+    let msgs = session(bare(), &[
+        json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": "x" }),
+        json!({ "jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": [] }),
+        json!({ "jsonrpc": "2.0", "id": 3, "method": "server/discover" }),
+    ]);
+    assert_eq!(by_id(&msgs, 1)["error"]["code"], INVALID_REQUEST);
+    assert_eq!(by_id(&msgs, 2)["error"]["code"], INVALID_PARAMS);
+    assert_eq!(by_id(&msgs, 3)["error"]["code"], INVALID_PARAMS);
 }
 
 #[test]
@@ -283,6 +293,9 @@ fn tools_run_on_the_engines() {
     let f = c.ok("run_flow_step", json!({ "body": order, "properties": { "want": "b" },
         "step": { "type": "filter", "config": { "expression": "/Order/Item[. = function:simple('${property.want}')]", "valueType": "string" } } }));
     assert_eq!(f["body"], "b", "{f}");
+    // As in the tab, only a missing value gets the default; an empty one goes to the engine as it is.
+    let empty = c.ok("run_flow_step", json!({ "body": order, "step": { "type": "filter", "config": { "expression": "/Order", "valueType": "" } } }));
+    assert_eq!(empty["ok"], false, "{empty}");
 
     // Script, XSLT and XML Validator steps run in their own tools, as their file opens in its tab.
     assert!(c.err("run_flow_step", json!({ "iflowStep": "CallActivity_1", "body": order })).contains("run_groovy"));
@@ -329,4 +342,22 @@ fn iflow_picks_among_equal_step_names() {
     assert_eq!(r["body"], "<Item>a</Item>", "{r}");
     engines.shutdown();
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A second request with a running request's id is refused and leaves the first one's cancellation alone.
+#[test]
+fn a_reused_id_keeps_the_cancellation() {
+    let Some(engines) = engines() else { return };
+    let server = Server::new(engines.clone(), None);
+    let slow = json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": { "name": "run_groovy",
+        "arguments": { "runtime": "groovy-1.x", "script": "def processData(m) { Thread.sleep(1500); m }" } } });
+    let msgs = session(server, &[
+        slow.clone(),
+        json!({ "jsonrpc": "2.0", "method": "notifications/cancelled", "params": { "requestId": 1 } }),
+        slow,
+    ]);
+    let ones: Vec<&Value> = msgs.iter().filter(|m| m["id"] == 1).collect();
+    assert_eq!(ones.len(), 1, "only the refusal, no answer to the cancelled run: {msgs:?}");
+    assert_eq!(ones[0]["error"]["code"], INVALID_REQUEST);
+    engines.shutdown();
 }

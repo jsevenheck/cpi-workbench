@@ -98,7 +98,7 @@ def main():
         # fn:transform with a fresh configuration would bypass the project resolver: XPath refuses it.
         ("xpath.eval", {"expression": nested_transform, "version": "3.1", "input": {"body": BODY}},
          lambda r: not r["ok"] and "TOP-SECRET" not in json.dumps(r) and "UnsupportedInSimulator" in json.dumps(r)),
-        ("xpath.eval", {"expression": "/x", "version": "3.1", "as": "nodes", "input": {"body": "<r><i>A</i><i>B</i></r>"}},
+        ("xpath.eval", {"expression": "/r", "version": "3.1", "as": "nodes", "input": {"body": "<r><i>A</i><i>B</i></r>"}},
          lambda r: r["value"] == "<r><i>A</i><i>B</i></r>"),
         ("xpath.eval", {"expression": "//i[position() = last()]/@g | //i[1]/@g", "version": "1.0", "input": {"body": BODY}}, lambda r: r["ok"] and r["count"] == 2),
         ("xml.format", {"text": BODY}, lambda r: r["ok"]),

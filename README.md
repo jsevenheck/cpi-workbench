@@ -45,8 +45,9 @@ it has not been checked against a tenant yet ([Fidelity](docs/fidelity.md)).
 
 **Coding agents**
 
-* `cpi-workbench mcp` is an [MCP server](docs/mcp.md): an agent such as Claude Code uses the app's
-  tabs (XSLT, Groovy, XSD, XPath, Flow Steps) on the simulator while it writes mappings and scripts.
+* **Built-in [MCP server](docs/mcp.md):** an agent such as Claude Code or Codex uses the app's tabs
+  (XSLT, Groovy, XSD, XPath, Flow Steps) on the simulator while it writes mappings and scripts. The
+  installed app brings it; the app window does not need to be open.
 
 Everything runs locally; the app never connects to a tenant.
 
@@ -77,12 +78,23 @@ java -jar engine/xml-he99/target/cpiwb-xml-he99.jar test testdata/regression-pro
 java -jar engine/groovy-v1/target/cpiwb-groovy-v1.jar test testdata/regression-project/tests
 ```
 
+### With a coding agent
+
+Add a `.mcp.json` to the project folder (Windows; on macOS and Linux use the path from
+[MCP server](docs/mcp.md)) and start Claude Code there:
+
+```json
+{ "mcpServers": { "cpi-workbench": {
+    "command": "${LOCALAPPDATA}\\CPI Workbench\\cpi-workbench.exe", "args": ["mcp"] } } }
+```
+
 ## Documentation
 
 The [documentation index](docs/README.md) lists everything. The most used pages:
 
 * [Installing](docs/install.md)
 * [User guide](docs/user-guide.md): desktop app, command line, browser mode
+* [MCP server](docs/mcp.md): setup for Claude Code, Claude Desktop and Codex
 * [Test cases and platform data](docs/test-cases.md)
 * [Fidelity](docs/fidelity.md): what matches CPI and what is still to verify
 * [Implementation status](docs/status.md)

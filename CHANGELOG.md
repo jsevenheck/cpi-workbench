@@ -6,26 +6,6 @@ of its version.
 
 ## [Unreleased]
 
-## [0.3.0] - 2026-11-01
-
-### Added
-
-- **MCP server** for coding agents: `cpi-workbench mcp` serves the app's tabs over the Model Context
-  Protocol (stdio) as the tools `project_info`, `run_xslt`, `run_groovy`, `validate_xsd`,
-  `evaluate_xpath` and `run_flow_step`, with the same inputs and engine calls as the app. It speaks the
-  2026-07-28 revision and, for clients that open with `initialize`, 2025-11-25 back to 2024-11-05.
-  Setup and what the server can access: [docs/mcp.md](docs/mcp.md).
-
-### Changed
-
-- The Groovy engines no longer print the JVM's class-data archive notes ("Skipping …: Old class has
-  been linked") to stderr.
-
-### Fixed
-
-- XSD and XPath: when a run starts while another is still open (Ctrl+Enter), only the latest run's
-  result is shown, as in the XSLT and Groovy tabs.
-
 ## [0.2.0] - 2026-11-01
 
 ### Added
@@ -54,6 +34,12 @@ of its version.
 - iFlow import lists Content Modifier, Filter, Router, Splitter and Gather steps and opens them in
   Flow Steps with their settings and the iFlow's externalized parameters (`{{name}}` from
   `parameters.prop`). The body of a Content Modifier up to version 1.3 is read as an expression.
+- **MCP server** for coding agents: `cpi-workbench mcp` lets an agent such as Claude Code or Codex use
+  the app's tabs while it writes mappings and scripts. The tools `project_info`, `run_xslt`,
+  `run_groovy`, `validate_xsd`, `evaluate_xpath` and `run_flow_step` take the tabs' inputs and make
+  the same engine calls; the app does not need to be open. It speaks MCP 2026-07-28 and, for clients
+  that open with `initialize`, 2025-11-25 back to 2024-11-05. Setup for `.mcp.json`, Claude Desktop
+  and Codex, and what the server can access: [docs/mcp.md](docs/mcp.md).
 
 ### Changed
 
@@ -61,11 +47,15 @@ of its version.
   Filter. Its 1.0 option no longer claims to be what simple iFlow steps use; that had no source.
 - The Groovy 2.x engine bundles Camel's `camel-bean`, which Camel 3 needs for OGNL calls in Camel
   Simple.
+- The Groovy engines no longer print the JVM's class-data archive notes ("Skipping …: Old class has
+  been linked") to stderr.
 
 ### Fixed
 
 - Opening a flow step right after a Groovy step no longer logs an uncaught `Canceled` error from the
   editor in the browser console.
+- XSD and XPath: when a run starts while another is still open (Ctrl+Enter), only the latest run's
+  result is shown, as in the XSLT and Groovy tabs.
 
 ## [0.1.1] - 2026-10-26
 
@@ -101,8 +91,7 @@ First public release.
   supported.
 - The installers and engine jars include the licence texts and notices of the bundled components.
 
-[Unreleased]: https://github.com/jsevenheck/cpi-workbench/compare/v0.3.0...HEAD
-[0.3.0]: https://github.com/jsevenheck/cpi-workbench/compare/v0.2.0...v0.3.0
+[Unreleased]: https://github.com/jsevenheck/cpi-workbench/compare/v0.2.0...HEAD
 [0.2.0]: https://github.com/jsevenheck/cpi-workbench/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/jsevenheck/cpi-workbench/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/jsevenheck/cpi-workbench/releases/tag/v0.1.0

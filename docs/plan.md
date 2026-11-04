@@ -334,7 +334,7 @@ Later convenience: open an **iFlow export (zip)** and list its script and XSLT s
 | **2 — XSLT MVP** | XSLT simulator with live mode, CPI binding, profiles, XSD validation, XPath tester, test cases | Probe cases for XSLT pass |
 | **3 — Groovy MVP** | Groovy v1 + v2, typed headers/properties, MPL, API call log, console, diff | Probe cases for Groovy pass |
 | **4 — Productivity** | Platform API mocks, linting, both-profiles comparison, CLI, iFlow-zip import | Usable for regression tests |
-| **5 — Distribution** | Signed installers (`.msi`, notarized `.dmg`), offline installer, auto-update | Shareable with colleagues |
+| **5 — Distribution** | Signed installers (`.msi`, notarized `.dmg`), offline installer, auto-update (§10.2) | Shareable with colleagues |
 
 ### 10.1 MCP server for coding agents (built, 2026-11-01)
 
@@ -361,6 +361,49 @@ Decisions:
 * **Security:** the server is bound to one project folder, opens no port, and marks only the project,
   XSD and XPath tools read-only (XSLT's reflexive `java:` calls and Groovy run code without a sandbox,
   as in the app). Payload files may carry prompt injection; the docs say so.
+
+### 10.2 Updates (planned)
+
+Researched on 2026-11-04 against the source of `tauri-plugin-updater` 2.14.1 and Tauri's NSIS
+template; the Tauri docs site was not reachable then. Installs of 0.2.0 and earlier have neither
+step and are updated by hand once.
+
+**0.3.0: check for updates.** A gear icon opens a small settings menu with the installed version
+and *Check for updates*. The button asks the GitHub API for the latest release
+(`/repos/jsevenheck/cpi-workbench/releases/latest`), compares the versions (SemVer) and, for a
+newer one, links to its release page; installing stays manual. Decisions:
+
+* **Only on demand.** The app makes no network request on its own: no check at start-up. The README
+  and the user guide say that this button contacts github.com (the app still never connects to a
+  tenant).
+* The CSP allows `connect-src https://api.github.com`, or the request runs in the Rust shell; opening
+  the release page needs the opener plugin. No keys, no CI change.
+
+**With signed installers (Phase 5): install the update.** `tauri-plugin-updater` checks a
+`latest.json` in the release, downloads the package and installs it. Facts from the source: it
+handles all our bundles (NSIS `setup.exe`, `.msi`, the macOS `.app`, `.deb` and `.rpm`, the last two
+since 2.10.0 with `pkexec` or `sudo`) and picks the one the app was installed with; every package is
+signed with an updater key pair of its own (public key in `tauri.conf.json`, private key as a CI
+secret), independent of code signing; on Windows it starts the installer and ends the app with
+`std::process::exit(0)`; the NSIS installer finds a running `cpi-workbench.exe` through the Restart
+Manager and offers to close it. What this repository needs:
+
+* **Stop the engines in `on_before_exit`.** `process::exit` skips `RunEvent::Exit` in `lib.rs`, so the
+  engines would otherwise keep running and may hold files in the install folder.
+* **MCP servers** started by an agent run the same `cpi-workbench.exe`; the installer offers to close
+  them too. The docs say so.
+* **CI:** `bundle.createUpdaterArtifacts`, signing on all three OSes, and a step in the `release` job
+  that writes `latest.json` (version, notes, URL and signature per target: `windows-x86_64-nsis`,
+  `windows-x86_64-msi`, `darwin-aarch64-app`, `linux-x86_64-deb`, `linux-x86_64-rpm`). The workflow
+  does not use `tauri-action`, so this step is our own.
+* **Key custody:** losing the private updater key ends automatic updates for every installed app;
+  it needs a backup outside GitHub.
+* **Manual test** ([Manual test](manual-test.md)): install the previous release and update from the
+  app, per bundle.
+
+To verify then: whether SmartScreen prompts for an installer the updater downloaded (an assumption:
+no Mark of the Web, so no prompt); replacing the ad-hoc signed macOS app; the updater behind a
+company proxy (it has proxy settings; whether it uses the Windows system proxy is not checked).
 
 ---
 

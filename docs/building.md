@@ -94,6 +94,8 @@ without hardened runtime, so the bundled JRE loads its libraries); it is not not
 
 ## Releasing
 
+Before tagging, check an installer by hand: [Manual test](manual-test.md).
+
 A tag `v<version>` builds, tests and publishes a GitHub release with the installers, the engine
 jars and `SHA256SUMS.txt` (job `release` in `build.yml`). It runs only when every other job passes.
 

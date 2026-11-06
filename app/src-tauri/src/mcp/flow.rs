@@ -33,6 +33,15 @@ pub fn run(server: &Server, args: &Args) -> Result<Value, String> {
     if !config.is_object() {
         return Err("step.config must be an object.".into());
     }
+    if args.contains_key("step") {
+        if let Some(keys) = config_keys(&kind) {
+            let unknown: Vec<&str> = config.as_object().unwrap().keys().map(String::as_str)
+                .filter(|k| !keys.contains(k)).collect();
+            if !unknown.is_empty() {
+                return Err(format!("Unknown {kind} config key(s): {}. The keys are: {}.", unknown.join(", "), keys.join(", ")));
+            }
+        }
+    }
     let ctx = Ctx {
         server,
         xml: tools::xml_runtime(server),
@@ -55,6 +64,18 @@ pub fn run(server: &Server, args: &Args) -> Result<Value, String> {
     };
     result["step"] = json!({ "type": kind, "name": step.get("name"), "config": config });
     Ok(result)
+}
+
+/// The settings of each step type in the Flow Steps tab (`flow` in `store.svelte.ts`).
+fn config_keys(kind: &str) -> Option<&'static [&'static str]> {
+    Some(match kind {
+        "contentModifier" => &["headers", "properties", "bodyType", "body"],
+        "filter" => &["expression", "valueType"],
+        "router" => &["routes", "throwException"],
+        "splitter" => &["splitter", "expressionType", "expression", "grouping", "streaming"],
+        "gather" => &["messageType", "algorithm", "sourceXPath", "targetXPath"],
+        _ => return None,
+    })
 }
 
 /// A step of the project's iFlows, by name or id.

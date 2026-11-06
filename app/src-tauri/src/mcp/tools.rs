@@ -124,7 +124,13 @@ pub fn definitions() -> Vec<Value> {
         ("step", json!({ "type": "object", "description": "A step given directly (as edited in the Flow Steps tab): {\"type\": \"contentModifier\"|\"filter\"|\"router\"|\"splitter\"|\"gather\", \"config\": {...}}, config shaped as project_info shows it for iFlow steps.",
             "properties": {
                 "type": { "type": "string", "enum": ["contentModifier", "filter", "router", "splitter", "gather"] },
-                "config": { "type": "object" } },
+                "config": { "type": "object", "description": "The tab's settings for the type (keys left out take the tab's defaults). \
+contentModifier: {headers: [row], properties: [row], bodyType: \"constant\"|\"expression\", body}, row = {action: \"Create\"|\"Delete\", name, \
+type: \"constant\"|\"header\"|\"property\"|\"xpath\"|\"expression\", value, datatype (e.g. \"java.lang.String\"), default}. \
+filter: {expression (XPath), valueType: \"string\"|\"integer\"|\"boolean\"|\"node\"|\"nodelist\"}. \
+router: {routes: [{name, expressionType: \"xml\"|\"nonxml\", condition, default: bool}], throwException: bool}. \
+splitter: {splitter: \"general\"|\"iterating\", expressionType: \"xpath\"|\"lineBreak\"|\"token\", expression, grouping, streaming: bool}. \
+gather: {messageType: \"sameXml\"|\"differentXml\"|\"plainText\", algorithm: \"combine\"|\"combineAtXPath\"|\"concatenate\", sourceXPath, targetXPath}." } },
             "required": ["type", "config"], "additionalProperties": false })),
         ("messages", json!({ "type": "array", "items": { "type": "string" },
             "description": "Gather only: the bodies to gather, e.g. the messages a splitter returned." })),

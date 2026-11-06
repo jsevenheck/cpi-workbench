@@ -67,6 +67,8 @@ class GatherStepTest {
         Map<String, Object> attr = gather("sameXml", "combineAtXPath", "/PurchaseOrder/Items/Item/@x", "/PurchaseOrder", List.of("<PurchaseOrder><Items><Item x='1'/></Items></PurchaseOrder>"));
         assertTrue(Json.arr(attr, "diagnostics").toString().contains("must select elements"));
         assertTrue(Json.arr(gather("any", "zip", "", "", List.of("a")), "diagnostics").toString().contains("UnsupportedInSimulator"));
+        // An unknown value names the simulated ones (2026-11-06: 'xml-same' read as if it were Any).
+        assertTrue(Json.arr(gather("xml-same", "combine", "", "", List.of("<a/>")), "diagnostics").toString().contains("simulated: sameXml, differentXml, plainText"));
         // Review 2026-11-03: a target among the gathered nodes lost them all, and a DOCTYPE ended up inside the wrapper.
         for (String target : List.of("/r/i", "/r/i/x")) {
             Map<String, Object> overlap = gather("sameXml", "combineAtXPath", "/r/i", target, List.of("<r><i><x/>A</i></r>"));

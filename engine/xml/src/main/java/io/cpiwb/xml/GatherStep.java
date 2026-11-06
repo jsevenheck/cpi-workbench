@@ -87,7 +87,7 @@ public final class GatherStep {
                                  Map<String, String> ns, ProjectResolver resolver) throws Exception {
         if (!List.of("sameXml", "differentXml", "plainText").contains(format)) {
             throw new IllegalArgumentException("UnsupportedInSimulator: the Incoming Format '" + format
-                    + "' (Any combines into Zip or Tar archives, which are not simulated).");
+                    + "' (simulated: sameXml, differentXml, plainText; Any, which combines into Zip or Tar archives, is not).");
         }
         boolean xml = !"plainText".equals(format);
         switch (algorithm) {

@@ -296,6 +296,9 @@ fn tools_run_on_the_engines() {
     // As in the tab, only a missing value gets the default; an empty one goes to the engine as it is.
     let empty = c.ok("run_flow_step", json!({ "body": order, "step": { "type": "filter", "config": { "expression": "/Order", "valueType": "" } } }));
     assert_eq!(empty["ok"], false, "{empty}");
+    // A key the tab does not have is named, rather than ignored (tried on 2026-11-06 from Claude Desktop).
+    let typo = c.err("run_flow_step", json!({ "body": order, "step": { "type": "splitter", "config": { "xpath": "/Order/Item" } } }));
+    assert!(typo.contains("Unknown splitter config key(s): xpath") && typo.contains("expression"), "{typo}");
 
     // Script, XSLT and XML Validator steps run in their own tools, as their file opens in its tab.
     assert!(c.err("run_flow_step", json!({ "iflowStep": "CallActivity_1", "body": order })).contains("run_groovy"));

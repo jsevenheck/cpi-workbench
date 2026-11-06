@@ -65,6 +65,7 @@ The steps (SAP: *Define Content Modifier*, *Define Filter*, *Define Router*, *De
 | Message log | `messageLogFactory` and `MessageLog` follow SAP's published interface; MPL disabled gives `null`. |
 | Platform APIs | Follow SAP's published `generic.api` (F33): Secure Store (user credentials, OAuth2 tokens from a fixed value), Value Mapping (`getMappedValue`), Partner Directory (parameters, certificate parameters, partner IDs, authorized users, deprecated pattern lookups), Keystore (keys, certificates, chains, key pairs, key and trust managers), number ranges. Other services raise `InvalidContextException`. The runtime's edge cases are **to verify** (Q-P1). |
 | Data Store from scripts | Not simulated: CPI has no public script API for it (F28). |
+| Scripts of a Message Mapping (custom functions with `MappingContext`, `Output`) | Not simulated yet: the engines run Groovy Script steps (`processData(Message)`); `com.sap.it.api.mapping` offers only `ValueMappingApi`, so such a script fails to compile ("unable to resolve class MappingContext"). Planned for 0.3.0 ([plan](plan.md) §10.3). |
 | Extra libraries on the class path | Unknown (F31). The simulator adds only `lib/` jars. |
 | Groovy modules on 2.x | xml, json, dateutil, datetime, templates and nio are bundled. CPI's set is **to verify**. Scripts on 2.x also see Camel's `camel-bean` (bundled for Camel Simple's OGNL calls; Camel 2's core has it built in). |
 | Pretty-printing (`XmlUtil.serialize`) | Depends on the JDK version (F25), so byte-exact comparisons depend on Java 17 being right. |

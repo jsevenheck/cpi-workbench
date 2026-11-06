@@ -128,7 +128,8 @@ Before the first release (third review):
 ## Next steps
 
 1. Run the probes on a test tenant (Appendix A of the plan) and turn "to verify" into facts.
-2. Install and open the installers on Windows (a machine without a policy against unsigned MSIs) and macOS once by hand.
-3. 0.3.0: *Check for updates* in a small settings menu (plan §10.2).
+2. Install and open the installer on macOS once by hand. Windows (`setup.exe`, [Manual test](manual-test.md)) and the
+   MCP server with Claude Desktop passed on 2026-11-06.
+3. 0.3.0: *Check for updates* in a small settings menu (plan §10.2) and Message Mapping scripts (plan §10.3).
 4. Code signing and auto-update (Phase 5, plan §10.2).
-5. Try the MCP server with Claude Code against a real project, on Windows too.
+5. Try the MCP server with Claude Code against a real project.

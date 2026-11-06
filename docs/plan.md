@@ -405,6 +405,20 @@ To verify then: whether SmartScreen prompts for an installer the updater downloa
 no Mark of the Web, so no prompt); replacing the ad-hoc signed macOS app; the updater behind a
 company proxy (it has proxy settings; whether it uses the Windows system proxy is not checked).
 
+### 10.3 Message Mapping scripts (planned for 0.3.0)
+
+Found in the Windows test on 2026-11-06: iFlows carry Groovy scripts of Message Mappings, custom
+functions such as `def String f(String arg1, String in1, MappingContext context)` with
+`import com.sap.it.api.mapping.*`. The engines run only Groovy Script steps, so these fail to compile
+(`MappingContext` is missing; `com.sap.it.api.mapping` has only `ValueMappingApi`). Graphical Message
+Mapping stays out of scope (§1); running its scripts on their own is in scope. To do:
+
+* Clean-room `MappingContext` and `Output` (queue functions) from SAP's published Script API
+  documentation, for both script versions; research which methods SAP documents.
+* In the Groovy tab: pick the function, enter its arguments (single values, or queues with context
+  changes), headers and properties for the context; show the return value or the output queue.
+* Until then, a clear `UnsupportedInSimulator` message for such scripts would replace the compile error.
+
 ---
 
 ## 11. Testing strategy

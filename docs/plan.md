@@ -43,6 +43,12 @@ New findings from the implementation:
 | F31 | Which libraries CPI puts on a script's class path besides Groovy and Camel (e.g. commons-codec, IAIK used by SAP's own sample scripts) is not known; the simulator offers none and loads jars from `lib/` and the iFlow's `src/main/resources/lib/`. | Unknown → fingerprint `classesAvailable` | SAP sample iFlows |
 | F32 | SAP's sample XSLTs call Java static methods through `java:` namespaces (e.g. `java:java.util.Date`), so CPI's Saxon-EE allows reflexive extension functions. The simulator registers them as integrated functions for JDK classes (native engines: a fixed list of JDK classes). Classes from the iFlow's or project's jars are not available to XSLT (the native engines cannot load classes at runtime). Exact argument conversion rules of Saxon-EE are not reproduced in all cases. | Observed (SAP samples) / Inferred (conversion) | SAP sample iFlows, `JavaExtensions.java` |
 | F33 | SAP also publishes the platform API interfaces as `com.sap.cloud.adk:generic.api` (4.10.2, with Javadoc; SAP Developer License, not bundled): `ITApiFactory`, `ITApiException`/`InvalidContextException`, Keystore (incl. key and trust managers), message log, number ranges (`NumberRangeConfigurationService.getNextValuefromNumberRange(name, correlationId)`), Partner Directory (incl. `getCertificateParameter(parameterId, partnerId)`, authorized users, deprecated LIKE-pattern lookups) and Secure Store (incl. OAuth2 tokens: `getAccesTokenForOauth2ClientCredential`, SAP's spelling). `ValueMappingApi` is not in it. The simulator's classes follow these signatures. | Observed (published jar + Javadoc) | S24 |
+| F34 | The Camel line is a property of the tenant: SAP numbers Cloud Integration software 8.x (Cloud Foundry) and 7.x (Neo) for runtimes on Camel 3, 6.x and 5.x for Camel 2. Patch notes from 2024 to 2026 describe the migration of tenants to Camel 3 and back-ports to the Camel 3.14.7 branch. Whether any tenant still runs Camel 2 is not stated. | Observed (SAP docs) | S25 |
+| F35 | SAP's Router table uses `=`, `and`, `or` and `${property.x}`, and its docs never use `${exchangeProperty.x}`. Plain Camel has no `=` operator ("Unexpected token =" on 2.24 and 3.14), and Camel 3.14 rejects `and`, `or` (only `&&`, `\|\|`) and `property`. SAP's patch notes (August 2024) confirm that CPI converts `property` to `exchangeProperty`; how it handles `=`, `and` and `or` is not documented. | Observed (SAP docs, simulator) / Inferred (`=`, `and`, `or`) | S25, `SimpleStepTest` |
+| F36 | In exported iFlows a Content Modifier is `activityType=Enricher` with `headerTable` / `propertyTable` (rows of `<cell id='Action\|Type\|Value\|Default\|Name\|Datatype'>`), `bodyType` and `wrapContent`. Source types: constant, header, property, xpath, expression, persisted variables, global persisted variables, numberRange, external parameter. Delete rows name `$name=X` or `$include=…,$exclude=…`. A Router is an `exclusiveGateway` (`throwException`, `default` flow) whose outgoing flows carry `expressionType` XML or NonXML and a `conditionExpression`. A splitter has `splitType` GeneralSplitter or IteratingSplitter, `exprType` XPath, Line Break or Token, `splitExprValue` or `tokenValue`, `grouping`, `Streaming`. Values may hold `{{parameters}}` from `parameters.prop`. | Observed (1,570 Content Modifiers, 629 Routers, 77 splitters in 389 exported iFlows) | S26 |
+| F37 | Router XML conditions in real iFlows use XPath 2.0+ syntax (`/node()/*:IDOC[1][1=last()]`, `/a/count(b) = 0`), so CPI's Router does not evaluate them as XPath 1.0. | Observed | S26 |
+| F38 | Content Modifier versions up to 1.3 have no `bodyType`, and their bodies hold Camel Simple (`${header.x}`, `${exception.message}`; 39 such steps, 19 with `${…}`), as in SAP's sample "Externalizing Additional Parameter" (1.2), which shows header values in the body: these bodies are expressions. From 1.4 the type is stored; 1.6 mostly stores `constant` for an empty body. In the same samples, 1,565 of 1,568 Content Modifiers and 623 of 625 Non-XML Router conditions run on the simulator's Camel; the rest fail on input values, a misspelt class (`java.Lang.Integer`) or three-level nested `${…}` that Camel's parser rejects. | Observed | S26 |
+| F39 | Filter steps store `xpathType` (String, Integer, Boolean, Node, Nodelist) and the XPath in `wrapContent`; Gather steps store `messageType` (SameXMLFormat, DiffXMLFormat, PlainText), `aggregationAlgorithm` (sap-identical-multi-mapping, sap-pi-multi-mapping, xpath-merge-strategy, concatenate-strategy), `sourceXPath` and `targetXPath` (64 Filters, 55 Gathers in the samples). Of the 64 Filter XPaths, 60 compile on Saxon without variables; the other 4, and one Router XML condition, use `$name` for a header or property. Camel's XPath variable resolver (`MessageVariableResolver`, Camel 2.24.3 and 3.14.7, read from the Apache jars) resolves an unprefixed `$name` to the header, else the exchange property. | Observed | S26 |
 | F23 | Saxon instantiates built-in functions reflectively; native builds need reflection metadata for all of them (generated by `engine/native/GenReflect.java`), plus the JDK XPath 1.0 function classes. | Observed | native build failures fixed in this phase |
 
 ---
@@ -328,7 +334,90 @@ Later convenience: open an **iFlow export (zip)** and list its script and XSLT s
 | **2 — XSLT MVP** | XSLT simulator with live mode, CPI binding, profiles, XSD validation, XPath tester, test cases | Probe cases for XSLT pass |
 | **3 — Groovy MVP** | Groovy v1 + v2, typed headers/properties, MPL, API call log, console, diff | Probe cases for Groovy pass |
 | **4 — Productivity** | Platform API mocks, linting, both-profiles comparison, CLI, iFlow-zip import | Usable for regression tests |
-| **5 — Distribution** | Signed installers (`.msi`, notarized `.dmg`), offline installer, auto-update | Shareable with colleagues |
+| **5 — Distribution** | Signed installers (`.msi`, notarized `.dmg`), offline installer, auto-update (§10.2) | Shareable with colleagues |
+
+### 10.1 MCP server for coding agents (built, 2026-11-01)
+
+`cpi-workbench mcp` ([MCP server](mcp.md)) lets a coding agent run mappings, scripts, flow steps and
+test cases on the simulator through the [Model Context Protocol](https://modelcontextprotocol.io).
+Decisions:
+
+* **One server in front of all engines**, as a subcommand of the desktop executable: it reuses the
+  shell's engine supervisor, the bundled JRE and native images, and the Windows junction for
+  non-ASCII install folders, and the installers need no new file. On Windows the executable is a
+  GUI-subsystem program; CI starts the release build with piped stdio on all three OSes
+  (`app/scripts/mcp-smoke.mjs`), which answers the open question from the first assessment.
+* **No new dependency:** the protocol is implemented on `serde_json` (`app/src-tauri/src/mcp/`). It is
+  dual-era as the 2026-07-28 specification allows: stateless 2026-07-28 requests and the `initialize`
+  handshake of 2025-11-25 back to 2024-11-05, which the official SDKs still negotiate (TypeScript
+  1.32.2 and Python 2.3.0, tried on 2026-11-01).
+* **The app leads; the server adds no function.** One tool per tab: `project_info`, `run_xslt`,
+  `run_groovy`, `validate_xsd`, `evaluate_xpath`, `run_flow_step`, with the tabs' inputs. Left out on
+  purpose because the app has no such tab: running test cases (CLI only), Camel Simple on its own,
+  a lint tool (the lint comes with every `run_groovy` result). The agent reads and writes files with
+  its own tools; the server writes nothing into the project.
+* **Flow steps** run like the Flow Steps tab, call for call (`mcp/flow.rs` follows
+  `store.svelte.ts`), so no CLI command was needed first. A test-case step for flow steps stays open.
+* **Security:** the server is bound to one project folder, opens no port, and marks only the project,
+  XSD and XPath tools read-only (XSLT's reflexive `java:` calls and Groovy run code without a sandbox,
+  as in the app). Payload files may carry prompt injection; the docs say so.
+
+### 10.2 Updates (planned)
+
+Researched on 2026-11-04 against the source of `tauri-plugin-updater` 2.14.1 and Tauri's NSIS
+template; the Tauri docs site was not reachable then. Installs of 0.2.0 and earlier have neither
+step and are updated by hand once.
+
+**0.3.0: check for updates.** A gear icon opens a small settings menu with the installed version
+and *Check for updates*. The button asks the GitHub API for the latest release
+(`/repos/jsevenheck/cpi-workbench/releases/latest`), compares the versions (SemVer) and, for a
+newer one, links to its release page; installing stays manual. Decisions:
+
+* **Only on demand.** The app makes no network request on its own: no check at start-up. The README
+  and the user guide say that this button contacts github.com (the app still never connects to a
+  tenant).
+* The CSP allows `connect-src https://api.github.com`, or the request runs in the Rust shell; opening
+  the release page needs the opener plugin. No keys, no CI change.
+
+**With signed installers (Phase 5): install the update.** `tauri-plugin-updater` checks a
+`latest.json` in the release, downloads the package and installs it. Facts from the source: it
+handles all our bundles (NSIS `setup.exe`, `.msi`, the macOS `.app`, `.deb` and `.rpm`, the last two
+since 2.10.0 with `pkexec` or `sudo`) and picks the one the app was installed with; every package is
+signed with an updater key pair of its own (public key in `tauri.conf.json`, private key as a CI
+secret), independent of code signing; on Windows it starts the installer and ends the app with
+`std::process::exit(0)`; the NSIS installer finds a running `cpi-workbench.exe` through the Restart
+Manager and offers to close it. What this repository needs:
+
+* **Stop the engines in `on_before_exit`.** `process::exit` skips `RunEvent::Exit` in `lib.rs`, so the
+  engines would otherwise keep running and may hold files in the install folder.
+* **MCP servers** started by an agent run the same `cpi-workbench.exe`; the installer offers to close
+  them too. The docs say so.
+* **CI:** `bundle.createUpdaterArtifacts`, signing on all three OSes, and a step in the `release` job
+  that writes `latest.json` (version, notes, URL and signature per target: `windows-x86_64-nsis`,
+  `windows-x86_64-msi`, `darwin-aarch64-app`, `linux-x86_64-deb`, `linux-x86_64-rpm`). The workflow
+  does not use `tauri-action`, so this step is our own.
+* **Key custody:** losing the private updater key ends automatic updates for every installed app;
+  it needs a backup outside GitHub.
+* **Manual test** ([Manual test](manual-test.md)): install the previous release and update from the
+  app, per bundle.
+
+To verify then: whether SmartScreen prompts for an installer the updater downloaded (an assumption:
+no Mark of the Web, so no prompt); replacing the ad-hoc signed macOS app; the updater behind a
+company proxy (it has proxy settings; whether it uses the Windows system proxy is not checked).
+
+### 10.3 Message Mapping scripts (planned for 0.3.0)
+
+Found in the Windows test on 2026-11-06: iFlows carry Groovy scripts of Message Mappings, custom
+functions such as `def String f(String arg1, String in1, MappingContext context)` with
+`import com.sap.it.api.mapping.*`. The engines run only Groovy Script steps, so these fail to compile
+(`MappingContext` is missing; `com.sap.it.api.mapping` has only `ValueMappingApi`). Graphical Message
+Mapping stays out of scope (§1); running its scripts on their own is in scope. To do:
+
+* Clean-room `MappingContext` and `Output` (queue functions) from SAP's published Script API
+  documentation, for both script versions; research which methods SAP documents.
+* In the Groovy tab: pick the function, enter its arguments (single values, or queues with context
+  changes), headers and properties for the context; show the return value or the output queue.
+* Until then, a clear `UnsupportedInSimulator` message for such scripts would replace the compile error.
 
 ---
 
@@ -410,3 +499,5 @@ Later convenience: open an **iFlow export (zip)** and list its script and XSLT s
 - S22 REA workflow skill: https://github.com/morluto/rea/blob/main/.agents/skills/reverse-engineer-anything/SKILL.md
 - S23 SAP Script API jars on Maven Central: https://repo1.maven.org/maven2/com/sap/cloud/script/
 - S24 SAP generic API (platform services) on Maven Central, with Javadoc jar: https://repo1.maven.org/maven2/com/sap/cloud/adk/generic.api/
+- S25 SAP-docs Integration Suite documentation (GitHub mirror of help.sap.com): *Using Camel Simple Expression Language*, *Define Router*, *Define Looping Process Call*, *Define Content Modifier*, *Understanding Software Version Numbers*, *Patch Releases for Cloud Integration*: https://github.com/SAP-docs/btp-integration-suite/tree/main/docs/ci
+- S26 SAP's sample iFlows (Apache-2.0), read for the model format only, not copied: https://github.com/SAP-samples/cloud-integration-flow

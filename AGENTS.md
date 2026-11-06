@@ -4,6 +4,8 @@ CPI Workbench simulates SAP Integration Suite (Cloud Integration) steps locally:
 * XSLT Mapping on Saxon-HE 9.9 and 12, as GraalVM native images.
 * Groovy Script 1.x (Groovy 2.4.21, Camel 2.24.3) and 2.x (Groovy 4.0.29, Camel 3.14.7).
 * XSD validation and XPath.
+* Flow Steps: Content Modifier, Filter, Router, General / Iterating Splitter and Gather (Camel Simple on
+  the Groovy engines' Camel; XPath, filtering, splitting and gathering on the XML engines).
 
 The UI is Tauri 2 + Svelte 5 + Monaco. Everything runs offline; the app never connects to a tenant.
 
@@ -19,7 +21,8 @@ java -jar engine/groovy-v2/target/cpiwb-groovy-v2.jar test testdata/regression-p
 npm --prefix app run check                      # Svelte/TypeScript checks
 npm --prefix app test                           # UI unit tests (formatters; Node 22.18+)
 npm --prefix app run build                      # UI bundle for browser mode and e2e
-CPIWB_REQUIRE_ENGINES=1 cargo test --manifest-path app/src-tauri/Cargo.toml   # shell ⇄ engines over stdio (needs the UI bundle, engine builds; JAVA_HOME picks the JRE)
+CPIWB_REQUIRE_ENGINES=1 cargo test --manifest-path app/src-tauri/Cargo.toml   # shell ⇄ engines over stdio, MCP server (needs the UI bundle, engine builds; JAVA_HOME picks the JRE)
+node app/scripts/mcp-smoke.mjs app/src-tauri/target/debug/cpi-workbench testdata/regression-project   # MCP server as a client starts it
 ```
 
 The end-to-end browser tests (`app/e2e/*.mjs`) need running engines; the steps are in `docs/building.md`.
@@ -34,7 +37,8 @@ in `docs/building.md` (*Releasing*).
 * `engine/groovy*`: the script runner and the clean-room `com.sap.*` API.
   * `src/api-common`: platform services shared by both versions.
   * `src/api-v1`, `src/api-v2`: the Script API of each version.
-* `app/src`: the UI. `app/src-tauri`: the Rust shell.
+* `app/src`: the UI. `app/src-tauri`: the Rust shell; `src/mcp/` is the MCP server (`cpi-workbench mcp`).
+  `mcp/flow.rs` repeats the Flow Steps tab's calls (`app/src/lib/store.svelte.ts`); change both together.
 * `examples/demo-project`: the sample project users open in the app (no test cases).
 * `testdata/regression-project`: the project with test cases that CI, the e2e and the shell tests run.
 * `probes`: tenant probes and the simulator's baseline output.

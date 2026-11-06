@@ -63,6 +63,12 @@ def main():
     open(secret, "w").write("TOP-SECRET-42")
     secret_uri = "file:///" + secret.replace(os.sep, "/").lstrip("/")
     entity_doc = f"<!DOCTYPE r [<!ENTITY x SYSTEM '{secret_uri}'>]><r>&x;</r>"
+    xsl_out = ('<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform"><xsl:template '
+               'name="xsl:initial-template"><xsl:value-of select="unparsed-text(\'' + secret_uri + '\')"/></xsl:template>'
+               '</xsl:stylesheet>')
+    nested_transform = ("transform(map{'stylesheet-text': '" + xsl_out.replace("'", "''") + "', 'delivery-format': 'serialized', "
+                        "'vendor-options': map{QName('http://saxon.sf.net/', 'configuration'): parse-xml('<configuration "
+                        "xmlns=\"http://saxon.sf.net/ns/configuration\" edition=\"HE\"/>')}})?output")
     no_leak = lambda r: not r["ok"] and "TOP-SECRET" not in json.dumps(r) and "outside the project" in json.dumps(r)
     reqs = [
         ("engine.info", {}, lambda r: r["profile"]),
@@ -89,8 +95,31 @@ def main():
         ("xpath.eval", {"expression": "concat(string(count(//i)), '-', name(/*), substring('abc', 2), normalize-space(' a '), string-length('ab'), boolean(//i), number('1'), translate('a','a','b'), not(false()), local-name(/*), contains('ab','b'), starts-with('ab','a'), floor(1.5), ceiling(1.5), round(1.5), last())",
                         "version": "1.0", "input": {"body": BODY}}, lambda r: r["ok"] and r["items"][0]["value"].startswith("3-x")),
         ("xpath.eval", {"expression": "/x", "version": "1.0", "input": {"body": BODY}}, lambda r: r["ok"] and r["items"][0]["kind"] == "element"),
+        # fn:transform with a fresh configuration would bypass the project resolver: XPath refuses it.
+        ("xpath.eval", {"expression": nested_transform, "version": "3.1", "input": {"body": BODY}},
+         lambda r: not r["ok"] and "TOP-SECRET" not in json.dumps(r) and "UnsupportedInSimulator" in json.dumps(r)),
+        ("xpath.eval", {"expression": "/r", "version": "3.1", "as": "nodes", "input": {"body": "<r><i>A</i><i>B</i></r>"}},
+         lambda r: r["value"] == "<r><i>A</i><i>B</i></r>"),
         ("xpath.eval", {"expression": "//i[position() = last()]/@g | //i[1]/@g", "version": "1.0", "input": {"body": BODY}}, lambda r: r["ok"] and r["count"] == 2),
         ("xml.format", {"text": BODY}, lambda r: r["ok"]),
+        # Flow Steps: XPath values for Router and Content Modifier, General and Iterating Splitter.
+        ("xpath.eval", {"expression": "//i[@g='b']", "version": "3.1", "as": "boolean", "input": {"body": BODY}}, lambda r: r["value"] == "true"),
+        ("xpath.eval", {"expression": "//i/@v", "version": "3.1", "as": "string", "input": {"body": BODY}}, lambda r: r["value"] == "1"),
+        ("split.run", {"splitter": "general", "expressionType": "xpath", "expression": "/x/i", "grouping": 2, "input": {"body": BODY}},
+         lambda r: r["count"] == 2 and "<x>" in r["messages"][1]["body"]),
+        ("split.run", {"splitter": "iterating", "expressionType": "token", "expression": "i", "input": {"body": BODY}}, lambda r: r["count"] == 3),
+        ("split.run", {"splitter": "general", "expressionType": "xpath", "expression": "/r", "input": {"body": entity_doc}}, no_leak),
+        # Filter (XPath 3.1, headers as variables) and Gather.
+        ("filter.run", {"expression": "count(/x/i[@g = $g])", "valueType": "integer",
+                        "input": {"body": BODY, "headers": [{"name": "g", "value": "b"}]}}, lambda r: r["body"] == "1"),
+        ("filter.run", {"expression": "/x/i", "valueType": "nodelist", "input": {"body": BODY}}, lambda r: r["count"] == 3),
+        ("filter.run", {"expression": "string(/r)", "valueType": "string", "input": {"body": entity_doc}}, no_leak),
+        ("gather.run", {"messageType": "sameXml", "algorithm": "combine", "messages": ["<a/>", "<b/>"]},
+         lambda r: "<multimap:Message1><a/><b/></multimap:Message1>" in r["body"]),
+        ("gather.run", {"messageType": "sameXml", "algorithm": "combineAtXPath", "sourceXPath": "/x/i", "messages": [BODY, BODY]},
+         lambda r: r["body"].count("<i ") == 6),
+        ("gather.run", {"messageType": "sameXml", "algorithm": "combineAtXPath", "sourceXPath": "/r", "targetXPath": "/r",
+                        "messages": [entity_doc]}, no_leak),
         ("xpath.eval", {"expression": "string(/r)", "version": "1.0", "input": {"body": entity_doc}}, no_leak),
         ("xpath.eval", {"expression": "string(/r)", "version": "3.1", "input": {"body": entity_doc}}, no_leak),
         ("xpath.eval", {"expression": f"unparsed-text('{secret_uri}')", "version": "3.1", "input": {"body": "<a/>"}}, no_leak),

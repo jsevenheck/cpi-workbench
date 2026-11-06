@@ -36,11 +36,41 @@ Download the installer for your platform from the
   the app has no test runner. Opening a `case.json` loads the case into its editor view. Inputs only
   a case file can hold (attachments, SOAP headers, platform overrides) are kept while the case is
   open and are shown below the input.
-* **XSD** validates a document against a schema; **XPath** evaluates an expression (1.0 or 3.1).
+* **XSD** validates a document against a schema; **XPath** evaluates an expression (3.1 by default, or 1.0).
+* **Flow Steps** runs a **Content Modifier**, **Filter**, **Router**, **General / Iterating Splitter** or
+  **Gather** on an input message (body, headers, properties, namespace mapping):
+  * Content Modifier: header and property rows with their source types and data types, and the
+    message body; the result shows each row's value and the output message.
+  * Router: routes in order, XML (XPath) or Non-XML (Camel Simple, with CPI's `=`, `and`, `or` and
+    `${property.x}`) conditions, default route; the result shows which route the message takes.
+  * Filter: an XPath and its Value Type (String, Integer, Boolean, Node, Nodelist); the result is the
+    new body. `function:simple('${property.x}')` takes the value from Camel Simple.
+  * Splitter: XPath, Line Break or Token, grouping; the result lists the messages. *Gather* passes them on.
+  * Gather: Combine (SAP's multi-mapping format), Combine at XPath or Concatenate. The messages are on
+    the left as *Body 1*, *Body 2*, …: from the splitter's *Gather* button, *From Splitter result*, or `+`
+    for the current input body. Gather combines bodies only (SAP does not aggregate headers and properties),
+    so the input pane shows no header or property tabs for it; the namespaces stay for *Combine at XPath*.
+
+  Each step keeps its settings and its last result when you switch between the steps or tabs; the input
+  message is shared by all steps but Gather. Nothing is kept after the app restarts.
+
+  In XPath, `$name` is the header of that name, else the exchange property, as Camel's XPath variable
+  resolver provides them ([Fidelity](fidelity.md), F39).
+
+  These steps have no Groovy version: *Camel* in the top bar picks the tenant's Camel line (3.14
+  for tenant software 7.x / 8.x, the default; 2.24 for 5.x / 6.x). XPath runs on Saxon-HE 9.9. *Use as input* passes a result on to the next step. See
+  [Fidelity](fidelity.md#flow-steps-content-modifier-filter-router-splitter-gather).
 * **Import iFlow** unpacks an iFlow exported from Integration Suite (zip) into `iflows/` and lists
-  its Groovy Script, XSLT Mapping and XML Validator steps. Clicking a step opens its file with the
-  step's function name and script version. Steps that choose their mapping from a header at runtime
+  its Groovy Script, XSLT Mapping, XML Validator, Content Modifier, Filter, Router, Splitter and Gather steps.
+  Clicking a script or mapping step opens its file with the step's function name and script
+  version; a Content Modifier, Filter, Router, Splitter or Gather opens in Flow Steps with its settings, with
+  `{{parameters}}` filled in from the iFlow's `parameters.prop`. Steps that choose their mapping from a header at runtime
   are marked. The `.iflw` format is not publicly documented, so this is read generically (best effort).
+* **Completions** in Groovy scripts: after `message.` (or a variable declared as `Message`),
+  `messageLogFactory.`, a message log (`MessageLog log`, or `def log = messageLogFactory.getMessageLog(...)`,
+  also with `log?.`) and `ITApiFactory.`, the editor lists the methods of SAP's Script API with their
+  parameters, for the script's API version (v1 or v2 imports). The editor has no type information, so
+  other variable names get no suggestions. Ctrl+Space opens the list again.
 * **Lint** shows hints about what breaks when a script moves from 1.x to 2.x:
   * `XmlSlurper` or `XmlParser` used without a `groovy.xml` import,
   * Script API v1 imports or v1-only methods in a 2.x step,
@@ -52,8 +82,10 @@ Download the installer for your platform from the
 
 * XSLT, XSD and XPath runs read files inside the open project only: includes, `doc()`,
   `document()`, `unparsed-text()`, external entities and DTDs. The network is blocked.
-  `xsl:result-document` and `collection()` are not supported. Reflexive `java:` calls are the
-  exception: they run JDK code and are not restricted.
+  `xsl:result-document` and `collection()` are not supported. XPath runs (the XPath tab and flow
+  steps) also refuse `fn:transform()`, and on Saxon 12 `fn:function-lookup()`: with a configuration of
+  its own, a nested transformation would not be bound to the project. In XSLT, reflexive `java:` calls
+  and `fn:transform()` are the exception: they are not restricted.
 * Groovy scripts run as ordinary Java code with your user's rights; there is no sandbox. Run only
   scripts you trust.
 
@@ -61,7 +93,12 @@ The installers are not code-signed yet; [Installing](install.md) shows how to st
 first time. The Windows `setup.exe` installs per user and needs no admin rights; the `.msi` installs
 per machine and needs admin rights.
 
-The Groovy runtime starts only when the Groovy tab is used and stops after 10 idle minutes.
+The Groovy runtime starts only when the Groovy or Flow Steps tab is used and stops after 10 idle minutes.
+
+## Coding agents (MCP)
+
+`cpi-workbench mcp` gives a coding agent such as Claude Code the app's tabs (XSLT, Groovy, XSD, XPath,
+Flow Steps) over the Model Context Protocol. Setup, tools and what the server can access: [MCP server](mcp.md).
 
 ## Command line (CI-friendly)
 

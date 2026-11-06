@@ -5,8 +5,8 @@
 [![license](https://img.shields.io/github/license/jsevenheck/cpi-workbench)](LICENSE)
 
 A lean, offline desktop app for testing **SAP Integration Suite (Cloud Integration)** mappings and
-scripts locally: enter a message (body, headers, exchange properties), run an **XSLT mapping** or a
-**Groovy script** and see the resulting body, headers, properties and log entries immediately,
+scripts locally: enter a message (body, headers, exchange properties), run an **XSLT mapping**, a
+**Groovy script** or a **Content Modifier, Filter, Router, Splitter or Gather** and see the resulting body, headers, properties and log entries immediately,
 without deploy → trace → monitor round trips.
 
 The goal is to behave like the real CPI step, not like a generic XSLT tester or Groovy console.
@@ -31,13 +31,31 @@ it has not been checked against a tenant yet ([Fidelity](docs/fidelity.md)).
   `ITApiFactory` with **Secure Store**, **Value Mapping**, **Partner Directory**, **Keystore** and
   **number range** mocks fed from the project's `platform/` folder, following SAP's published API interfaces.
 * Compile and runtime errors point to the script line; `println` output is captured.
+* The editor completes SAP's Script API (`message.`, `messageLog.`, `ITApiFactory.`) for 1.x or 2.x.
 * Groovy 1.x → 2.x differences surface for real (e.g. `groovy.util.XmlSlurper` no longer exists in Groovy 4).
+
+**Flow Steps**
+
+* **Content Modifier**, **Filter**, **Router**, **General / Iterating Splitter** and **Gather** with their
+  CPI settings, on the tenant's Camel line (3.14 or 2.24): Camel Simple with CPI's spellings (`=`, `and`,
+  `${property.x}`), XPath 3.1 on Saxon, split messages with `CamelSplit*` information, gathered again in
+  SAP's multi-mapping format.
+* **Import iFlow** lists an exported iFlow's scripts, mappings and these steps and opens them with
+  their settings.
+
+**Coding agents**
+
+* **Built-in [MCP server](docs/mcp.md):** an agent such as Claude Code or Codex uses the app's tabs
+  (XSLT, Groovy, XSD, XPath, Flow Steps) on the simulator while it writes mappings and scripts. The
+  installed app brings it; the app window does not need to be open.
 
 Everything runs locally; the app never connects to a tenant.
 
 ![XSLT view](docs/images/screenshot-xslt.png)
 
 ![Groovy view](docs/images/screenshot-groovy.png)
+
+![Flow Steps view](docs/images/screenshot-flow-steps.png)
 
 ## Install
 
@@ -60,12 +78,23 @@ java -jar engine/xml-he99/target/cpiwb-xml-he99.jar test testdata/regression-pro
 java -jar engine/groovy-v1/target/cpiwb-groovy-v1.jar test testdata/regression-project/tests
 ```
 
+### With a coding agent
+
+Add a `.mcp.json` to the project folder (Windows; on macOS and Linux use the path from
+[MCP server](docs/mcp.md)) and start Claude Code there:
+
+```json
+{ "mcpServers": { "cpi-workbench": {
+    "command": "${LOCALAPPDATA}\\CPI Workbench\\cpi-workbench.exe", "args": ["mcp"] } } }
+```
+
 ## Documentation
 
 The [documentation index](docs/README.md) lists everything. The most used pages:
 
 * [Installing](docs/install.md)
 * [User guide](docs/user-guide.md): desktop app, command line, browser mode
+* [MCP server](docs/mcp.md): setup for Claude Code, Claude Desktop and Codex
 * [Test cases and platform data](docs/test-cases.md)
 * [Fidelity](docs/fidelity.md): what matches CPI and what is still to verify
 * [Implementation status](docs/status.md)

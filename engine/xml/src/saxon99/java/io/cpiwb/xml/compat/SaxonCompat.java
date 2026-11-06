@@ -44,6 +44,52 @@ public final class SaxonCompat {
     private SaxonCompat() {
     }
 
+    /** fn:transform: with a configuration in vendor-options it builds a new Saxon Configuration without the
+     * project resolver, which could then read any file. XPath runs (XPath tab, flow steps) refuse it. */
+    private static final String BLOCKED_REASON = "UnsupportedInSimulator: fn:transform() is not available in XPath "
+            + "here; it could run a stylesheet outside the project's file access rules.";
+
+    private static boolean blocked(net.sf.saxon.trans.SymbolicName.F name) {
+        StructuredQName q = name.getComponentName();
+        return "transform".equals(q.getLocalPart()) && "http://www.w3.org/2005/xpath-functions".equals(q.getURI());
+    }
+
+    /** Takes fn:transform out of the XPath compiler's function library. */
+    public static void withoutTransform(net.sf.saxon.s9api.XPathCompiler xc) {
+        net.sf.saxon.sxpath.AbstractStaticContext sc = (net.sf.saxon.sxpath.AbstractStaticContext) xc.getUnderlyingStaticContext();
+        net.sf.saxon.functions.FunctionLibraryList list = new net.sf.saxon.functions.FunctionLibraryList();
+        list.addFunctionLibrary(new WithoutTransform(sc.getFunctionLibrary()));
+        sc.setFunctionLibrary(list);
+    }
+
+    private static final class WithoutTransform implements net.sf.saxon.functions.FunctionLibrary {
+        private final net.sf.saxon.functions.FunctionLibrary inner;
+
+        WithoutTransform(net.sf.saxon.functions.FunctionLibrary inner) {
+            this.inner = inner;
+        }
+
+        @Override
+        public boolean isAvailable(net.sf.saxon.trans.SymbolicName.F name) {
+            return !blocked(name) && inner.isAvailable(name);
+        }
+
+        @Override
+        public net.sf.saxon.expr.Expression bind(net.sf.saxon.trans.SymbolicName.F name, net.sf.saxon.expr.Expression[] args,
+                                                 net.sf.saxon.expr.StaticContext env, List<String> reasons) {
+            if (blocked(name)) {
+                reasons.add(BLOCKED_REASON);
+                return null;
+            }
+            return inner.bind(name, args, env, reasons);
+        }
+
+        @Override
+        public net.sf.saxon.functions.FunctionLibrary copy() {
+            return new WithoutTransform(inner.copy());
+        }
+    }
+
     /** Entity resolver for every document Saxon parses itself, such as parse-xml() arguments. */
     public static void setEntityResolver(Configuration config, org.xml.sax.EntityResolver resolver) {
         config.getParseOptions().setEntityResolver(resolver);

@@ -65,13 +65,18 @@ node app/e2e/smoke.mjs /tmp/demo-project [screenshotDir]
 node app/e2e/groovy.mjs /tmp/demo-project [screenshotDir]
 ```
 
+With `CPIWB_IFLOW_ZIP` set to a zip of `engine/core/src/test/resources/iflow`, `groovy.mjs` also imports
+that iFlow and opens its Groovy, Content Modifier, Filter and Gather steps. CI does this; locally:
+`jar --create --no-manifest --file /tmp/iflow.zip -C engine/core/src/test/resources/iflow .`
+
 ## CI and installers
 
 `.github/workflows/build.yml`:
 
 * runs the engine tests and the regression cases in `testdata/regression-project`,
 * runs the browser e2e tests,
-* runs the shell tests against the native engines and the trimmed JRE, then builds the bundles.
+* runs the shell tests against the native engines and the trimmed JRE, then builds the bundles,
+* starts the release executable as an MCP server (`app/scripts/mcp-smoke.mjs`), as a client would.
 
 Pushes to `main`, tags `v*`, pull requests to `main` and manual runs (*Run workflow*,
 `workflow_dispatch`) run everything on Linux, Windows (e2e, .msi/.exe) and macOS (Apple Silicon, .dmg).
@@ -80,11 +85,16 @@ The macOS runner is `macos-26`; `MACOSX_DEPLOYMENT_TARGET=11.0` (for native-imag
 macOS 11 (the app's `minimumSystemVersion`), and a CI step checks that. The Linux bundles are built on
 `ubuntu-22.04` on purpose, so they need only that release's glibc.
 
+The workflow artifacts (engine jars, installers) expire after 3 days; a tag's installers stay 90 days,
+and the release keeps its own copies.
+
 Native images must be built on each target OS; there is no cross-compilation.
 The installers are not code-signed yet. On macOS the app is signed ad hoc (`signingIdentity: "-"`,
 without hardened runtime, so the bundled JRE loads its libraries); it is not notarized.
 
 ## Releasing
+
+Before tagging, check an installer by hand: [Manual test](manual-test.md).
 
 A tag `v<version>` builds, tests and publishes a GitHub release with the installers, the engine
 jars and `SHA256SUMS.txt` (job `release` in `build.yml`). It runs only when every other job passes.

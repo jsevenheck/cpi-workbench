@@ -8,7 +8,7 @@
 | `engine/xml`, `engine/xml-he99`, `engine/xml-he12` | CPI XSLT step, XSD validation, XPath. The same sources are built against Saxon-HE 9.9.1-8 and 12.9. |
 | `engine/native` | GraalVM native-image build (`build-native.sh`), reflection metadata generator, workload smoke test. |
 | `engine/groovy`, `engine/groovy-v1`, `engine/groovy-v2` | Groovy engines: shared runner, clean-room `com.sap.*` API (`src/api-common`, `src/api-v1`, `src/api-v2`), and the two builds (Groovy 2.4.21 with Camel 2.24.3, Groovy 4.0.29 with Camel 3.14.7). `build-jre.sh` trims the Java 17 runtime. |
-| `app/` | Svelte 5 + Monaco UI (`src/`), Tauri 2 shell (`src-tauri/`), browser e2e tests (`e2e/`). |
+| `app/` | Svelte 5 + Monaco UI (`src/`), Tauri 2 shell (`src-tauri/`, with the MCP server in `src/mcp/`), browser e2e tests (`e2e/`). |
 | `examples/demo-project/` | Sample project for the app: mappings, scripts, a schema, inputs and platform data. |
 | `testdata/regression-project/` | Project with test cases (`case.json`) that CI, the browser e2e and the shell tests run. |
 | `probes/` | Fingerprint and behaviour probes for a real tenant, plus the simulator's baseline output. |
@@ -19,8 +19,9 @@ The desktop shell starts each engine as a sidecar process on demand and talks JS
 over stdio. Every engine can also serve HTTP on localhost (`serve --http <port>`) for the
 browser mode. The main methods are:
 
-* `xslt.run`, `xsd.validate`, `xpath.eval` (XML engines),
-* `groovy.run` (Groovy engines),
+* `xslt.run`, `xsd.validate`, `xpath.eval`, `split.run`, `filter.run`, `gather.run` (XML engines),
+* `groovy.run`, `simple.eval`, `contentModifier.run` (Groovy engines); the UI evaluates a Router
+  route by route with `xpath.eval` and `simple.eval`,
 * `tests.run`, and `project.*`, `file.*`, `iflow.*` for files (all engines).
 
 File methods and XML runs stay inside the open project (`ProjectFiles`, `ProjectResolver`). Over
@@ -39,6 +40,12 @@ need an `X-Cpiwb` header, which forces a CORS preflight, and the origin's host i
   write (`app/src-tauri/src/ascii_alias.rs`); the AppCDS archives go there too.
 * **Caches**: compiled stylesheets and scripts are cached by content hash and profile, so changing
   only the input skips compilation.
+
+The shell's executable also runs headless as an MCP server (`cpi-workbench mcp`, [MCP server](mcp.md)):
+it starts the same engines through the same supervisor (`engine.rs`), opens the project in each engine
+when it starts, and maps each tool to engine calls. Its flow-step tool repeats the UI's orchestration
+of `xpath.eval`, `simple.eval` and `contentModifier.run` (`mcp/flow.rs`). The app leads: the tools
+add no function of their own.
 
 The design reasons and the build-vs-reuse principle are in the [plan](plan.md) §3 and §5.
 

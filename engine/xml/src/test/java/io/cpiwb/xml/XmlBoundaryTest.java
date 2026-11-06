@@ -61,6 +61,28 @@ class XmlBoundaryTest {
                 + "<xsl:output method='text'/><xsl:template match='/'><xsl:value-of select=\"" + expr + "\"/></xsl:template></xsl:stylesheet>";
     }
 
+    /**
+     * fn:transform with a configuration in vendor-options runs the stylesheet on a new Saxon Configuration that has
+     * no project resolver; found in a review on 2026-11-03. XPath refuses fn:transform, also by reference or lookup.
+     */
+    @Test
+    void xpathNestedTransformCannotLeaveTheProject() {
+        String xsl = "<xsl:stylesheet version=\"3.0\" xmlns:xsl=\"http://www.w3.org/1999/XSL/Transform\">"
+                + "<xsl:template name=\"xsl:initial-template\"><xsl:value-of select=\"unparsed-text('" + secretUri + "')\"/>"
+                + "</xsl:template></xsl:stylesheet>";
+        String options = "map{'stylesheet-text': '" + xsl.replace("'", "''") + "', 'delivery-format': 'serialized', "
+                + "'vendor-options': map{QName('http://saxon.sf.net/', 'configuration'): "
+                + "parse-xml('<configuration xmlns=\"http://saxon.sf.net/ns/configuration\" edition=\"HE\"/>')}}";
+        for (String expr : List.of("transform(" + options + ")?output",
+                "Q{http://www.w3.org/2005/xpath-functions}transform#1(" + options + ")?output",
+                "function-lookup(QName('http://www.w3.org/2005/xpath-functions', 'transform'), 1)(" + options + ")?output")) {
+            Map<String, Object> r = xpath(expr, "3.1", "<a/>");
+            assertNoLeak(r);
+            assertFalse(Json.bool(r, "ok", true), () -> Json.write(r));
+        }
+        assertTrue(Json.write(xpath("transform(" + options + ")?output", "3.1", "<a/>")).contains("UnsupportedInSimulator"));
+    }
+
     @Test
     void xsltInputExternalEntityIsBlocked() {
         Map<String, Object> r = xslt(COPY, entityDoc());

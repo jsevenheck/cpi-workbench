@@ -18,7 +18,7 @@ import java.util.Map;
 /** RPC dispatcher of a Groovy engine (one per Script API generation). */
 public final class GroovyEngine implements RpcHandler {
 
-    public static final String VERSION = "0.1.1";
+    public static final String VERSION = "0.2.0";
 
     private final ScriptRunner runner;
     private final SimpleStep simple = new SimpleStep();

@@ -44,7 +44,7 @@ clients without a project folder need `--project`:
 {
   "mcpServers": {
     "cpi-workbench": {
-      "command": "C:\\Users\\me\\AppData\\Local\\CPI Workbench\\cpi-workbench.exe",
+      "command": "C:\\Users\\<user>\\AppData\\Local\\CPI Workbench\\cpi-workbench.exe",
       "args": ["mcp", "--project", "C:\\work\\my-cpi-project"]
     }
   }
@@ -55,9 +55,12 @@ clients without a project folder need `--project`:
 
 ```toml
 [mcp_servers.cpi-workbench]
-command = 'C:\Users\me\AppData\Local\CPI Workbench\cpi-workbench.exe'
+command = 'C:\Users\<user>\AppData\Local\CPI Workbench\cpi-workbench.exe'
 args = ["mcp", "--project", 'C:\work\my-cpi-project']
 ```
+
+In both, replace `<user>` with your Windows user name (the folder under `C:\Users`) and the project
+path with yours, then restart the client.
 
 The project folder is `--project`, else `CLAUDE_PROJECT_DIR`, else the server's working directory.
 From a repository checkout, a debug build works too (`app/src-tauri/target/debug/cpi-workbench mcp`);

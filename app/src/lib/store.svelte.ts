@@ -59,7 +59,9 @@ export interface IflowStep {
   iflow: string;
   id: string;
   name: string;
-  type: 'groovy' | 'xslt' | 'xsd' | FlowStep | 'error';
+  type: 'groovy' | 'xslt' | 'xsd' | 'mmap' | FlowStep | 'error';
+  /** Message Mapping steps: the Groovy scripts its .mmap uses (the mapping itself is not simulated). */
+  scripts?: string[];
   note?: string;
   /** Flow step settings (Content Modifier, Filter, Router, Splitter, Gather) as the iFlow stores them. */
   config?: any;
@@ -366,6 +368,19 @@ export async function importIflow(zip: string) {
 /** Opens the file of an imported iFlow step with the step's settings (function, script version). */
 export async function openIflowStep(step: IflowStep) {
   if (step.config) return openFlowStep(step);
+  if (step.type === 'mmap') {
+    const [first, ...rest] = step.scripts ?? [];
+    if (!first) {
+      app.status = `Message Mapping "${step.name}": ${step.note ?? 'not simulated.'}`;
+      return;
+    }
+    // The script opens with its first Message Mapping function (see runGroovy), on 1.x (F41).
+    pickMappingFunction = true;
+    await openFile(first, { profile: step.profile });
+    app.status = `Message Mapping "${step.name}" is not simulated; opened its script ${first.split('/').pop()}`
+      + (rest.length ? ` (also: ${rest.map((p) => p.split('/').pop()).join(', ')})` : '') + '.';
+    return;
+  }
   if (!step.file || !step.fileFound) {
     app.error = step.note ? `Step "${step.name}": ${step.note}`
       : `The file of step "${step.name}" was not found in the export (${step.file ?? 'no reference'}).`;
@@ -780,6 +795,8 @@ export async function runXslt() {
 }
 
 let groovySeq = 0;
+/** Set when a Message Mapping step opens its script: the first run picks a mapping function if there is no processData. */
+let pickMappingFunction = false;
 
 export async function runGroovy() {
   const seq = ++groovySeq;
@@ -796,6 +813,12 @@ export async function runGroovy() {
     if (seq === groovySeq) {
       groovy.result = r;
       groovy.compare = c;
+      const pick = pickMappingFunction;
+      pickMappingFunction = false;
+      if (pick && !r.ok && r.failedPhase === 'compile' && r.functions?.length && !r.mapping) {
+        groovy.functionName = r.functions[0].slice(0, r.functions[0].indexOf('('));
+        return void runGroovy();
+      }
       // A compile error says nothing about the function; keep what the last run found.
       if (r.mapping) {
         // Arguments typed for another function do not belong to this one (a test case's do: mapping is null then).

@@ -23,7 +23,7 @@ import java.util.zip.ZipInputStream;
 
 /**
  * Imports an exported iFlow (zip) into the project and lists its Groovy Script and XSLT Mapping
- * steps. The .iflw format is not publicly specified; this reads the BPMN call activities and their
+ * steps, and its Message Mapping steps with their scripts (the mapping itself is not simulated). The .iflw format is not publicly specified; this reads the BPMN call activities and their
  * key/value properties generically and resolves referenced files by name, so it degrades gracefully
  * when SAP changes property names.
  */
@@ -175,6 +175,19 @@ public final class IflowImport {
             if (note != null) {
                 step.with("note", note);
             }
+            if ("mmap".equals(type)) {
+                List<String> scripts = new ArrayList<>();
+                List<String> missing = new ArrayList<>();
+                if (resolved != null) {
+                    mappingScripts(resolved, flowRoot, projectRoot, scripts, missing);
+                }
+                // SAP's patch notes: Groovy Script version 2 is not supported in Message Mappings (plan F41).
+                step.with("scripts", scripts).with("profile", "groovy-1.x");
+                step.with("note", "Message Mapping is not simulated. " + (resolved == null ? "Its .mmap is not in the export."
+                        : scripts.isEmpty() && missing.isEmpty() ? "It uses no Groovy scripts."
+                        : "Its script functions run in the Groovy tab.")
+                        + (missing.isEmpty() ? "" : " Not found in the export: " + String.join(", ", missing) + "."));
+            }
             if ("groovy".equals(type)) {
                 String fn = props.get("scriptFunction");
                 step.with("function", fn == null || fn.isBlank() ? "processData" : fn.trim());
@@ -238,6 +251,11 @@ public final class IflowImport {
         if (all.contains("javascript")) {
             return null;
         }
+        // A Message Mapping step references its .mmap (mappinguri dir://mmap/...; SAP's sample iFlows).
+        if (all.contains("messagemapping")
+                || props.values().stream().anyMatch(v -> hasExtension("mmap", v.toLowerCase(Locale.ROOT)))) {
+            return "mmap";
+        }
         if (all.contains("groovy") || all.contains("script")) {
             return "groovy";
         }
@@ -265,8 +283,47 @@ public final class IflowImport {
                 return lowerValue.endsWith(".xsl") || lowerValue.endsWith(".xslt");
             case "xsd":
                 return lowerValue.endsWith(".xsd");
+            case "mmap":
+                return lowerValue.endsWith(".mmap");
             default:
                 return false;
+        }
+    }
+
+    /**
+     * The Groovy scripts a Message Mapping uses: in the .mmap, each {@code lnkRole role="UsedFuncLib"}
+     * holds a key whose first two {@code elem} values are the file name and its folder (SAP's sample
+     * iFlow "Accessing Header Property and Externalized Parameter from Message Mapping").
+     */
+    private static void mappingScripts(Path mmap, Path flowRoot, Path projectRoot, List<String> found,
+                                       List<String> missing) {
+        try {
+            DocumentBuilderFactory f = DocumentBuilderFactory.newDefaultInstance();
+            f.setNamespaceAware(true);
+            f.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+            Document doc = f.newDocumentBuilder().parse(mmap.toFile());
+            NodeList roles = doc.getElementsByTagNameNS("*", "lnkRole");
+            for (int i = 0; i < roles.getLength(); i++) {
+                Element role = (Element) roles.item(i);
+                if (!"UsedFuncLib".equals(role.getAttribute("role"))) {
+                    continue;
+                }
+                NodeList elems = role.getElementsByTagNameNS("*", "elem");
+                if (elems.getLength() == 0) {
+                    continue;
+                }
+                String name = elems.item(0).getTextContent().trim();
+                String dir = elems.getLength() > 1 ? elems.item(1).getTextContent().trim() : "";
+                Path p = resolve(flowRoot, dir.isEmpty() ? name : dir + "/" + name);
+                String rel = p == null ? null : projectRoot.relativize(p).toString().replace('\\', '/');
+                if (rel == null) {
+                    missing.add(name);
+                } else if (!found.contains(rel)) {
+                    found.add(rel);
+                }
+            }
+        } catch (Exception e) {
+            missing.add("(cannot read " + mmap.getFileName() + ": " + e.getMessage() + ")");
         }
     }
 

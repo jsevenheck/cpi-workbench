@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Synthetic: only the parts CPI Workbench reads, in the shape of SAP's sample iFlow "Accessing Header
+     Property and Externalized Parameter from Message Mapping" (a used function library per script). -->
+<xiObj xmlns="urn:sap-com:xi">
+  <generic>
+    <lnks>
+      <lnkRole kpos="1" role="SOURCE_IFR_MESS"><lnk rMode="R"><key typeID="xsd" version="1.1"><elem>order.xsd</elem><elem>src/main/resources/xsd</elem></key></lnk></lnkRole>
+      <lnkRole kpos="1" role="UsedFuncLib"><lnk rMode="R"><key oid="lookup.gsh" typeID="gsh" version="1.1"><elem>lookup.gsh</elem><elem>src/main/resources/script</elem></key></lnk></lnkRole>
+      <lnkRole kpos="2" role="UsedFuncLib"><lnk rMode="R"><key oid="gone.gsh" typeID="gsh" version="1.1"><elem>gone.gsh</elem><elem>src/main/resources/script</elem></key></lnk></lnkRole>
+    </lnks>
+  </generic>
+</xiObj>

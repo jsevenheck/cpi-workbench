@@ -87,6 +87,15 @@
         <ifl:property><key>wrapContent</key><value>/Order/Item</value></ifl:property>
       </bpmn2:extensionElements>
     </bpmn2:callActivity>
+    <!-- A Message Mapping step as in SAP's sample iFlows: activityType Mapping, mappinguri dir://mmap/... -->
+    <bpmn2:callActivity id="CallActivity_10" name="Map order">
+      <bpmn2:extensionElements>
+        <ifl:property><key>mappingname</key><value>order</value></ifl:property>
+        <ifl:property><key>mappingpath</key><value>src/main/resources/mapping/order</value></ifl:property>
+        <ifl:property><key>activityType</key><value>Mapping</value></ifl:property>
+        <ifl:property><key>mappinguri</key><value>dir://mmap/src/main/resources/mapping/order.mmap</value></ifl:property>
+      </bpmn2:extensionElements>
+    </bpmn2:callActivity>
     <bpmn2:exclusiveGateway default="SequenceFlow_9" id="ExclusiveGateway_1" name="Check sender">
       <bpmn2:extensionElements>
         <ifl:property><key>activityType</key><value>ExclusiveGateway</value></ifl:property>

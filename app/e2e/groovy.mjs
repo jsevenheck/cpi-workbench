@@ -111,6 +111,13 @@ if (process.env.CPIWB_IFLOW_ZIP) {
   if ((await page.getByLabel('Filter XPath').inputValue()) !== '/Order/Item') fail('Filter XPath from the iFlow');
   await page.locator('.steps .step', { hasText: 'Gather items' }).click();
   if ((await page.getByLabel('Aggregation Algorithm').inputValue()) !== 'combineAtXPath') fail('Gather algorithm from the iFlow');
+  // A Message Mapping step is listed (not simulated); it opens its script with the first mapping function.
+  await page.locator('.steps .step', { hasText: 'Map order' }).click();
+  await page.locator('section.script h2', { hasText: 'lookup.gsh' }).waitFor({ timeout: 10000 })
+    .catch(() => fail('Message Mapping step did not open its script'));
+  await page.locator('section.output .badge.ok').waitFor({ timeout: 20000 })
+    .catch(() => fail('mapping script from the iFlow did not run'));
+  if ((await page.getByLabel('Function name').inputValue()) !== 'getHeader') fail('mapping function not picked');
   await page.getByRole('tab', { name: 'Groovy Script' }).click();
 }
 

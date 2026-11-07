@@ -65,7 +65,9 @@ Download the installer for your platform from the
   Clicking a script or mapping step opens its file with the step's function name and script
   version; a Content Modifier, Filter, Router, Splitter or Gather opens in Flow Steps with its settings, with
   `{{parameters}}` filled in from the iFlow's `parameters.prop`. Steps that choose their mapping from a header at runtime
-  are marked. The `.iflw` format is not publicly documented, so this is read generically (best effort).
+  are marked. A **Message Mapping** step (**M**) is listed but not simulated; clicking it opens the first
+  Groovy script its `.mmap` uses, with the script's first mapping function, and names the others.
+  The `.iflw` format is not publicly documented, so this is read generically (best effort).
 * **Completions** in Groovy scripts: after `message.` (or a variable declared as `Message`),
   `messageLogFactory.`, a message log (`MessageLog log`, or `def log = messageLogFactory.getMessageLog(...)`,
   also with `log?.`) and `ITApiFactory.`, the editor lists the methods of SAP's Script API with their

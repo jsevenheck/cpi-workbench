@@ -18,6 +18,8 @@ of its version.
   Graphical Message Mapping (`.mmap`) is still not simulated.
 - **Check for updates** in a new ⚙ menu (desktop app): shows the installed version, asks github.com
   for the latest release on click, and opens its page if it is newer. The app makes no request on its own.
+- iFlow import lists **Message Mapping** steps. The mapping is not simulated; clicking the step opens
+  the first Groovy script its `.mmap` uses, with its first mapping function, on Groovy Script 1.x.
 - Probe `probe-mapping-v1.groovy` for how a tenant calls mapping functions.
 
 ## [0.2.0] - 2026-11-06

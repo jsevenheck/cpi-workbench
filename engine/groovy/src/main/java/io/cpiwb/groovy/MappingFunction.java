@@ -96,11 +96,26 @@ final class MappingFunction {
         for (Method m : scriptClass.getDeclaredMethods()) {
             int mod = m.getModifiers();
             if (Modifier.isPublic(mod) && !Modifier.isStatic(mod) && !m.isSynthetic() && !m.isBridge()
-                    && !m.getName().equals("run") && !m.getName().contains("$")) {
+                    && !m.getName().equals("run") && !m.getName().contains("$") && !fieldSetter(scriptClass, m)) {
                 out.add(m);
             }
         }
         return out;
+    }
+
+    /** The setter Groovy generates for an {@code @Field} variable of the script: not a mapping function. */
+    private static boolean fieldSetter(Class<?> cls, Method m) {
+        String n = m.getName();
+        if (!n.startsWith("set") || n.length() < 4 || m.getParameterCount() != 1) {
+            return false;
+        }
+        String field = Character.toLowerCase(n.charAt(3)) + n.substring(4);
+        for (java.lang.reflect.Field f : cls.getDeclaredFields()) {
+            if (f.getName().equals(field) || f.getName().equals(n.substring(3))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static MappingFunction of(Method m) {

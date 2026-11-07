@@ -137,5 +137,19 @@ class MappingFunctionTest {
         assertTrue(Json.bool(r, "ok", false), () -> Json.write(r));
         assertNull(r.get("mapping"));
         assertEquals("y", entry(r, "headers", "x").get("value"));
+        assertFalse(Json.write(r).contains("Arguments are given"));
+
+        Map<String, Object> w = call(s, "processData", List.of("unused"));
+        assertTrue(Json.write(w).contains("Arguments are given"), "arguments a script step ignores are reported");
+    }
+
+    @Test
+    void fieldSettersAreNotMappingFunctions() throws Exception {
+        String s = "import groovy.transform.Field\n@Field String prefix = 'P-'\n"
+                + "def String addPrefix(String a) { prefix + a }\n";
+        Map<String, Object> r = call(s, "addPrefix", List.of("1"));
+        assertTrue(Json.bool(r, "ok", false), () -> Json.write(r));
+        assertEquals("P-1", mapping(r).get("returned"));
+        assertEquals(List.of("addPrefix(String)"), r.get("functions"));
     }
 }

@@ -132,6 +132,10 @@ public final class ScriptRunner {
                     + String.join(", ", mappingFunctions) + ". Enter one of their names as the function to run it.")));
             return finish(result, false, "compile", diags, null, null, platform, "", t0, compileMs, cached, null);
         }
+        if (mapping == null && !Json.arr(req, "args").isEmpty()) {
+            diags.add(Diagnostic.warning("Arguments are given, but " + function + " is called like a Groovy Script step "
+                    + "with the message; only Message Mapping functions take arguments, so they are ignored."));
+        }
         if (mapping != null && "v2".equals(apiVersion)) {
             diags.add(Diagnostic.warning("SAP's patch notes (software increment 2602) say that Groovy Script version 2 "
                     + "is not supported in Message Mappings; run this function on Groovy Script 1.x."));

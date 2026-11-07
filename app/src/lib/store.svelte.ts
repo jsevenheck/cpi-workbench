@@ -798,9 +798,14 @@ export async function runGroovy() {
       groovy.compare = c;
       // A compile error says nothing about the function; keep what the last run found.
       if (r.mapping) {
+        // Arguments typed for another function do not belong to this one (a test case's do: mapping is null then).
+        if (groovy.mapping && groovy.mapping.function !== r.mapping.function) groovy.args = [];
         groovy.mapping = { function: r.mapping.function, parameters: r.mapping.parameters };
         if (!known && groovy.args.some((a) => a?.trim())) return void runGroovy();
-      } else if (r.failedPhase !== 'compile') groovy.mapping = null;
+      } else if (r.failedPhase !== 'compile') {
+        if (groovy.mapping) groovy.args = [];
+        groovy.mapping = null;
+      }
     }
   } catch (e) {
     if (seq === groovySeq) fail(e);

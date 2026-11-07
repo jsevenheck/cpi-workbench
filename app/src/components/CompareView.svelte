@@ -3,6 +3,7 @@
   import { app, otherProfile, type CompareRun } from '../lib/store.svelte';
   import type { Profile } from '../lib/engine';
   import type { GroovyResult, Row, XsltResult } from '../lib/types';
+  import { formatQueue } from '../lib/queue';
 
   type Result = XsltResult | GroovyResult;
 
@@ -51,9 +52,17 @@
   let headers = $derived(diffRows(a.result?.output?.headers, b?.result?.output?.headers));
   let properties = $derived(diffRows(a.result?.output?.properties, b?.result?.output?.properties));
   let bodiesDiffer = $derived(a.result?.output?.body !== b?.result?.output?.body);
+  /** A Message Mapping function's returned value and output queue, as text. */
+  function mappingText(r: Result | null | undefined) {
+    const m = r && 'mapping' in r ? r.mapping : undefined;
+    if (!m) return '';
+    return ('returned' in m ? 'returned: ' + JSON.stringify(m.returned) + '\n' : '') + (m.queue ? formatQueue(m.queue) : '');
+  }
+  let mappingA = $derived(mappingText(a.result));
+  let mappingB = $derived(mappingText(b?.result));
   let statusDiffers = $derived(!!b && (a.result?.ok ?? false) !== (b.result?.ok ?? false));
   let bothOk = $derived(!!a.result?.ok && !!b?.result?.ok);
-  let same = $derived(!!b && !statusDiffers && !bodiesDiffer && headers.length === 0 && properties.length === 0);
+  let same = $derived(!!b && !statusDiffers && !bodiesDiffer && mappingA === mappingB && headers.length === 0 && properties.length === 0);
 
   function cell(r: Row | undefined) {
     return r === undefined ? '—' : `${r.value ?? 'null'} (${r.type})`;
@@ -82,8 +91,15 @@
       {#if !bothOk}
         <p class="hint">{a.result?.ok || b.result?.ok ? 'Only one runtime succeeded' : 'Both runtimes failed'}; output is not compared.</p>
       {:else if same}
-        <p class="same">Same result on both runtimes: body, headers and properties are identical.</p>
+        <p class="same">Same result on both runtimes: {mappingA ? 'function result' : 'body'}, headers and properties are identical.</p>
       {:else}
+        {#if mappingA !== mappingB}
+          <h3>Function result that differs</h3>
+          <div class="sides">
+            <pre class="mono">A: {mappingA}</pre>
+            <pre class="mono">B: {mappingB}</pre>
+          </div>
+        {/if}
         {#each [['Headers', headers], ['Properties', properties]] as [title, rows]}
           {#if (rows as Diff[]).length}
             <h3>{title} that differ</h3>
@@ -130,5 +146,6 @@
   table { border-collapse: collapse; width: 100%; }
   th, td { text-align: left; padding: 2px 6px; border-bottom: 1px solid var(--border-soft); vertical-align: top; word-break: break-word; }
   th { color: var(--muted); font-weight: 600; }
+  pre { margin: 0; white-space: pre-wrap; word-break: break-word; }
   .diff { flex: 1; min-height: 160px; position: relative; border-top: 1px solid var(--border); }
 </style>

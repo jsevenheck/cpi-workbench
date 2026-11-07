@@ -127,6 +127,11 @@ await page.locator('section.output pre', { hasText: '["2"]\n["1"]\n["0"]' }).wai
   .catch(async () => fail('mapping queue: ' + (await page.locator('section.output').innerText()).slice(0, 400)));
 if (!(await page.getByLabel('Argument 1').inputValue()).includes('"Multi Print"')) fail('mapping argument from the case');
 if (shots) await page.screenshot({ path: path.join(shots, 'g3c-mapping-context.png') });
+// Compare runs the function on 2.x too and compares the function result, not only the body.
+await page.getByRole('button', { name: 'Compare', exact: true }).click();
+await page.locator('section.output .compare .same', { hasText: 'function result' }).waitFor({ timeout: 20000 })
+  .catch(async () => fail('compare of a mapping function: ' + (await page.locator('section.output').innerText()).slice(0, 400)));
+await page.getByRole('button', { name: 'Comparing' }).click();
 await page.getByLabel('Argument 1').fill('["A", "B", "C"]');
 await page.locator('section.output pre', { hasText: '["3"]' }).waitFor({ timeout: 20000 })
   .catch(() => fail('mapping argument typed in the tab'));

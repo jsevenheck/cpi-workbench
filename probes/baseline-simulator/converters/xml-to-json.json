@@ -1,0 +1,1 @@
+{"abc:A":{"xyz:B":{"@xyz:attr1":"1","@attr2":"2","$":"valueB"},"C":["valueC1","valueC2"],"D":"","E":"valueE","F":" ","G":"a/b \"quoted\" ü"}}

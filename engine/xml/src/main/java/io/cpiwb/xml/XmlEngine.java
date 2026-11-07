@@ -27,6 +27,7 @@ public final class XmlEngine implements RpcHandler {
     private final SplitStep split = new SplitStep();
     private final FilterStep filter = new FilterStep();
     private final GatherStep gather = new GatherStep();
+    private final ConverterStep converter = new ConverterStep();
     private final ProjectFiles files = new ProjectFiles();
 
     @Override
@@ -40,7 +41,7 @@ public final class XmlEngine implements RpcHandler {
                 .with("java", System.getProperty("java.vm.name") + " " + System.getProperty("java.version"))
                 .with("nativeImage", System.getProperty("org.graalvm.nativeimage.imagecode") != null)
                 .with("types", TypedValue.TYPES)
-                .with("methods", List.of("engine.info", "xslt.run", "xsd.validate", "xpath.eval", "split.run", "filter.run", "gather.run", "xml.format",
+                .with("methods", List.of("engine.info", "xslt.run", "xsd.validate", "xpath.eval", "split.run", "filter.run", "gather.run", "convert.run", "xml.format",
                         "project.open", "project.close", "project.list", "file.read", "file.write", "file.delete", "iflow.import", "iflow.steps", "tests.run"));
     }
 
@@ -62,6 +63,8 @@ public final class XmlEngine implements RpcHandler {
                 return filter.run(withProjectRoot(params));
             case "gather.run":
                 return gather.run(withProjectRoot(params));
+            case "convert.run":
+                return converter.run(withProjectRoot(params));
             case "xml.format":
                 return xpath.format(params);
             case "project.open":

@@ -37,8 +37,8 @@ Download the installer for your platform from the
   a case file can hold (attachments, SOAP headers, platform overrides) are kept while the case is
   open and are shown below the input.
 * **XSD** validates a document against a schema; **XPath** evaluates an expression (3.1 by default, or 1.0).
-* **Flow Steps** runs a **Content Modifier**, **Filter**, **Router**, **General / Iterating Splitter** or
-  **Gather** on an input message (body, headers, properties, namespace mapping):
+* **Flow Steps** runs a **Content Modifier**, **Filter**, **Router**, **General / Iterating Splitter**,
+  **Gather** or **Converter** on an input message (body, headers, properties, namespace mapping):
   * Content Modifier: header and property rows with their source types and data types, and the
     message body; the result shows each row's value and the output message.
   * Router: routes in order, XML (XPath) or Non-XML (Camel Simple, with CPI's `=`, `and`, `or` and
@@ -46,6 +46,9 @@ Download the installer for your platform from the
   * Filter: an XPath and its Value Type (String, Integer, Boolean, Node, Nodelist); the result is the
     new body. `function:simple('${property.x}')` takes the value from Camel Simple.
   * Splitter: XPath, Line Break or Token, grouping; the result lists the messages. *Gather* passes them on.
+  * Converter: JSON to XML, XML to JSON (namespace mapping, root element options, streaming), XML to CSV
+    and CSV to XML (with an XSD from the project), with the settings of CPI's converter steps. *Use as
+    input* chains them with the other steps, e.g. JSON to XML, then a Router.
   * Gather: Combine (SAP's multi-mapping format), Combine at XPath or Concatenate. The messages are on
     the left as *Body 1*, *Body 2*, …: from the splitter's *Gather* button, *From Splitter result*, or `+`
     for the current input body. Gather combines bodies only (SAP does not aggregate headers and properties),
@@ -61,9 +64,9 @@ Download the installer for your platform from the
   for tenant software 7.x / 8.x, the default; 2.24 for 5.x / 6.x). XPath runs on Saxon-HE 9.9. *Use as input* passes a result on to the next step. See
   [Fidelity](fidelity.md#flow-steps-content-modifier-filter-router-splitter-gather).
 * **Import iFlow** unpacks an iFlow exported from Integration Suite (zip) into `iflows/` and lists
-  its Groovy Script, XSLT Mapping, XML Validator, Content Modifier, Filter, Router, Splitter and Gather steps.
+  its Groovy Script, XSLT Mapping, XML Validator, Content Modifier, Filter, Router, Splitter, Gather and converter steps.
   Clicking a script or mapping step opens its file with the step's function name and script
-  version; a Content Modifier, Filter, Router, Splitter or Gather opens in Flow Steps with its settings, with
+  version; a Content Modifier, Filter, Router, Splitter, Gather or converter opens in Flow Steps with its settings, with
   `{{parameters}}` filled in from the iFlow's `parameters.prop`. Steps that choose their mapping from a header at runtime
   are marked. A **Message Mapping** step (**M**) is listed but not simulated; clicking it opens the first
   Groovy script its `.mmap` uses, with the script's first mapping function, and names the others.

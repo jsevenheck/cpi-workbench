@@ -88,6 +88,7 @@ The first run starts the Java engines and can take a few seconds.
 | 2.20 | *Use as input* on a result | The result becomes the next step's input. |
 | 2.21 | Switch between steps and tabs | Each step keeps its settings and last result. |
 | 2.22 | **Camel** 3.14 ↔ 2.24 in the top bar, run again | Runs on both. |
+| 2.22a | **Converter**: XML to JSON on `inputs/order.xml`, *Use as input*, then JSON to XML | JSON with `@` attributes, then XML like the input (without indentation). |
 | 2.23 | Start a step and change the body or its settings at once | The result belongs to the state at the start; the change applies to the next run. |
 
 ### Editor and files

@@ -185,7 +185,7 @@ export const xpath = $state({
   running: false,
 });
 
-export type FlowStep = 'contentModifier' | 'filter' | 'router' | 'splitter' | 'gather';
+export type FlowStep = 'contentModifier' | 'filter' | 'router' | 'splitter' | 'gather' | 'converter';
 
 /** A Content Modifier row in the iFlow's encoding (type: constant, header, property, xpath, expression, ...). */
 export interface CmRow {
@@ -243,11 +243,22 @@ export const flow = $state({
   filter: { expression: "/Order/Item[@qty > 1]", valueType: 'nodelist' },
   /** The messages to gather: a splitter's result or bodies added by hand. */
   gather: { messageType: 'sameXml', algorithm: 'combine', sourceXPath: '', targetXPath: '', messages: [] as string[] },
+  /** JSON ↔ XML and XML ↔ CSV converters; mapping and array paths are text, one entry per line. */
+  converter: {
+    conversion: 'xmlToJson' as 'jsonToXml' | 'xmlToJson' | 'xmlToCsv' | 'csvToXml',
+    useNamespaces: false, separator: ':', namespaceMapping: '',
+    addRootElement: false, rootElementName: 'root', rootNamespace: '',
+    suppressRoot: false, streaming: false, streamingElements: 'all' as 'all' | 'specific', arrayPaths: '', outputEncoding: '',
+    sourcePath: '/Order/Item', fieldSeparator: ',', csvHeader: 'xml' as 'none' | 'xml' | 'xsd', includeParent: false, parentPath: '',
+    includeAttributes: false,
+    schema: '', targetPath: '', recordMarker: '', firstLineHeader: true, headerMapping: 'xsd' as 'xsd' | 'csv',
+  },
   cmResult: null as any,
   routerResult: null as null | { routes: RouteResult[]; taken: string; diagnostics: string[] },
   splitResult: null as any,
   filterResult: null as any,
   gatherResult: null as any,
+  converterResult: null as any,
   running: false,
 });
 
@@ -926,8 +937,9 @@ async function simpleEval(run: FlowRun, expression: string, mode: 'condition' | 
 
 // A run's result goes to the step it was started for, and only if no newer run or newly opened step came since.
 let flowSeq = 0;
-const flowResultKey = { contentModifier: 'cmResult', filter: 'filterResult', router: 'routerResult', splitter: 'splitResult', gather: 'gatherResult' } as const;
-const flowConfigKey = { contentModifier: 'cm', filter: 'filter', router: 'router', splitter: 'splitter', gather: 'gather' } as const;
+const flowResultKey = { contentModifier: 'cmResult', filter: 'filterResult', router: 'routerResult', splitter: 'splitResult', gather: 'gatherResult',
+  converter: 'converterResult' } as const;
+const flowConfigKey = { contentModifier: 'cm', filter: 'filter', router: 'router', splitter: 'splitter', gather: 'gather', converter: 'converter' } as const;
 
 export async function runFlowStep() {
   const seq = ++flowSeq;
@@ -941,6 +953,7 @@ export async function runFlowStep() {
       : step === 'filter' ? await runFilter(run, config)
       : step === 'router' ? await runRouter(run, config)
       : step === 'splitter' ? await runSplitter(run, config)
+      : step === 'converter' ? await runConverter(run, config)
       : await runGather(run, config);
     if (seq === flowSeq) flow[flowResultKey[step]] = r;
   } catch (e) {
@@ -1034,6 +1047,19 @@ async function runGather(run: FlowRun, g: typeof flow.gather) {
   }, run.xml);
 }
 
+async function runConverter(run: FlowRun, c: typeof flow.converter) {
+  // SAP (CSV to XML 1.4): schema, target path and record marker may come from a header or property.
+  const resolve = async (v: string) => (v.includes('${') ? (await simpleEval(run, v, 'expression')).value ?? '' : v);
+  const csv = c.conversion === 'csvToXml';
+  return await call('convert.run', {
+    ...c,
+    schema: csv ? await resolve(c.schema) : c.schema,
+    targetPath: csv ? await resolve(c.targetPath) : c.targetPath,
+    recordMarker: csv ? await resolve(c.recordMarker) : c.recordMarker,
+    namespaces: run.namespaces, input: run.input,
+  }, run.xml);
+}
+
 /** The splitter's messages go to the Gather step, as in an iFlow's Splitter → … → Gather. */
 export function gatherSplitResult() {
   flow.gather.messages = (flow.splitResult?.messages ?? []).map((m: { body: string }) => m.body);
@@ -1060,6 +1086,11 @@ function openFlowStep(step: IflowStep) {
     flow.router = { routes: c.routes ?? [], throwException: !!c.throwException };
   } else if (step.type === 'filter') {
     flow.filter = { expression: c.expression ?? '', valueType: c.valueType ?? 'nodelist' };
+  } else if (step.type === 'converter') {
+    // The iFlow's lists become the tab's text fields (one entry per line).
+    flow.converter = { ...flow.converter, ...c,
+      namespaceMapping: Array.isArray(c.namespaceMapping) ? c.namespaceMapping.map((m: any) => `${m.prefix} = ${m.namespace}`).join('\n') : c.namespaceMapping ?? '',
+      arrayPaths: Array.isArray(c.arrayPaths) ? c.arrayPaths.join('\n') : c.arrayPaths ?? '' };
   } else if (step.type === 'gather') {
     // The messages stay: they come from the splitter, not from the iFlow.
     flow.gather = { ...flow.gather, messageType: c.messageType ?? 'sameXml', algorithm: c.algorithm ?? 'combine',

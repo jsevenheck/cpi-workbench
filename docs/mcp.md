@@ -78,7 +78,7 @@ server adds no function of its own.
 | `run_groovy` | Groovy, with the Script API and the project's `platform/` mocks, and the body type (`bodyType`). The runtime (1.x or 2.x) follows the script's imports unless given; `both` runs both. A custom function of a Message Mapping script takes `args` instead, as the Groovy tab's *Arguments*; the result's `mapping` holds the returned value or the output queue. |
 | `validate_xsd` | XSD. |
 | `evaluate_xpath` | XPath (1.0 or 3.1, with namespaces). |
-| `run_flow_step` | Flow Steps: a Content Modifier, Filter, Router, Splitter or Gather step from an iFlow (`iflowStep`: name or id, with `iflow` when several iFlows share it) or from a configuration (`step`). |
+| `run_flow_step` | Flow Steps: a Content Modifier, Filter, Router, Splitter, Gather or converter (JSON ↔ XML, XML ↔ CSV) step from an iFlow (`iflowStep`: name or id, with `iflow` when several iFlows share it) or from a configuration (`step`). |
 
 Without `runtime` or `camel`, a tool uses the app's default (Saxon-HE 9.9, Camel 3.14; Groovy from the
 script's imports), or the other runtime of that kind when the default is not installed, as the app does.

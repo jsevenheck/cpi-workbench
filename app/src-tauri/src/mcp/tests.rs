@@ -268,6 +268,13 @@ fn tools_run_on_the_engines() {
     let xp = c.ok("evaluate_xpath", json!({ "expression": "concat(/a/@x, '2')", "body": "<a x='1'/>" }));
     assert_eq!(xp["items"][0]["value"], "12", "{xp}");
 
+    // Converters: given directly, and from the iFlow (its {{RootName}} and namespace mapping).
+    let x2j = c.ok("run_flow_step", json!({ "body": "<a><b>1</b><b>2</b></a>",
+        "step": { "type": "converter", "config": { "conversion": "xmlToJson" } } }));
+    assert_eq!(x2j["body"], "{\"a\":{\"b\":[\"1\",\"2\"]}}", "{x2j}");
+    let j2x = c.ok("run_flow_step", json!({ "iflowStep": "JSON to XML", "body": "{\"x\":\"1\",\"y\":2}" }));
+    assert_eq!(j2x["body"], "<?xml version='1.0' encoding='UTF-8'?><Orders xmlns:ord=\"urn:orders\"><x>1</x><y>2</y></Orders>", "{j2x}");
+
     // Flow steps from the iFlow.
     let order = "<Order id=\"7\"><Item>a</Item><Item>b</Item><Item>c</Item></Order>";
     let cm = c.ok("run_flow_step", json!({ "iflowStep": "Set headers", "body": order, "headers": { "X-Trace": "1" } }));

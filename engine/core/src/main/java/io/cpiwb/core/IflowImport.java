@@ -148,6 +148,9 @@ public final class IflowImport {
             Map<String, String> props = properties(act);
             Json.Obj flowStep = FlowSteps.of(act, props, params);
             if (flowStep != null) {
+                if ("converter".equals(flowStep.get("type"))) {
+                    schemaFile(flowStep, flowRoot, projectRoot);
+                }
                 out.add(flowStep.with("iflow", flowRoot.getFileName().toString()));
                 continue;
             }
@@ -201,6 +204,22 @@ public final class IflowImport {
             out.add(FlowSteps.router(doc, gw, properties(gw), params).with("iflow", flowRoot.getFileName().toString()));
         }
         return out;
+    }
+
+    /** A CSV to XML converter's schema (/xsd/x.xsd in the iFlow's resources) as a project path. */
+    @SuppressWarnings("unchecked")
+    private static void schemaFile(Json.Obj step, Path flowRoot, Path projectRoot) throws IOException {
+        Map<String, Object> config = (Map<String, Object>) step.get("config");
+        String schema = Json.str(config, "schema", "");
+        if (schema.isBlank() || schema.contains("${") || schema.startsWith("pd:")) {
+            return; // set at runtime: the Flow Steps tab resolves ${...}; the Partner Directory is not simulated
+        }
+        Path p = resolve(flowRoot, schema);
+        if (p != null) {
+            config.put("schema", projectRoot.relativize(p).toString().replace('\\', '/'));
+        } else {
+            step.with("note", "The schema " + schema + " is not in the export.");
+        }
     }
 
     /** The iFlow's externalized parameters (src/main/resources/parameters.prop), if it has them. */

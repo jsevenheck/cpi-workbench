@@ -127,16 +127,21 @@ holds the returned value or the output queue in the same form." })),
     let mut step = obj(vec![
         ("iflowStep", json!({ "type": "string", "description": "Name or id of a step that project_info lists under iflowSteps. Use iflowStep or step." })),
         ("iflow", json!({ "type": "string", "description": "The iFlow of iflowStep, when several iFlows have a step with that name or id." })),
-        ("step", json!({ "type": "object", "description": "A step given directly (as edited in the Flow Steps tab): {\"type\": \"contentModifier\"|\"filter\"|\"router\"|\"splitter\"|\"gather\", \"config\": {...}}, config shaped as project_info shows it for iFlow steps.",
+        ("step", json!({ "type": "object", "description": "A step given directly (as edited in the Flow Steps tab): {\"type\": \"contentModifier\"|\"filter\"|\"router\"|\"splitter\"|\"gather\"|\"converter\", \"config\": {...}}, config shaped as project_info shows it for iFlow steps.",
             "properties": {
-                "type": { "type": "string", "enum": ["contentModifier", "filter", "router", "splitter", "gather"] },
+                "type": { "type": "string", "enum": ["contentModifier", "filter", "router", "splitter", "gather", "converter"] },
                 "config": { "type": "object", "description": "The tab's settings for the type (keys left out take the tab's defaults). \
 contentModifier: {headers: [row], properties: [row], bodyType: \"constant\"|\"expression\", body}, row = {action: \"Create\"|\"Delete\", name, \
 type: \"constant\"|\"header\"|\"property\"|\"xpath\"|\"expression\", value, datatype (e.g. \"java.lang.String\"), default}. \
 filter: {expression (XPath), valueType: \"string\"|\"integer\"|\"boolean\"|\"node\"|\"nodelist\"}. \
 router: {routes: [{name, expressionType: \"xml\"|\"nonxml\", condition, default: bool}], throwException: bool}. \
 splitter: {splitter: \"general\"|\"iterating\", expressionType: \"xpath\"|\"lineBreak\"|\"token\", expression, grouping, streaming: bool}. \
-gather: {messageType: \"sameXml\"|\"differentXml\"|\"plainText\", algorithm: \"combine\"|\"combineAtXPath\"|\"concatenate\", sourceXPath, targetXPath}." } },
+gather: {messageType: \"sameXml\"|\"differentXml\"|\"plainText\", algorithm: \"combine\"|\"combineAtXPath\"|\"concatenate\", sourceXPath, targetXPath}. \
+converter: {conversion: \"jsonToXml\"|\"xmlToJson\"|\"xmlToCsv\"|\"csvToXml\"; JSON/XML: useNamespaces, separator, \
+namespaceMapping ([{prefix, namespace}] or lines \"prefix = uri\"), addRootElement, rootElementName, rootNamespace (a prefix of namespaces), \
+suppressRoot, streaming, streamingElements: \"all\"|\"specific\", arrayPaths, outputEncoding; XML to CSV: sourcePath, fieldSeparator, \
+csvHeader: \"none\"|\"xml\", includeParent, parentPath, includeAttributes; CSV to XML: schema (project .xsd), targetPath, recordMarker, \
+fieldSeparator, firstLineHeader, headerMapping: \"xsd\"|\"csv\"}." } },
             "required": ["type", "config"], "additionalProperties": false })),
         ("messages", json!({ "type": "array", "items": { "type": "string" },
             "description": "Gather only: the bodies to gather, e.g. the messages a splitter returned." })),
@@ -167,7 +172,7 @@ gather: {messageType: \"sameXml\"|\"differentXml\"|\"plainText\", algorithm: \"c
             "Evaluates an XPath on the body, like the XPath tab. Returns the value or the selected nodes.",
             xpath, &["expression"], true),
         tool("run_flow_step", "Run a flow step",
-            "Runs a Content Modifier, Filter, Router, General or Iterating Splitter, or Gather step on a message, like the \
+            "Runs a Content Modifier, Filter, Router, General or Iterating Splitter, Gather or converter (JSON/XML/CSV) step on a message, like the \
              Flow Steps tab, from an iFlow of the project or from a config given here. Returns the output message(s), or \
              for a Router each route's result and the route taken. For an iFlow's script, XSLT or XML Validator step, \
              use run_groovy, run_xslt or validate_xsd with the step's file, function and profile from project_info.",

@@ -207,6 +207,18 @@ await page.getByLabel('Value Type').selectOption('nodelist');
 await page.getByRole('button', { name: 'Run step' }).click();
 await page.locator('.res h3', { hasText: '1 item(s) selected' }).waitFor({ timeout: 10000 })
   .catch(() => fail('Filter did not select the one item with qty > 1'));
+// Converter: XML to JSON on the sample body, the result back as input, then JSON to XML.
+await page.getByRole('tab', { name: 'Converter' }).click();
+await page.getByLabel('Converter', { exact: true }).selectOption('xmlToJson');
+await page.getByRole('button', { name: 'Run step' }).click();
+await page.locator('.res pre', { hasText: '{"Order":{"@id":"4711"' }).waitFor({ timeout: 10000 })
+  .catch(async () => fail('XML to JSON: ' + (await page.locator('.res').innerText()).slice(0, 300)));
+await page.locator('.res h3').getByRole('button', { name: 'Use as input' }).click();
+await page.getByLabel('Converter', { exact: true }).selectOption('jsonToXml');
+await page.getByRole('button', { name: 'Run step' }).click();
+await page.locator('.res pre', { hasText: "<?xml version='1.0' encoding='UTF-8'?><Order id=\"4711\">" }).waitFor({ timeout: 10000 })
+  .catch(async () => fail('JSON to XML: ' + (await page.locator('.res').innerText()).slice(0, 300)));
+await page.locator('.res h3').getByRole('button', { name: 'Use as input' }).click();
 // Jumping between the steps keeps each step's settings and result.
 await page.getByRole('tab', { name: 'Content Modifier' }).click();
 await page.locator('.res .row', { hasText: 'OrderId' }).filter({ hasText: '4711' }).waitFor({ timeout: 5000 })

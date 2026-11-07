@@ -4,8 +4,9 @@ CPI Workbench simulates SAP Integration Suite (Cloud Integration) steps locally:
 * XSLT Mapping on Saxon-HE 9.9 and 12, as GraalVM native images.
 * Groovy Script 1.x (Groovy 2.4.21, Camel 2.24.3) and 2.x (Groovy 4.0.29, Camel 3.14.7).
 * XSD validation and XPath.
-* Flow Steps: Content Modifier, Filter, Router, General / Iterating Splitter and Gather (Camel Simple on
-  the Groovy engines' Camel; XPath, filtering, splitting and gathering on the XML engines).
+* Flow Steps: Content Modifier, Filter, Router, General / Iterating Splitter, Gather and Converter (Camel Simple on
+  the Groovy engines' Camel; XPath, filtering, splitting, gathering and JSON / XML / CSV conversion on the XML engines).
+* Message Mapping functions (Groovy custom functions with `MappingContext` and `Output`), run on their own.
 
 The UI is Tauri 2 + Svelte 5 + Monaco. Everything runs offline; the app never connects to a tenant.
 

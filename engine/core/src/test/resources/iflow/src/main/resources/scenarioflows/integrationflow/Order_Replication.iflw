@@ -96,6 +96,30 @@
         <ifl:property><key>mappinguri</key><value>dir://mmap/src/main/resources/mapping/order.mmap</value></ifl:property>
       </bpmn2:extensionElements>
     </bpmn2:callActivity>
+    <!-- Converters with the keys seen in public iFlows (synthetic values). -->
+    <bpmn2:callActivity id="CallActivity_11" name="JSON to XML">
+      <bpmn2:extensionElements>
+        <ifl:property><key>componentVersion</key><value>1.1</value></ifl:property>
+        <ifl:property><key>activityType</key><value>JsonToXmlConverter</value></ifl:property>
+        <ifl:property><key>cmdVariantUri</key><value>ctype::FlowstepVariant/cname::JsonToXmlConverter/version::1.1.2</value></ifl:property>
+        <ifl:property><key>useNamespaces</key><value>true</value></ifl:property>
+        <ifl:property><key>jsonNamespaceSeparator</key><value>:</value></ifl:property>
+        <ifl:property><key>jsonNamespaceMapping</key><value>&lt;row&gt;&lt;cell&gt;ord&lt;/cell&gt;&lt;cell&gt;urn:orders&lt;/cell&gt;&lt;/row&gt;</value></ifl:property>
+        <ifl:property><key>addXMLRootElement</key><value>true</value></ifl:property>
+        <ifl:property><key>additionalRootElementName</key><value>{{RootName}}</value></ifl:property>
+      </bpmn2:extensionElements>
+    </bpmn2:callActivity>
+    <bpmn2:callActivity id="CallActivity_12" name="CSV to XML">
+      <bpmn2:extensionElements>
+        <ifl:property><key>componentVersion</key><value>1.4</value></ifl:property>
+        <ifl:property><key>activityType</key><value>CsvToXmlConverter</value></ifl:property>
+        <ifl:property><key>XML_Schema_File_Path</key><value>/xsd/order.xsd</value></ifl:property>
+        <ifl:property><key>XPath_Field_Location</key><value>Order/Item</value></ifl:property>
+        <ifl:property><key>Field_Separator_in_CSV</key><value>;</value></ifl:property>
+        <ifl:property><key>ignoreFirstLineAsHeader</key><value>true</value></ifl:property>
+        <ifl:property><key>headerMapping</key><value>mapHeadersToXSD</value></ifl:property>
+      </bpmn2:extensionElements>
+    </bpmn2:callActivity>
     <bpmn2:exclusiveGateway default="SequenceFlow_9" id="ExclusiveGateway_1" name="Check sender">
       <bpmn2:extensionElements>
         <ifl:property><key>activityType</key><value>ExclusiveGateway</value></ifl:property>

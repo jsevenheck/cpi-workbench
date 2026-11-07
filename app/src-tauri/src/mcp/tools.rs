@@ -95,7 +95,15 @@ pub fn definitions() -> Vec<Value> {
     let mut groovy = obj(vec![
         ("scriptPath", json!({ "type": "string", "description": "Project-relative .groovy file. Use scriptPath or script." })),
         ("script", json!({ "type": "string", "description": "The script source, if it is not in a file." })),
-        ("function", json!({ "type": "string", "default": "processData", "description": "The function the step calls (Script Function)." })),
+        ("function", json!({ "type": "string", "default": "processData", "description": "The function the step calls (Script Function), \
+or a custom function of a Message Mapping script (e.g. f(String, MappingContext) or f(String[], Output, MappingContext))." })),
+        ("args", json!({ "type": "array", "description": "Message Mapping functions only: the String and String[] arguments in order \
+(Output and MappingContext are passed by the simulator). A String argument is a string; a String[] argument is a list of contexts, \
+e.g. [[\"A\", \"B\"], [\"C\"]], whose entries are strings, {\"suppress\": true} or {\"xsiNil\": true}. The result's mapping \
+holds the returned value or the output queue in the same form." })),
+        ("execution", json!({ "type": "string", "enum": ["queue", "context"], "default": "queue",
+            "description": "Message Mapping functions with String[] arguments: queue (All values of a queue: one call) or context \
+(All values of a context: one call per context)." })),
     ]);
     message_properties(&mut groovy, true);
     groovy.insert("bodyType".into(), json!({ "type": "string", "enum": ["String", "byte[]", "InputStream"], "default": "String",
@@ -203,7 +211,7 @@ fn check_args(name: &str, args: &Args) -> Result<(), String> {
         let ok = match p["type"].as_str() {
             Some("string") => v.is_string(),
             Some("object") => v.is_object(),
-            Some("array") => v.as_array().is_some_and(|a| a.iter().all(Value::is_string)),
+            Some("array") => v.as_array().is_some_and(|a| p["items"]["type"] != "string" || a.iter().all(Value::is_string)),
             _ => true,
         };
         if !ok {
@@ -383,7 +391,8 @@ fn run_groovy(server: &Server, args: &Args) -> Result<Value, String> {
         "script": script,
         "function": str_arg(args, "function").unwrap_or("processData"),
         "input": message(server, args)?,
-        "options": { "bodyType": str_arg(args, "bodyType").unwrap_or("String") },
+        "options": { "bodyType": str_arg(args, "bodyType").unwrap_or("String"), "execution": str_arg(args, "execution").unwrap_or("queue") },
+        "args": args.get("args").cloned().unwrap_or(json!([])),
     });
     let mut r = on_runtimes(server, &pick(args, "runtime", GROOVY_RUNTIMES, detected), "groovy.run", params)?;
     if str_arg(args, "runtime").is_none() {

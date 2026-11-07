@@ -1,0 +1,14 @@
+{
+  "name": "Message Mapping function: getHeader through MappingContext",
+  "step": "groovy",
+  "profile": "groovy-1.x",
+  "script": "../../scripts/mapping-functions.groovy",
+  "function": "getHeader",
+  "args": ["OrderId"],
+  "input": {
+    "headers": { "OrderId": "4711" }
+  },
+  "expect": {
+    "returned": "4711"
+  }
+}

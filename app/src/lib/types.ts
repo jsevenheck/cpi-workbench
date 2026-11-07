@@ -70,4 +70,15 @@ export interface GroovyResult {
   runMs?: number;
   timing: { compileMs: number; cached: boolean; totalMs: number };
   engine: { profile: string; groovy: string; camel: string; java: string; scriptApi: string };
+  /** Signatures of the script's Message Mapping functions. */
+  functions?: string[];
+  /** Set when the function is a Message Mapping function. */
+  mapping?: {
+    function: string;
+    signature: string;
+    parameters: string[];
+    execution?: 'single' | 'queue' | 'context';
+    returned?: string | null;
+    queue?: (string | null | { suppress: true } | { xsiNil: true })[][];
+  };
 }

@@ -31,6 +31,39 @@ async fn engine_profiles(state: State<'_, AppState>) -> Result<Vec<String>, Stri
         .map_err(|e| e.to_string())
 }
 
+const RELEASES_PAGE: &str = "https://github.com/jsevenheck/cpi-workbench/releases/";
+
+/// A release page of this repository, in characters no shell or opener treats specially.
+fn is_release_page(url: &str) -> bool {
+    url.strip_prefix(RELEASES_PAGE)
+        .is_some_and(|rest| rest.chars().all(|c| c.is_ascii_alphanumeric() || "./_-".contains(c)) && !rest.contains(".."))
+}
+
+/// Opens a release page in the default browser (*Check for updates*). Only this repository's release
+/// pages, so the webview cannot open anything else; the system's own opener, no extra crate.
+#[tauri::command]
+fn open_release_page(url: String) -> Result<(), String> {
+    if !is_release_page(&url) {
+        return Err(format!("Not a release page of CPI Workbench: {url}"));
+    }
+    let mut cmd = if cfg!(windows) {
+        let mut c = std::process::Command::new("rundll32");
+        c.args(["url.dll,FileProtocolHandler", &url]);
+        c
+    } else if cfg!(target_os = "macos") {
+        let mut c = std::process::Command::new("open");
+        c.arg(&url);
+        c
+    } else {
+        let mut c = std::process::Command::new("xdg-open");
+        c.arg(&url);
+        c
+    };
+    let mut child = cmd.spawn().map_err(|e| format!("Could not open the browser: {e}"))?;
+    std::thread::spawn(move || child.wait());
+    Ok(())
+}
+
 pub fn run() {
     let context = tauri::generate_context!();
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -56,7 +89,7 @@ pub fn run() {
             });
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![engine_call, engine_profiles])
+        .invoke_handler(tauri::generate_handler![engine_call, engine_profiles, open_release_page])
         .build(context)
         .expect("error while building CPI Workbench");
     app.run(|handle, event| {
@@ -86,5 +119,19 @@ fn user_cache_dir() -> Option<std::path::PathBuf> {
         env("HOME").map(|h| h.join("Library").join("Caches"))
     } else {
         env("XDG_CACHE_HOME").filter(|p| p.is_absolute()).or_else(|| env("HOME").map(|h| h.join(".cache")))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn opens_release_pages_only() {
+        assert!(super::is_release_page("https://github.com/jsevenheck/cpi-workbench/releases/tag/v0.3.0"));
+        assert!(super::is_release_page("https://github.com/jsevenheck/cpi-workbench/releases/"));
+        for bad in ["https://github.com/jsevenheck/cpi-workbench/releases/tag/v1 & calc", "https://example.com/",
+                    "https://github.com/jsevenheck/cpi-workbench/releases/../../other", "file:///etc/passwd",
+                    "https://github.com/jsevenheck/cpi-workbench/releases/tag/\"x\""] {
+            assert!(!super::is_release_page(bad), "{bad}");
+        }
     }
 }

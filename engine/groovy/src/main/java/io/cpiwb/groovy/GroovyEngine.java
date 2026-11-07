@@ -154,7 +154,7 @@ public final class GroovyEngine implements RpcHandler {
                 }
             }
             params.put("input", input);
-            for (String k : List.of("options", "platform", "classpath")) {
+            for (String k : List.of("options", "platform", "classpath", "args")) {
                 if (tc.get(k) != null) {
                     params.put(k, tc.get(k));
                 }

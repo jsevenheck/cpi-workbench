@@ -55,6 +55,7 @@ import java.util.Map;
  * Simulates the Cloud Integration <em>Groovy Script</em> step: compiles the script with the
  * profile's Groovy version, calls the configured function with a CPI {@code Message} backed by a
  * Camel exchange and reports body, headers, properties, MPL entries, console output and errors.
+ * A custom function of a Message Mapping script runs with arguments instead ({@link MappingFunction}).
  */
 public final class ScriptRunner {
 
@@ -120,11 +121,20 @@ public final class ScriptRunner {
         }
         double compileMs = (System.nanoTime() - tc) / 1_000_000.0;
 
-        Method fn = findFunction(scriptClass, function);
-        if (fn == null) {
+        List<String> mappingFunctions = MappingFunction.list(scriptClass);
+        result.with("functions", mappingFunctions);
+        MappingFunction mapping = MappingFunction.find(scriptClass, function);
+        Method fn = mapping != null ? null : findFunction(scriptClass, function);
+        if (fn == null && mapping == null) {
             diags.add(Diagnostic.error("Function '" + function + "' with one parameter was not found in the script. "
-                    + "The Groovy Script step calls " + function + "(message)."));
+                    + "The Groovy Script step calls " + function + "(message)."
+                    + (mappingFunctions.isEmpty() ? "" : " The script has Message Mapping functions: "
+                    + String.join(", ", mappingFunctions) + ". Enter one of their names as the function to run it.")));
             return finish(result, false, "compile", diags, null, null, platform, "", t0, compileMs, cached, null);
+        }
+        if (mapping != null && "v2".equals(apiVersion)) {
+            diags.add(Diagnostic.warning("SAP's patch notes (software increment 2602) say that Groovy Script version 2 "
+                    + "is not supported in Message Mappings; run this function on Groovy Script 1.x."));
         }
 
         // ---- build the message
@@ -134,14 +144,21 @@ public final class ScriptRunner {
         exchange.getIn().setBody(inputBody(in, bodyType));
         exchange.getIn().getHeaders().putAll(in.getHeaders());
         exchange.getProperties().putAll(in.getProperties());
-        MessageSupport<?> message = newMessage(fn.getParameterTypes()[0], exchange, diags);
-        message.setAttachments(attachments(Json.obj(req, "input")));
-        List<SoapHeader> inSoap = soapHeaders(Json.obj(req, "input"));
-        if (message instanceof com.sap.gateway.ip.core.customdev.util.Message) {
-            ((com.sap.gateway.ip.core.customdev.util.Message) message).setSoapHeaders(inSoap);
-        } else if (!inSoap.isEmpty()) {
-            diags.add(Diagnostic.info("The input SOAP headers are not passed to the script: the Script API v2 Message "
-                    + "has no getSoapHeaders()."));
+        MessageSupport<?> message = null;
+        if (mapping == null) {
+            message = newMessage(fn.getParameterTypes()[0], exchange, diags);
+            message.setAttachments(attachments(Json.obj(req, "input")));
+            List<SoapHeader> inSoap = soapHeaders(Json.obj(req, "input"));
+            if (message instanceof com.sap.gateway.ip.core.customdev.util.Message) {
+                ((com.sap.gateway.ip.core.customdev.util.Message) message).setSoapHeaders(inSoap);
+            } else if (!inSoap.isEmpty()) {
+                diags.add(Diagnostic.info("The input SOAP headers are not passed to the script: the Script API v2 Message "
+                        + "has no getSoapHeaders()."));
+            }
+        }
+        Json.Obj mappingResult = mapping == null ? null : mapping.describe();
+        if (mappingResult != null) {
+            result.with("mapping", mappingResult);
         }
 
         // ---- run
@@ -163,7 +180,12 @@ public final class ScriptRunner {
             System.setErr(capture);
             Thread.currentThread().setContextClassLoader(scriptClass.getClassLoader());
             Script script = InvokerHelper.createScript(scriptClass, binding);
-            returned = script.invokeMethod(function, new Object[] {message});
+            if (mapping != null) {
+                mapping.call(script, Json.arr(req, "args"), Json.str(options, "execution", "queue"), exchange, diags,
+                        mappingResult);
+            } else {
+                returned = script.invokeMethod(function, new Object[] {message});
+            }
         } catch (Throwable e) {
             ok = false;
             diags.add(runtimeDiagnostic(e, className));

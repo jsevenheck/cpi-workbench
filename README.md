@@ -33,6 +33,7 @@ it has not been checked against a tenant yet ([Fidelity](docs/fidelity.md)).
 * Compile and runtime errors point to the script line; `println` output is captured.
 * The editor completes SAP's Script API (`message.`, `messageLog.`, `ITApiFactory.`) for 1.x or 2.x.
 * Groovy 1.x → 2.x differences surface for real (e.g. `groovy.util.XmlSlurper` no longer exists in Groovy 4).
+* **Message Mapping functions** run on their own: `MappingContext`, and `Output` with queues and context changes.
 
 **Flow Steps**
 
@@ -49,7 +50,8 @@ it has not been checked against a tenant yet ([Fidelity](docs/fidelity.md)).
   (XSLT, Groovy, XSD, XPath, Flow Steps) on the simulator while it writes mappings and scripts. The
   installed app brings it; the app window does not need to be open.
 
-Everything runs locally; the app never connects to a tenant.
+Everything runs locally; the app never connects to a tenant. Apart from your own scripts, the only
+network request is *Check for updates* in the ⚙ menu, to github.com, when you click it.
 
 ![XSLT view](docs/images/screenshot-xslt.png)
 

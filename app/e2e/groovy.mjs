@@ -120,6 +120,28 @@ await page.locator('.tree .file', { hasText: 'route-by-partner.groovy' }).click(
 await page.locator('section.script h2', { hasText: 'route-by-partner.groovy' }).waitFor({ timeout: 10000 });
 if ((await page.getByLabel('Function name').inputValue()) !== 'processData') fail('function name kept from the previous script');
 
+// 4d) Message Mapping functions: arguments instead of a body, the output queue as the result.
+await page.locator('.tree .file', { hasText: 'mapping-queue/case.json' }).click();
+await page.locator('section.output pre', { hasText: '["2"]\n["1"]\n["0"]' }).waitFor({ timeout: 20000 })
+  .catch(async () => fail('mapping queue: ' + (await page.locator('section.output').innerText()).slice(0, 400)));
+if (!(await page.getByLabel('Argument 1').inputValue()).includes('"Multi Print"')) fail('mapping argument from the case');
+if ((await page.getByLabel('Execution type').inputValue()) !== 'queue') fail('execution type from the case');
+if (shots) await page.screenshot({ path: path.join(shots, 'g3c-mapping-queue.png') });
+await page.getByLabel('Execution type').selectOption('context');
+// One call per context: each call counts its own context, the calls are joined by context changes.
+await page.locator('section.output pre', { hasText: '["2"]\n["1"]\n["0"]' }).waitFor({ timeout: 20000 })
+  .catch(() => fail('mapping queue per context'));
+await page.locator('.tree .file', { hasText: 'mapping-get-header/case.json' }).click();
+await page.locator('section.output pre', { hasText: '4711' }).waitFor({ timeout: 20000 })
+  .catch(async () => fail('mapping returned value: ' + (await page.locator('section.output').innerText()).slice(0, 400)));
+await page.getByLabel('Argument 1').fill('Missing');
+await page.locator('section.output .pad .hint', { hasText: 'null' }).waitFor({ timeout: 20000 })
+  .catch(() => fail('getHeader of a missing header is not null'));
+// Opening a script starts with processData again, so the Body tab is back.
+await page.locator('.tree .file', { hasText: 'route-by-partner.groovy' }).click();
+await page.locator('section.input').getByRole('tab', { name: 'Body' }).waitFor({ timeout: 10000 })
+  .catch(() => fail('no Body tab after opening a script'));
+
 // 5) A file from inputs/ opens as the Groovy input body.
 fs.mkdirSync(path.join(project, 'inputs'), { recursive: true });
 fs.writeFileSync(path.join(project, 'inputs/g-input.xml'), '<Order id="g-input-1"/>\n');

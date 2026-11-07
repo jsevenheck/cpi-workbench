@@ -71,6 +71,16 @@ Download the installer for your platform from the
   also with `log?.`) and `ITApiFactory.`, the editor lists the methods of SAP's Script API with their
   parameters, for the script's API version (v1 or v2 imports). The editor has no type information, so
   other variable names get no suggestions. Ctrl+Space opens the list again.
+* **Message Mapping functions:** enter the name of a custom function of a mapping script under
+  **fn** (the list offers the script's functions), such as `def String getHeader(String name,
+  MappingContext context)` or `def void f(String[] values, Output output, MappingContext context)`.
+  The input pane then shows **Arguments** instead of the body: a text field per `String`, and per
+  `String[]` one context per line as a JSON array (`["A", "B"]`; `{"suppress": true}` and
+  `{"xsiNil": true}` stand for SUPPRESS and xsi:nil). For `String[]` functions, *Execution type*
+  picks *All values of a queue* or *All values of a context*. **Result** shows the returned value
+  or the output queue in the same form; `MappingContext` reads and sets the Headers and Properties
+  tabs. The mapping itself (`.mmap`) is not simulated; SAP does not support Groovy Script 2.x in
+  Message Mappings, so use 1.x ([Fidelity](fidelity.md)).
 * **Lint** shows hints about what breaks when a script moves from 1.x to 2.x:
   * `XmlSlurper` or `XmlParser` used without a `groovy.xml` import,
   * Script API v1 imports or v1-only methods in a 2.x step,
@@ -94,6 +104,10 @@ first time. The Windows `setup.exe` installs per user and needs no admin rights;
 per machine and needs admin rights.
 
 The Groovy runtime starts only when the Groovy or Flow Steps tab is used and stops after 10 idle minutes.
+
+**⚙** (top right) shows the installed version. **Check for updates** asks github.com for the latest
+release and links to its page if it is newer; download and install it from there. Apart from your
+own scripts, this is the app's only network request, and it is made only when you click.
 
 ## Coding agents (MCP)
 

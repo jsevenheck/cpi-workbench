@@ -12,6 +12,7 @@ runtime profiles.
 | `fingerprint.xsl` | XSLT Mapping 1.2+ | Saxon edition/version, supported features, localisation of `format-date` (Q-X1) |
 | `probe-platform-v1.groovy` | Groovy Script **1.x** | Partner Directory and Keystore behaviour for entries that do not exist, plus the real method lists (Q-P1) |
 | `prepare-xslt-probe.groovy` + `probe-xslt-behaviour.xsl` | Groovy 1.x, then XSLT Mapping | Header vs. property precedence, Java→XDM types, missing params, `setHeader` return value (Q-X2 … Q-X5) |
+| `probe-mapping-v1.groovy` | Custom function in a **Message Mapping** | Groovy and Java version of mapping scripts, the classes and methods behind `MappingContext` and `Output`, and how a queue reaches a function: context changes and SUPPRESS in the input array (Q-M1) |
 
 ## How to run
 
@@ -27,6 +28,15 @@ runtime profiles.
 4. iFlow **Probe_XSLT_Fingerprint**: `HTTPS sender` → `XSLT Mapping: fingerprint.xsl` → end.
 5. iFlow **Probe_Platform**: `HTTPS sender` → `Groovy Script 1.x: probe-platform-v1.groovy` → end.
    It only looks up names that cannot exist; no Partner Directory content or keys are needed.
+
+6. iFlow **Probe_Mapping**: `HTTPS sender` → `Message Mapping` → end. Source and target can be any
+   XML schemas with a repeating field in a repeating group and one string field, e.g. source
+   `<Root><Group><Value/>…</Group>…</Root>`, target `<Result><Info/></Result>`. Add
+   `probe-mapping-v1.groovy` as the mapping's script (Groovy Script 1.x), map `Value` with its
+   context set to `Root` through `describeQueue` to `Info`, and post a body such as
+   `<Root><Group><Value>a</Value><Value>b</Value></Group><Group><Value>c</Value></Group></Root>`.
+   `Info` holds the JSON. If the mapping does not deploy or the function is not offered, the error
+   message is valuable too. The baseline used the queue `[["a","b"],["c",{"suppress":true}]]`.
 
 Send the response bodies (or attach them to an issue). Nothing in them is confidential beyond
 version numbers and the tenant's default timezone/locale.

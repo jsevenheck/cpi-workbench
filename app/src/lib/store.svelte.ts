@@ -1,5 +1,6 @@
 import { call, openProject, closeProject as closeEngineProject, availableProfiles, DEFAULT_PROFILE, type Profile, type ProfileInfo } from './engine';
 import type { Diagnostic, FileEntry, GroovyResult, Row, XsltResult } from './types';
+import { argText, mappingArgs } from './queue';
 import { toRows } from './rows';
 import { pathKey } from './paths';
 import { resolveSimpleFunctions } from './simple';
@@ -149,6 +150,11 @@ export const groovy = $state({
   caseExtras: null as CaseExtras | null,
   compareOn: false,
   compare: null as CompareRun<GroovyResult> | null,
+  /** A Message Mapping function, known from the last run of this function; null for processData(message). */
+  mapping: null as { function: string; parameters: string[] } | null,
+  /** Text of each String / String[] argument of the mapping function (queues: one context per line). */
+  args: [] as string[],
+  execution: 'queue' as 'queue' | 'context',
 });
 
 export interface CaseExtras {
@@ -428,6 +434,8 @@ export async function openFile(path: string, opts: OpenOptions = {}) {
       groovy.casePath = null;
       groovy.caseExtras = null;
       groovy.functionName = opts.functionName ?? 'processData';
+      groovy.mapping = null;
+      groovy.args = [];
       if (opts.profile && hasProfile(opts.profile)) app.groovyProfile = opts.profile;
       else if (content.includes('com.sap.it.script.v2.api') && hasProfile('groovy-2.x')) app.groovyProfile = 'groovy-2.x';
       else if (content.includes('com.sap.gateway.ip.core.customdev.util') && hasProfile('groovy-1.x')) app.groovyProfile = 'groovy-1.x';
@@ -714,14 +722,16 @@ function xsltRequest() {
 }
 
 function groovyRequest() {
+  const fn = groovy.functionName || 'processData';
   return {
     script: { content: groovy.script, path: groovy.scriptPath ?? 'script.groovy' },
-    function: groovy.functionName || 'processData',
+    function: fn,
+    args: groovy.mapping?.function === fn ? mappingArgs(groovy.mapping.parameters, groovy.args) : [],
     input: {
       body: groovy.body, headers: clean(groovy.headers), properties: clean(groovy.properties),
       attachments: groovy.caseExtras?.attachments, soapHeaders: groovy.caseExtras?.soapHeaders,
     },
-    options: { bodyType: groovy.bodyType },
+    options: { bodyType: groovy.bodyType, execution: groovy.execution },
     platform: groovy.caseExtras?.platform,
     caseDir: groovy.caseExtras?.dir,
   };
@@ -785,6 +795,9 @@ export async function runGroovy() {
     if (seq === groovySeq) {
       groovy.result = r;
       groovy.compare = c;
+      // A compile error says nothing about the function; keep what the last run found.
+      if (r.mapping) groovy.mapping = { function: r.mapping.function, parameters: r.mapping.parameters };
+      else if (r.failedPhase !== 'compile') groovy.mapping = null;
     }
   } catch (e) {
     if (seq === groovySeq) fail(e);
@@ -1063,6 +1076,9 @@ async function loadGroovyCase(path: string, dir: string, tc: any) {
   groovy.properties = toRows(tc.input?.properties);
   groovy.functionName = tc.function ?? 'processData';
   groovy.bodyType = tc.options?.bodyType ?? 'String';
+  groovy.args = (tc.args ?? []).map(argText);
+  groovy.execution = tc.options?.execution === 'context' ? 'context' : 'queue';
+  groovy.mapping = null;
   if (tc.profile && hasProfile(tc.profile)) app.groovyProfile = tc.profile;
   const extras: CaseExtras = { dir, attachments: tc.input?.attachments, soapHeaders: tc.input?.soapHeaders, platform: tc.platform };
   groovy.caseExtras = extras.attachments || extras.soapHeaders || extras.platform ? extras : null;

@@ -12,10 +12,10 @@
 
 Automated checks:
 
-* Engine tests (`mvn -f engine/pom.xml verify`): core 12, XSLT/XSD/XPath/Splitter/Filter/Gather 53 per Saxon version (14 of them on project boundaries, 8 splitter cases from SAP's examples, 5 Filter and 3 Gather tests), Groovy 39 per script version (4 Camel Simple, 4 Content Modifier, 8 Message Mapping functions).
+* Engine tests (`mvn -f engine/pom.xml verify`): core 12, XSLT/XSD/XPath/Splitter/Filter/Gather 53 per Saxon version (14 of them on project boundaries, 8 splitter cases from SAP's examples, 5 Filter and 3 Gather tests), Groovy 38 per script version (4 Camel Simple, 4 Content Modifier, 7 Message Mapping functions).
 * Regression test cases (`testdata/regression-project`): 8.
 * Browser end-to-end tests: `app/e2e/smoke.mjs` (XML tools) and `groovy.mjs` (Groovy, Flow Steps and the iFlow import, which CI runs with the iFlow fixture as a zip).
-* UI unit tests (`npm --prefix app test`): the JSON, XSLT and Groovy formatters, test-case rows, path comparison, the Script API completions (checked against the clean-room Java classes) the Filter's `function:simple(...)` substitution, Message Mapping queues and the update check's SemVer comparison.
+* UI unit tests (`npm --prefix app test`): the JSON, XSLT and Groovy formatters, test-case rows, path comparison, the Script API completions (checked against the clean-room Java classes), the Filter's `function:simple(...)` substitution, Message Mapping arguments and the update check's SemVer comparison.
 * CI runs the engine tests on Linux, Windows and macOS, the browser e2e tests on Linux and Windows, and the shell tests on all three before it builds the installers. All of them passed on Windows and macOS runners for the first time on 2026-10-25 (`d237e25`). macOS runs on `macos-26` (GitHub deprecated `macos-14`); the native engines are built for macOS 11 and CI checks that.
 
 ## By area
@@ -28,7 +28,7 @@ Automated checks:
 | Flow Steps: Content Modifier, Filter, Router, General / Iterating Splitter, Gather (with Camel Simple) | ≈ 80 % | `=`, `and`, `or` are rewritten to Camel's spelling on an assumption (F35). Splitter rules are inferred from SAP's examples. Gather's Combine at XPath has no SAP example (an assumption); Zip and Tar are not simulated. Number Range and External Parameter sources raise `UnsupportedInSimulator`; variables use their default. No probe yet, no CLI command, no test-case step. |
 | Groovy Script 1.x (Groovy 2.4.21, Camel 2.24.3, Script API v1) | ≈ 90 % | Overloads that take Camel's `Attachment` type. Camel 3.14 variant in case the fingerprint shows it (F30). |
 | Groovy Script 2.x (Groovy 4.0.29, Camel 3.14.7, Script API v2) | ≈ 90 % | ProcessDirect raises `UnsupportedInSimulator`. Methods the runtime class may have beyond the interface. |
-| Message Mapping functions (`MappingContext`, `Output`) | ≈ 80 % | The function runs on its own; `.mmap` is out of scope. The execution type is chosen by hand, the per-context join and the marker strings are assumptions, a single-value function is called once (not per value), and the Groovy version is not known (Q-M1, `probe-mapping-v1.groovy`). |
+| Message Mapping functions (`MappingContext`, `Output`) | ≈ 80 % | The function runs on its own; `.mmap` is out of scope. The execution type follows the signature as community guides describe CPI (F44, not verified); the per-context join and the marker strings are assumptions, a single-value function is called once (not per value), and the Groovy version is not known (Q-M1, `probe-mapping-v1.groovy`). |
 | MPL, console, API call log | ≈ 95 % | — |
 | Platform API mocks | ≈ 85 % | Data Store (no public API). Number ranges count per run only. OAuth2 tokens are fixed values. Services outside `generic.api` other than Value Mapping. |
 | Test cases, runner, CLI | ≈ 90 % | No test case from an exported MPL trace (format unknown, F18). Cases are written by hand and run from the CLI; the app only opens them (the Tests tab and *Save as test* were removed on 2026-10-25 because they were not needed). |

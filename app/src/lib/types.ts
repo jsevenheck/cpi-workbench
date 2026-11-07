@@ -77,7 +77,7 @@ export interface GroovyResult {
     function: string;
     signature: string;
     parameters: string[];
-    execution?: 'single' | 'queue' | 'context';
+    execution?: 'single' | 'context';
     returned?: string | null;
     queue?: (string | null | { suppress: true } | { xsiNil: true })[][];
   };

@@ -112,16 +112,9 @@
     <div class="body">
       {#if inputTab === 'args' && mapping}
         <div class="pad args">
-          <p class="hint">Message Mapping function <code>{mapping.function}({mapping.parameters.join(', ')})</code>, run on its own.
+          <p class="hint">Message Mapping function <code>{mapping.function}({mapping.parameters.join(', ')})</code>, run on its own
+            {valueParams.includes('String[]') ? 'once per context (All values of a context)' : 'once (Single Values)'}.
             Output and MappingContext come from the simulator; MappingContext reads and sets the Headers and Properties tabs.</p>
-          {#if valueParams.includes('String[]')}
-            <label class="exec">Execution type
-              <select bind:value={groovy.execution} onchange={changed} aria-label="Execution type">
-                <option value="queue">All values of a queue (one call)</option>
-                <option value="context">All values of a context (one call per context)</option>
-              </select>
-            </label>
-          {/if}
           {#each valueParams as p, i}
             <label class="arg">Argument {i + 1} <span class="muted">{p}</span>
               {#if p === 'String'}
@@ -296,8 +289,8 @@
   .fn, .bt { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--muted); }
   .fn input { width: 140px; }
   .args { display: flex; flex-direction: column; gap: 8px; }
-  .arg, .exec { display: flex; flex-direction: column; gap: 3px; font-size: 11px; color: var(--muted); }
-  .arg input, .arg textarea, .exec select { font-size: 12px; }
+  .arg { display: flex; flex-direction: column; gap: 3px; font-size: 11px; color: var(--muted); }
+  .arg input, .arg textarea { font-size: 12px; }
   .arg textarea { resize: vertical; }
   .badge { font-size: 10px; padding: 1px 6px; border-radius: 8px; margin-left: 6px; text-transform: uppercase; background: var(--surface); }
   .badge.ok { background: var(--ok-bg); color: var(--ok); }

@@ -12,17 +12,7 @@ def String setProperty(String name, String value, MappingContext context) {
     return value
 }
 
-// All values of a queue: the number of values in each context.
+// All values of a context (String[] arguments, Output): called once per context.
 def void countPerContext(String[] values, Output output, MappingContext context) {
-    int n = 0
-    for (String v : values) {
-        if (output.isContextChange(v)) {
-            output.addValue(n)
-            output.addContextChange()
-            n = 0
-        } else if (!output.isSuppress(v)) {
-            n++
-        }
-    }
-    output.addValue(n)
+    output.addValue(values.count { !output.isSuppress(it) })
 }

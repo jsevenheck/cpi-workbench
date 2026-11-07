@@ -1,10 +1,9 @@
 package com.sap.it.api.mapping;
 
 /**
- * The result of a custom function with the execution type "All values of a context" or "All values of
- * a queue". Methods follow SAP's published Javadoc of the Cloud Integration API
- * ({@code com.sap.it.api.mapping}): {@code isContextChange(a[i])} finds context changes in an input
- * array.
+ * The result of a custom function with the execution type "All values of a context" (SAP's Javadoc
+ * also names "All values of a queue", which community guides say CPI does not offer). Methods follow
+ * SAP's published Javadoc of the Cloud Integration API ({@code com.sap.it.api.mapping}).
  */
 public interface Output {
 

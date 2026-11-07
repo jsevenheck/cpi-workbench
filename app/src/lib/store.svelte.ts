@@ -154,7 +154,6 @@ export const groovy = $state({
   mapping: null as { function: string; parameters: string[] } | null,
   /** Text of each String / String[] argument of the mapping function (queues: one context per line). */
   args: [] as string[],
-  execution: 'queue' as 'queue' | 'context',
 });
 
 export interface CaseExtras {
@@ -731,7 +730,7 @@ function groovyRequest() {
       body: groovy.body, headers: clean(groovy.headers), properties: clean(groovy.properties),
       attachments: groovy.caseExtras?.attachments, soapHeaders: groovy.caseExtras?.soapHeaders,
     },
-    options: { bodyType: groovy.bodyType, execution: groovy.execution },
+    options: { bodyType: groovy.bodyType },
     platform: groovy.caseExtras?.platform,
     caseDir: groovy.caseExtras?.dir,
   };
@@ -787,6 +786,8 @@ export async function runGroovy() {
   groovy.running = true;
   app.error = '';
   try {
+    // A mapping function's parameters are known only after a run; until then its arguments cannot be sent.
+    const known = groovy.mapping?.function === (groovy.functionName || 'processData');
     const params = groovyRequest();
     const [r, c] = await Promise.all([
       call<GroovyResult>('groovy.run', params, app.groovyProfile),
@@ -796,8 +797,10 @@ export async function runGroovy() {
       groovy.result = r;
       groovy.compare = c;
       // A compile error says nothing about the function; keep what the last run found.
-      if (r.mapping) groovy.mapping = { function: r.mapping.function, parameters: r.mapping.parameters };
-      else if (r.failedPhase !== 'compile') groovy.mapping = null;
+      if (r.mapping) {
+        groovy.mapping = { function: r.mapping.function, parameters: r.mapping.parameters };
+        if (!known && groovy.args.some((a) => a?.trim())) return void runGroovy();
+      } else if (r.failedPhase !== 'compile') groovy.mapping = null;
     }
   } catch (e) {
     if (seq === groovySeq) fail(e);
@@ -1077,7 +1080,6 @@ async function loadGroovyCase(path: string, dir: string, tc: any) {
   groovy.functionName = tc.function ?? 'processData';
   groovy.bodyType = tc.options?.bodyType ?? 'String';
   groovy.args = (tc.args ?? []).map(argText);
-  groovy.execution = tc.options?.execution === 'context' ? 'context' : 'queue';
   groovy.mapping = null;
   if (tc.profile && hasProfile(tc.profile)) app.groovyProfile = tc.profile;
   const extras: CaseExtras = { dir, attachments: tc.input?.attachments, soapHeaders: tc.input?.soapHeaders, platform: tc.platform };

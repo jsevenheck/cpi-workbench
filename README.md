@@ -33,7 +33,7 @@ it has not been checked against a tenant yet ([Fidelity](docs/fidelity.md)).
 * Compile and runtime errors point to the script line; `println` output is captured.
 * The editor completes SAP's Script API (`message.`, `messageLog.`, `ITApiFactory.`) for 1.x or 2.x.
 * Groovy 1.x → 2.x differences surface for real (e.g. `groovy.util.XmlSlurper` no longer exists in Groovy 4).
-* **Message Mapping functions** run on their own: `MappingContext`, and `Output` with queues and context changes.
+* **Message Mapping functions** run on their own: single values, or all values of a context with `Output`; `MappingContext` reads headers and properties.
 
 **Flow Steps**
 

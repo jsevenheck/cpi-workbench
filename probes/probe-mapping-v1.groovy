@@ -5,10 +5,11 @@ import groovy.json.JsonOutput
 /*
  * Probe Q-M1: how does a Message Mapping call a script's custom function? Assign this script to a
  * Message Mapping (Groovy Script 1.x: SAP's patch notes say version 2 is not supported in Message
- * Mappings) and map a repeating source field, with its context set to the root, through
- * describeQueue to one target field (see probes/README.md). The target field then holds a JSON
- * document: runtime versions, the classes and methods behind MappingContext and Output, and each
- * input entry with its class, text and what Output.isContextChange / isSuppress / isXSINIL say.
+ * Mappings) and map a repeating source field through describeQueue to a repeating target field (see
+ * probes/README.md). Each call adds one JSON document: runtime versions, the classes and methods
+ * behind MappingContext and Output, and each input entry with its class, text and what
+ * Output.isContextChange / isSuppress / isXSINIL say. One document per source context means one call
+ * per context ("All values of a context"); context changes inside the entries would mean a queue.
  */
 def void describeQueue(String[] values, Output output, MappingContext context) {
     def safe = { Closure c -> try { c() } catch (Throwable t) { 'unavailable: ' + t.getClass().getName() } }

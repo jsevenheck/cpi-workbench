@@ -181,8 +181,7 @@ public final class ScriptRunner {
             Thread.currentThread().setContextClassLoader(scriptClass.getClassLoader());
             Script script = InvokerHelper.createScript(scriptClass, binding);
             if (mapping != null) {
-                mapping.call(script, Json.arr(req, "args"), Json.str(options, "execution", "queue"), exchange, diags,
-                        mappingResult);
+                mapping.call(script, Json.arr(req, "args"), exchange, diags, mappingResult);
             } else {
                 returned = script.invokeMethod(function, new Object[] {message});
             }

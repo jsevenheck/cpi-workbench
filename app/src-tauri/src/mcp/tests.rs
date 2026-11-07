@@ -256,7 +256,7 @@ fn tools_run_on_the_engines() {
         "script": "def processData(m) { m.setBody(m.getBody() instanceof InputStream ? 'stream' : 'other'); m }" }));
     assert_eq!(typed["output"]["body"], "stream", "the Groovy tab's Body type: {typed}");
     // A Message Mapping function with a queue argument, on 1.x (its imports are not v2).
-    let mm = c.ok("run_groovy", json!({ "function": "join", "args": [[["A", "B"], ["C"]]], "execution": "context",
+    let mm = c.ok("run_groovy", json!({ "function": "join", "args": [[["A", "B"], ["C"]]],
         "script": "import com.sap.it.api.mapping.*\n\
             def void join(String[] a, Output out, MappingContext c) { out.addValue(a.join('+')) }" }));
     assert_eq!(mm["runtime"], "groovy-1.x");

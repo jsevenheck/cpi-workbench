@@ -59,7 +59,6 @@ or `def void f(String[] a, Output output, MappingContext c)`, runs with `args` i
   "script": "../../scripts/mapping-functions.groovy",
   "function": "countPerContext",
   "args": [[["Multi Print", "Multi Color"], ["Power Scan", { "suppress": true }], []]],
-  "options": { "execution": "queue" },
   "input": { "headers": { "OrderId": "4711" } },
   "expect": { "queue": [["2"], ["1"], ["0"]] }
 }
@@ -68,8 +67,9 @@ or `def void f(String[] a, Output output, MappingContext c)`, runs with `args` i
 * `args` holds one entry per `String` or `String[]` parameter, in order; `Output` and
   `MappingContext` come from the simulator. A `String[]` argument is a list of contexts; an entry
   is a string, `{ "suppress": true }` or `{ "xsiNil": true }`. A flat list is one context.
-* `options.execution`: `queue` (*All values of a queue*, the default: one call, context changes
-  between the contexts) or `context` (*All values of a context*: one call per context).
+* The signature decides how the function is called: with `String` arguments once (*Single values*),
+  with `String[]` arguments once per context (*All values of a context*), which needs the same number
+  of contexts in every `String[]` argument.
 * `MappingContext` reads and sets the input's headers and properties; `expect.headers` and
   `expect.properties` check them as usual.
 * `expect.returned` is the returned value (a string or `null`); `expect.queue` the output queue in

@@ -13,17 +13,15 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * A custom function of a Message Mapping script, run on its own: {@code def String f(String a,
- * MappingContext context)} (execution type "Single Values"), or {@code def void f(String[] a, Output
- * output, MappingContext context)} ("All values of a context" or "All values of a queue").
- *
- * <p>Queues follow SAP's documentation of advanced user-defined functions (PI 7.31, plan S27): an
- * argument is a list of contexts; "queue" passes all contexts in one array with a context change
- * between two contexts (none at the start or the end); "context" calls the function once per context,
- * without context changes. That CPI's Groovy functions handle queues like PI's Java functions is an
- * assumption, and so is how "context" joins the calls (a context change after each call but the last).
- * Context changes, SUPPRESS and xsi:nil are marker strings of the simulator, compared by identity;
- * CPI's own marker values are not known.
+ * A custom function of a Message Mapping script, run on its own. The signature decides the execution
+ * type, as community guides describe CPI (plan F44; CPI has no "All values of a queue"):
+ * {@code def String f(String a, MappingContext context)} is "Single Values" (one call here; CPI calls
+ * it once per value), {@code def void f(String[] a, Output output, MappingContext context)} is "All
+ * values of a context": an argument is a list of contexts and the function is called once per context,
+ * without context changes in its arrays, as SAP's PI documentation describes the type (plan F42).
+ * Each call gets an Output of its own; joining the results with a context change is an assumption from
+ * that documentation. SUPPRESS and
+ * xsi:nil are marker strings of the simulator, compared by identity; CPI's own values are not known.
  */
 final class MappingFunction {
 
@@ -130,19 +128,16 @@ final class MappingFunction {
     // ---------------------------------------------------------------- run
 
     /** Calls the function and adds its result to {@code result} (from {@link #describe}). */
-    void call(Object script, List<Object> args, String execution, Exchange exchange, List<Diagnostic> diags,
-              Json.Obj result) throws Exception {
-        if (!"queue".equals(execution) && !"context".equals(execution)) {
-            throw new IllegalArgumentException("options.execution must be \"queue\" or \"context\", not \"" + execution + "\"");
-        }
+    void call(Object script, List<Object> args, Exchange exchange, List<Diagnostic> diags, Json.Obj result)
+            throws Exception {
         int values = (int) kinds.stream().filter(k -> k == Kind.VALUE || k == Kind.QUEUE).count();
         if (args.size() > values) {
             diags.add(Diagnostic.warning(args.size() + " arguments given, " + signature() + " takes " + values
                     + "; the rest are ignored."));
         }
         if (kinds.contains(Kind.OUTPUT) && method.getReturnType() != void.class) {
-            diags.add(Diagnostic.warning("A function with an Output parameter returns its values through Output. "
-                    + "SAP Community reports that CPI accepts such functions only with the return type void (not verified)."));
+            diags.add(Diagnostic.warning("A function with an Output parameter returns its values through Output; "
+                    + "community guides declare such functions void and report that CPI rejects other return types."));
         }
         if (kinds.contains(Kind.QUEUE) && !kinds.contains(Kind.OUTPUT)) {
             diags.add(Diagnostic.warning("The function takes String[] but has no Output parameter: its return value is "
@@ -175,36 +170,36 @@ final class MappingFunction {
             result.with("returned", r == null ? null : String.valueOf(r));
             return;
         }
-        int calls = 1;
-        if ("context".equals(execution)) {
-            calls = -1;
-            for (int i = 0; i < kinds.size(); i++) {
-                if (queues.get(i) != null) {
-                    int n = queues.get(i).size();
-                    if (calls >= 0 && n != calls) {
-                        throw new IllegalArgumentException("With \"All values of a context\" every String[] argument needs "
-                                + "the same number of contexts; they have " + calls + " and " + n + ".");
-                    }
-                    calls = n;
+        int calls = -1; // the number of contexts
+        for (int i = 0; i < kinds.size(); i++) {
+            if (queues.get(i) != null) {
+                int n = queues.get(i).size();
+                if (calls >= 0 && n != calls) {
+                    throw new IllegalArgumentException("Every String[] argument needs the same number of contexts "
+                            + "(the function is called once per context); they have " + calls + " and " + n + ".");
                 }
+                calls = n;
             }
-            calls = Math.max(calls, 1);
         }
+        calls = Math.max(calls, 1);
+        // Each call gets an Output of its own (so clear() drops only its values); the results are joined.
         Object returned = null;
         for (int c = 0; c < calls; c++) {
+            SimOutput own = new SimOutput();
+            returned = method.invoke(script, build(single, queues, c, own, context));
             if (c > 0) {
                 output.addContextChange();
             }
-            returned = method.invoke(script, build(single, queues, "context".equals(execution) ? c : -1, output, context));
+            output.entries.addAll(own.entries);
         }
-        result.with("execution", execution);
+        result.with("execution", "context");
         if (method.getReturnType() != void.class) {
             result.with("returned", returned == null ? null : String.valueOf(returned));
         }
         result.with("queue", output.toJson());
     }
 
-    /** Arguments of one call; {@code ctx} >= 0 passes that context only, -1 the whole queue. */
+    /** Arguments of one call: context {@code ctx} of each queue argument. */
     private Object[] build(List<Object> single, List<List<List<String>>> queues, int ctx, Output output, MappingContext context) {
         Object[] out = new Object[kinds.size()];
         for (int i = 0; i < kinds.size(); i++) {
@@ -213,19 +208,8 @@ final class MappingFunction {
                 case OUTPUT -> out[i] = output;
                 case CONTEXT -> out[i] = context;
                 case QUEUE -> {
-                    List<String> flat = new ArrayList<>();
-                    List<List<String>> q = queues.get(i);
-                    if (ctx >= 0) {
-                        flat.addAll(q.get(ctx));
-                    } else {
-                        for (int c = 0; c < q.size(); c++) {
-                            if (c > 0) {
-                                flat.add(CONTEXT_CHANGE);
-                            }
-                            flat.addAll(q.get(c));
-                        }
-                    }
-                    out[i] = method.getParameterTypes()[i] == Object[].class ? flat.toArray(new Object[0]) : flat.toArray(new String[0]);
+                    List<String> values = queues.get(i).get(ctx);
+                    out[i] = method.getParameterTypes()[i] == Object[].class ? values.toArray(new Object[0]) : values.toArray(new String[0]);
                 }
             }
         }

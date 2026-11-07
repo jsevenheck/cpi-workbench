@@ -10,11 +10,11 @@ of its version.
 
 - **Message Mapping functions** in the Groovy tab: a custom function of a mapping script, such as
   `getHeader(String, MappingContext)` or `f(String[], Output, MappingContext)`, runs on its own.
-  *Arguments* replace the body (queues as one context per line); *Result* shows the returned value
-  or the output queue with context changes, SUPPRESS and xsi:nil. `MappingContext` and `Output`
-  follow SAP's Javadoc; *All values of a queue* or *of a context* is chosen by hand. Test cases take
-  `args`, `options.execution`, `expect.returned` and `expect.queue`; the MCP tool `run_groovy` takes
-  `args` and `execution`. A script without `processData` now names its mapping functions.
+  *Arguments* replace the body (`String[]` arguments as one context per line); a `String[]` function
+  runs once per context (*All values of a context*). *Result* shows the returned value or the output
+  queue with context changes, SUPPRESS and xsi:nil. `MappingContext` and `Output` follow SAP's
+  Javadoc. Test cases take `args`, `expect.returned` and `expect.queue`; the MCP tool `run_groovy`
+  takes `args`. A script without `processData` now names its mapping functions.
   Graphical Message Mapping (`.mmap`) is still not simulated.
 - **Check for updates** in a new ⚙ menu (desktop app): shows the installed version, asks github.com
   for the latest release on click, and opens its page if it is newer. The app makes no request on its own.

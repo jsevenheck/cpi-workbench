@@ -76,8 +76,8 @@ Download the installer for your platform from the
   MappingContext context)` or `def void f(String[] values, Output output, MappingContext context)`.
   The input pane then shows **Arguments** instead of the body: a text field per `String`, and per
   `String[]` one context per line as a JSON array (`["A", "B"]`; `{"suppress": true}` and
-  `{"xsiNil": true}` stand for SUPPRESS and xsi:nil). For `String[]` functions, *Execution type*
-  picks *All values of a queue* or *All values of a context*. **Result** shows the returned value
+  `{"xsiNil": true}` stand for SUPPRESS and xsi:nil). A `String[]` function runs once per context
+  (*All values of a context*), a function with `String` arguments once. **Result** shows the returned value
   or the output queue in the same form; `MappingContext` reads and sets the Headers and Properties
   tabs. The mapping itself (`.mmap`) is not simulated; SAP does not support Groovy Script 2.x in
   Message Mappings, so use 1.x ([Fidelity](fidelity.md)).

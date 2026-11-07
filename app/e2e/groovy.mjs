@@ -121,16 +121,15 @@ await page.locator('section.script h2', { hasText: 'route-by-partner.groovy' }).
 if ((await page.getByLabel('Function name').inputValue()) !== 'processData') fail('function name kept from the previous script');
 
 // 4d) Message Mapping functions: arguments instead of a body, the output queue as the result.
-await page.locator('.tree .file', { hasText: 'mapping-queue/case.json' }).click();
+// One call per context: each call counts its own context, the calls are joined by context changes.
+await page.locator('.tree .file', { hasText: 'mapping-context/case.json' }).click();
 await page.locator('section.output pre', { hasText: '["2"]\n["1"]\n["0"]' }).waitFor({ timeout: 20000 })
   .catch(async () => fail('mapping queue: ' + (await page.locator('section.output').innerText()).slice(0, 400)));
 if (!(await page.getByLabel('Argument 1').inputValue()).includes('"Multi Print"')) fail('mapping argument from the case');
-if ((await page.getByLabel('Execution type').inputValue()) !== 'queue') fail('execution type from the case');
-if (shots) await page.screenshot({ path: path.join(shots, 'g3c-mapping-queue.png') });
-await page.getByLabel('Execution type').selectOption('context');
-// One call per context: each call counts its own context, the calls are joined by context changes.
-await page.locator('section.output pre', { hasText: '["2"]\n["1"]\n["0"]' }).waitFor({ timeout: 20000 })
-  .catch(() => fail('mapping queue per context'));
+if (shots) await page.screenshot({ path: path.join(shots, 'g3c-mapping-context.png') });
+await page.getByLabel('Argument 1').fill('["A", "B", "C"]');
+await page.locator('section.output pre', { hasText: '["3"]' }).waitFor({ timeout: 20000 })
+  .catch(() => fail('mapping argument typed in the tab'));
 await page.locator('.tree .file', { hasText: 'mapping-get-header/case.json' }).click();
 await page.locator('section.output pre', { hasText: '4711' }).waitFor({ timeout: 20000 })
   .catch(async () => fail('mapping returned value: ' + (await page.locator('section.output').innerText()).slice(0, 400)));

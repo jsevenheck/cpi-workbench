@@ -11,6 +11,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -270,5 +271,22 @@ class ConverterStepTest {
     @Test
     void unknownConversion() {
         assertTrue(error(convert("ediToXml", "", Json.o())).contains("Unknown conversion"));
+    }
+
+    @Test
+    void reviewEdgeCases() {
+        // Strict JSON numbers; the error names the place.
+        assertTrue(error(convert("jsonToXml", "{\"a\":01}", Json.o())).contains("must not start with 0"));
+        // A character XML does not allow is reported.
+        Map<String, Object> ctl = convert("jsonToXml", "{\"a\":\"\\u0001\"}", Json.o());
+        assertTrue(Json.write(ctl.get("diagnostics")).contains("U+0001"), () -> Json.write(ctl));
+        // A listed array interrupted by another element: the warning does not ask to list it.
+        Map<String, Object> run = convert("xmlToJson", "<a><b>1</b><c/><b>2</b></a>", Json.o().with("streaming", true)
+                .with("streamingElements", "specific").with("arrayPaths", "/a/b"));
+        assertTrue(Json.write(run.get("diagnostics")).contains("appears again after other elements"), () -> Json.write(run));
+        // An unknown encoding fails before any output.
+        Map<String, Object> enc = convert("xmlToJson", "<a/>", Json.o().with("outputEncoding", "bogus"));
+        assertFalse(Json.bool(enc, "ok", true));
+        assertNull(enc.get("body"));
     }
 }

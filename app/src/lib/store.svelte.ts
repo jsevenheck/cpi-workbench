@@ -211,6 +211,19 @@ export interface RouteResult {
   camel?: string;
 }
 
+/** JSON ↔ XML and XML ↔ CSV converters; mapping and array paths are text, one entry per line. */
+function converterDefaults() {
+  return {
+    conversion: 'xmlToJson' as 'jsonToXml' | 'xmlToJson' | 'xmlToCsv' | 'csvToXml',
+    useNamespaces: false, separator: ':', namespaceMapping: '',
+    addRootElement: false, rootElementName: 'root', rootNamespace: '',
+    suppressRoot: false, streaming: false, streamingElements: 'all' as 'all' | 'specific', arrayPaths: '', outputEncoding: '',
+    sourcePath: '/Order/Item', fieldSeparator: ',', csvHeader: 'xml' as 'none' | 'xml' | 'xsd', includeParent: false, parentPath: '',
+    includeAttributes: false,
+    schema: '', targetPath: '', recordMarker: '', firstLineHeader: true, headerMapping: 'xsd' as 'xsd' | 'csv',
+  };
+}
+
 export const flow = $state({
   step: 'contentModifier' as FlowStep,
   /**
@@ -243,16 +256,7 @@ export const flow = $state({
   filter: { expression: "/Order/Item[@qty > 1]", valueType: 'nodelist' },
   /** The messages to gather: a splitter's result or bodies added by hand. */
   gather: { messageType: 'sameXml', algorithm: 'combine', sourceXPath: '', targetXPath: '', messages: [] as string[] },
-  /** JSON ↔ XML and XML ↔ CSV converters; mapping and array paths are text, one entry per line. */
-  converter: {
-    conversion: 'xmlToJson' as 'jsonToXml' | 'xmlToJson' | 'xmlToCsv' | 'csvToXml',
-    useNamespaces: false, separator: ':', namespaceMapping: '',
-    addRootElement: false, rootElementName: 'root', rootNamespace: '',
-    suppressRoot: false, streaming: false, streamingElements: 'all' as 'all' | 'specific', arrayPaths: '', outputEncoding: '',
-    sourcePath: '/Order/Item', fieldSeparator: ',', csvHeader: 'xml' as 'none' | 'xml' | 'xsd', includeParent: false, parentPath: '',
-    includeAttributes: false,
-    schema: '', targetPath: '', recordMarker: '', firstLineHeader: true, headerMapping: 'xsd' as 'xsd' | 'csv',
-  },
+  converter: converterDefaults(),
   cmResult: null as any,
   routerResult: null as null | { routes: RouteResult[]; taken: string; diagnostics: string[] },
   splitResult: null as any,
@@ -1087,8 +1091,9 @@ function openFlowStep(step: IflowStep) {
   } else if (step.type === 'filter') {
     flow.filter = { expression: c.expression ?? '', valueType: c.valueType ?? 'nodelist' };
   } else if (step.type === 'converter') {
-    // The iFlow's lists become the tab's text fields (one entry per line).
-    flow.converter = { ...flow.converter, ...c,
+    // The iFlow's lists become the tab's text fields (one entry per line). Settings the step does not have start
+    // from the defaults, not from a converter opened before.
+    flow.converter = { ...converterDefaults(), ...c,
       namespaceMapping: Array.isArray(c.namespaceMapping) ? c.namespaceMapping.map((m: any) => `${m.prefix} = ${m.namespace}`).join('\n') : c.namespaceMapping ?? '',
       arrayPaths: Array.isArray(c.arrayPaths) ? c.arrayPaths.join('\n') : c.arrayPaths ?? '' };
   } else if (step.type === 'gather') {

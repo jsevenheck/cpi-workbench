@@ -65,8 +65,8 @@ public final class ConverterStep {
                     result.with("body", run.jsonToXml());
                     break;
                 case "xmlToJson":
-                    result.with("body", run.xmlToJson());
-                    result.with("encoding", run.outputEncoding());
+                    String encoding = run.outputEncoding();
+                    result.with("body", run.xmlToJson()).with("encoding", encoding);
                     break;
                 case "xmlToCsv":
                     result.with("body", run.xmlToCsv());
@@ -148,6 +148,7 @@ public final class ConverterStep {
             StringBuilder decls = new StringBuilder();
             prefixToNs.forEach((p, ns) -> decls.append(" xmlns:").append(p).append("=\"").append(escapeAttr(ns)).append('"'));
             JsonToXml w = new JsonToXml(useNs, sep, prefixToNs);
+            // SAP's conversion rules: "This error is also raised, if you've chosen the option Add XML Root Element."
             if (!root.members.isEmpty() && root.members.get(0).name.startsWith("@")) {
                 throw new IllegalArgumentException("The root member name starts with the attribute indicator @. An attribute "
                         + "cannot be root.");
@@ -189,6 +190,14 @@ public final class ConverterStep {
                             + "which would give several root elements; SAP does not document this case.");
                 }
                 w.element(m.name, m.value, decls.toString());
+            }
+            for (int i = 0; i < w.out.length(); i++) {
+                char c = w.out.charAt(i);
+                if (c < 0x20 && c != '\t' && c != '\n' && c != '\r' || c == 0xFFFE || c == 0xFFFF) {
+                    warnOnce("char", String.format("The JSON holds the character U+%04X, which XML 1.0 does not allow: the "
+                            + "result is not well-formed.", (int) c));
+                    break;
+                }
             }
             return XML_DECLARATION + w.out;
         }
@@ -461,9 +470,13 @@ public final class ConverterStep {
                             run.add(elements.get(i++));
                         }
                         if (!written.add(n)) {
-                            warnOnce("dup:" + p, "'" + n + "' appears more than once in its parent without being an array: "
-                                    + "the JSON has a duplicate member and is not valid, as SAP documents for streaming. "
-                                    + "List " + p + " under the array elements, or choose All.");
+                            warnOnce("dup:" + p, array
+                                    ? "'" + n + "' appears again after other elements: streaming writes each run of "
+                                    + "neighbouring elements as an array of its own, so the JSON has a duplicate member and "
+                                    + "is not valid (an assumption from SAP's streaming rules)."
+                                    : "'" + n + "' appears more than once in its parent without being an array: the JSON has "
+                                    + "a duplicate member and is not valid, as SAP documents for streaming. List " + p
+                                    + " under the array elements, or choose All.");
                         }
                         first = comma(first);
                         member(n, run, p, array);
@@ -1231,6 +1244,9 @@ public final class ConverterStep {
             if (peek('-')) {
                 i++;
             }
+            if (peek('0') && i + 1 < s.length() && s.charAt(i + 1) >= '0' && s.charAt(i + 1) <= '9') {
+                throw error("a number must not start with 0");
+            }
             digits();
             if (peek('.')) {
                 i++;
@@ -1248,7 +1264,7 @@ public final class ConverterStep {
 
         private void digits() {
             int start = i;
-            while (i < s.length() && Character.isDigit(s.charAt(i))) {
+            while (i < s.length() && s.charAt(i) >= '0' && s.charAt(i) <= '9') {
                 i++;
             }
             if (start == i) {

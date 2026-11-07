@@ -39,7 +39,7 @@ class IflowImportTest {
         Map<String, Object> r = IflowImport.importZip(zip, project, null);
         assertEquals("iflows/Order_Replication", r.get("imported"));
         List<Object> steps = (List<Object>) r.get("steps");
-        assertEquals(10, steps.size(), () -> Json.write(r));
+        assertEquals(13, steps.size(), () -> Json.write(r));
         Map<String, Object> g = (Map<String, Object>) steps.get(0);
         assertEquals("groovy", g.get("type"));
         assertEquals("enrich", g.get("function"));
@@ -86,7 +86,27 @@ class IflowImportTest {
         assertEquals("filter", filter.get("type"));
         assertEquals("nodelist", Json.obj(filter, "config").get("valueType"));
         assertEquals("/Order/Item", Json.obj(filter, "config").get("expression"));
-        Map<String, Object> router = (Map<String, Object>) steps.get(9);
+        Map<String, Object> mmap = (Map<String, Object>) steps.get(9);
+        assertEquals("mmap", mmap.get("type"));
+        assertEquals("iflows/Order_Replication/src/main/resources/mapping/order.mmap", mmap.get("file"));
+        assertEquals(List.of("iflows/Order_Replication/src/main/resources/script/lookup.gsh"), mmap.get("scripts"));
+        assertEquals("groovy-1.x", mmap.get("profile"));
+        assertTrue(mmap.get("note").toString().contains("not simulated") && mmap.get("note").toString().contains("gone.gsh"),
+                () -> String.valueOf(mmap.get("note")));
+        Map<String, Object> j2x = (Map<String, Object>) steps.get(10);
+        assertEquals("converter", j2x.get("type"));
+        Map<String, Object> j2xConfig = Json.obj(j2x, "config");
+        assertEquals("jsonToXml", j2xConfig.get("conversion"));
+        assertEquals(true, j2xConfig.get("useNamespaces"));
+        assertEquals("Orders", j2xConfig.get("rootElementName"), "{{parameters}} are filled in");
+        assertEquals(List.of(Map.of("prefix", "ord", "namespace", "urn:orders")), j2xConfig.get("namespaceMapping"));
+        Map<String, Object> c2x = Json.obj((Map<String, Object>) steps.get(11), "config");
+        assertEquals("csvToXml", c2x.get("conversion"));
+        assertEquals("iflows/Order_Replication/src/main/resources/xsd/order.xsd", c2x.get("schema"));
+        assertEquals("Order/Item", c2x.get("targetPath"));
+        assertEquals(true, c2x.get("firstLineHeader"));
+        assertEquals("xsd", c2x.get("headerMapping"));
+        Map<String, Object> router = (Map<String, Object>) steps.get(12);
         assertEquals("router", router.get("type"));
         List<Object> routes = Json.arr(Json.obj(router, "config"), "routes");
         assertEquals("ERP", ((Map<String, Object>) routes.get(0)).get("name"));

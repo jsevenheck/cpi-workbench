@@ -95,7 +95,13 @@ pub fn definitions() -> Vec<Value> {
     let mut groovy = obj(vec![
         ("scriptPath", json!({ "type": "string", "description": "Project-relative .groovy file. Use scriptPath or script." })),
         ("script", json!({ "type": "string", "description": "The script source, if it is not in a file." })),
-        ("function", json!({ "type": "string", "default": "processData", "description": "The function the step calls (Script Function)." })),
+        ("function", json!({ "type": "string", "default": "processData", "description": "The function the step calls (Script Function), \
+or a custom function of a Message Mapping script: f(String, MappingContext) (single values) or f(String[], Output, MappingContext) \
+(all values of a context: called once per context))." })),
+        ("args", json!({ "type": "array", "description": "Message Mapping functions only: the String and String[] arguments in order \
+(Output and MappingContext are passed by the simulator). A String argument is a string; a String[] argument is a list of contexts, \
+e.g. [[\"A\", \"B\"], [\"C\"]], whose entries are strings, {\"suppress\": true} or {\"xsiNil\": true}. The result's mapping \
+holds the returned value or the output queue in the same form." })),
     ]);
     message_properties(&mut groovy, true);
     groovy.insert("bodyType".into(), json!({ "type": "string", "enum": ["String", "byte[]", "InputStream"], "default": "String",
@@ -121,16 +127,21 @@ pub fn definitions() -> Vec<Value> {
     let mut step = obj(vec![
         ("iflowStep", json!({ "type": "string", "description": "Name or id of a step that project_info lists under iflowSteps. Use iflowStep or step." })),
         ("iflow", json!({ "type": "string", "description": "The iFlow of iflowStep, when several iFlows have a step with that name or id." })),
-        ("step", json!({ "type": "object", "description": "A step given directly (as edited in the Flow Steps tab): {\"type\": \"contentModifier\"|\"filter\"|\"router\"|\"splitter\"|\"gather\", \"config\": {...}}, config shaped as project_info shows it for iFlow steps.",
+        ("step", json!({ "type": "object", "description": "A step given directly (as edited in the Flow Steps tab): {\"type\": \"contentModifier\"|\"filter\"|\"router\"|\"splitter\"|\"gather\"|\"converter\", \"config\": {...}}, config shaped as project_info shows it for iFlow steps.",
             "properties": {
-                "type": { "type": "string", "enum": ["contentModifier", "filter", "router", "splitter", "gather"] },
+                "type": { "type": "string", "enum": ["contentModifier", "filter", "router", "splitter", "gather", "converter"] },
                 "config": { "type": "object", "description": "The tab's settings for the type (keys left out take the tab's defaults). \
 contentModifier: {headers: [row], properties: [row], bodyType: \"constant\"|\"expression\", body}, row = {action: \"Create\"|\"Delete\", name, \
 type: \"constant\"|\"header\"|\"property\"|\"xpath\"|\"expression\", value, datatype (e.g. \"java.lang.String\"), default}. \
 filter: {expression (XPath), valueType: \"string\"|\"integer\"|\"boolean\"|\"node\"|\"nodelist\"}. \
 router: {routes: [{name, expressionType: \"xml\"|\"nonxml\", condition, default: bool}], throwException: bool}. \
 splitter: {splitter: \"general\"|\"iterating\", expressionType: \"xpath\"|\"lineBreak\"|\"token\", expression, grouping, streaming: bool}. \
-gather: {messageType: \"sameXml\"|\"differentXml\"|\"plainText\", algorithm: \"combine\"|\"combineAtXPath\"|\"concatenate\", sourceXPath, targetXPath}." } },
+gather: {messageType: \"sameXml\"|\"differentXml\"|\"plainText\", algorithm: \"combine\"|\"combineAtXPath\"|\"concatenate\", sourceXPath, targetXPath}. \
+converter: {conversion: \"jsonToXml\"|\"xmlToJson\"|\"xmlToCsv\"|\"csvToXml\"; JSON/XML: useNamespaces, separator, \
+namespaceMapping ([{prefix, namespace}] or lines \"prefix = uri\"), addRootElement, rootElementName, rootNamespace (a prefix of namespaces), \
+suppressRoot, streaming, streamingElements: \"all\"|\"specific\", arrayPaths, outputEncoding; XML to CSV: sourcePath, fieldSeparator, \
+csvHeader: \"none\"|\"xml\", includeParent, parentPath, includeAttributes; CSV to XML: schema (project .xsd), targetPath, recordMarker, \
+fieldSeparator, firstLineHeader, headerMapping: \"xsd\"|\"csv\"}." } },
             "required": ["type", "config"], "additionalProperties": false })),
         ("messages", json!({ "type": "array", "items": { "type": "string" },
             "description": "Gather only: the bodies to gather, e.g. the messages a splitter returned." })),
@@ -161,7 +172,7 @@ gather: {messageType: \"sameXml\"|\"differentXml\"|\"plainText\", algorithm: \"c
             "Evaluates an XPath on the body, like the XPath tab. Returns the value or the selected nodes.",
             xpath, &["expression"], true),
         tool("run_flow_step", "Run a flow step",
-            "Runs a Content Modifier, Filter, Router, General or Iterating Splitter, or Gather step on a message, like the \
+            "Runs a Content Modifier, Filter, Router, General or Iterating Splitter, Gather or converter (JSON/XML/CSV) step on a message, like the \
              Flow Steps tab, from an iFlow of the project or from a config given here. Returns the output message(s), or \
              for a Router each route's result and the route taken. For an iFlow's script, XSLT or XML Validator step, \
              use run_groovy, run_xslt or validate_xsd with the step's file, function and profile from project_info.",
@@ -203,7 +214,7 @@ fn check_args(name: &str, args: &Args) -> Result<(), String> {
         let ok = match p["type"].as_str() {
             Some("string") => v.is_string(),
             Some("object") => v.is_object(),
-            Some("array") => v.as_array().is_some_and(|a| a.iter().all(Value::is_string)),
+            Some("array") => v.as_array().is_some_and(|a| p["items"]["type"] != "string" || a.iter().all(Value::is_string)),
             _ => true,
         };
         if !ok {
@@ -384,6 +395,7 @@ fn run_groovy(server: &Server, args: &Args) -> Result<Value, String> {
         "function": str_arg(args, "function").unwrap_or("processData"),
         "input": message(server, args)?,
         "options": { "bodyType": str_arg(args, "bodyType").unwrap_or("String") },
+        "args": args.get("args").cloned().unwrap_or(json!([])),
     });
     let mut r = on_runtimes(server, &pick(args, "runtime", GROOVY_RUNTIMES, detected), "groovy.run", params)?;
     if str_arg(args, "runtime").is_none() {

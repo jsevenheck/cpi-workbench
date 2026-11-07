@@ -1,0 +1,11 @@
+{
+  "name": "Message Mapping function: all values of a context",
+  "step": "groovy",
+  "profile": "groovy-1.x",
+  "script": "../../scripts/mapping-functions.groovy",
+  "function": "countPerContext",
+  "args": [[["Multi Print", "Multi Color"], ["Power Scan", { "suppress": true }], []]],
+  "expect": {
+    "queue": [["2"], ["1"], ["0"]]
+  }
+}

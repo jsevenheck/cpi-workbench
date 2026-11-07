@@ -28,7 +28,15 @@ import java.util.regex.Pattern;
  * {@code default} flow; Filter {@code xpathType} (String, Integer, Boolean, Node, Nodelist) and the XPath in
  * {@code wrapContent}; Gather {@code messageType} (SameXMLFormat, DiffXMLFormat, PlainText),
  * {@code aggregationAlgorithm} (sap-identical-multi-mapping, sap-pi-multi-mapping, xpath-merge-strategy,
- * concatenate-strategy), {@code sourceXPath} and {@code targetXPath}. The format is not documented.
+ * concatenate-strategy), {@code sourceXPath} and {@code targetXPath}. Converters (keys seen in public iFlows on
+ * GitHub, 2026-11-07, plan F46): JsonToXmlConverter {@code useNamespaces}, {@code jsonNamespaceSeparator},
+ * {@code jsonNamespaceMapping}, {@code addXMLRootElement}, {@code additionalRootElementName}; XmlToJsonConverter
+ * {@code useNamespaces}, {@code jsonNamespaceSeparator}, {@code xmlJsonSuppressRootElement},
+ * {@code xmlJsonUseStreaming}, {@code xmlJsonConvertAllElements}, {@code jsonOutputEncoding}; XmlToCsvConverter
+ * {@code XPath_Field_Location}, {@code Field_Separator_in_CSV}, {@code CSV_Header} or {@code Include_Header},
+ * {@code Include_Master}, {@code Master_XPath_Field_Location}, {@code Include_Attribute}; CsvToXmlConverter
+ * {@code XML_Schema_File_Path}, {@code XPath_Field_Location}, {@code Field_Separator_in_CSV},
+ * {@code ignoreFirstLineAsHeader}, {@code headerMapping}. The format is not documented.
  * {@code {{name}}} placeholders take the value from parameters.prop.
  */
 final class FlowSteps {
@@ -65,6 +73,10 @@ final class FlowSteps {
                     .with("sourceXPath", param(props.getOrDefault("sourceXPath", ""), params))
                     .with("targetXPath", param(props.getOrDefault("targetXPath", ""), params)));
         }
+        Json.Obj converter = converter(activity, props, params);
+        if (converter != null) {
+            return step(act, "converter", props).with("config", converter);
+        }
         String split = props.getOrDefault("splitType", "");
         if ("Splitter".equals(activity) && (split.equals("GeneralSplitter") || split.equals("IteratingSplitter"))) {
             String expr = props.getOrDefault("exprType", "XPath");
@@ -77,6 +89,105 @@ final class FlowSteps {
                     .with("streaming", !"false".equals(param(props.getOrDefault("Streaming", "true"), params))));
         }
         return null;
+    }
+
+    /**
+     * A converter's settings in the Flow Steps tab's terms. Keys not seen in public iFlows (the XML to JSON
+     * namespace table and array paths, the CSV record marker) are looked up by their likely words, best effort.
+     */
+    private static Json.Obj converter(String activity, Map<String, String> props, Properties params) throws Exception {
+        java.util.function.Function<String, String> p = k -> param(props.getOrDefault(k, ""), params);
+        java.util.function.Function<String, Boolean> b = k -> "true".equalsIgnoreCase(p.apply(k));
+        switch (activity) {
+            case "JsonToXmlConverter":
+                return Json.o().with("conversion", "jsonToXml").with("useNamespaces", b.apply("useNamespaces"))
+                        .with("separator", p.apply("jsonNamespaceSeparator").isEmpty() ? ":" : p.apply("jsonNamespaceSeparator"))
+                        .with("namespaceMapping", mapping(props.get("jsonNamespaceMapping"), params, 0, 1))
+                        .with("addRootElement", b.apply("addXMLRootElement"))
+                        .with("rootElementName", p.apply("additionalRootElementName"));
+            case "XmlToJsonConverter":
+                return Json.o().with("conversion", "xmlToJson").with("useNamespaces", b.apply("useNamespaces"))
+                        .with("separator", p.apply("jsonNamespaceSeparator").isEmpty() ? ":" : p.apply("jsonNamespaceSeparator"))
+                        // SAP's table for this direction is XML Namespace, then JSON Prefix (an assumption for the cell order).
+                        .with("namespaceMapping", mapping(find(props, "namespacemapping"), params, 1, 0))
+                        .with("suppressRoot", b.apply("xmlJsonSuppressRootElement"))
+                        .with("streaming", b.apply("xmlJsonUseStreaming"))
+                        .with("streamingElements", "all".equalsIgnoreCase(p.apply("xmlJsonConvertAllElements")) ? "all" : "specific")
+                        .with("arrayPaths", firstCells(find(props, "path"), params))
+                        .with("outputEncoding", p.apply("jsonOutputEncoding"));
+            case "XmlToCsvConverter": {
+                String header = p.apply("CSV_Header").toLowerCase();
+                if (header.isEmpty()) {
+                    header = b.apply("Include_Header") ? "xml" : "none";
+                }
+                return Json.o().with("conversion", "xmlToCsv").with("sourcePath", p.apply("XPath_Field_Location"))
+                        .with("fieldSeparator", p.apply("Field_Separator_in_CSV")).with("csvHeader", header)
+                        .with("includeParent", b.apply("Include_Master")).with("parentPath", p.apply("Master_XPath_Field_Location"))
+                        .with("includeAttributes", b.apply("Include_Attribute"));
+            }
+            case "CsvToXmlConverter":
+                return Json.o().with("conversion", "csvToXml").with("schema", p.apply("XML_Schema_File_Path"))
+                        .with("targetPath", p.apply("XPath_Field_Location"))
+                        .with("recordMarker", find(props, "marker") == null ? "" : param(find(props, "marker"), params))
+                        .with("fieldSeparator", p.apply("Field_Separator_in_CSV"))
+                        .with("firstLineHeader", b.apply("ignoreFirstLineAsHeader"))
+                        .with("headerMapping", "mapHeadersToXSD".equals(p.apply("headerMapping")) || p.apply("headerMapping").isEmpty()
+                                ? "xsd" : "csv");
+            default:
+                return null;
+        }
+    }
+
+    /** The value of the first key that contains {@code word} (case-insensitive), or null. */
+    private static String find(Map<String, String> props, String word) {
+        for (Map.Entry<String, String> e : props.entrySet()) {
+            if (e.getKey().toLowerCase().contains(word)) {
+                return e.getValue();
+            }
+        }
+        return null;
+    }
+
+    /** A namespace table ({@code <row><cell>..</cell><cell>..</cell></row>}) as {prefix, namespace} pairs. */
+    private static List<Object> mapping(String table, Properties params, int prefixCell, int namespaceCell) throws Exception {
+        List<Object> out = new ArrayList<>();
+        for (List<String> row : cells(table, params)) {
+            if (row.size() > Math.max(prefixCell, namespaceCell) && !row.get(prefixCell).isBlank() && !row.get(namespaceCell).isBlank()) {
+                out.add(Json.o().with("prefix", row.get(prefixCell).trim()).with("namespace", row.get(namespaceCell).trim()));
+            }
+        }
+        return out;
+    }
+
+    private static List<Object> firstCells(String table, Properties params) throws Exception {
+        List<Object> out = new ArrayList<>();
+        for (List<String> row : cells(table, params)) {
+            if (!row.isEmpty() && !row.get(0).isBlank()) {
+                out.add(row.get(0).trim());
+            }
+        }
+        return out;
+    }
+
+    /** The cells of each row, in order (the converters' tables have cells without ids). */
+    private static List<List<String>> cells(String table, Properties params) throws Exception {
+        List<List<String>> out = new ArrayList<>();
+        if (table == null || !table.contains("<row")) {
+            return out;
+        }
+        DocumentBuilderFactory f = DocumentBuilderFactory.newDefaultInstance();
+        f.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+        Document d = f.newDocumentBuilder().parse(new InputSource(new StringReader("<rows>" + table + "</rows>")));
+        NodeList rows = d.getElementsByTagName("row");
+        for (int i = 0; i < rows.getLength(); i++) {
+            List<String> row = new ArrayList<>();
+            NodeList cs = ((Element) rows.item(i)).getElementsByTagName("cell");
+            for (int j = 0; j < cs.getLength(); j++) {
+                row.add(param(cs.item(j).getTextContent(), params));
+            }
+            out.add(row);
+        }
+        return out;
     }
 
     /** A Router: its routes in the order of the gateway's outgoing flows (an assumption for CPI's order). */

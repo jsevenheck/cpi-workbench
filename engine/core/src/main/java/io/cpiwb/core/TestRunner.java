@@ -160,6 +160,20 @@ public final class TestRunner {
         }
         compareValues("header", Json.obj(expect, "headers"), Json.arr(Json.obj(result, "output"), "headers"), msgs);
         compareValues("property", Json.obj(expect, "properties"), Json.arr(Json.obj(result, "output"), "properties"), msgs);
+        Map<String, Object> mapping = Json.obj(result, "mapping");
+        if (expect.containsKey("returned")) {
+            Object actual = mapping == null ? null : mapping.get("returned");
+            if (!Objects.equals(expect.get("returned"), actual)) {
+                msgs.add("Expected the function to return " + Json.write(expect.get("returned")) + " but it returned "
+                        + Json.write(actual));
+            }
+        }
+        if (expect.containsKey("queue")) {
+            String actual = Json.write(mapping == null ? null : mapping.get("queue"));
+            if (!Json.write(expect.get("queue")).equals(actual)) {
+                msgs.add("Expected the output queue " + Json.write(expect.get("queue")) + " but it was " + actual);
+            }
+        }
         if (expect.containsKey("result")) {
             String actual = Json.str(result, "result", null);
             if (!Objects.equals(Json.str(expect, "result", null), actual)) {

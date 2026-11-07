@@ -6,6 +6,27 @@ of its version.
 
 ## [Unreleased]
 
+### Added
+
+- **Message Mapping functions** in the Groovy tab: a custom function of a mapping script, such as
+  `getHeader(String, MappingContext)` or `f(String[], Output, MappingContext)`, runs on its own.
+  *Arguments* replace the body (`String[]` arguments as one context per line); a `String[]` function
+  runs once per context (*All values of a context*). *Result* shows the returned value or the output
+  queue with context changes, SUPPRESS and xsi:nil. `MappingContext` and `Output` follow SAP's
+  Javadoc. Test cases take `args`, `expect.returned` and `expect.queue`; the MCP tool `run_groovy`
+  takes `args`. A script without `processData` now names its mapping functions.
+  Graphical Message Mapping (`.mmap`) is still not simulated.
+- **Check for updates** in a new ⚙ menu (desktop app): shows the installed version, asks github.com
+  for the latest release on click, and opens its page if it is newer. The app makes no request on its own.
+- **Converter** step in Flow Steps: JSON to XML, XML to JSON, XML to CSV and CSV to XML with the
+  settings of CPI's converter steps (namespace mapping, root element options, streaming, record marker,
+  header mapping, parent element). It follows SAP's documented conversion rules and limitations; SAP's
+  examples are reproduced exactly in the tests. CSV to XML reads its XSD from the project. The iFlow import
+  opens converter steps with their settings, and the MCP tool `run_flow_step` runs them.
+- iFlow import lists **Message Mapping** steps. The mapping is not simulated; clicking the step opens
+  the first Groovy script its `.mmap` uses, with its first mapping function, on Groovy Script 1.x.
+- Probe `probe-mapping-v1.groovy` for how a tenant calls mapping functions.
+
 ## [0.2.0] - 2026-11-06
 
 ### Added

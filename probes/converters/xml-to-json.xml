@@ -1,0 +1,10 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<n1:A xmlns:n1="http://com.sap/abc" xmlns:n2="http://com.sap/xyz">
+<n2:B n2:attr1="1" attr2="2">valueB</n2:B>
+<C>valueC1</C>
+<C>valueC2</C>
+<D/>
+<E>valueE</E>
+<F> </F>
+<G>a/b "quoted" ü</G>
+</n1:A>

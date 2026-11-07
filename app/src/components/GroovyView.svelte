@@ -7,12 +7,13 @@
   import CompareView from './CompareView.svelte';
   import { app, groovy, runGroovy, saveScript, saveScriptAs, formatXml, otherProfile, saveInput } from '../lib/store.svelte';
   import { reindentGroovy } from '../lib/indent';
+  import { formatQueue } from '../lib/queue';
   import type { CaseExtras } from '../lib/store.svelte';
   import type { Diagnostic } from '../lib/types';
 
   const panes = paneSizes('groovy', [1, 1.3, 1.1]);
 
-  let inputTab = $state<'body' | 'headers' | 'properties'>('body');
+  let inputTab = $state<'body' | 'args' | 'headers' | 'properties'>('body');
   let outputTab = $state<'body' | 'headers' | 'properties' | 'mpl' | 'console' | 'api' | 'compare'>('body');
   let showDiff = $state(false);
   let scriptEditor: Editor | undefined = $state();
@@ -26,6 +27,14 @@
   }
 
   let result = $derived(groovy.result);
+  /** The function is a Message Mapping function: arguments instead of a body. */
+  let mapping = $derived(groovy.mapping?.function === groovy.functionName ? groovy.mapping : null);
+  let valueParams = $derived(mapping?.parameters.filter((p) => p === 'String' || p === 'String[]') ?? []);
+  let functionNames = $derived([...new Set(['processData', ...(result?.functions ?? []).map((f) => f.slice(0, f.indexOf('(')))])]);
+  $effect(() => {
+    if (mapping && inputTab === 'body') inputTab = 'args';
+    else if (!mapping && inputTab === 'args') inputTab = 'body';
+  });
   let errors = $derived(result?.diagnostics.filter((d) => d.severity === 'error') ?? []);
   let others = $derived(result?.diagnostics.filter((d) => d.severity !== 'error') ?? []);
   let markers = $derived<Diagnostic[]>((result?.diagnostics ?? []).filter((d) => d.line));
@@ -80,7 +89,11 @@
     <header>
       <h2 title={app.inputPaths.groovy ?? ''}>Input message{#if app.inputPaths.groovy} <span class="from">· {app.inputPaths.groovy.split('/').pop()}</span>{/if}</h2>
       <div class="tabs" role="tablist">
-        <button role="tab" class:active={inputTab === 'body'} onclick={() => (inputTab = 'body')}>Body</button>
+        {#if mapping}
+          <button role="tab" class:active={inputTab === 'args'} onclick={() => (inputTab = 'args')}>Arguments <span class="count">{valueParams.length}</span></button>
+        {:else}
+          <button role="tab" class:active={inputTab === 'body'} onclick={() => (inputTab = 'body')}>Body</button>
+        {/if}
         <button role="tab" class:active={inputTab === 'headers'} onclick={() => (inputTab = 'headers')}>Headers <span class="count">{groovy.headers.length}</span></button>
         <button role="tab" class:active={inputTab === 'properties'} onclick={() => (inputTab = 'properties')}>Properties <span class="count">{groovy.properties.length}</span></button>
       </div>
@@ -97,7 +110,23 @@
       {/if}
     </header>
     <div class="body">
-      {#if inputTab === 'body'}
+      {#if inputTab === 'args' && mapping}
+        <div class="pad args">
+          <p class="hint">Message Mapping function <code>{mapping.function}({mapping.parameters.join(', ')})</code>, run on its own
+            {valueParams.includes('String[]') ? 'once per context (All values of a context)' : 'once (Single Values)'}.
+            Output and MappingContext come from the simulator; MappingContext reads and sets the Headers and Properties tabs.</p>
+          {#each valueParams as p, i}
+            <label class="arg">Argument {i + 1} <span class="muted">{p}</span>
+              {#if p === 'String'}
+                <input class="mono" bind:value={groovy.args[i]} oninput={changed} aria-label="Argument {i + 1}" />
+              {:else}
+                <textarea class="mono" rows="4" bind:value={groovy.args[i]} oninput={changed} aria-label="Argument {i + 1}"
+                  placeholder={'One context per line, e.g.\n["A", "B"]\n["C", {"suppress": true}]'}></textarea>
+              {/if}
+            </label>
+          {/each}
+        </div>
+      {:else if inputTab === 'body'}
         <Editor bind:value={groovy.body} language={inLanguage} onchange={changed} onrun={runGroovy} label="Input body" />
       {:else if inputTab === 'headers'}
         <KeyValueTable bind:rows={groovy.headers} onchange={changed} emptyText="No headers. Types matter: getHeader(name, Integer) converts like Camel." />
@@ -116,7 +145,8 @@
     <header>
       <h2 title={groovy.scriptPath ?? 'Unsaved script'}>{groovy.scriptPath ?? 'script.groovy (unsaved)'}{#if dirty}<span class="dirty">●</span>{/if}</h2>
       <label class="fn" title="Function the Groovy Script step calls">fn
-        <input class="mono" bind:value={groovy.functionName} onchange={changed} aria-label="Function name" />
+        <input class="mono" list="groovy-functions" bind:value={groovy.functionName} onchange={changed} aria-label="Function name" />
+        <datalist id="groovy-functions">{#each functionNames as f}<option value={f}></option>{/each}</datalist>
       </label>
       <div class="spacer"></div>
       <button class="small" onclick={saveScript} disabled={!app.project} title={app.project ? 'Save (Ctrl+S)' : 'Open a project to save'}>Save</button>
@@ -139,7 +169,7 @@
         {:else if result}<span class="badge" class:ok={result.ok} class:bad={!result.ok}>{result.ok ? 'OK' : (result.failedPhase ?? 'error') + ' error'}</span>{/if}
       </h2>
       <div class="tabs" role="tablist">
-        <button role="tab" class:active={outputTab === 'body'} onclick={() => (outputTab = 'body')}>Body</button>
+        <button role="tab" class:active={outputTab === 'body'} onclick={() => (outputTab = 'body')}>{result?.mapping ? 'Result' : 'Body'}</button>
         <button role="tab" class:active={outputTab === 'headers'} onclick={() => (outputTab = 'headers')}>Headers{#if result?.changes && (result.changes.headers.added.length + result.changes.headers.changed.length) > 0}<span class="count hl">{result.changes.headers.added.length + result.changes.headers.changed.length}</span>{/if}</button>
         <button role="tab" class:active={outputTab === 'properties'} onclick={() => (outputTab = 'properties')}>Properties{#if result?.changes && (result.changes.properties.added.length + result.changes.properties.changed.length) > 0}<span class="count hl">{result.changes.properties.added.length + result.changes.properties.changed.length}</span>{/if}</button>
         <button role="tab" class:active={outputTab === 'mpl'} onclick={() => (outputTab = 'mpl')}>MPL{#if mplCount}<span class="count">{mplCount}</span>{/if}</button>
@@ -149,7 +179,7 @@
       </div>
       <button class="small" class:on={groovy.compareOn} onclick={toggleCompare} disabled={!other && !groovy.compareOn}
         title={other ? 'Also run on ' + other + ' and show the differences' : 'No second Groovy runtime available'}>{groovy.compareOn ? 'Comparing' : 'Compare'}</button>
-      {#if outputTab === 'body' && result?.output}
+      {#if outputTab === 'body' && result?.output && !result.mapping}
         <label class="check"><input type="checkbox" bind:checked={showDiff} /> Diff</label>
       {/if}
     </header>
@@ -159,7 +189,19 @@
       {:else if outputTab === 'compare'}
         <CompareView profile={app.groovyProfile} {result} compare={groovy.compare} language={outLanguage} />
       {:else if outputTab === 'body'}
-        {#if result.output}
+        {#if result.output && result.mapping}
+          <div class="pad">
+            {#if 'returned' in result.mapping}
+              <h3>Returned</h3>
+              {#if result.mapping.returned === null}<p class="hint">null</p>{:else}<pre class="console">{result.mapping.returned}</pre>{/if}
+            {/if}
+            {#if result.mapping.queue}
+              <h3>Output queue · {result.mapping.queue.length} context{result.mapping.queue.length === 1 ? '' : 's'}</h3>
+              <pre class="console">{formatQueue(result.mapping.queue)}</pre>
+              <p class="hint">One context per line; the same form works as a String[] argument.</p>
+            {/if}
+          </div>
+        {:else if result.output}
           <Editor value={result.output.body} language={outLanguage} readOnly original={showDiff ? groovy.body : null} label="Output body" />
         {:else}
           <div class="errors">
@@ -245,7 +287,11 @@
   .spacer { flex: 1; }
   .dirty { color: var(--accent); margin-left: 4px; }
   .fn, .bt { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--muted); }
-  .fn input { width: 110px; }
+  .fn input { width: 140px; }
+  .args { display: flex; flex-direction: column; gap: 8px; }
+  .arg { display: flex; flex-direction: column; gap: 3px; font-size: 11px; color: var(--muted); }
+  .arg input, .arg textarea { font-size: 12px; }
+  .arg textarea { resize: vertical; }
   .badge { font-size: 10px; padding: 1px 6px; border-radius: 8px; margin-left: 6px; text-transform: uppercase; background: var(--surface); }
   .badge.ok { background: var(--ok-bg); color: var(--ok); }
   .badge.bad { background: var(--err-bg); color: var(--err); }

@@ -8,6 +8,7 @@
   import FlowStepsView from './components/FlowStepsView.svelte';
   import Dialog from './components/Dialog.svelte';
   import FileView from './components/FileView.svelte';
+  import SettingsMenu from './components/SettingsMenu.svelte';
   import { isDesktop } from './lib/engine';
   import { app, xslt, groovy, flow, fileView, init, runXslt, runXsd, runXpath, runFlowStep, runGroovy, onGroovyProfileChange } from './lib/store.svelte';
 
@@ -117,6 +118,7 @@
     {#if app.tool !== 'file'}
       <button class="primary" onclick={run} title="Run (Ctrl+Enter)">▶ Run</button>
     {/if}
+    {#if isDesktop}<SettingsMenu />{/if}
   </header>
 
   {#if app.error}

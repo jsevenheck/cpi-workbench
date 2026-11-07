@@ -37,8 +37,8 @@ Download the installer for your platform from the
   a case file can hold (attachments, SOAP headers, platform overrides) are kept while the case is
   open and are shown below the input.
 * **XSD** validates a document against a schema; **XPath** evaluates an expression (3.1 by default, or 1.0).
-* **Flow Steps** runs a **Content Modifier**, **Filter**, **Router**, **General / Iterating Splitter** or
-  **Gather** on an input message (body, headers, properties, namespace mapping):
+* **Flow Steps** runs a **Content Modifier**, **Filter**, **Router**, **General / Iterating Splitter**,
+  **Gather** or **Converter** on an input message (body, headers, properties, namespace mapping):
   * Content Modifier: header and property rows with their source types and data types, and the
     message body; the result shows each row's value and the output message.
   * Router: routes in order, XML (XPath) or Non-XML (Camel Simple, with CPI's `=`, `and`, `or` and
@@ -46,6 +46,9 @@ Download the installer for your platform from the
   * Filter: an XPath and its Value Type (String, Integer, Boolean, Node, Nodelist); the result is the
     new body. `function:simple('${property.x}')` takes the value from Camel Simple.
   * Splitter: XPath, Line Break or Token, grouping; the result lists the messages. *Gather* passes them on.
+  * Converter: JSON to XML, XML to JSON (namespace mapping, root element options, streaming), XML to CSV
+    and CSV to XML (with an XSD from the project), with the settings of CPI's converter steps. *Use as
+    input* chains them with the other steps, e.g. JSON to XML, then a Router.
   * Gather: Combine (SAP's multi-mapping format), Combine at XPath or Concatenate. The messages are on
     the left as *Body 1*, *Body 2*, …: from the splitter's *Gather* button, *From Splitter result*, or `+`
     for the current input body. Gather combines bodies only (SAP does not aggregate headers and properties),
@@ -61,16 +64,28 @@ Download the installer for your platform from the
   for tenant software 7.x / 8.x, the default; 2.24 for 5.x / 6.x). XPath runs on Saxon-HE 9.9. *Use as input* passes a result on to the next step. See
   [Fidelity](fidelity.md#flow-steps-content-modifier-filter-router-splitter-gather).
 * **Import iFlow** unpacks an iFlow exported from Integration Suite (zip) into `iflows/` and lists
-  its Groovy Script, XSLT Mapping, XML Validator, Content Modifier, Filter, Router, Splitter and Gather steps.
+  its Groovy Script, XSLT Mapping, XML Validator, Content Modifier, Filter, Router, Splitter, Gather and converter steps.
   Clicking a script or mapping step opens its file with the step's function name and script
-  version; a Content Modifier, Filter, Router, Splitter or Gather opens in Flow Steps with its settings, with
+  version; a Content Modifier, Filter, Router, Splitter, Gather or converter opens in Flow Steps with its settings, with
   `{{parameters}}` filled in from the iFlow's `parameters.prop`. Steps that choose their mapping from a header at runtime
-  are marked. The `.iflw` format is not publicly documented, so this is read generically (best effort).
+  are marked. A **Message Mapping** step (**M**) is listed but not simulated; clicking it opens the first
+  Groovy script its `.mmap` uses, with the script's first mapping function, and names the others.
+  The `.iflw` format is not publicly documented, so this is read generically (best effort).
 * **Completions** in Groovy scripts: after `message.` (or a variable declared as `Message`),
   `messageLogFactory.`, a message log (`MessageLog log`, or `def log = messageLogFactory.getMessageLog(...)`,
   also with `log?.`) and `ITApiFactory.`, the editor lists the methods of SAP's Script API with their
   parameters, for the script's API version (v1 or v2 imports). The editor has no type information, so
   other variable names get no suggestions. Ctrl+Space opens the list again.
+* **Message Mapping functions:** enter the name of a custom function of a mapping script under
+  **fn** (the list offers the script's functions), such as `def String getHeader(String name,
+  MappingContext context)` or `def void f(String[] values, Output output, MappingContext context)`.
+  The input pane then shows **Arguments** instead of the body: a text field per `String`, and per
+  `String[]` one context per line as a JSON array (`["A", "B"]`; `{"suppress": true}` and
+  `{"xsiNil": true}` stand for SUPPRESS and xsi:nil). A `String[]` function runs once per context
+  (*All values of a context*), a function with `String` arguments once. **Result** shows the returned value
+  or the output queue in the same form; `MappingContext` reads and sets the Headers and Properties
+  tabs. The mapping itself (`.mmap`) is not simulated; SAP does not support Groovy Script 2.x in
+  Message Mappings, so use 1.x ([Fidelity](fidelity.md)).
 * **Lint** shows hints about what breaks when a script moves from 1.x to 2.x:
   * `XmlSlurper` or `XmlParser` used without a `groovy.xml` import,
   * Script API v1 imports or v1-only methods in a 2.x step,
@@ -94,6 +109,10 @@ first time. The Windows `setup.exe` installs per user and needs no admin rights;
 per machine and needs admin rights.
 
 The Groovy runtime starts only when the Groovy or Flow Steps tab is used and stops after 10 idle minutes.
+
+**⚙** (top right) shows the installed version. **Check for updates** asks github.com for the latest
+release and links to its page if it is newer; download and install it from there. Apart from your
+own scripts, this is the app's only network request, and it is made only when you click.
 
 ## Coding agents (MCP)
 

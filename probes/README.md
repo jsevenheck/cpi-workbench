@@ -12,6 +12,8 @@ runtime profiles.
 | `fingerprint.xsl` | XSLT Mapping 1.2+ | Saxon edition/version, supported features, localisation of `format-date` (Q-X1) |
 | `probe-platform-v1.groovy` | Groovy Script **1.x** | Partner Directory and Keystore behaviour for entries that do not exist, plus the real method lists (Q-P1) |
 | `prepare-xslt-probe.groovy` + `probe-xslt-behaviour.xsl` | Groovy 1.x, then XSLT Mapping | Header vs. property precedence, Java→XDM types, missing params, `setHeader` return value (Q-X2 … Q-X5) |
+| `converters/` | **JSON to XML, XML to JSON, XML to CSV, CSV to XML** converters | Output formatting and XML declaration, JSON escaping, CSV line ends and quoting, an unmapped JSON prefix without namespace mapping (Q-C1) |
+| `probe-mapping-v1.groovy` | Custom function in a **Message Mapping** | Groovy and Java version of mapping scripts, the classes and methods behind `MappingContext` and `Output`, and how values reach a `String[]` function: one call per context, SUPPRESS in the input array (Q-M1) |
 
 ## How to run
 
@@ -27,6 +29,28 @@ runtime profiles.
 4. iFlow **Probe_XSLT_Fingerprint**: `HTTPS sender` → `XSLT Mapping: fingerprint.xsl` → end.
 5. iFlow **Probe_Platform**: `HTTPS sender` → `Groovy Script 1.x: probe-platform-v1.groovy` → end.
    It only looks up names that cannot exist; no Partner Directory content or keys are needed.
+
+6. iFlow **Probe_Mapping**: `HTTPS sender` → `Message Mapping` → end. Source and target can be any
+   XML schemas with a repeating field in a repeating group and a repeating string field, e.g. source
+   `<Root><Group><Value/>…</Group>…</Root>`, target `<Result><Info/>…</Result>` (`Info` 0..unbounded).
+   Add `probe-mapping-v1.groovy` as the mapping's script (Groovy Script 1.x), map `Value` (its
+   default context, `Group`) through `describeQueue` to `Info`, and post a body such as
+   `<Root><Group><Value>a</Value><Value>b</Value></Group><Group><Value>c</Value></Group></Root>`.
+   Each `Info` holds the JSON of one call. If the mapping does not deploy or the function is not
+   offered, the error message is valuable too. The baseline used the argument
+   `[["a","b"],["c",{"suppress":true}]]` (two contexts, so two calls).
+
+7. iFlow **Probe_Converters**: four small iFlows (or one with four HTTPS addresses), each
+   `HTTPS sender` → converter → end, with the files in `converters/` as request bodies. Save each
+   response body as a file (e.g. `curl --data-binary @file … --output result`), so line ends and
+   whitespace stay as they are. Settings as for the baseline in `baseline-simulator/converters/`:
+   * XML to JSON, body `xml-to-json.xml`: *Use Namespace Mapping* with `http://com.sap/abc` → `abc`
+     and `http://com.sap/xyz` → `xyz`, JSON prefix separator `:`, no streaming.
+   * JSON to XML, body `json-to-xml.json`: no namespace mapping, separator `:`, no root element.
+   * XML to CSV, body `xml-to-csv.xml`: path `/root/Products/Product`, separator `;`, CSV header
+     *XML based*, *Include Parent Element* with `/root`, *Include Attribute Values*.
+   * CSV to XML, body `csv-to-xml.csv`: schema `products.xsd` (upload it to the iFlow), path
+     `Products/Product`, separator `;`, *Exclude First Line Header*, headers to match *XSD Elements*.
 
 Send the response bodies (or attach them to an issue). Nothing in them is confidential beyond
 version numbers and the tenant's default timezone/locale.

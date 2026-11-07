@@ -1,4 +1,4 @@
-# Implementation status (2026-11-01)
+# Implementation status (2026-11-07)
 
 ## How to read the numbers
 
@@ -12,10 +12,10 @@
 
 Automated checks:
 
-* Engine tests (`mvn -f engine/pom.xml verify`): core 12, XSLT/XSD/XPath/Splitter/Filter/Gather 53 per Saxon version (14 of them on project boundaries, 8 splitter cases from SAP's examples, 5 Filter and 3 Gather tests), Groovy 31 per script version (4 Camel Simple, 4 Content Modifier).
-* Regression test cases (`testdata/regression-project`): 6.
+* Engine tests (`mvn -f engine/pom.xml verify`): core 12, XSLT/XSD/XPath/Splitter/Filter/Gather/Converter 67 per Saxon version (14 of them on project boundaries, 8 splitter cases from SAP's examples, 5 Filter, 3 Gather and 14 converter tests, most with SAP's examples), Groovy 39 per script version (4 Camel Simple, 4 Content Modifier, 8 Message Mapping functions).
+* Regression test cases (`testdata/regression-project`): 8.
 * Browser end-to-end tests: `app/e2e/smoke.mjs` (XML tools) and `groovy.mjs` (Groovy, Flow Steps and the iFlow import, which CI runs with the iFlow fixture as a zip).
-* UI unit tests (`npm --prefix app test`): the JSON, XSLT and Groovy formatters, test-case rows, path comparison, the Script API completions (checked against the clean-room Java classes) and the Filter's `function:simple(...)` substitution.
+* UI unit tests (`npm --prefix app test`): the JSON, XSLT and Groovy formatters, test-case rows, path comparison, the Script API completions (checked against the clean-room Java classes), the Filter's `function:simple(...)` substitution, Message Mapping arguments and the update check's SemVer comparison.
 * CI runs the engine tests on Linux, Windows and macOS, the browser e2e tests on Linux and Windows, and the shell tests on all three before it builds the installers. All of them passed on Windows and macOS runners for the first time on 2026-10-25 (`d237e25`). macOS runs on `macos-26` (GitHub deprecated `macos-14`); the native engines are built for macOS 11 and CI checks that.
 
 ## By area
@@ -25,18 +25,19 @@ Automated checks:
 | XSLT Mapping step (both Saxon profiles, parameter binding, `hci:` functions, includes, `java:` calls, error lines) | ≈ 90 % | `java:` calls: JDK classes only (no classes from the iFlow's jars), Saxon-EE argument conversion only in simple cases. |
 | XSD validation | ≈ 90 % | XML Schema 1.0 only (JDK validator). |
 | XPath tester | ≈ 95 % | — |
-| Flow Steps: Content Modifier, Filter, Router, General / Iterating Splitter, Gather (with Camel Simple) | ≈ 80 % | `=`, `and`, `or` are rewritten to Camel's spelling on an assumption (F35). Splitter rules are inferred from SAP's examples. Gather's Combine at XPath has no SAP example (an assumption); Zip and Tar are not simulated. Number Range and External Parameter sources raise `UnsupportedInSimulator`; variables use their default. No probe yet, no CLI command, no test-case step. |
+| Flow Steps: Content Modifier, Filter, Router, General / Iterating Splitter, Gather (with Camel Simple), Converter | ≈ 80 % | `=`, `and`, `or` are rewritten to Camel's spelling on an assumption (F35). Splitter rules are inferred from SAP's examples. Gather's Combine at XPath has no SAP example (an assumption); Zip and Tar are not simulated. Number Range and External Parameter sources raise `UnsupportedInSimulator`; variables use their default. Converters (JSON ↔ XML, XML ↔ CSV) follow SAP's rules and examples; output formatting, CSV quoting and line ends, and one contradiction in SAP's JSON to XML docs are open (Q-C1). Not simulated: EDI, Encoder/Decoder, XML Modifier, Message Digest, MIME Multipart. No CLI command, no test-case step. |
 | Groovy Script 1.x (Groovy 2.4.21, Camel 2.24.3, Script API v1) | ≈ 90 % | Overloads that take Camel's `Attachment` type. Camel 3.14 variant in case the fingerprint shows it (F30). |
 | Groovy Script 2.x (Groovy 4.0.29, Camel 3.14.7, Script API v2) | ≈ 90 % | ProcessDirect raises `UnsupportedInSimulator`. Methods the runtime class may have beyond the interface. |
+| Message Mapping functions (`MappingContext`, `Output`) | ≈ 80 % | The function runs on its own; `.mmap` is out of scope. The execution type follows the signature as community guides describe CPI (F44, not verified); the per-context join and the marker strings are assumptions, a single-value function is called once (not per value), and the Groovy version is not known (Q-M1, `probe-mapping-v1.groovy`). |
 | MPL, console, API call log | ≈ 95 % | — |
 | Platform API mocks | ≈ 85 % | Data Store (no public API). Number ranges count per run only. OAuth2 tokens are fixed values. Services outside `generic.api` other than Value Mapping. |
 | Test cases, runner, CLI | ≈ 90 % | No test case from an exported MPL trace (format unknown, F18). Cases are written by hand and run from the CLI; the app only opens them (the Tests tab and *Save as test* were removed on 2026-10-25 because they were not needed). |
 | Runtime comparison (9.9 ↔ 12, 1.x ↔ 2.x) | ≈ 95 % | — |
 | Lint (1.x → 2.x) | ≈ 80 % | Covers the known breaks (F26, v1-only methods, imports). Others appear only as compile or runtime errors. On the 1.x runtime, the compile error for a Script API v2 or `groovy.xml.XmlSlurper` import says that it needs 2.x. |
-| iFlow-zip import | ≈ 80 % | Groovy, XSLT, XML Validator, Content Modifier, Filter, Router, General / Iterating Splitter and Gather steps (`{{parameters}}` from `parameters.prop`); other steps are not listed. Header-driven mappings are flagged, not resolved. The format is undocumented (best effort; checked against 389 exported iFlows from SAP's samples, F36, F38, F39). |
-| MCP server (`cpi-workbench mcp`) | ≈ 90 % | One tool per tab of the app (XSLT, Groovy, XSD, XPath, Flow Steps) plus the project view; the app leads, the server adds no function. Tested with the official TypeScript and Python SDK clients (2025-11-25) and the repository's own tests (2026-07-28); not yet tried by hand with Claude Code or another agent. Groovy runs without a sandbox (docs/mcp.md). |
+| iFlow-zip import | ≈ 80 % | Groovy, XSLT, XML Validator, Content Modifier, Filter, Router, General / Iterating Splitter and Gather steps (`{{parameters}}` from `parameters.prop`); Message Mapping steps with the scripts their `.mmap` uses (F45; the mapping is not simulated); other steps are not listed. Header-driven mappings are flagged, not resolved. The format is undocumented (best effort; checked against 389 exported iFlows from SAP's samples, F36, F38, F39). |
+| MCP server (`cpi-workbench mcp`) | ≈ 90 % | One tool per tab of the app (XSLT, Groovy, XSD, XPath, Flow Steps) plus the project view; the app leads, the server adds no function. Tested with the official TypeScript and Python SDK clients (2025-11-25) and the repository's own tests (2026-07-28); by hand with Claude Code and Claude Desktop on the demo project for the 0.2.0 release ([Manual test](manual-test.md), section 5). Groovy runs without a sandbox (docs/mcp.md). |
 | Desktop app and browser mode | ≈ 90 % | Engines, shell and browser mode are tested on Windows and macOS in CI. On Windows, the desktop window (WebView2, `tauri dev`) was tried by hand on 2026-10-25 with XSLT, Groovy 1.x/2.x, XSD validation and iFlow import. Not yet tried by hand: the installers, macOS (WKWebView). |
-| Distribution | ≈ 40 % | No code signing, no auto-update. On a managed Windows laptop, the unsigned MSI is refused as untrusted, so it could not be tried there. One all-in-one installer instead of a base app plus a separate Groovy pack (plan §5.3). |
+| Distribution | ≈ 45 % | *Check for updates* links to a newer release (0.3.0); the release page opens through the shell's own command, not yet tried in the desktop window on Windows or macOS. No code signing, no auto-update. On a managed Windows laptop, the unsigned MSI is refused as untrusted, so it could not be tried there. One all-in-one installer instead of a base app plus a separate Groovy pack (plan §5.3). |
 | Large messages | ≈ 70 % | Messages go through JSON-RPC, not temp files (plan §5.3). 7.4 MB worked (XSLT 1.3 s, Groovy 0.45 s); larger ones are untested. |
 | Performance budgets | measured on Linux | Windows and macOS not measured. |
 | Probe kit | written 100 %, run 0 % | Needs one run on a test tenant. |
@@ -130,6 +131,6 @@ Before the first release (third review):
 1. Run the probes on a test tenant (Appendix A of the plan) and turn "to verify" into facts.
 2. Install and open the installer on macOS once by hand. Windows (`setup.exe`, [Manual test](manual-test.md)) and the
    MCP server with Claude Desktop passed on 2026-11-06.
-3. 0.3.0: *Check for updates* in a small settings menu (plan §10.2) and Message Mapping scripts (plan §10.3).
+3. 0.3.0 is built: *Check for updates* (plan §10.2) and Message Mapping functions (plan §10.3). Before
+   the release: open the ⚙ menu in the desktop app on Windows and macOS ([Manual test](manual-test.md)).
 4. Code signing and auto-update (Phase 5, plan §10.2).
-5. Try the MCP server with Claude Code against a real project.

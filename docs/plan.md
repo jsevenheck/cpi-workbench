@@ -49,6 +49,14 @@ New findings from the implementation:
 | F37 | Router XML conditions in real iFlows use XPath 2.0+ syntax (`/node()/*:IDOC[1][1=last()]`, `/a/count(b) = 0`), so CPI's Router does not evaluate them as XPath 1.0. | Observed | S26 |
 | F38 | Content Modifier versions up to 1.3 have no `bodyType`, and their bodies hold Camel Simple (`${header.x}`, `${exception.message}`; 39 such steps, 19 with `${…}`), as in SAP's sample "Externalizing Additional Parameter" (1.2), which shows header values in the body: these bodies are expressions. From 1.4 the type is stored; 1.6 mostly stores `constant` for an empty body. In the same samples, 1,565 of 1,568 Content Modifiers and 623 of 625 Non-XML Router conditions run on the simulator's Camel; the rest fail on input values, a misspelt class (`java.Lang.Integer`) or three-level nested `${…}` that Camel's parser rejects. | Observed | S26 |
 | F39 | Filter steps store `xpathType` (String, Integer, Boolean, Node, Nodelist) and the XPath in `wrapContent`; Gather steps store `messageType` (SameXMLFormat, DiffXMLFormat, PlainText), `aggregationAlgorithm` (sap-identical-multi-mapping, sap-pi-multi-mapping, xpath-merge-strategy, concatenate-strategy), `sourceXPath` and `targetXPath` (64 Filters, 55 Gathers in the samples). Of the 64 Filter XPaths, 60 compile on Saxon without variables; the other 4, and one Router XML condition, use `$name` for a header or property. Camel's XPath variable resolver (`MessageVariableResolver`, Camel 2.24.3 and 3.14.7, read from the Apache jars) resolves an unprefixed `$name` to the header, else the exchange property. | Observed | S26 |
+| F40 | SAP's Javadoc of the Cloud Integration API (`com.sap.it.public.api` 2.12.0) documents `com.sap.it.api.mapping`: `MappingContext` extends `com.sap.it.api.msg.ExchangePropertyProvider` with `getHeader(String)` / `setHeader(String, Object)` and `getProperty(String)` / `setProperty(String, Object)` (null for a missing name; set creates or overwrites). `Output` is "used in advanced user-defined functions (execution type 'All values of Context' or 'All values of a Queue') to return the result": `addValue(Object)`, `addContextChange()`, `addSuppress()` (the target field and its sub nodes are not generated), `addXSINIL()`, `clear()`, `isContextChange(Object)` (to find context changes in an input array), `isSuppress(Object)`, `isXSINIL(Object)`. None of these is in SAP's jars on Maven Central (`script.api` 2.16.4, `script.v2.api` 4.2.2, `generic.api` 4.10.2). The simulator follows these signatures. | Observed (Javadoc) | S27 |
+| F41 | SAP's patch notes (software increment 2602 and later: 6.77.47, 7.50.10, 6.78.56, 7.51.11) say: "Filtered out Groovy Script Version 2 artifacts from Message Mappings, as this version is currently not supported in Message Mapping scenarios." So mapping scripts run on the 1.x side; which Groovy and Java version they get is not stated. | Observed (SAP docs) / Unknown (versions) → Q-M1 | S25 |
+| F42 | SAP's PI documentation of advanced user-defined functions: a queue holds values, an empty string per occurrence of a structure field, context changes (`ResultList.CC`), `ResultList.SUPPRESS` and empty contexts. "All Values of Context" passes one context, without an identifiable context change, and the function may insert context changes into its result; "All Values of Queue" passes whole queues, without the context changes at the start and end. That CPI's Groovy functions get queues this way is an inference (same execution type names in CPI's Javadoc, F40). How CPI joins the results of the per-context calls, and the marker values it uses, are not documented. | Observed (PI docs) / Inferred (CPI) → Q-M1 | S28 |
+| F43 | SAP's samples declare mapping functions as `def String f(String name, MappingContext context)`; `import com.sap.it.api.mapping.MappingContext`. Community guides declare a function with an `Output` parameter `void` and use no return value (F44); that CPI rejects other return types ("No valid return type") was seen only in search excerpts of SAP Community posts. The `setProperty` sample in *Access Headers and Properties in Scripts* returns `header_value`, which it does not define (the simulator fails at runtime with `MissingPropertyException`). | Observed (SAP docs) / Reported (Community, not verified) | S25 |
+| F44 | Two community guides (2022 and later) agree that CPI offers two execution types for Groovy mapping functions, chosen by the signature: *Single values* (`def String f(String a, …)`, values "one by one in the context") and *All values of context* (`def void f(String[] a, Output output, MappingContext context)`, no return value). Both say CPI has no *All values of queue*; `removeContexts` before the function is the usual workaround. `MappingContext` may be left out of a single-value function. SAP's own documentation does not describe the execution types. | Reported (community, two sources) → Q-M1 | S29 |
+| F45 | In SAP's sample iFlow "Accessing Header Property and Externalized Parameter from Message Mapping", a Message Mapping step is `activityType=Mapping` with `mappinguri` `dir://mmap/src/main/resources/mapping/<name>.mmap` (no `subActivityType`). The `.mmap` lists each Groovy script it uses as `<lnkRole role="UsedFuncLib">` with a key whose `elem` values are the file name (`getLocation.gsh`) and its folder (`src/main/resources/script`). One sample only; the import reads these generically. | Observed (one SAP sample) | S26 |
+| F46 | Converter steps in exported iFlows: `activityType` JsonToXmlConverter (`useNamespaces`, `jsonNamespaceSeparator`, `jsonNamespaceMapping` as rows of two unnamed cells, `addXMLRootElement`, `additionalRootElementName`), XmlToJsonConverter (`useNamespaces`, `jsonNamespaceSeparator`, `xmlJsonSuppressRootElement`, `xmlJsonUseStreaming`, `xmlJsonConvertAllElements` = `specific`, `jsonOutputEncoding`), XmlToCsvConverter (`XPath_Field_Location`, `Field_Separator_in_CSV`, `CSV_Header` none/xml or older `Include_Header`, `Include_Master`, `Master_XPath_Field_Location`, `Include_Attribute`), CsvToXmlConverter (`XML_Schema_File_Path` such as `/xsd/items.xsd`, `XPath_Field_Location`, `Field_Separator_in_CSV`, `ignoreFirstLineAsHeader`, `headerMapping` = `mapHeadersToXSD`). Not seen: the XML to JSON namespace table and array paths (no sample streams), the CSV record marker, the JSON root element's namespace. | Observed (37 + 35 + 7 + 2 steps in 50 public iFlows on GitHub, 2026-11-07) | S31 |
+| F47 | SAP documents the JSON ↔ XML conversion rules, limitations, error texts and examples, XML to JSON streaming, and two CSV examples with input and output (S30); the converters follow them. SAP's own pages disagree in one place: the JSON to XML rule keeps an unmapped prefix in the element name (`"p.A"` → `<p.A>`), while the example "No Namespace Mapping" turns `"abc.A"` into `<A>` (with separator `:`). The examples also contain typos (`<E>valueE<E>`). Output formatting is shown compact for JSON ↔ XML, indented for CSV to XML. | Observed (SAP docs) → Q-C1 | S30 |
 | F23 | Saxon instantiates built-in functions reflectively; native builds need reflection metadata for all of them (generated by `engine/native/GenReflect.java`), plus the JDK XPath 1.0 function classes. | Observed | native build failures fixed in this phase |
 
 ---
@@ -362,7 +370,7 @@ Decisions:
   XSD and XPath tools read-only (XSLT's reflexive `java:` calls and Groovy run code without a sandbox,
   as in the app). Payload files may carry prompt injection; the docs say so.
 
-### 10.2 Updates (planned)
+### 10.2 Updates (check built for 0.3.0; install planned)
 
 Researched on 2026-11-04 against the source of `tauri-plugin-updater` 2.14.1 and Tauri's NSIS
 template; the Tauri docs site was not reachable then. Installs of 0.2.0 and earlier have neither
@@ -376,8 +384,14 @@ newer one, links to its release page; installing stays manual. Decisions:
 * **Only on demand.** The app makes no network request on its own: no check at start-up. The README
   and the user guide say that this button contacts github.com (the app still never connects to a
   tenant).
-* The CSP allows `connect-src https://api.github.com`, or the request runs in the Rust shell; opening
-  the release page needs the opener plugin. No keys, no CI change.
+* The CSP allows `connect-src https://api.github.com` (GitHub's API answers CORS requests with
+  `Access-Control-Allow-Origin: *`). No keys, no CI change.
+* *Built (2026-11-07):* the release page opens through a command of the shell
+  (`open_release_page`), not through `tauri-plugin-opener`: the plugin added about 40 crates to
+  `Cargo.lock` (D-Bus via `zbus` on Linux) for one link. The command accepts this repository's
+  release pages only and hands them to the system's opener (`rundll32 url.dll,FileProtocolHandler`
+  on Windows, `open` on macOS, `xdg-open` on Linux). The menu is in the desktop app only; tried in a
+  browser with a mocked shell, not yet in the desktop window on Windows or macOS.
 
 **With signed installers (Phase 5): install the update.** `tauri-plugin-updater` checks a
 `latest.json` in the release, downloads the package and installs it. Facts from the source: it
@@ -405,7 +419,17 @@ To verify then: whether SmartScreen prompts for an installer the updater downloa
 no Mark of the Web, so no prompt); replacing the ad-hoc signed macOS app; the updater behind a
 company proxy (it has proxy settings; whether it uses the Windows system proxy is not checked).
 
-### 10.3 Message Mapping scripts (planned for 0.3.0)
+### 10.4 Converters (built for 0.3.0)
+
+JSON ↔ XML and XML ↔ CSV as a *Converter* step in the Flow Steps tab, not a tab of their own: the tab already
+has the input message, the step settings, the result and *Use as input* to chain steps, and the iFlow import
+and `run_flow_step` cover it. The engine class is `ConverterStep` in the XML engine (native, no new library;
+its JSON reader keeps member order, duplicates and number text). Rules come from SAP's documentation (F47,
+S30), the iFlow keys from public iFlows (F46). Not built, from SAP's list of message transformers: EDI ↔ XML
+and the EDI Extractor (they need EDI schemas), Encoder / Decoder (Base64, GZIP, ZIP, MIME Multipart), XML
+Modifier and Message Digest; they can follow when needed.
+
+### 10.3 Message Mapping scripts (built for 0.3.0)
 
 Found in the Windows test on 2026-11-06: iFlows carry Groovy scripts of Message Mappings, custom
 functions such as `def String f(String arg1, String in1, MappingContext context)` with
@@ -418,6 +442,24 @@ Mapping stays out of scope (§1); running its scripts on their own is in scope. 
 * In the Groovy tab: pick the function, enter its arguments (single values, or queues with context
   changes), headers and properties for the context; show the return value or the output queue.
 * Until then, a clear `UnsupportedInSimulator` message for such scripts would replace the compile error.
+
+*Built (2026-11-07)*, from SAP's Javadoc (F40), SAP's patch notes (F41) and SAP's PI documentation
+of queues (F42):
+
+* `MappingContext`, `ExchangePropertyProvider` and `Output` in `api-common`, for both engines. A
+  function whose parameters are `String`, `String[]`, `Output` and `MappingContext` runs with
+  arguments instead of a message; the result has its returned value or output queue, and headers
+  and properties as for a script step. On 2.x a warning cites F41.
+* Execution types follow the signature (F44): *single* (no `String[]`: one call) and *All values of
+  a context* (`String[]`: one call per context, without context changes in the arrays, F42). Each
+  call gets an `Output` of its own; joining the results with a context change is an assumption.
+  A first version also offered *All values of a queue*; it was removed when two community guides
+  said CPI has no such type.
+* Not simulated: graphical Message Mapping and `.mmap` files (out of scope, §1); calling a
+  single-value function once per value of a queue (PI does; for CPI see Q-M1); CPI's own marker
+  values (the simulator's markers are its own strings, compared by identity).
+* No `UnsupportedInSimulator` step was needed: the script compiles, and a missing `processData`
+  names the script's mapping functions.
 
 ---
 
@@ -471,6 +513,8 @@ Mapping stays out of scope (§1); running its scripts on their own is in scope. 
 | Q-X6 | Source/target from header/property in newer step versions | Open | SAP docs + probe |
 | Q-V1 | XSD engine and version behind the XML Validator step | Open | Probe iFlow (error message format) |
 | Q-T1 | Format of exported MPL trace content | Open (F18) | Export one sample |
+| Q-M1 | Message Mapping scripts: Groovy and Java version, whether the signature alone picks the execution type (single value or context, F44), how the per-context results are joined, the marker value of SUPPRESS, whether a single-value function is called once per value | Partial (F40–F44) | `probe-mapping-v1.groovy` |
+| Q-C1 | Converters: compact or indented output, the XML declaration, CSV line ends and quoting, an unmapped JSON prefix without namespace mapping (F47), the XML to JSON namespace table's cell order | Partial (F46, F47) | `probes/converters/` |
 | Q-P1 | Partner Directory / Keystore / Secure Store edge cases: missing parameter, unknown partner, unknown keystore alias (null or exception, which message) | Documented (F27, F33); runtime and messages open | `probe-platform-v1.groovy` |
 
 ## Sources
@@ -501,3 +545,8 @@ Mapping stays out of scope (§1); running its scripts on their own is in scope. 
 - S24 SAP generic API (platform services) on Maven Central, with Javadoc jar: https://repo1.maven.org/maven2/com/sap/cloud/adk/generic.api/
 - S25 SAP-docs Integration Suite documentation (GitHub mirror of help.sap.com): *Using Camel Simple Expression Language*, *Define Router*, *Define Looping Process Call*, *Define Content Modifier*, *Understanding Software Version Numbers*, *Patch Releases for Cloud Integration*: https://github.com/SAP-docs/btp-integration-suite/tree/main/docs/ci
 - S26 SAP's sample iFlows (Apache-2.0), read for the model format only, not copied: https://github.com/SAP-samples/cloud-integration-flow
+- S27 SAP Cloud Integration API Javadoc (`com.sap.it.public.api` 2.12.0; `com.sap.it.api.mapping`, `com.sap.it.api.msg`), read on 2026-11-07: https://help.sap.com/doc/d47441d304c14a0ab9d3986c1b553a1e/Cloud/en-US/index-all.html
+- S29 Community guides on Groovy mapping functions in CPI, read on 2026-11-07: https://sappipolearnings.blogspot.com/2022/02/udfs-groovy-script-in-message-mapping.html ; https://totoro.hashnode.dev/step-by-step-guide-using-groovy-scripts-in-sap-cpi-mappings ; examples (`addValue` of a BigDecimal sum, functions without `MappingContext`): https://sapcpidesign.blogspot.com/2021/08/sap-cpi-message-mapping-groovy-script.html . The SAP Community threads they cite (e.g. "SAP CPI UDF Execution type All values of Queue") sit behind a bot check and were not read.
+- S30 SAP-docs Integration Suite documentation (S25 mirror): *Define JSON to XML Converter*, *Define XML to JSON Converter*, *Conversion Rules* and *Limitations* for both directions, *Example: Transformations … with and without Namespace Mapping* (both directions), *Example: Transformation to a JSON Message without Root Element Tag*, *How Streaming in the XML-to-JSON Converter Works*, *Configure CSV to XML Converter*, *Configure XML to CSV Converter*, *Use the CSV to XML Converter*, *Use the XML to CSV Converter*
+- S31 Public iFlows on GitHub with converter steps (code search `JsonToXmlConverter`, `XmlToJsonConverter`, `CsvToXmlConverter`, `XmlToCsvConverter` in `.iflw` files, 2026-11-07), read for property names only
+- S28 SAP NetWeaver PI 7.31 — Advanced User-Defined Functions; Implementing Java Functions: https://help.sap.com/doc/saphelp_nw73ehp1/7.31.19/en-US/4b/fbd21666d33de4e10000000a42189e/content.htm ; https://help.sap.com/doc/saphelp_nw73ehp1/7.31.19/en-US/4b/fbd6bb66d33de4e10000000a42189e/content.htm

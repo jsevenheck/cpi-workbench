@@ -65,6 +65,8 @@ The first run starts the Java engines and can take a few seconds.
 | 2.9 | `scripts/route-by-partner.groovy`, input `inputs/order.xml`, header `SalesChannel` = `web-eu` | Reads the Partner Directory. |
 | 2.10 | **Compare** on a script | Runs on 1.x and 2.x. |
 | 2.11 | Type `message.` in a script; also `messageLogFactory.` and Ctrl+Space | The Script API methods are listed. |
+| 2.11a | `scripts/mapping-functions.groovy`, **fn** `countPerContext`, Argument 1 `["A", "B"]` and `["C"]` on two lines | **Arguments** replaces the body; **Result** shows `["2"]` and `["1"]`. With **fn** `getHeader`, Argument 1 `SenderSystem` and that header set, **Result** shows its value. |
+| 2.11b | **⚙** → **Check for updates** | The installed version is shown; the answer says it is the latest, or **Open release page** opens the release in the browser. |
 
 ### XSD and XPath
 
@@ -86,6 +88,7 @@ The first run starts the Java engines and can take a few seconds.
 | 2.20 | *Use as input* on a result | The result becomes the next step's input. |
 | 2.21 | Switch between steps and tabs | Each step keeps its settings and last result. |
 | 2.22 | **Camel** 3.14 ↔ 2.24 in the top bar, run again | Runs on both. |
+| 2.22a | **Converter**: XML to JSON on `inputs/order.xml`, *Use as input*, then JSON to XML | JSON with `@` attributes, then XML like the input (without indentation). |
 | 2.23 | Start a step and change the body or its settings at once | The result belongs to the state at the start; the change applies to the next run. |
 
 ### Editor and files

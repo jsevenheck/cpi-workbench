@@ -132,6 +132,8 @@ if ((await page.locator('section.script .mode').innerText()) !== 'Script step') 
 // 4d) Message Mapping functions: arguments instead of a body, the output queue as the result.
 // One call per context: each call counts its own context, the calls are joined by context changes.
 await page.locator('.tree .file', { hasText: 'mapping-context/case.json' }).click();
+// The output keeps the tab chosen before (Headers in 4a2), so open the result.
+await page.locator('section.output').getByRole('tab', { name: 'Result' }).click();
 await page.locator('section.output pre', { hasText: '["2"]\n["1"]\n["0"]' }).waitFor({ timeout: 20000 })
   .catch(async () => fail('mapping queue: ' + (await page.locator('section.output').innerText()).slice(0, 400)));
 if (!(await page.getByLabel('Argument 1').inputValue()).includes('"Multi Print"')) fail('mapping argument from the case');

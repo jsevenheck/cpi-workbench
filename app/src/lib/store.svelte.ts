@@ -154,6 +154,8 @@ export const groovy = $state({
   compare: null as CompareRun<GroovyResult> | null,
   /** A Message Mapping function, known from the last run of this function; null for processData(message). */
   mapping: null as { function: string; parameters: string[] } | null,
+  /** The open script's Message Mapping functions (signatures), from its last run that compiled. */
+  functions: [] as string[],
   /** Text of each String / String[] argument of the mapping function (queues: one context per line). */
   args: [] as string[],
 });
@@ -464,6 +466,7 @@ export async function openFile(path: string, opts: OpenOptions = {}) {
       groovy.caseExtras = null;
       groovy.functionName = opts.functionName ?? 'processData';
       groovy.mapping = null;
+      groovy.functions = [];
       groovy.args = [];
       if (opts.profile && hasProfile(opts.profile)) app.groovyProfile = opts.profile;
       else if (content.includes('com.sap.it.script.v2.api') && hasProfile('groovy-2.x')) app.groovyProfile = 'groovy-2.x';
@@ -835,6 +838,7 @@ export async function runGroovy() {
         return void runGroovy();
       }
       // A compile error says nothing about the function; keep what the last run found.
+      if (r.functions) groovy.functions = r.functions;
       if (r.mapping) {
         // Arguments typed for another function do not belong to this one (a test case's do: mapping is null then).
         if (groovy.mapping && groovy.mapping.function !== r.mapping.function) groovy.args = [];
@@ -1145,6 +1149,7 @@ async function loadGroovyCase(path: string, dir: string, tc: any) {
   groovy.bodyType = tc.options?.bodyType ?? 'String';
   groovy.args = (tc.args ?? []).map(argText);
   groovy.mapping = null;
+  groovy.functions = [];
   if (tc.profile && hasProfile(tc.profile)) app.groovyProfile = tc.profile;
   const extras: CaseExtras = { dir, attachments: tc.input?.attachments, soapHeaders: tc.input?.soapHeaders, platform: tc.platform };
   groovy.caseExtras = extras.attachments || extras.soapHeaders || extras.platform ? extras : null;

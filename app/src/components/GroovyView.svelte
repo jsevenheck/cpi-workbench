@@ -31,6 +31,16 @@
   let mapping = $derived(groovy.mapping?.function === groovy.functionName ? groovy.mapping : null);
   let valueParams = $derived(mapping?.parameters.filter((p) => p === 'String' || p === 'String[]') ?? []);
   let functionNames = $derived([...new Set(['processData', ...(result?.functions ?? []).map((f) => f.slice(0, f.indexOf('(')))])]);
+  /** The script's Message Mapping functions; with none the script view looks as for any script step. */
+  let mappingFunctions = $derived(groovy.functions);
+  /** Whether the script defines processData (text check: offered only when there is one to switch to). */
+  let hasProcessData = $derived(/\bprocessData\s*\(/.test(groovy.script));
+
+  function useFunction(name: string) {
+    if (groovy.functionName === name) return;
+    groovy.functionName = name;
+    runGroovy();
+  }
   $effect(() => {
     if (mapping && inputTab === 'body') inputTab = 'args';
     else if (!mapping && inputTab === 'args') inputTab = 'body';
@@ -114,7 +124,9 @@
         <div class="pad args">
           <p class="hint">Message Mapping function <code>{mapping.function}({mapping.parameters.join(', ')})</code>, run on its own
             {valueParams.includes('String[]') ? 'once per context (All values of a context)' : 'once (Single Values)'}.
-            Output and MappingContext come from the simulator; MappingContext reads and sets the Headers and Properties tabs.</p>
+            Output and MappingContext come from the simulator; MappingContext reads and sets the Headers and Properties tabs.
+            The message body is not used: to run with a body, choose {#if hasProcessData}<button class="link"
+              onclick={() => useFunction('processData')}>processData</button> or another{:else}a{/if} script step function (one parameter: the message).</p>
           {#each valueParams as p, i}
             <label class="arg">Argument {i + 1} <span class="muted">{p}</span>
               {#if p === 'String'}
@@ -148,12 +160,29 @@
         <input class="mono" list="groovy-functions" bind:value={groovy.functionName} onchange={changed} aria-label="Function name" />
         <datalist id="groovy-functions">{#each functionNames as f}<option value={f}></option>{/each}</datalist>
       </label>
+      <span class="mode" class:mapping={!!mapping} title={mapping
+        ? 'A Message Mapping function: it takes field values (Arguments), not the message body'
+        : 'A script step: the function gets the message (Body, Headers, Properties)'}>{mapping ? 'Mapping function' : 'Script step'}</span>
       <div class="spacer"></div>
       <button class="small" onclick={saveScript} disabled={!app.project} title={app.project ? 'Save (Ctrl+S)' : 'Open a project to save'}>Save</button>
       <button class="small" onclick={() => { groovy.script = reindentGroovy(groovy.script); changed(); }}
         title="Re-indent by bracket depth; strings and comments keep their text">Format</button>
       <button class="small" onclick={saveScriptAs} disabled={!app.project} title="Save under a new name; the open file stays as it is">Save as…</button>
     </header>
+    {#if mappingFunctions.length}
+      <div class="functions" role="toolbar" aria-label="Functions of the script">
+        <span class="muted">Run as</span>
+        {#if hasProcessData}
+          <button class="chip" class:active={!mapping && groovy.functionName === 'processData'} onclick={() => useFunction('processData')}
+            title="Script step: the message body is the input">processData <span class="muted">· body</span></button>
+        {/if}
+        {#each mappingFunctions as f}
+          {@const name = f.slice(0, f.indexOf('('))}
+          <button class="chip" class:active={mapping?.function === name} onclick={() => useFunction(name)} title={'Message Mapping function ' + f}>
+            {name} <span class="muted">· {f.includes('String[]') ? 'context' : 'single'}</span></button>
+        {/each}
+      </div>
+    {/if}
     <div class="body">
       <Editor bind:this={scriptEditor} bind:value={groovy.script} language="java" markers={markers}
         onchange={changed} onrun={runGroovy} onsave={saveScript} label="Groovy script" />
@@ -288,6 +317,13 @@
   .dirty { color: var(--accent); margin-left: 4px; }
   .fn, .bt { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--muted); }
   .fn input { width: 140px; }
+  .mode { font-size: 10px; padding: 1px 6px; border-radius: 8px; background: var(--surface); color: var(--muted); white-space: nowrap; }
+  .mode.mapping { background: var(--ok-bg); color: var(--ok); }
+  .functions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 5px 10px; border-bottom: 1px solid var(--border); font-size: 11px; }
+  .chip { font: 11px var(--mono); padding: 2px 8px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); color: var(--fg); cursor: pointer; }
+  .chip.active { border-color: var(--accent); background: var(--surface); color: var(--accent); }
+  .chip .muted, .functions .muted { color: var(--muted); }
+  .link { border: none; background: none; padding: 0; font: inherit; color: var(--accent); text-decoration: underline; cursor: pointer; }
   .args { display: flex; flex-direction: column; gap: 8px; }
   .arg { display: flex; flex-direction: column; gap: 3px; font-size: 11px; color: var(--muted); }
   .arg input, .arg textarea { font-size: 12px; }

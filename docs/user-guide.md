@@ -76,7 +76,10 @@ Download the installer for your platform from the
   also with `log?.`) and `ITApiFactory.`, the editor lists the methods of SAP's Script API with their
   parameters, for the script's API version (v1 or v2 imports). The editor has no type information, so
   other variable names get no suggestions. Ctrl+Space opens the list again.
-* **Message Mapping functions:** enter the name of a custom function of a mapping script under
+* **Message Mapping functions:** a script with mapping functions shows them above the editor
+  (**Run as**: `processData`, if the script has it, and each function with *single* or *context*);
+  a click runs that function. The label next to **fn** says *Script step* (the function gets the message)
+  or *Mapping function*. You can also enter the name of a custom function of a mapping script under
   **fn** (the list offers the script's functions), such as `def String getHeader(String name,
   MappingContext context)` or `def void f(String[] values, Output output, MappingContext context)`.
   The input pane then shows **Arguments** instead of the body: a text field per `String`, and per

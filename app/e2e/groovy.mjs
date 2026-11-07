@@ -126,6 +126,8 @@ await page.getByLabel('Function name').fill('customFunction');
 await page.locator('.tree .file', { hasText: 'route-by-partner.groovy' }).click();
 await page.locator('section.script h2', { hasText: 'route-by-partner.groovy' }).waitFor({ timeout: 10000 });
 if ((await page.getByLabel('Function name').inputValue()) !== 'processData') fail('function name kept from the previous script');
+if (await page.locator('.functions').count()) fail('function bar shown for a script without mapping functions');
+if ((await page.locator('section.script .mode').innerText()) !== 'Script step') fail('mode label for a script step');
 
 // 4d) Message Mapping functions: arguments instead of a body, the output queue as the result.
 // One call per context: each call counts its own context, the calls are joined by context changes.
@@ -148,6 +150,12 @@ await page.locator('section.output pre', { hasText: '4711' }).waitFor({ timeout:
 await page.getByLabel('Argument 1').fill('Missing');
 await page.locator('section.output .pad .hint', { hasText: 'null' }).waitFor({ timeout: 20000 })
   .catch(() => fail('getHeader of a missing header is not null'));
+// The function bar shows the script's mapping functions; a click switches the function and the mode label.
+if ((await page.locator('section.script .mode').innerText()) !== 'Mapping function') fail('mode label for a mapping function');
+await page.locator('.functions .chip', { hasText: 'countPerContext' }).click();
+await page.locator('.functions .chip.active', { hasText: 'countPerContext' }).waitFor({ timeout: 10000 })
+  .catch(() => fail('function chip did not switch the function'));
+if ((await page.getByLabel('Function name').inputValue()) !== 'countPerContext') fail('function chip did not set fn');
 // Opening a script starts with processData again, so the Body tab is back.
 await page.locator('.tree .file', { hasText: 'route-by-partner.groovy' }).click();
 await page.locator('section.input').getByRole('tab', { name: 'Body' }).waitFor({ timeout: 10000 })

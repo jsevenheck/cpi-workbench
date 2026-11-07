@@ -65,7 +65,7 @@ The first run starts the Java engines and can take a few seconds.
 | 2.9 | `scripts/route-by-partner.groovy`, input `inputs/order.xml`, header `SalesChannel` = `web-eu` | Reads the Partner Directory. |
 | 2.10 | **Compare** on a script | Runs on 1.x and 2.x. |
 | 2.11 | Type `message.` in a script; also `messageLogFactory.` and Ctrl+Space | The Script API methods are listed. |
-| 2.11a | `scripts/mapping-functions.groovy`, **fn** `countPerContext`, Argument 1 `["A", "B"]` and `["C"]` on two lines | **Arguments** replaces the body; **Result** shows `["2"]` and `["1"]`. With **fn** `getHeader`, Argument 1 `SenderSystem` and that header set, **Result** shows its value. |
+| 2.11a | `scripts/mapping-functions.groovy`, **Run as** `countPerContext` (or **fn** `countPerContext`), Argument 1 `["A", "B"]` and `["C"]` on two lines | **Arguments** replaces the body; **Result** shows `["2"]` and `["1"]`. With **fn** `getHeader`, Argument 1 `SenderSystem` and that header set, **Result** shows its value. |
 | 2.11b | **⚙** → **Check for updates** | The installed version is shown; the answer says it is the latest, or **Open release page** opens the release in the browser. |
 
 ### XSD and XPath

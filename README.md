@@ -6,8 +6,8 @@
 
 A lean, offline desktop app for testing **SAP Integration Suite (Cloud Integration)** mappings and
 scripts locally: enter a message (body, headers, exchange properties), run an **XSLT mapping**, a
-**Groovy script**, a **Content Modifier, Filter, Router, Splitter, Gather** or a **converter** and see the resulting body, headers, properties and log entries immediately,
-without deploy → trace → monitor round trips.
+**Groovy script** or a **flow step** and see the resulting body, headers, properties and log entries
+immediately, without deploy → trace → monitor round trips.
 
 The goal is to behave like the real CPI step, not like a generic XSLT tester or Groovy console.
 That behaviour follows SAP's documentation, SAP's published interfaces and Saxon's and Camel's code;
@@ -37,13 +37,11 @@ it has not been checked against a tenant yet ([Fidelity](docs/fidelity.md)).
 
 **Flow Steps**
 
-* **Content Modifier**, **Filter**, **Router**, **General / Iterating Splitter** and **Gather** with their
-  CPI settings, on the tenant's Camel line (3.14 or 2.24): Camel Simple with CPI's spellings (`=`, `and`,
-  `${property.x}`), XPath 3.1 on Saxon, split messages with `CamelSplit*` information, gathered again in
-  SAP's multi-mapping format.
-* **Converters** JSON ↔ XML and XML ↔ CSV with the settings and rules SAP documents for its converter steps.
-* **Import iFlow** lists an exported iFlow's scripts, mappings and these steps and opens them with
-  their settings.
+* **Content Modifier**, **Filter**, **Router**, **General / Iterating Splitter**, **Gather** and
+  **Converter** (JSON ↔ XML, XML ↔ CSV) with their CPI settings, on the tenant's Camel line (3.14 or 2.24):
+  Camel Simple with CPI's spellings (`=`, `and`, `${property.x}`), XPath 3.1 on Saxon, SAP's documented
+  conversion rules.
+* **Import iFlow** lists an exported iFlow's scripts, mappings and steps and opens them with their settings.
 
 **Coding agents**
 

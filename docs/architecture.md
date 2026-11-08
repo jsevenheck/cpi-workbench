@@ -4,8 +4,8 @@
 
 | Path | What |
 |---|---|
-| `engine/core` | Shared Java 17 code: JSON, JSON-RPC server (stdio and HTTP), project files, iFlow import, test runner. |
-| `engine/xml`, `engine/xml-he99`, `engine/xml-he12` | CPI XSLT step, XSD validation, XPath. The same sources are built against Saxon-HE 9.9.1-8 and 12.9. |
+| `engine/core` | Shared Java 17 code: JSON, JSON-RPC server (stdio and HTTP), project files and path checks, iFlow import, test runner. |
+| `engine/xml`, `engine/xml-he99`, `engine/xml-he12` | CPI XSLT step, XSD validation, XPath, the XPath-based flow steps (Filter, Splitter, Gather) and the converters. The same sources are built against Saxon-HE 9.9.1-8 and 12.9. |
 | `engine/native` | GraalVM native-image build (`build-native.sh`), reflection metadata generator, workload smoke test. |
 | `engine/groovy`, `engine/groovy-v1`, `engine/groovy-v2` | Groovy engines: shared runner, clean-room `com.sap.*` API (`src/api-common`, `src/api-v1`, `src/api-v2`), and the two builds (Groovy 2.4.21 with Camel 2.24.3, Groovy 4.0.29 with Camel 3.14.7). `build-jre.sh` trims the Java 17 runtime. |
 | `app/` | Svelte 5 + Monaco UI (`src/`), Tauri 2 shell (`src-tauri/`, with the MCP server in `src/mcp/`), browser e2e tests (`e2e/`). |
@@ -24,7 +24,7 @@ browser mode. The main methods are:
   route by route with `xpath.eval` and `simple.eval`,
 * `tests.run`, and `project.*`, `file.*`, `iflow.*` for files (all engines).
 
-File methods and XML runs stay inside the open project (`ProjectFiles`, `ProjectResolver`). Over
+File methods and XML runs stay inside the open project (`ProjectFiles`, `ProjectResolver`; `ProjectPaths` follows symbolic links). Over
 HTTP, the engines answer pages from `localhost`, `127.0.0.1` and the desktop shell only: requests
 need an `X-Cpiwb` header, which forces a CORS preflight, and the origin's host is compared exactly.
 
@@ -43,8 +43,8 @@ need an `X-Cpiwb` header, which forces a CORS preflight, and the origin's host i
 
 The shell's executable also runs headless as an MCP server (`cpi-workbench mcp`, [MCP server](mcp.md)):
 it starts the same engines through the same supervisor (`engine.rs`), opens the project in each engine
-when it starts, and maps each tool to engine calls. Its flow-step tool repeats the UI's orchestration
-of `xpath.eval`, `simple.eval` and `contentModifier.run` (`mcp/flow.rs`). The app leads: the tools
+when it starts, and maps each tool to engine calls. Its flow-step tool repeats the UI's calls to the engines,
+step by step (`mcp/flow.rs`). The app leads: the tools
 add no function of their own.
 
 The design reasons and the build-vs-reuse principle are in the [plan](plan.md) §3 and §5.

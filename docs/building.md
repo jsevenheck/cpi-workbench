@@ -5,7 +5,7 @@
 * JDK 17+ and Maven.
 * GraalVM 21+ for the native engines.
 * A JDK 17 with jmods for the Groovy runtime (`engine/groovy/build-jre.sh`).
-* Node 22 and Rust (stable).
+* Node 22.18+ and Rust (stable).
 * On Linux, the WebKitGTK development packages (see `.github/workflows/build.yml`).
 
 ## Commands
@@ -29,7 +29,7 @@ npx tauri dev                                        # development (UI hot reloa
 ## Shell tests
 
 `cargo test` in `app/src-tauri` checks the desktop shell's path to the engines: each engine is
-started over stdio and runs the whole demo project. It needs `npm run build` (the shell embeds the
+started over stdio and runs the regression project's test cases. It needs `npm run build` (the shell embeds the
 UI bundle) and the engine builds; it looks for the native engines in `engine/native/out` and for
 the jars in the engine `target/` folders. `JAVA_HOME` selects the Java runtime, e.g. the trimmed
 one from `build-jre.sh`. Without `CPIWB_REQUIRE_ENGINES=1` the test is skipped.
@@ -66,7 +66,7 @@ node app/e2e/groovy.mjs /tmp/demo-project [screenshotDir]
 ```
 
 With `CPIWB_IFLOW_ZIP` set to a zip of `engine/core/src/test/resources/iflow`, `groovy.mjs` also imports
-that iFlow and opens its Groovy, Content Modifier, Filter and Gather steps. CI does this; locally:
+that iFlow and opens its Groovy, Content Modifier, Filter, Gather and Message Mapping steps. CI does this; locally:
 `jar --create --no-manifest --file /tmp/iflow.zip -C engine/core/src/test/resources/iflow .`
 
 ## CI and installers

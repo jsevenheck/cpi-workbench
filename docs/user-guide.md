@@ -20,9 +20,8 @@ Download the installer for your platform from the
 * Right-click a file in the tree to open, rename, copy or delete it, or to copy its path.
 * Drag the bars between input, mapping or script and output to resize them; double-click a bar to reset.
 * **Save…** above the input body stores it under `inputs/`. Clicking a file there, or **Use as input**
-  in a file's context menu, loads it as the input body of the current tool. A JSON file always goes
-  to the Groovy tab, because only a script takes a JSON body; **Format** there pretty-prints JSON
-  too.
+  in a file's context menu, loads it as the input body of the current tool. A JSON file goes to the
+  Groovy tab, unless Flow Steps is open (the Converter takes JSON); **Format** pretty-prints JSON too.
 * Other files, such as `platform/*.json` or `cpi-workbench.json`, open in a **File** tab with their own
   editor. They no longer replace the input body.
 * The output updates live, or press **Ctrl+Enter**. Compile and runtime errors are marked in the editor.
@@ -61,34 +60,31 @@ Download the installer for your platform from the
   resolver provides them ([Fidelity](fidelity.md), F39).
 
   These steps have no Groovy version: *Camel* in the top bar picks the tenant's Camel line (3.14
-  for tenant software 7.x / 8.x, the default; 2.24 for 5.x / 6.x). XPath runs on Saxon-HE 9.9. *Use as input* passes a result on to the next step. See
-  [Fidelity](fidelity.md#flow-steps-content-modifier-filter-router-splitter-gather).
+  for tenant software 7.x / 8.x, the default; 2.24 for 5.x / 6.x). XPath and the converters run on
+  Saxon-HE 9.9. See [Fidelity](fidelity.md#flow-steps-content-modifier-filter-router-splitter-gather-converter).
 * **Import iFlow** unpacks an iFlow exported from Integration Suite (zip) into `iflows/` and lists
-  its Groovy Script, XSLT Mapping, XML Validator, Content Modifier, Filter, Router, Splitter, Gather and converter steps.
-  Clicking a script or mapping step opens its file with the step's function name and script
-  version; a Content Modifier, Filter, Router, Splitter, Gather or converter opens in Flow Steps with its settings, with
-  `{{parameters}}` filled in from the iFlow's `parameters.prop`. Steps that choose their mapping from a header at runtime
-  are marked. A **Message Mapping** step (**M**) is listed but not simulated; clicking it opens the first
-  Groovy script its `.mmap` uses, with the script's first mapping function, and names the others.
-  The `.iflw` format is not publicly documented, so this is read generically (best effort).
+  its steps. A Groovy Script or XSLT Mapping step opens its file with the step's function name and
+  script version; a flow step opens in Flow Steps with its settings, with `{{parameters}}` from the
+  iFlow's `parameters.prop`. Steps that choose their mapping from a header at runtime are marked. A
+  **Message Mapping** step (**M**) is not simulated; clicking it opens the first Groovy script its
+  `.mmap` uses, with its first mapping function. The `.iflw` format is not publicly documented, so
+  it is read generically (best effort).
 * **Completions** in Groovy scripts: after `message.` (or a variable declared as `Message`),
   `messageLogFactory.`, a message log (`MessageLog log`, or `def log = messageLogFactory.getMessageLog(...)`,
   also with `log?.`) and `ITApiFactory.`, the editor lists the methods of SAP's Script API with their
   parameters, for the script's API version (v1 or v2 imports). The editor has no type information, so
   other variable names get no suggestions. Ctrl+Space opens the list again.
-* **Message Mapping functions:** a script with mapping functions shows them above the editor
-  (**Run as**: `processData`, if the script has it, and each function with *single* or *context*);
-  a click runs that function. The label next to **fn** says *Script step* (the function gets the message)
-  or *Mapping function*. You can also enter the name of a custom function of a mapping script under
-  **fn** (the list offers the script's functions), such as `def String getHeader(String name,
-  MappingContext context)` or `def void f(String[] values, Output output, MappingContext context)`.
-  The input pane then shows **Arguments** instead of the body: a text field per `String` (**null** passes null), and per
-  `String[]` one context per line as a JSON array (`["A", "B"]`; `{"suppress": true}` and
-  `{"xsiNil": true}` stand for SUPPRESS and xsi:nil). A `String[]` function runs once per context
-  (*All values of a context*), a function with `String` arguments once. **Result** shows the returned value
-  or the output queue in the same form; `MappingContext` reads and sets the Headers and Properties
-  tabs. The mapping itself (`.mmap`) is not simulated; SAP does not support Groovy Script 2.x in
-  Message Mappings, so use 1.x ([Fidelity](fidelity.md)).
+* **Message Mapping functions** (custom functions such as `def String getHeader(String name,
+  MappingContext context)` or `def void f(String[] values, Output output, MappingContext context)`):
+  a script that has them lists them above the editor under **Run as**; a click runs one, or enter
+  its name under **fn**. The label next to **fn** says *Script step* (the function gets the message)
+  or *Mapping function*. A mapping function takes **Arguments** instead of the body: a text field per
+  `String` (**null** passes null), and per `String[]` one context per line as a JSON array
+  (`["A", "B"]`; `{"suppress": true}` and `{"xsiNil": true}` stand for SUPPRESS and xsi:nil). A
+  `String[]` function runs once per context, a `String` function once. **Result** shows the returned
+  value or the output queue; `MappingContext` reads and sets the Headers and Properties tabs. The
+  mapping itself (`.mmap`) is not simulated. SAP does not support Groovy Script 2.x in Message
+  Mappings, so use 1.x ([Fidelity](fidelity.md)).
 * **Lint** shows hints about what breaks when a script moves from 1.x to 2.x:
   * `XmlSlurper` or `XmlParser` used without a `groovy.xml` import,
   * Script API v1 imports or v1-only methods in a 2.x step,

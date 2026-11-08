@@ -14,8 +14,7 @@ while a required step fails.
 **Installers.** Workflow artifacts expire after 3 days ([CI and installers](building.md#ci-and-installers)).
 If the last run is older, start a new one: *Actions* → *build* → *Run workflow* on the branch to
 test (about 20 minutes). Download `cpi-workbench-windows-latest` from the run's *Artifacts*; it holds
-the `…_x64-setup.exe` and the `.msi`. The file name carries the version in `tauri.conf.json`, which
-the release step sets later, so before a release it is still the previous version.
+the `…_x64-setup.exe` and the `.msi`. The file name carries the version in `tauri.conf.json`.
 
 **Projects.** From a checkout or a ZIP of the branch you need:
 
@@ -65,8 +64,9 @@ The first run starts the Java engines and can take a few seconds.
 | 2.9 | `scripts/route-by-partner.groovy`, input `inputs/order.xml`, header `SalesChannel` = `web-eu` | Reads the Partner Directory. |
 | 2.10 | **Compare** on a script | Runs on 1.x and 2.x. |
 | 2.11 | Type `message.` in a script; also `messageLogFactory.` and Ctrl+Space | The Script API methods are listed. |
-| 2.11a | `scripts/mapping-functions.groovy`, **Run as** `countPerContext` (or **fn** `countPerContext`), Argument 1 `["A", "B"]` and `["C"]` on two lines | **Arguments** replaces the body; **Result** shows `["2"]` and `["1"]`. With **fn** `getHeader`, Argument 1 `SenderSystem` and that header set, **Result** shows its value. |
-| 2.11b | **⚙** → **Check for updates** | The installed version is shown; the answer says it is the latest, or **Open release page** opens the release in the browser. |
+| 2.11a | `scripts/mapping-functions.groovy`: **Run as** shows its functions; click `countPerContext`, Argument 1 `["A", "B"]` and `["C"]` on two lines | The label next to **fn** says *Mapping function*; **Arguments** replaces the body; **Result** shows `["2"]` and `["1"]`. |
+| 2.11b | **Run as** `getHeader`, Argument 1 `SenderSystem` with that header set; then **null** | **Result** shows the header's value; with **null**, `null`. Opening another script brings the **Body** tab back. |
+| 2.11c | **⚙** → **Check for updates** | The installed version is shown. Before the release: "This is the latest version (latest release: 0.2.0)"; with a newer release, **Open release page** opens it in the browser. |
 
 ### XSD and XPath
 
@@ -89,6 +89,7 @@ The first run starts the Java engines and can take a few seconds.
 | 2.21 | Switch between steps and tabs | Each step keeps its settings and last result. |
 | 2.22 | **Camel** 3.14 ↔ 2.24 in the top bar, run again | Runs on both. |
 | 2.22a | **Converter**: XML to JSON on `inputs/order.xml`, *Use as input*, then JSON to XML | JSON with `@` attributes, then XML like the input (without indentation). |
+| 2.22b | **Converter**: XML to CSV on `inputs/order.xml`, path `/Order/Items/Item`, *Include Attribute Values* | A header line and one line per item. |
 | 2.23 | Start a step and change the body or its settings at once | The result belongs to the state at the start; the change applies to the next run. |
 
 ### Editor and files
@@ -103,9 +104,10 @@ The first run starts the Java engines and can take a few seconds.
 
 | # | Step | Expected |
 |---|---|---|
-| 3.1 | **Import iFlow** with the ZIP from section 0 | Unpacked into `iflows/`; lists the Groovy, XSLT, XML Validator, Content Modifier, Filter, Router, Splitter and Gather steps. |
+| 3.1 | **Import iFlow** with the ZIP from section 0 | Unpacked into `iflows/`; lists the Groovy, XSLT, XML Validator, Content Modifier, Filter, Router, Splitter, Gather, Message Mapping (**M**) and converter (**T**) steps. |
 | 3.2 | Click a Groovy or XSLT step | The file opens with the step's function name and script version. |
-| 3.3 | Click the Content Modifier, Filter and Gather | They open in Flow Steps with their settings; `{{parameters}}` come from `parameters.prop`. |
+| 3.3 | Click the Content Modifier, Filter, Gather and *JSON to XML* | They open in Flow Steps with their settings; `{{parameters}}` come from `parameters.prop` (the converter's root element `Orders`). |
+| 3.3a | Click *Map order* (**M**) | Its script `lookup.gsh` opens with the mapping function `getHeader`. |
 | 3.4 | Optional: an iFlow exported from your own tenant, without secrets | Imports without errors; steps run or report `UnsupportedInSimulator`. |
 
 ## 4. Special cases (optional)

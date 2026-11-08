@@ -68,7 +68,8 @@ easy to spot. Known, expected differences:
   `format-date`/`format-dateTime` with a language other than English.
 * `ImplicitTimezone` depends on the machine running the simulator; CPI tenants usually run in UTC.
 
-Regenerate the baseline with:
+The converter baselines come from the Flow Steps tab's Converter (or `convert.run`) with the settings
+in step 7. Regenerate the XSLT baselines with:
 
 ```sh
 E=engine/native/out/cpiwb-xml-he99   # or: java -jar engine/xml-he99/target/cpiwb-xml-he99.jar

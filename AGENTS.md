@@ -33,13 +33,14 @@ in `docs/building.md` (*Releasing*).
 
 ## Layout
 
-* `engine/core`: JSON-RPC, project files, test runner, iFlow import.
-* `engine/xml*`: XSLT, XSD and XPath against both Saxon versions.
+* `engine/core`: JSON-RPC, project files and path checks (`ProjectPaths`), test runner, iFlow import.
+* `engine/xml*`: XSLT, XSD, XPath, the XPath flow steps and the converters, against both Saxon versions.
 * `engine/groovy*`: the script runner and the clean-room `com.sap.*` API.
   * `src/api-common`: platform services shared by both versions.
   * `src/api-v1`, `src/api-v2`: the Script API of each version.
 * `app/src`: the UI. `app/src-tauri`: the Rust shell; `src/mcp/` is the MCP server (`cpi-workbench mcp`).
-  `mcp/flow.rs` repeats the Flow Steps tab's calls (`app/src/lib/store.svelte.ts`); change both together.
+  `mcp/flow.rs` repeats the Flow Steps tab's calls (`app/src/lib/store.svelte.ts`), including the converter
+  defaults; change both together.
 * `examples/demo-project`: the sample project users open in the app (no test cases).
 * `testdata/regression-project`: the project with test cases that CI, the e2e and the shell tests run.
 * `probes`: tenant probes and the simulator's baseline output.

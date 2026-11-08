@@ -1,38 +1,69 @@
 # CPI Workbench — Project Plan
 
-Status: **v3, implementation in progress** — see §0 for what is built and [status.md](status.md) for the per-area completeness audit. Open decisions are in §13.
-
-Working name: **CPI Workbench** (placeholder).
-
-What changed in v3: the plan is now built around **our own CPI simulation core**. Third-party components are limited to the foundation CPI itself runs on (JDK, Groovy, Apache Camel, Saxon). Small community projects such as go-xslt are only references for features and UX, not components (§3). XSLT now runs on the **same Saxon release line as CPI (9.9)**, compiled to a native binary, so XSLT needs no JVM at runtime (§5, §7).
+The design, the research ledger (findings F…, sources S…, open questions Q…) and the roadmap. What is
+built and how complete it is: [status](status.md). What matches CPI: [fidelity](fidelity.md).
 
 ---
 
-## 0. Implementation status (2026-10-25)
+## 1. The core idea
 
-Decisions taken: build-vs-reuse principle accepted (§3), XSLT first, tenant probes later (§13 Q1–Q6).
+Testing a Groovy script or an XSLT mapping in SAP Integration Suite today means: change → deploy → wait → trigger → enable trace → open the monitor → read the payload → repeat. Each round takes minutes.
 
-| Phase | Status |
-|---|---|
-| 0 — Spikes | **Done.** (a) Saxon-HE 9.9.1-8 and 12.9 compile to GraalVM native executables (Linux measured; Windows/macOS built and smoke-tested in CI, not measured). (b) CPI parameter binding and `hci:setHeader`/`setProperty` work as Saxon integrated extension functions in both versions — no `xsl:message` workaround needed. (d) Tauri ⇄ engine JSON-RPC over stdio works. (e) Budgets measured, see below. (c) Groovy spike: skipped, Groovy was built directly in Phase 3. |
-| 1 — Probe kit | **Written** (`probes/`), simulator baseline recorded; waiting for a tenant run. |
-| 2 — XSLT MVP | **Done**: XSLT simulator with live mode, both Saxon profiles, parameter binding view, XSD validation, XPath 1.0/3.1, test cases + runner + CLI, desktop app and browser mode. |
-| 3 — Groovy MVP | **Done**: engines for Groovy Script 1.x (Groovy 2.4.21, Camel 2.24.3) and 2.x (Groovy 4.0.29, Camel 3.14.7), clean-room Script API, MPL, Secure Store + Value Mapping mocks, Groovy view in the app, test cases, bundled Java 17 runtime with AppCDS and idle shutdown. Message methods of v1 and v2 follow SAP's published interfaces (F29). |
-| 4 — Productivity | **Done**: CLI runner; platform API mocks following SAP's published generic API (Secure Store incl. OAuth2 tokens, Value Mapping, Partner Directory, Keystore incl. key/trust managers, number ranges; F33; Data Store has no public script API, F28); runtime comparison (Saxon 9.9 ↔ 12, Groovy 1.x ↔ 2.x); lint (v1 imports in 2.x, wildcard imports, 1.x scripts that will break on 2.x through the `groovy.util` → `groovy.xml` move, v1-only methods in 2.x); iFlow-zip import (Groovy, XSLT and XML Validator steps, header-driven mappings flagged; checked against 24 SAP sample iFlows); reflexive Java extension functions in XSLT (F32); SOAP headers and `lib/` jars for scripts. |
-| 5 — Distribution | Partly: CI builds unsigned Windows/macOS (Apple Silicon)/Linux installers (green, not yet run on real Windows/macOS hardware). Open: code signing, auto-update. |
+CPI Workbench removes that loop. It is a lean desktop app (Windows, macOS, Linux) where you:
 
-Measured (Linux x86-64, native engines): engine start ≈ 10 ms (JVM: ≈ 200 ms); first XSLT run ≈ 10 ms, cached
-runs < 1 ms (JVM: ≈ 420 ms / 5 ms); 270 KB input ≈ 70 ms (9.9) / ≈ 200 ms (12) with ≈ 60 MB peak RSS;
-executables 48 MB (9.9) and 54 MB (12), ≈ 16 and 18 MB gzip-compressed. Both engines fit the ≤ 60 MB base-installer
-budget only together with installer compression; the measured compressed size suggests they do (to confirm with real installers).
+1. enter an **input message** — body, headers, exchange properties,
+2. pick a **Groovy script** (1.x or 2.x), an **XSLT mapping** or a **flow step**,
+3. press **Run** (or let it re-run on every change),
+4. see the **output message** — body, headers, properties, MPL entries, logs and errors — immediately.
 
-New findings from the implementation:
+The test must behave **as close as possible to the real CPI step**: same Groovy version, same Saxon release line, same parameter binding, same API surface, same type conversions. That fidelity is the reason to build this instead of using a generic Groovy console or XSLT tester.
 
-| # | Finding | Label | Evidence |
+Everything runs **offline** on the local machine.
+
+### In scope
+- Groovy Script step, **Script API v1** (step 1.x, Groovy 2.4.21) and **Script API v2** (step 2.x, Groovy 4.0.29)
+- XSLT Mapping step (XSLT 1.0 / 2.0 / 3.0)
+- XML Validator-like **XSD validation**, an **XPath tester**
+- Single **flow steps**: Content Modifier, Filter, Router, Splitter, Gather, Converter (§10)
+- Custom functions of **Message Mapping** scripts, run on their own (§10.3)
+- Test cases saved as files, a runner and CLI for regression tests; an **MCP server** for coding agents (§10.1)
+
+### Out of scope (for now)
+- Whole iFlows, adapters, graphical Message Mapping (`.mmap`)
+- Connecting to a tenant; the app stays offline
+- Shipping SAP code or decompiling SAP runtime binaries
+
+---
+
+## 2. What CPI actually does (research ledger)
+
+Labels follow the REA evidence rules (see §4): **Observed** = read in a source or measured; **Inferred** = concluded from observations; **Unknown** = not established. F1–F19 come from the first research round; later findings came up during the implementation.
+
+| # | Finding | Label | Source |
 |---|---|---|---|
+| F1 | Groovy Script step 1.x → **Groovy 2.4.21** | Observed | S1 |
+| F2 | Groovy Script step 2.x → **Groovy 4.0.29** | Observed | S1 |
+| F3 | A diagnostic on a 2.x step reported **Java 17.0.18, Groovy 4.0.29, Camel 3.14.7** | Observed (one community report) | S2 |
+| F4 | Java version behind **1.x** scripts today | **Unknown** (SAP Help still mentions Java 8) | S1 |
+| F5 | v1 API `com.sap.gateway.ip.core.customdev.util.Message`, entry `def Message processData(Message message)` | Observed | S1, S5 |
+| F6 | v2 API in package `com.sap.it.script.v2.api` (`Message`, `Exchange`); full method list | Interface **Observed** (F29); runtime class Unknown | S2, S3, S23 |
+| F7 | The public SAP Script API jar is under an SAP licence and is "bare-bones" | Observed (jar: SAP Developer License, interfaces only) → not shippable (Inferred) | S5, S6, S23 |
+| F8 | CPI's XSLT engine is **Saxon-EE**, most recently reported as **9.9.1.6** (older report: 9.8.0.12) | Observed (community) | S8, S9 |
+| F9 | XSLT 3.0 supported since XSLT Mapping step 1.2 | Observed | S7 |
+| F10 | XSLT parameters: **every `xsl:param` is bound automatically** to a header or exchange property of the same name, if one exists | Observed (SAP sample docs) | S10 |
+| F11 | Setting values from XSLT: namespace `http://sap.com/it/` (prefix free, SAP uses `hci:`), functions `setHeader($exchange, name, value)` and `setProperty($exchange, name, value)`, all strings; the stylesheet must declare `<xsl:param name="exchange"/>` | Observed (SAP sample docs) | S10 |
+| F12 | Error "Header/Property value not found for the parameter" exists as an SAP KBA — parameter binding has edge cases | Observed (KBA title only) | S10 |
+| F13 | Saxon-HE **9.9.1-x** is on Maven Central under **MPL-2.0** | Observed | S11 |
+| F14 | Saxon **9.9 HE does not support higher-order functions** (PE/EE only); HE gained them (and `xsl:evaluate`) in Saxon 10 | Observed | S12 |
+| F15 | Saxon-HE supports **integrated extension functions** (`ExtensionFunctionDefinition`); reflexive Java calls need PE/EE | Observed (Saxon docs as cited by PTC; Saxon docs to re-check) | S13, S8 |
+| F16 | Saxon-HE can be compiled to a **native executable with GraalVM** (reported for 12.4, ~42 MB, small reflection config); SaxonC is Saxonica's own native build | Observed (anecdotal for 12.4) → feasible for 9.9 (Inferred) | S14, S15 |
+| F17 | Dynamic Groovy (runtime-compiled scripts) **cannot run in a GraalVM native image**; no Groovy implementation exists outside the JVM | Observed | S16, S17 |
+| F18 | CPI traces show headers, exchange properties and payload per step; MPL with trace content can be exported | Observed (blogs; export format Unknown) | S18 |
+| F19 | Existing references: GrooveBox (online, Groovy 2.4/Java 8 and 4/Java 17, body/headers/properties, value mappings, secure store, partner directory, MPL, console, list of SAP API calls), Contiva Groovy IDE (online), go-xslt (pure-Go XSLT 3.0/XSD engine + desktop tester, pre-1.0, single maintainer) | Observed (descriptions, not inspected in depth) | S19, S20, S21 |
 | F20 | Saxon-HE (9.9 and 12) only has English names for `format-date` (`'de'` → `[Language: en]5. March 2026`). CPI's Saxon-EE is expected to localise. | Observed (simulator) / Inferred (CPI) | `probes/baseline-simulator/fingerprint.saxon-he-9.9.xml` |
 | F21 | Passing headers/properties as Java objects through JAXP `setParameter` makes Saxon convert them itself: `Integer` → `xs:integer`, `Boolean` → `xs:boolean`, `Date` → `xs:dateTime`, `byte[]` → sequence of integers. | Observed (simulator) | `probes/baseline-simulator/probe-xslt-behaviour.saxon-he-9.9.xml` |
 | F22 | Header-over-property precedence is modelled on Camel's XsltBuilder (properties set first, headers override). That CPI uses this code path is an inference. | Inferred → probe Q-X2 | `XsltStep.java` |
+| F23 | Saxon instantiates built-in functions reflectively; native builds need reflection metadata for all of them (generated by `engine/native/GenReflect.java`), plus the JDK XPath 1.0 function classes. | Observed | native build failures fixed in this phase |
 | F24 | Groovy 2.4.21 runs the Script API v1 corpus on Java 17 and 21 without changes (7 community scripts). | Observed (simulator) | `GroovyCorpusTest` |
 | F25 | `XmlUtil.serialize` / XSLT pretty-printing differs between JDK versions (indentation), so the Java version behind each CPI step matters for byte-exact comparisons. | Observed (corpus expected files vs. JDK 17/21 output) | `GroovyCorpusTest` |
 | F26 | A classic 1.x → 2.x break is reproduced: scripts using `XmlParser`/`XmlSlurper` without import (default `groovy.util` package) fail on Groovy 4. | Observed (simulator) | corpus `edi-segment-counter` |
@@ -57,63 +88,6 @@ New findings from the implementation:
 | F45 | In SAP's sample iFlow "Accessing Header Property and Externalized Parameter from Message Mapping", a Message Mapping step is `activityType=Mapping` with `mappinguri` `dir://mmap/src/main/resources/mapping/<name>.mmap` (no `subActivityType`). The `.mmap` lists each Groovy script it uses as `<lnkRole role="UsedFuncLib">` with a key whose `elem` values are the file name (`getLocation.gsh`) and its folder (`src/main/resources/script`). One sample only; the import reads these generically. | Observed (one SAP sample) | S26 |
 | F46 | Converter steps in exported iFlows: `activityType` JsonToXmlConverter (`useNamespaces`, `jsonNamespaceSeparator`, `jsonNamespaceMapping` as rows of two unnamed cells, `addXMLRootElement`, `additionalRootElementName`), XmlToJsonConverter (`useNamespaces`, `jsonNamespaceSeparator`, `xmlJsonSuppressRootElement`, `xmlJsonUseStreaming`, `xmlJsonConvertAllElements` = `specific`, `jsonOutputEncoding`), XmlToCsvConverter (`XPath_Field_Location`, `Field_Separator_in_CSV`, `CSV_Header` none/xml or older `Include_Header`, `Include_Master`, `Master_XPath_Field_Location`, `Include_Attribute`), CsvToXmlConverter (`XML_Schema_File_Path` such as `/xsd/items.xsd`, `XPath_Field_Location`, `Field_Separator_in_CSV`, `ignoreFirstLineAsHeader`, `headerMapping` = `mapHeadersToXSD`). Not seen: the XML to JSON namespace table and array paths (no sample streams), the CSV record marker, the JSON root element's namespace. | Observed (37 + 35 + 7 + 2 steps in 50 public iFlows on GitHub, 2026-11-07) | S31 |
 | F47 | SAP documents the JSON ↔ XML conversion rules, limitations, error texts and examples, XML to JSON streaming, and two CSV examples with input and output (S30); the converters follow them. SAP's own pages disagree in one place: the JSON to XML rule keeps an unmapped prefix in the element name (`"p.A"` → `<p.A>`), while the example "No Namespace Mapping" turns `"abc.A"` into `<A>` (with separator `:`). The examples also contain typos (`<E>valueE<E>`). Output formatting is shown compact for JSON ↔ XML, indented for CSV to XML. | Observed (SAP docs) → Q-C1 | S30 |
-| F23 | Saxon instantiates built-in functions reflectively; native builds need reflection metadata for all of them (generated by `engine/native/GenReflect.java`), plus the JDK XPath 1.0 function classes. | Observed | native build failures fixed in this phase |
-
----
-
-## 1. The core idea
-
-Testing a Groovy script or an XSLT mapping in SAP Integration Suite today means: change → deploy → wait → trigger → enable trace → open the monitor → read the payload → repeat. Each round takes minutes.
-
-CPI Workbench removes that loop. It is a lean desktop app (Windows, macOS; Linux comes almost for free) where you:
-
-1. enter an **input message** — body, headers, exchange properties, attachments,
-2. pick a **Groovy script** (v1 or v2) or an **XSLT mapping**,
-3. press **Run** (or let it re-run on every change),
-4. see the **output message** — body, headers, properties, MPL entries, logs and errors — immediately, with a diff against the input.
-
-The test must behave **as close as possible to the real CPI step**: same Groovy version, same Saxon release line, same parameter binding, same API surface, same type conversions. That fidelity is the reason to build this instead of using a generic Groovy console or XSLT tester.
-
-Everything runs **offline** on the local machine.
-
-### In scope
-- Groovy Script step, **Script API v1** (step 1.x, Groovy 2.4.21) and **Script API v2** (step 2.x, Groovy 4.0.29)
-- XSLT Mapping step (XSLT 1.0 / 2.0 / 3.0)
-- XML Validator-like **XSD validation**, an **XPath tester** (Content Modifier / Router style)
-- Test cases saved as files, a runner and CLI for regression tests
-
-### Out of scope (for now)
-- Whole iFlows, adapters, routers, Message Mapping (graphical)
-- Connecting to a tenant; the app stays offline
-- Shipping SAP code or decompiling SAP runtime binaries
-
----
-
-## 2. What CPI actually does (research ledger)
-
-Labels follow the REA evidence rules (see §4): **Observed** = read in a source or measured; **Inferred** = concluded from observations; **Unknown** = not established.
-
-| # | Finding | Label | Source |
-|---|---|---|---|
-| F1 | Groovy Script step 1.x → **Groovy 2.4.21** | Observed | S1 |
-| F2 | Groovy Script step 2.x → **Groovy 4.0.29** | Observed | S1 |
-| F3 | A diagnostic on a 2.x step reported **Java 17.0.18, Groovy 4.0.29, Camel 3.14.7** | Observed (one community report) | S2 |
-| F4 | Java version behind **1.x** scripts today | **Unknown** (SAP Help still mentions Java 8) | S1 |
-| F5 | v1 API `com.sap.gateway.ip.core.customdev.util.Message`, entry `def Message processData(Message message)` | Observed | S1, S5 |
-| F6 | v2 API in package `com.sap.it.script.v2.api` (`Message`, `Exchange`); full method list | Interface **Observed** (F29); runtime class Unknown | S2, S3, S23 |
-| F7 | The public SAP Script API jar is under an SAP licence and is "bare-bones" | Observed (jar: SAP Developer License, interfaces only) → not shippable (Inferred) | S5, S6, S23 |
-| F8 | CPI's XSLT engine is **Saxon-EE**, most recently reported as **9.9.1.6** (older report: 9.8.0.12) | Observed (community) | S8, S9 |
-| F9 | XSLT 3.0 supported since XSLT Mapping step 1.2 | Observed | S7 |
-| F10 | XSLT parameters: **every `xsl:param` is bound automatically** to a header or exchange property of the same name, if one exists | Observed (SAP sample docs) | S10 |
-| F11 | Setting values from XSLT: namespace `http://sap.com/it/` (prefix free, SAP uses `hci:`), functions `setHeader($exchange, name, value)` and `setProperty($exchange, name, value)`, all strings; the stylesheet must declare `<xsl:param name="exchange"/>` | Observed (SAP sample docs) | S10 |
-| F12 | Error "Header/Property value not found for the parameter" exists as an SAP KBA — parameter binding has edge cases | Observed (KBA title only) | S10 |
-| F13 | Saxon-HE **9.9.1-x** is on Maven Central under **MPL-2.0** | Observed | S11 |
-| F14 | Saxon **9.9 HE does not support higher-order functions** (PE/EE only); HE gained them (and `xsl:evaluate`) in Saxon 10 | Observed | S12 |
-| F15 | Saxon-HE supports **integrated extension functions** (`ExtensionFunctionDefinition`); reflexive Java calls need PE/EE | Observed (Saxon docs as cited by PTC; Saxon docs to re-check) | S13, S8 |
-| F16 | Saxon-HE can be compiled to a **native executable with GraalVM** (reported for 12.4, ~42 MB, small reflection config); SaxonC is Saxonica's own native build | Observed (anecdotal for 12.4) → feasible for 9.9 (Inferred) | S14, S15 |
-| F17 | Dynamic Groovy (runtime-compiled scripts) **cannot run in a GraalVM native image**; no Groovy implementation exists outside the JVM | Observed | S16, S17 |
-| F18 | CPI traces show headers, exchange properties and payload per step; MPL with trace content can be exported | Observed (blogs; export format Unknown) | S18 |
-| F19 | Existing references: GrooveBox (online, Groovy 2.4/Java 8 and 4/Java 17, body/headers/properties, value mappings, secure store, partner directory, MPL, console, list of SAP API calls), Contiva Groovy IDE (online), go-xslt (pure-Go XSLT 3.0/XSD engine + desktop tester, pre-1.0, single maintainer) | Observed (descriptions, not inspected in depth) | S19, S20, S21 |
 
 ---
 
@@ -132,10 +106,10 @@ Why: the goal is to behave like CPI. CPI executes scripts with Groovy, converts 
 | **Script API v1 + v2 implementations** (clean-room) | Same package/class names as SAP, so scripts run unchanged |
 | **Groovy step runner** | Loads the script with the right Groovy version, calls the configured function, captures results, maps errors to script lines |
 | **MPL emulation** | `messageLogFactory`, string properties, custom header properties, log attachments |
-| **Platform API mocks** | `ITApiFactory`: Secure Store, Value Mapping, Keystore, Partner Directory, Data Store — data from local files |
+| **Platform API mocks** | `ITApiFactory`: Secure Store, Value Mapping, Keystore, Partner Directory, number ranges — data from local files (no Data Store: no public API, F28) |
 | **XSLT step runner** | CPI parameter binding (F10), `$exchange` + `setHeader`/`setProperty` as Saxon integrated extension functions (F11, F15), output handling, `xsl:include`/`xsl:import` resolution |
-| **XSD validator step** and **XPath tester** | CPI-style configuration and error reporting |
-| **Runtime profiles + calibration probes** | Version data per CPI step version; probe iFlows to verify against a real tenant (§8) |
+| **XSD validator step**, **XPath tester** and **flow steps** | CPI-style configuration and error reporting; Content Modifier, Filter, Router, Splitter, Gather and Converter (§10) |
+| **Runtime profiles + calibration probes** | One engine per CPI runtime (Saxon 9.9 / 12, Groovy Script 1.x / 2.x, Camel 2.24 / 3.14); probe iFlows to verify against a real tenant (§8) |
 | **Compatibility linter** | v1→v2 migration warnings, Groovy 2→4 breaking changes, EE-only XSLT features |
 | **Test-case format, runner, CLI** | Regression tests without a tenant |
 | **Desktop app and UI** | The editor, the panels, the diff, the "live run" loop |
@@ -145,9 +119,9 @@ Why: the goal is to behave like CPI. CPI executes scripts with Groovy, converts 
 | Component | Version | Licence | Why |
 |---|---|---|---|
 | Groovy | 2.4.21 and 4.0.29 | Apache-2.0 | Exactly what CPI uses (F1, F2) |
-| Apache Camel core (type converters) | 3.14.x for v2; v1 to calibrate | Apache-2.0 | Same type conversion rules as CPI (F3) |
-| Saxon-HE | **9.9.1-x** (CPI line) and 12.x (optional) | MPL-2.0 | Same engine family and release line as CPI (F8, F13) |
-| JDK (Eclipse Temurin) | 17 (plus 8/11 if calibration requires) | GPLv2 + Classpath Exception | CPI runtime (F3) |
+| Apache Camel core (type converters, Simple) | 3.14.7 for 2.x, 2.24.3 for 1.x (to calibrate, F30) | Apache-2.0 | Same type conversion rules as CPI (F3) |
+| Saxon-HE | **9.9.1-8** (CPI line) and 12.9 | MPL-2.0 | Same engine family and release line as CPI (F8, F13) |
+| JDK (Eclipse Temurin) | 17 | GPLv2 + Classpath Exception | CPI runtime (F3) |
 | Tauri, Monaco editor | current | MIT / Apache-2.0 | App shell and code editor |
 
 All of them are long-lived projects backed by foundations or companies (Apache, Saxonica, Eclipse, the Tauri team, Microsoft) — not one-person projects.
@@ -181,32 +155,36 @@ Reference products (GrooveBox, Contiva, go-xslt's desktop app, CPI's own simulat
 
 ```
 ┌────────────────────────────── Desktop app ──────────────────────────────┐
-│  UI: TypeScript + Svelte, Monaco editor (webview)                        │
-│  Shell: Rust (Tauri 2) — projects, settings, process supervisor,         │
-│         test runner, CLI, auto-update                                    │
+│  UI: TypeScript + Svelte 5, Monaco editor (webview)                     │
+│  Shell: Rust (Tauri 2) — engine supervisor, MCP server (cpi-workbench mcp) │
 └───────────┬───────────────────────────────────────────┬─────────────────┘
             │ JSON-RPC over stdio                       │ JSON-RPC over stdio
             ▼                                           ▼
 ┌───────────────────────────────┐        ┌────────────────────────────────┐
-│ cpisim-xml  (NATIVE binary)   │        │ cpisim-groovy  (JVM worker)    │
-│  our CPI XSLT step runner     │        │  our Script API v1 / v2        │
-│  our XSD / XPath tools        │        │  our MPL + platform API mocks  │
-│  Saxon-HE 9.9.1 (CPI line)    │        │  Groovy 2.4.21 | Groovy 4.0.29 │
-│  compiled with GraalVM        │        │  Camel type converters         │
-│  → no JVM at runtime          │        │  trimmed bundled JRE           │
+│ cpiwb-xml (NATIVE binary)     │        │ cpiwb-groovy (JVM, one per     │
+│  CPI XSLT step, XSD, XPath,   │        │  script version)               │
+│  XPath flow steps, converters │        │  Script API v1 / v2, MPL,      │
+│  Saxon-HE 9.9 or 12           │        │  platform API mocks, Camel     │
+│  compiled with GraalVM        │        │  Simple, Content Modifier      │
+│  → no JVM at runtime          │        │  Groovy 2.4.21 | 4.0.29        │
 └───────────────────────────────┘        └────────────────────────────────┘
-          shared code base: cpisim-core (Java 17) — exchange model, profiles,
-          test-case format, result format
+          shared code base: engine/core (Java 17) — JSON-RPC, project files,
+          test runner, iFlow import
 ```
 
+Details: [architecture](architecture.md).
+
 ### 5.2 Technology choices and why
-- **Engine core in Java 17** (`cpisim-core`, `cpisim-xml`, `cpisim-groovy`): it must sit directly on Groovy, Camel and Saxon, which are Java libraries. Plain Java (rather than Kotlin) keeps the runtime small and is the safest choice for GraalVM native compilation.
+- **Engine core in Java 17** (`engine/core`, `engine/xml`, `engine/groovy`): it must sit directly on Groovy, Camel and Saxon, which are Java libraries. Plain Java (rather than Kotlin) keeps the runtime small and is the safest choice for GraalVM native compilation.
 - **XSLT/XSD/XPath as a native binary** (GraalVM Native Image): Saxon is pure Java and has been compiled natively before (F16). Result: fast start, low memory, no JVM for XML work. If native compilation of 9.9 hits a blocker, the same code runs on the bundled JRE (fallback, slower start).
 - **Groovy on a JVM**: unavoidable (F17). v1 and v2 run as separate worker processes so Groovy 2 and 4 never mix, and a runaway script only kills its own worker.
 - **Shell in Rust (Tauri 2)**: small native binary, uses the operating system's webview (no bundled browser), good installer and update tooling. The UI needs a real code editor, which the webview + Monaco provides; a pure-Rust UI toolkit (egui, as in ArtCraft) has no comparable editor.
-- Technology is not dogma: if the spikes show a better option (e.g. a JVM-only app being simpler), we switch.
 
 ### 5.3 Footprint and performance
+
+The original targets. As built: one all-in-one installer (no separate Groovy pack), messages go through
+JSON-RPC (no temp files), the heap is fixed at 512 MB, and the engines time out after 30 s. Measured numbers
+are in [architecture](architecture.md#measured-performance).
 
 **Lean by default**
 - **Modular delivery**: the base app contains shell, UI and the native XML engine. The **Groovy pack** (JRE + Groovy + Camel + our API) is downloaded on first Groovy use, or comes with an **all-in-one offline installer** for machines without internet access.
@@ -238,18 +216,18 @@ Reference products (GrooveBox, Contiva, go-xslt's desktop app, CPI's own simulat
 ## 6. Groovy Script Simulator
 
 ### 6.1 Input
-- **Body**: XML / JSON / text / binary (from file); encoding selector; pretty-print.
+- **Body**: XML / JSON / text (from a file or typed), as `String`, `InputStream` or `byte[]`; pretty-print.
 - **Headers** and **exchange properties**: tables with name, value and **Java type** (`String`, `Integer`, `Long`, `Boolean`, `byte[]`, `Date`, `null`, …) — wrong types are a common cause of CPI failures.
-- **Attachments**: name, content type, file.
+- **Attachments** and **SOAP headers**: in test cases (`case.json`).
 - **Script** in Monaco; **function name** (default `processData`, as in the step configuration).
-- **Script collection / libraries**: extra `.groovy` and `.jar` files on the classpath.
+- **Libraries**: `.jar` files from the project's `lib/` and the iFlow's `src/main/resources/lib/` on the classpath.
 - **Profile**: `Groovy Script 1.x` or `2.x`.
 
 ### 6.2 Output
 - Body with diff to input; headers and properties with added/changed/removed and type changes highlighted.
 - **MPL view**: string properties, custom header properties, log attachments.
 - **API call log**: which SAP APIs the script called (Secure Store, Value Mapping, …) — an idea taken from GrooveBox.
-- Console (`println`, stdout/stderr, SLF4J), exception with stack trace mapped to script lines, timing, memory.
+- Console (`println`), errors mapped to script lines, timing.
 
 ### 6.3 Our Script API implementation
 **v1** `com.sap.gateway.ip.core.customdev.util.Message`: `getBody()`, `getBody(Class)`, `setBody`, `getHeaders`, `getHeader(String, Class)`, `setHeader(s)`, `getProperties`, `getProperty`, `setProperty`/`setProperties`, attachment methods, `getBodySize`, `getAttachmentsSize`; `messageLogFactory` binding with `MessageLog` (`setStringProperty`, `addCustomHeaderProperty`, `addAttachmentAsString`).
@@ -258,10 +236,10 @@ Reference products (GrooveBox, Contiva, go-xslt's desktop app, CPI's own simulat
 
 **Type conversion**: our `Message` wraps a real Camel `DefaultExchange`, so `getBody(String)`, `getHeader(name, Type)` etc. use Camel's actual converters — the same rules as on CPI.
 
-**Platform APIs** (`ITApiFactory`): mocks fed from `platform/` files in the project (credentials, value mapping CSV, keystore, partner directory). Unsupported APIs fail with a clear `UnsupportedInSimulator` error.
+**Platform APIs** (`ITApiFactory`): mocks fed from `platform/` files in the project (credentials, value mappings, partner directory, keystore, number ranges; [test cases](test-cases.md)). Other services raise `InvalidContextException`, as SAP's Javadoc says (F27).
 
 ### 6.4 Linting
-v1 imports in a v2 profile; Groovy 2→4 breaking changes (e.g. `groovy.util.XmlSlurper` → `groovy.xml.XmlSlurper`); wildcard imports (discouraged by SAP's upgrade guidance, S3); Java APIs not available on the profile's Java version. "Run under both profiles" compares v1 and v2 results side by side.
+v1 imports in a v2 profile; Groovy 2→4 breaking changes (e.g. `groovy.util.XmlSlurper` → `groovy.xml.XmlSlurper`); wildcard imports (discouraged by SAP's upgrade guidance, S3). *Compare* runs a script on 1.x and 2.x side by side.
 
 ---
 
@@ -275,7 +253,7 @@ Three panes: **Input** (body, headers, properties) → **XSLT** (Monaco, with in
 - **`$exchange` and `setHeader` / `setProperty`** (F11): registered as **Saxon integrated extension functions** in namespace `http://sap.com/it/`, exactly where CPI registers them. Calls are recorded and applied to the output message.
 - **Output**: result becomes the new body; output encoding and serialization as configured in the stylesheet (Saxon decides, as in CPI).
 - **Includes/imports** resolved from the project's mapping folder, like iFlow resources.
-- Step options such as source/target from header or property (newer step versions) — to verify, then implement.
+- Step options such as source/target from header or property (newer step versions): to verify (Q-X6), not built.
 
 ### 7.3 Saxon profiles
 
@@ -283,30 +261,28 @@ Three panes: **Input** (body, headers, properties) → **XSLT** (Monaco, with in
 |---|---|---|
 | **CPI 9.9 (default)** | Saxon-HE 9.9.1-x, native | Same release line as CPI (F8) — closest behaviour |
 | **Modern HE** | Saxon-HE 12.x, native | Supports higher-order functions and `xsl:evaluate`, which CPI's EE 9.9 has but HE 9.9 lacks (F14) |
-| **Bring your own EE** (optional) | your licensed Saxon-EE 9.9 jar, on the JRE | Exact CPI engine, if you own a licence |
 
-The linter detects EE-only features (higher-order functions, schema-aware XSLT, streaming, reflexive Java calls) and suggests the right profile. ~~Reflexive calls to your own Java classes do not work in CPI either (S8), so they are flagged as errors.~~ Superseded by F32: SAP's own samples use reflexive calls, so the simulator supports them; features that need Saxon-PE/EE get an explaining diagnostic instead.
+Features that need Saxon-PE/EE (higher-order functions on 9.9, schema-aware XSLT, streaming) get a diagnostic that names the profile to use. Reflexive Java calls are supported for JDK classes, since SAP's own samples use them (F32). A *bring your own Saxon-EE* profile was considered and not built.
 
 ---
 
 ## 8. Fidelity: profiles, calibration, limits
 
 ### 8.1 Runtime profiles
-Versioned JSON files with Java, Groovy, Camel and Saxon versions per CPI step version, each value linked to its evidence (finding IDs) and a `verifiedOn` date.
+A profile is an engine build per CPI runtime (Saxon 9.9 / 12, Groovy Script 1.x / 2.x) and, for flow steps, a Camel line (2.24 / 3.14). Versioned profile files with a `verifiedOn` date were planned; they wait for the probe results.
 
 ### 8.2 Isolation and safety
-Fresh exchange per run, timeout (default 10 s), memory cap, captured output. XML engine: no network, file access limited to the project folder. Groovy: network allowed by default (CPI scripts may call HTTP), "offline sandbox" toggle.
-*Update 2026-10: no Groovy sandbox is planned; scripts run with the user's rights, and the user guide says to run trusted scripts only.*
+Fresh exchange per run, a 30-second timeout after which the engine restarts, captured output. XML runs: no network, file access limited to the project folder (following symbolic links). Groovy: no sandbox; scripts run with the user's rights, and the user guide says to run trusted scripts only.
 
 ### 8.3 Calibration and probe iFlows (the REA "observe" step)
-- **Fingerprint iFlow**: reports Java, Groovy (`GroovySystem.getVersion()`), Camel and Saxon (`system-property('xsl:product-version')`) versions, default charset, timezone, locale.
-- **Probe iFlows**: one per open behaviour question (Appendix A) — e.g. header vs. property precedence for `xsl:param`, type conversions of `getBody(String)` for various body types, serialization defaults. Results are stored as expected values.
-- The app imports the results, updates the profiles and turns probe cases into regression tests. Every release must pass them.
+- **Fingerprint iFlows** report Java, Groovy, Camel and Saxon versions, default charset, timezone, locale.
+- **Probe iFlows**, one per open behaviour question (Appendix A); the simulator's own output is the baseline (`probes/baseline-simulator/`).
+- Differences become bugs or documented limits ([fidelity](fidelity.md)), and probe cases become regression tests.
 
 ### 8.4 Limits we accept
-- Adapter-specific headers exist only if set in the input (templates help).
+- Adapter-specific headers exist only if set in the input.
 - Tenant-specific settings (memory limits, custom libraries, real platform data) are not reproduced.
-- Saxon-EE-only features without your own EE licence (§7.3).
+- Saxon-EE-only features (§7.3).
 - SAP-internal classes outside the public script API.
 
 ---
@@ -316,33 +292,30 @@ Fresh exchange per run, timeout (default 10 s), memory cap, captured output. XML
 ```
 my-project/
   cpi-workbench.json      # marks the folder as a project (name)
-  scripts/                # .groovy
-  mappings/               # .xsl / .xslt
-  schemas/                # .xsd
+  scripts/  mappings/  schemas/
   lib/                    # extra .jar
-  platform/               # mocked secure store, value mappings, partner directory
+  platform/               # mocked secure store, value mappings, partner directory, keystore, number ranges
+  iflows/                 # imported iFlow exports
   tests/
     order-to-idoc/
       case.json           # step type, profile, function name, typed headers/properties
       input.xml
       expected-output.xml # optional → regression assertion
 ```
-Plain, git-friendly files. **CLI** (`cpiwb run tests/`) runs all cases and exits non-zero on failure (CI-ready).
-
-Later convenience: open an **iFlow export (zip)** and list its script and XSLT steps with their configuration; create a test case from an **exported MPL trace** (export format to be checked, F18).
+Plain, git-friendly files. The engines' `test` command (`cpiwb-xml test tests/`, `java -jar cpiwb-groovy-v1.jar test tests/`) runs the cases and exits non-zero on failure. Format: [test cases](test-cases.md). Open: a test case from an **exported MPL trace** (export format unknown, F18) and test cases for flow steps.
 
 ---
 
 ## 10. Roadmap
 
-| Phase | Scope | Exit criterion |
+| Phase | Scope | Status |
 |---|---|---|
-| **0 — Spikes** | (a) Saxon-HE 9.9.1 as GraalVM native image on Windows + macOS; (b) CPI parameter binding + `setHeader`/`setProperty` as integrated extension functions; (c) Groovy 2.4.21 and 4.0.29 workers with Camel-backed `Message`; (d) Tauri ⇄ engine JSON-RPC; (e) measure all budgets in §5.3 | Measured numbers; go/no-go for native XML engine |
-| **1 — Probe kit** | Fingerprint + probe iFlows for the questions in Appendix A | You run them once on a test tenant; results stored |
-| **2 — XSLT MVP** | XSLT simulator with live mode, CPI binding, profiles, XSD validation, XPath tester, test cases | Probe cases for XSLT pass |
-| **3 — Groovy MVP** | Groovy v1 + v2, typed headers/properties, MPL, API call log, console, diff | Probe cases for Groovy pass |
-| **4 — Productivity** | Platform API mocks, linting, both-profiles comparison, CLI, iFlow-zip import | Usable for regression tests |
-| **5 — Distribution** | Signed installers (`.msi`, notarized `.dmg`), offline installer, auto-update (§10.2) | Shareable with colleagues |
+| **0 — Spikes** | Saxon-HE 9.9 as GraalVM native image; CPI parameter binding and `setHeader`/`setProperty` as integrated extension functions; Tauri ⇄ engine JSON-RPC; budgets (§5.3) | Done |
+| **1 — Probe kit** | Fingerprint and probe iFlows for the questions in Appendix A | Written, baseline recorded; waiting for a tenant run |
+| **2 — XSLT MVP** | XSLT with live mode, CPI binding, both Saxon profiles, XSD validation, XPath tester, test cases, CLI | Done (0.1.0) |
+| **3 — Groovy MVP** | Groovy 1.x and 2.x, typed headers/properties, MPL, API call log, console, diff | Done (0.1.0) |
+| **4 — Productivity** | Platform API mocks, lint, runtime comparison, iFlow-zip import, flow steps, MCP server | Done (0.1.0–0.3.0) |
+| **5 — Distribution** | Installers for Windows, macOS, Linux; code signing, auto-update (§10.2) | Unsigned installers and a manual update check; signing and auto-update open |
 
 ### 10.1 MCP server for coding agents (built, 2026-11-01)
 
@@ -419,32 +392,12 @@ To verify then: whether SmartScreen prompts for an installer the updater downloa
 no Mark of the Web, so no prompt); replacing the ad-hoc signed macOS app; the updater behind a
 company proxy (it has proxy settings; whether it uses the Windows system proxy is not checked).
 
-### 10.4 Converters (built for 0.3.0)
-
-JSON ↔ XML and XML ↔ CSV as a *Converter* step in the Flow Steps tab, not a tab of their own: the tab already
-has the input message, the step settings, the result and *Use as input* to chain steps, and the iFlow import
-and `run_flow_step` cover it. The engine class is `ConverterStep` in the XML engine (native, no new library;
-its JSON reader keeps member order, duplicates and number text). Rules come from SAP's documentation (F47,
-S30), the iFlow keys from public iFlows (F46). Not built, from SAP's list of message transformers: EDI ↔ XML
-and the EDI Extractor (they need EDI schemas), Encoder / Decoder (Base64, GZIP, ZIP, MIME Multipart), XML
-Modifier and Message Digest; they can follow when needed.
-
 ### 10.3 Message Mapping scripts (built for 0.3.0)
 
 Found in the Windows test on 2026-11-06: iFlows carry Groovy scripts of Message Mappings, custom
-functions such as `def String f(String arg1, String in1, MappingContext context)` with
-`import com.sap.it.api.mapping.*`. The engines run only Groovy Script steps, so these fail to compile
-(`MappingContext` is missing; `com.sap.it.api.mapping` has only `ValueMappingApi`). Graphical Message
-Mapping stays out of scope (§1); running its scripts on their own is in scope. To do:
-
-* Clean-room `MappingContext` and `Output` (queue functions) from SAP's published Script API
-  documentation, for both script versions; research which methods SAP documents.
-* In the Groovy tab: pick the function, enter its arguments (single values, or queues with context
-  changes), headers and properties for the context; show the return value or the output queue.
-* Until then, a clear `UnsupportedInSimulator` message for such scripts would replace the compile error.
-
-*Built (2026-11-07)*, from SAP's Javadoc (F40), SAP's patch notes (F41) and SAP's PI documentation
-of queues (F42):
+functions such as `def String f(String arg1, MappingContext context)`. Graphical Message Mapping stays
+out of scope (§1); running its scripts on their own is in scope. Built from SAP's Javadoc (F40), SAP's
+patch notes (F41) and SAP's PI documentation of queues (F42):
 
 * `MappingContext`, `ExchangePropertyProvider` and `Output` in `api-common`, for both engines. A
   function whose parameters are `String`, `String[]`, `Output` and `MappingContext` runs with
@@ -455,11 +408,20 @@ of queues (F42):
   call gets an `Output` of its own; joining the results with a context change is an assumption.
   A first version also offered *All values of a queue*; it was removed when two community guides
   said CPI has no such type.
-* Not simulated: graphical Message Mapping and `.mmap` files (out of scope, §1); calling a
-  single-value function once per value of a queue (PI does; for CPI see Q-M1); CPI's own marker
-  values (the simulator's markers are its own strings, compared by identity).
-* No `UnsupportedInSimulator` step was needed: the script compiles, and a missing `processData`
-  names the script's mapping functions.
+* The iFlow import lists Message Mapping steps (F45) and opens the scripts their `.mmap` uses.
+* Not simulated: graphical Message Mapping and `.mmap` files; calling a single-value function once per
+  value of a queue (PI does; for CPI see Q-M1); CPI's own marker values (the simulator's markers are its
+  own strings, compared by identity).
+
+### 10.4 Converters (built for 0.3.0)
+
+JSON ↔ XML and XML ↔ CSV as a *Converter* step in the Flow Steps tab, not a tab of their own: the tab already
+has the input message, the step settings, the result and *Use as input* to chain steps, and the iFlow import
+and `run_flow_step` cover it. The engine class is `ConverterStep` in the XML engine (native, no new library;
+its JSON reader keeps member order, duplicates and number text). Rules come from SAP's documentation (F47,
+S30), the iFlow keys from public iFlows (F46). Not built, from SAP's list of message transformers: EDI ↔ XML
+and the EDI Extractor (they need EDI schemas), Encoder / Decoder (Base64, GZIP, ZIP, MIME Multipart), XML
+Modifier and Message Digest; they can follow when needed.
 
 ---
 
@@ -475,23 +437,19 @@ of queues (F42):
 
 | Risk | Mitigation |
 |---|---|
-| Saxon 9.9 does not compile cleanly to a native image | Fallback: run `cpisim-xml` on the bundled JRE (slower start, same results) |
-| v2 API surface unknown (F6) | Get SAP's reference (Q3); probe iFlow lists methods via reflection at runtime |
-| CPI updates Groovy/Saxon/Java | Profiles are data, not code; re-run fingerprint iFlow |
-| Groovy 2.4.21 on Java 17 behaves differently from CPI's v1 runtime | Calibrate (F4); ship a Java 8/11 JRE for v1 if needed |
-| Saxon-HE vs. EE differences | Profiles + linter + optional bring-your-own EE |
+| CPI's runtime differs from SAP's documentation and published interfaces | Tenant probes (§8.3); assumptions are labelled in [fidelity](fidelity.md) |
+| CPI updates Groovy/Saxon/Java/Camel | Re-run the fingerprint probes; engines per runtime (§8.1) |
+| Groovy 2.4.21 on Java 17 behaves differently from CPI's 1.x runtime | Calibrate (F4) |
+| Saxon-HE vs. EE differences | Both HE profiles, diagnostics for EE-only features (§7.3) |
+| Undocumented iFlow format | Read generically, checked against public iFlows (F36, F46) |
 
 ---
 
-## 13. Open decisions for you
+## 13. Decisions
 
-1. **Build-vs-reuse principle (§3)**: OK that we build the whole CPI simulation layer ourselves but reuse Groovy, Camel and Saxon-HE, because CPI runs exactly these?
-2. **Tenant access**: can you run the fingerprint and probe iFlows (§8.3) on a test tenant? This is what makes "as close to CPI as possible" verifiable.
-3. **Script API v2**: can you provide SAP's API documentation or the v2 Script API jar? (help.sap.com was not reachable from this environment.)
-4. **Saxon-EE**: does your company have a Saxon-EE licence, or are the HE profiles enough?
-5. **Platform APIs**: which do your scripts use most (Secure Store, Value Mapping, Keystore, Partner Directory, Data Store)?
-6. **Priorities**: XSLT first (no JVM, fewest unknowns), then Groovy — or the other way round?
-7. **Name / licence**: app name; open source or private?
+Taken: the build-vs-reuse principle (§3), XSLT first, tenant probes later; the name CPI Workbench and
+the Apache-2.0 licence in a public repository; the HE profiles instead of a Saxon-EE licence. Open: a
+run of the probes on a test tenant (planned after 0.3.0).
 
 ---
 
@@ -546,7 +504,7 @@ of queues (F42):
 - S25 SAP-docs Integration Suite documentation (GitHub mirror of help.sap.com): *Using Camel Simple Expression Language*, *Define Router*, *Define Looping Process Call*, *Define Content Modifier*, *Understanding Software Version Numbers*, *Patch Releases for Cloud Integration*: https://github.com/SAP-docs/btp-integration-suite/tree/main/docs/ci
 - S26 SAP's sample iFlows (Apache-2.0), read for the model format only, not copied: https://github.com/SAP-samples/cloud-integration-flow
 - S27 SAP Cloud Integration API Javadoc (`com.sap.it.public.api` 2.12.0; `com.sap.it.api.mapping`, `com.sap.it.api.msg`), read on 2026-11-07: https://help.sap.com/doc/d47441d304c14a0ab9d3986c1b553a1e/Cloud/en-US/index-all.html
+- S28 SAP NetWeaver PI 7.31 — Advanced User-Defined Functions; Implementing Java Functions: https://help.sap.com/doc/saphelp_nw73ehp1/7.31.19/en-US/4b/fbd21666d33de4e10000000a42189e/content.htm ; https://help.sap.com/doc/saphelp_nw73ehp1/7.31.19/en-US/4b/fbd6bb66d33de4e10000000a42189e/content.htm
 - S29 Community guides on Groovy mapping functions in CPI, read on 2026-11-07: https://sappipolearnings.blogspot.com/2022/02/udfs-groovy-script-in-message-mapping.html ; https://totoro.hashnode.dev/step-by-step-guide-using-groovy-scripts-in-sap-cpi-mappings ; examples (`addValue` of a BigDecimal sum, functions without `MappingContext`): https://sapcpidesign.blogspot.com/2021/08/sap-cpi-message-mapping-groovy-script.html . The SAP Community threads they cite (e.g. "SAP CPI UDF Execution type All values of Queue") sit behind a bot check and were not read.
 - S30 SAP-docs Integration Suite documentation (S25 mirror): *Define JSON to XML Converter*, *Define XML to JSON Converter*, *Conversion Rules* and *Limitations* for both directions, *Example: Transformations … with and without Namespace Mapping* (both directions), *Example: Transformation to a JSON Message without Root Element Tag*, *How Streaming in the XML-to-JSON Converter Works*, *Configure CSV to XML Converter*, *Configure XML to CSV Converter*, *Use the CSV to XML Converter*, *Use the XML to CSV Converter*
 - S31 Public iFlows on GitHub with converter steps (code search `JsonToXmlConverter`, `XmlToJsonConverter`, `CsvToXmlConverter`, `XmlToCsvConverter` in `.iflw` files, 2026-11-07), read for property names only
-- S28 SAP NetWeaver PI 7.31 — Advanced User-Defined Functions; Implementing Java Functions: https://help.sap.com/doc/saphelp_nw73ehp1/7.31.19/en-US/4b/fbd21666d33de4e10000000a42189e/content.htm ; https://help.sap.com/doc/saphelp_nw73ehp1/7.31.19/en-US/4b/fbd6bb66d33de4e10000000a42189e/content.htm

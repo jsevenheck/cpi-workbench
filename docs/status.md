@@ -12,7 +12,7 @@
 
 Automated checks:
 
-* Engine tests (`mvn -f engine/pom.xml verify`): core 12, XSLT/XSD/XPath/Splitter/Filter/Gather/Converter 70 per Saxon version (15 of them on project boundaries, 8 splitter cases from SAP's examples, 5 Filter, 3 Gather and 16 converter tests, most with SAP's examples), Groovy 39 per script version (4 Camel Simple, 4 Content Modifier, 8 Message Mapping functions).
+* Engine tests (`mvn -f engine/pom.xml verify`): core 13, XSLT/XSD/XPath/Splitter/Filter/Gather/Converter 71 per Saxon version (16 of them on project boundaries, 8 splitter cases from SAP's examples, 5 Filter, 3 Gather and 16 converter tests, most with SAP's examples), Groovy 39 per script version (4 Camel Simple, 4 Content Modifier, 8 Message Mapping functions).
 * Regression test cases (`testdata/regression-project`): 9.
 * Browser end-to-end tests: `app/e2e/smoke.mjs` (XML tools) and `groovy.mjs` (Groovy, Flow Steps and the iFlow import, which CI runs with the iFlow fixture as a zip).
 * UI unit tests (`npm --prefix app test`): the JSON, XSLT and Groovy formatters, test-case rows, path comparison, the Script API completions (checked against the clean-room Java classes), the Filter's `function:simple(...)` substitution, Message Mapping arguments and the update check's SemVer comparison.
@@ -115,7 +115,8 @@ After a second review round:
 * Closing the project asks before it drops unsaved changes in the File tab.
 * `unparsed-text()` uses its encoding argument (it always read UTF-8).
 * Not changed, out of scope for local projects: path checks are lexical (a symlink inside the
-  project can point outside), and a failed iFlow import leaves the files it already wrote.
+  project can point outside), and a failed iFlow import leaves the files it already wrote. Since
+  0.3.0 the checks follow symbolic links (review of 2026-11-08).
 
 Before the first release (third review):
 

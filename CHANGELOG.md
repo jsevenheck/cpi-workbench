@@ -32,6 +32,13 @@ of its version.
 - Probe `probe-mapping-v1.groovy` for how a tenant calls mapping functions, and converter inputs in
   `probes/converters/` for comparing the four conversions with a tenant.
 
+### Security
+
+- Project path checks follow symbolic links: a link inside the project that leads outside it is
+  refused for XML runs (includes, `doc()`, `unparsed-text()`, entities), the File tab, the MCP tools
+  and the iFlow import. Links that stay inside the project still work. Before, the checks compared
+  the paths as written.
+
 ## [0.2.0] - 2026-11-06
 
 ### Added

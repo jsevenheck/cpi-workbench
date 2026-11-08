@@ -119,6 +119,36 @@ class XmlBoundaryTest {
         assertEquals("inside-doc", inside.get("body"));
     }
 
+    /** A symbolic link inside the project that points outside is outside (found in a review on 2026-11-08). */
+    @Test
+    void symbolicLinkOutOfTheProjectIsBlocked() throws Exception {
+        Path outside = tmp.resolve("outside.xml");
+        Files.writeString(outside, "<s><v>" + SECRET + "</v></s>");
+        try {
+            Files.createSymbolicLink(project.resolve("link.xml"), outside);
+            Files.createSymbolicLink(project.resolve("same.xml"), project.resolve("inside.xml"));
+        } catch (UnsupportedOperationException | java.io.IOException e) {
+            org.junit.jupiter.api.Assumptions.abort("symbolic links are not available here: " + e);
+        }
+        Map<String, Object> csvRun = csv(Json.o().with("sourcePath", "doc('link.xml')/s"), "<root/>");
+        assertNoLeak(csvRun);
+        assertFalse(Json.bool(csvRun, "ok", true), () -> Json.write(csvRun));
+        for (String version : List.of("1.0", "3.1")) {
+            Map<String, Object> r = xpath("string(doc('link.xml'))", version, "<a/>");
+            assertNoLeak(r);
+            assertFalse(Json.bool(r, "ok", true), () -> Json.write(r));
+        }
+        Map<String, Object> text = xpath("unparsed-text('link.xml')", "3.1", "<a/>");
+        assertNoLeak(text);
+        Map<String, Object> x = xslt(select("doc('link.xml')"), "<a/>");
+        assertNoLeak(x);
+        assertFalse(Json.bool(x, "ok", true), () -> Json.write(x));
+        // A link that stays inside the project works.
+        Map<String, Object> same = xpath("string(doc('same.xml'))", "3.1", "<a/>");
+        assertTrue(Json.bool(same, "ok", false), () -> Json.write(same));
+        assertTrue(Json.write(same).contains("inside-doc"), () -> Json.write(same));
+    }
+
     @Test
     void xsltInputExternalEntityIsBlocked() {
         Map<String, Object> r = xslt(COPY, entityDoc());

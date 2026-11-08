@@ -99,7 +99,8 @@ Download the installer for your platform from the
 ### What a run can access
 
 * XSLT, XSD and XPath runs read files inside the open project only: includes, `doc()`,
-  `document()`, `unparsed-text()`, external entities and DTDs. The network is blocked.
+  `document()`, `unparsed-text()`, external entities and DTDs. The network is blocked. A symbolic
+  link inside the project that leads outside it counts as outside; links within the project work.
   `xsl:result-document` and `collection()` are not supported. XPath runs (the XPath tab and flow
   steps) also refuse `fn:transform()`, and on Saxon 12 `fn:function-lookup()`: with a configuration of
   its own, a nested transformation would not be bound to the project. In XSLT, reflexive `java:` calls

@@ -98,7 +98,7 @@ lists what is verified against CPI.
 
 * **Files:** only the project folder. Bodies, mappings, scripts and schemas are read through the
   engines, which refuse paths outside the project, as in the app ([What a run can access](user-guide.md#what-a-run-can-access)).
-  The check compares paths, so a symbolic link inside the project can point outside it.
+  The check follows symbolic links: a link inside the project that leads outside it is refused.
   The tools write nothing into the project; the engines keep caches in the temp folder and the
   user's cache folder, as in the app. Groovy scripts can write files (next point).
 * **Code:** Groovy scripts execute as ordinary Java code with your user's rights, without a sandbox;

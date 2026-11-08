@@ -46,6 +46,9 @@ public final class IflowImport {
         if (!target.startsWith(iflows) || target.equals(iflows)) {
             throw new IllegalArgumentException("Invalid iFlow name: " + n);
         }
+        if (!ProjectPaths.inside(projectRoot, target)) {
+            throw new IllegalArgumentException("The iFlow folder is outside the project (a symbolic link leads outside): " + target);
+        }
         Files.createDirectories(target);
         long total = 0;
         int files = 0;
@@ -53,7 +56,7 @@ public final class IflowImport {
             ZipEntry e;
             while ((e = in.getNextEntry()) != null) {
                 Path out = target.resolve(e.getName()).normalize();
-                if (!out.startsWith(target)) {
+                if (!out.startsWith(target) || !ProjectPaths.inside(projectRoot, out)) {
                     throw new IOException("Zip entry outside the target folder: " + e.getName());
                 }
                 if (e.isDirectory()) {

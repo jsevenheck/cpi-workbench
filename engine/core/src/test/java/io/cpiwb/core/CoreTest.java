@@ -95,4 +95,32 @@ class CoreTest {
         assertNull(files.root());
         assertThrows(IllegalStateException.class, () -> files.read(Map.of("path", "a.txt")));
     }
+
+    /** Paths are checked where they really lead: a symbolic link inside the project may not point outside. */
+    @Test
+    void symbolicLinksStayInsideTheProject(@TempDir Path tmp) throws Exception {
+        Path project = Files.createDirectories(tmp.resolve("project"));
+        Files.writeString(tmp.resolve("outside.txt"), "secret");
+        Files.createDirectories(tmp.resolve("outdir"));
+        Files.writeString(project.resolve("inside.txt"), "inside");
+        try {
+            Files.createSymbolicLink(project.resolve("out.txt"), tmp.resolve("outside.txt"));
+            Files.createSymbolicLink(project.resolve("outdir"), tmp.resolve("outdir"));
+            Files.createSymbolicLink(project.resolve("in.txt"), project.resolve("inside.txt"));
+            Files.createSymbolicLink(project.resolve("dangling.txt"), tmp.resolve("not-yet.txt"));
+        } catch (UnsupportedOperationException | java.io.IOException e) {
+            org.junit.jupiter.api.Assumptions.abort("symbolic links are not available here: " + e);
+        }
+        ProjectFiles files = new ProjectFiles();
+        files.open(Map.of("dir", project.toString()));
+        assertThrows(IllegalArgumentException.class, () -> files.read(Map.of("path", "out.txt")));
+        assertThrows(IllegalArgumentException.class, () -> files.write(Map.of("path", "outdir/new.txt", "content", "x")));
+        assertThrows(IllegalArgumentException.class, () -> files.write(Map.of("path", "dangling.txt", "content", "x")));
+        assertFalse(Files.exists(tmp.resolve("outdir/new.txt")));
+        assertFalse(Files.exists(tmp.resolve("not-yet.txt")), "a dangling link must not create its target");
+        // Links inside the project and new files still work.
+        assertEquals("inside", files.read(Map.of("path", "in.txt")).get("content"));
+        files.write(Map.of("path", "sub/new.txt", "content", "y"));
+        assertEquals("y", files.read(Map.of("path", "sub/new.txt")).get("content"));
+    }
 }

@@ -123,6 +123,8 @@ def main():
         # Converters (JSON <-> XML, XML <-> CSV); CSV to XML reads its schema from the project.
         ("convert.run", {"conversion": "xmlToJson", "input": {"body": BODY}}, lambda r: r["ok"] and r["body"].startswith('{"x":')),
         ("convert.run", {"conversion": "xmlToJson", "streaming": True, "input": {"body": entity_doc}}, no_leak),
+        ("convert.run", {"conversion": "xmlToCsv", "sourcePath": f"/x | doc('{secret_uri}')",
+                         "input": {"body": BODY}}, no_leak),
         ("convert.run", {"conversion": "jsonToXml", "useNamespaces": True, "namespaceMapping": "p = urn:p",
                          "input": {"body": '{"p:a":{"@v":1,"b":[true,null]}}'}},
          lambda r: r["body"] == "<?xml version='1.0' encoding='UTF-8'?><p:a xmlns:p=\"urn:p\" v=\"1\"><b>true</b><b/></p:a>"),

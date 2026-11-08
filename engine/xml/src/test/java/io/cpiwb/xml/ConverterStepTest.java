@@ -254,6 +254,27 @@ class ConverterStepTest {
                 body(convert("csvToXml", positional, csvSettings(dir, "Yes").with("firstLineHeader", false))));
     }
 
+    /** XSD rules for the target namespace: global elements (also by ref) are qualified, local ones by form. */
+    @Test
+    void csvToXmlQualifiesByDeclaration(@TempDir Path dir) throws Exception {
+        String xsd = "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\" xmlns:t=\"urn:t\" targetNamespace=\"urn:t\" "
+                + "elementFormDefault=\"unqualified\">"
+                + "<xs:element name=\"Root\"><xs:complexType><xs:sequence><xs:element ref=\"t:Row\" maxOccurs=\"unbounded\"/>"
+                + "</xs:sequence></xs:complexType></xs:element>"
+                + "<xs:element name=\"Row\"><xs:complexType><xs:sequence><xs:element name=\"Value\" type=\"xs:string\"/>"
+                + "<xs:element name=\"Code\" form=\"qualified\" type=\"xs:string\"/></xs:sequence></xs:complexType></xs:element>"
+                + "</xs:schema>";
+        Files.writeString(dir.resolve("t.xsd"), xsd);
+        String out = body(convert("csvToXml", "Hello,A\nWorld,B", Json.o().with("baseDir", dir.toString()).with("schema", "t.xsd")
+                .with("targetPath", "Root/Row").with("firstLineHeader", false)));
+        assertEquals("<?xml version='1.0' encoding='UTF-8'?><ns0:Root xmlns:ns0=\"urn:t\"><ns0:Row><Value>Hello</Value>"
+                + "<ns0:Code>A</ns0:Code></ns0:Row><ns0:Row><Value>World</Value><ns0:Code>B</ns0:Code></ns0:Row></ns0:Root>", out);
+        // The output is valid against its schema.
+        javax.xml.validation.SchemaFactory.newInstance(javax.xml.XMLConstants.W3C_XML_SCHEMA_NS_URI)
+                .newSchema(dir.resolve("t.xsd").toFile()).newValidator()
+                .validate(new javax.xml.transform.stream.StreamSource(new java.io.StringReader(out)));
+    }
+
     @Test
     void csvToXmlErrorsStayInTheProject(@TempDir Path dir) throws Exception {
         Files.createDirectories(dir.resolve("p/schemas"));
@@ -284,6 +305,11 @@ class ConverterStepTest {
         Map<String, Object> run = convert("xmlToJson", "<a><b>1</b><c/><b>2</b></a>", Json.o().with("streaming", true)
                 .with("streamingElements", "specific").with("arrayPaths", "/a/b"));
         assertTrue(Json.write(run.get("diagnostics")).contains("appears again after other elements"), () -> Json.write(run));
+        // A name with a colon is still checked as a name: no markup gets into the output.
+        assertTrue(error(convert("jsonToXml", "{\"a:x><injected/><!--\":\"v\"}", Json.o())).contains("cannot be converted"));
+        assertTrue(error(convert("jsonToXml", "{\"a:x><i/>\":\"v\"}", Json.o().with("useNamespaces", true)
+                .with("namespaceMapping", "b = urn:b"))).contains("cannot be converted"));
+        assertTrue(error(convert("jsonToXml", "{\"a:b:c\":\"v\"}", Json.o())).contains("cannot be converted"));
         // An unknown encoding fails before any output.
         Map<String, Object> enc = convert("xmlToJson", "<a/>", Json.o().with("outputEncoding", "bogus"));
         assertFalse(Json.bool(enc, "ok", true));

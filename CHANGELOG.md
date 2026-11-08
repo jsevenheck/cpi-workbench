@@ -14,7 +14,7 @@ of its version.
   `getHeader(String, MappingContext)` or `f(String[], Output, MappingContext)`, runs on its own.
   *Arguments* replace the body (`String[]` arguments as one context per line); a `String[]` function
   runs once per context (*All values of a context*). *Result* shows the returned value or the output
-  queue with context changes, SUPPRESS and xsi:nil. `MappingContext` and `Output` follow SAP's
+  queue with context changes, SUPPRESS and xsi:nil; a `String` argument may be null. `MappingContext` and `Output` follow SAP's
   Javadoc. Test cases take `args`, `expect.returned` and `expect.queue`; the MCP tool `run_groovy`
   takes `args`. A script without `processData` now names its mapping functions. A script with
   mapping functions lists them above the editor (*Run as*), and a label next to *fn* shows whether

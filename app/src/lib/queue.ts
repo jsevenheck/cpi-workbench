@@ -23,26 +23,24 @@ export function formatQueue(q: Queue): string {
   return q.map((ctx) => JSON.stringify(ctx)).join('\n');
 }
 
-/** Values of a test case's or agent's argument for the text field. */
-export function argText(v: unknown): string {
+/** Values of a test case's or agent's argument for the text field; null stays null (a String argument may be null). */
+export function argText(v: unknown): string | null {
   if (typeof v === 'string') return v;
-  if (v === null || v === undefined) return '';
+  if (v === null) return null;
+  if (v === undefined) return '';
   if (Array.isArray(v)) return formatQueue(v.length > 0 && v.every(Array.isArray) ? (v as Queue) : [v as QueueEntry[]]);
   return String(v);
 }
 
 /** The request's args: one per String or String[] parameter, in order. */
-export function mappingArgs(parameters: string[], texts: string[]): unknown[] {
+export function mappingArgs(parameters: string[], texts: (string | null)[]): unknown[] {
   const out: unknown[] = [];
   parameters.filter((p) => p === 'String' || p === 'String[]').forEach((p, i) => {
-    const text = texts[i] ?? '';
-    if (p === 'String') out.push(text);
-    else {
-      try {
-        out.push(parseQueue(text));
-      } catch (e) {
-        throw new Error(`Argument ${i + 1}: ${(e as Error).message}`);
-      }
+    if (p === 'String') return void out.push(texts[i] === undefined ? '' : texts[i]);
+    try {
+      out.push(parseQueue(texts[i] ?? ''));
+    } catch (e) {
+      throw new Error(`Argument ${i + 1}: ${(e as Error).message}`);
     }
   });
   return out;

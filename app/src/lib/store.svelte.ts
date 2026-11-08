@@ -157,7 +157,7 @@ export const groovy = $state({
   /** The open script's Message Mapping functions (signatures), from its last run that compiled. */
   functions: [] as string[],
   /** Text of each String / String[] argument of the mapping function (queues: one context per line). */
-  args: [] as string[],
+  args: [] as (string | null)[],
 });
 
 export interface CaseExtras {
@@ -213,7 +213,10 @@ export interface RouteResult {
   camel?: string;
 }
 
-/** JSON ↔ XML and XML ↔ CSV converters; mapping and array paths are text, one entry per line. */
+/**
+ * JSON ↔ XML and XML ↔ CSV converters; mapping and array paths are text, one entry per line. The MCP server uses
+ * the same defaults (`converter_defaults` in `mcp/flow.rs`); change both together.
+ */
 function converterDefaults() {
   return {
     conversion: 'xmlToJson' as 'jsonToXml' | 'xmlToJson' | 'xmlToCsv' | 'csvToXml',
@@ -468,6 +471,7 @@ export async function openFile(path: string, opts: OpenOptions = {}) {
       groovy.mapping = null;
       groovy.functions = [];
       groovy.args = [];
+      forgetGroovyRun();
       if (opts.profile && hasProfile(opts.profile)) app.groovyProfile = opts.profile;
       else if (content.includes('com.sap.it.script.v2.api') && hasProfile('groovy-2.x')) app.groovyProfile = 'groovy-2.x';
       else if (content.includes('com.sap.gateway.ip.core.customdev.util') && hasProfile('groovy-1.x')) app.groovyProfile = 'groovy-1.x';
@@ -813,6 +817,12 @@ export async function runXslt() {
 }
 
 let groovySeq = 0;
+
+/** Another script or test case is opened: a run still under way belongs to the old one and must not land here. */
+function forgetGroovyRun() {
+  groovySeq++;
+  groovy.running = false;
+}
 /** Set when a Message Mapping step opens its script: the first run picks a mapping function if there is no processData. */
 let pickMappingFunction = false;
 
@@ -843,7 +853,7 @@ export async function runGroovy() {
         // Arguments typed for another function do not belong to this one (a test case's do: mapping is null then).
         if (groovy.mapping && groovy.mapping.function !== r.mapping.function) groovy.args = [];
         groovy.mapping = { function: r.mapping.function, parameters: r.mapping.parameters };
-        if (!known && groovy.args.some((a) => a?.trim())) return void runGroovy();
+        if (!known && groovy.args.some((a) => a === null || a.trim() !== '')) return void runGroovy();
       } else if (r.failedPhase !== 'compile') {
         if (groovy.mapping) groovy.args = [];
         groovy.mapping = null;
@@ -1150,6 +1160,7 @@ async function loadGroovyCase(path: string, dir: string, tc: any) {
   groovy.args = (tc.args ?? []).map(argText);
   groovy.mapping = null;
   groovy.functions = [];
+  forgetGroovyRun();
   if (tc.profile && hasProfile(tc.profile)) app.groovyProfile = tc.profile;
   const extras: CaseExtras = { dir, attachments: tc.input?.attachments, soapHeaders: tc.input?.soapHeaders, platform: tc.platform };
   groovy.caseExtras = extras.attachments || extras.soapHeaders || extras.platform ? extras : null;

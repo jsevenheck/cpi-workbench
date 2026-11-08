@@ -128,6 +128,35 @@ await page.locator('section.script h2', { hasText: 'route-by-partner.groovy' }).
 if ((await page.getByLabel('Function name').inputValue()) !== 'processData') fail('function name kept from the previous script');
 if (await page.locator('.functions').count()) fail('function bar shown for a script without mapping functions');
 if ((await page.locator('section.script .mode').innerText()) !== 'Script step') fail('mode label for a script step');
+// 4c2) Live off: a run that answers after another script was opened does not land in that script.
+// The first run is held until the other script is open; any later run is held until the check is done.
+await page.getByLabel('Live').uncheck();
+await page.locator('.tree .file', { hasText: 'mapping-null.groovy' }).click();
+await page.locator('section.script h2', { hasText: 'mapping-null.groovy' }).waitFor({ timeout: 10000 });
+await page.getByLabel('Function name').fill('classify');
+await page.getByLabel('Runtime profile').selectOption('groovy-1.x');
+await page.locator('section.output .badge.run').waitFor({ state: 'detached', timeout: 20000 }).catch(() => {});
+let releaseFirst, releaseLater;
+const first = new Promise((r) => (releaseFirst = r));
+const later = new Promise((r) => (releaseLater = r));
+const groovyRpc = /127\.0\.0\.1:777[89]\/rpc/;
+let heldRuns = 0;
+await page.route(groovyRpc, async (route) => {
+  if (route.request().postData()?.includes('groovy.run')) await (++heldRuns === 1 ? first : later);
+  await route.continue().catch(() => {}); // unroute may have let it through already
+});
+await page.getByRole('button', { name: /^\W*Run$/ }).click();
+// enrich-order.groovy is a 1.x script too, so opening it changes no runtime (which would start a run of its own).
+await page.locator('.tree .file', { hasText: 'enrich-order.groovy' }).first().click();
+await page.locator('section.script h2', { hasText: 'enrich-order.groovy' }).waitFor({ timeout: 10000 });
+releaseFirst();
+await page.waitForTimeout(1500);
+if (heldRuns === 0) fail('the late-run check held no run');
+if (await page.locator('.functions').count()) fail('a late run of the previous script showed its functions');
+if ((await page.locator('section.script .mode').innerText()) !== 'Script step') fail('a late run of the previous script set its mode');
+releaseLater();
+await page.unroute(groovyRpc);
+await page.getByLabel('Live').check();
 
 // 4d) Message Mapping functions: arguments instead of a body, the output queue as the result.
 // One call per context: each call counts its own context, the calls are joined by context changes.
@@ -149,6 +178,16 @@ await page.locator('section.output pre', { hasText: '["3"]' }).waitFor({ timeout
 await page.locator('.tree .file', { hasText: 'mapping-get-header/case.json' }).click();
 await page.locator('section.output pre', { hasText: '4711' }).waitFor({ timeout: 20000 })
   .catch(async () => fail('mapping returned value: ' + (await page.locator('section.output').innerText()).slice(0, 400)));
+// A test case's null argument stays null in the tab (not an empty string); the null button toggles it.
+await page.locator('.tree .file', { hasText: 'mapping-null-arg/case.json' }).click();
+await page.locator('section.output .pad', { hasText: 'NULL' }).waitFor({ timeout: 20000 })
+  .catch(async () => fail('null argument from the case: ' + (await page.locator('section.output').innerText()).slice(0, 300)));
+if ((await page.getByRole('button', { name: 'null', exact: true }).getAttribute('aria-pressed')) !== 'true') fail('null button not pressed');
+await page.getByRole('button', { name: 'null', exact: true }).click();
+await page.locator('section.output .pad', { hasText: 'EMPTY' }).waitFor({ timeout: 20000 })
+  .catch(() => fail('the null button did not switch to an empty string'));
+await page.locator('.tree .file', { hasText: 'mapping-get-header/case.json' }).click();
+await page.locator('section.output pre', { hasText: '4711' }).waitFor({ timeout: 20000 });
 await page.getByLabel('Argument 1').fill('Missing');
 await page.locator('section.output .pad .hint', { hasText: 'null' }).waitFor({ timeout: 20000 })
   .catch(() => fail('getHeader of a missing header is not null'));

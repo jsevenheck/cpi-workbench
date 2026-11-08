@@ -23,5 +23,9 @@ test('formatQueue and argText give the same text form', () => {
 test('mappingArgs skips Output and MappingContext and names the bad argument', () => {
   assert.deepEqual(mappingArgs(['String', 'String[]', 'Output', 'MappingContext'], ['x', '["a"]']), ['x', [['a']]]);
   assert.deepEqual(mappingArgs(['String', 'MappingContext'], []), ['']);
+  // A null String argument stays null from the test case to the request (not "").
+  assert.equal(argText(null), null);
+  assert.deepEqual(mappingArgs(['String', 'MappingContext'], [argText(null)]), [null]);
+  assert.deepEqual(mappingArgs(['String[]', 'Output'], [null]), [[[]]]);
   assert.throws(() => mappingArgs(['String', 'String[]', 'Output'], ['x', 'oops']), /Argument 2: Line 1/);
 });

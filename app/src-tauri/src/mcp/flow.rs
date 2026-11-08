@@ -277,13 +277,34 @@ fn gather(ctx: &Ctx, config: &Value, args: &Args) -> Result<Value, String> {
     }))
 }
 
+/// The Flow Steps tab's converter settings before any change (`converterDefaults()` in `store.svelte.ts`).
+fn converter_defaults() -> Value {
+    json!({
+        "conversion": "xmlToJson",
+        "useNamespaces": false, "separator": ":", "namespaceMapping": "",
+        "addRootElement": false, "rootElementName": "root", "rootNamespace": "",
+        "suppressRoot": false, "streaming": false, "streamingElements": "all", "arrayPaths": "", "outputEncoding": "",
+        "sourcePath": "/Order/Item", "fieldSeparator": ",", "csvHeader": "xml", "includeParent": false, "parentPath": "",
+        "includeAttributes": false,
+        "schema": "", "targetPath": "", "recordMarker": "", "firstLineHeader": true, "headerMapping": "xsd",
+    })
+}
+
 /// JSON ↔ XML, XML ↔ CSV. CSV to XML's schema, target path and record marker may name a header or property
 /// (SAP, version 1.4); Camel Simple resolves them first, as in the tab's `runConverter`.
 fn converter(ctx: &Ctx, config: &Value) -> Result<Value, String> {
-    let mut params = config.clone();
-    if s(config, "conversion") == "csvToXml" {
+    // Keys the config leaves out (or sets null) take the tab's defaults (`converterDefaults()` in the store).
+    let mut params = converter_defaults();
+    if let Some(given) = config.as_object() {
+        for (k, v) in given {
+            if !v.is_null() {
+                params[k.as_str()] = v.clone();
+            }
+        }
+    }
+    if s(&params, "conversion") == "csvToXml" {
         for key in ["schema", "targetPath", "recordMarker"] {
-            let v = s(config, key).to_string();
+            let v = s(&params, key).to_string();
             if v.contains("${") {
                 params[key] = json!(s(&ctx.simple(&v, "expression")?, "value"));
             }

@@ -272,6 +272,10 @@ fn tools_run_on_the_engines() {
     let x2j = c.ok("run_flow_step", json!({ "body": "<a><b>1</b><b>2</b></a>",
         "step": { "type": "converter", "config": { "conversion": "xmlToJson" } } }));
     assert_eq!(x2j["body"], "{\"a\":{\"b\":[\"1\",\"2\"]}}", "{x2j}");
+    // Keys left out take the tab's defaults: XML based header for XML to CSV, header line for CSV to XML.
+    let x2c = c.ok("run_flow_step", json!({ "body": "<Order><Item><Name>A</Name></Item></Order>",
+        "step": { "type": "converter", "config": { "conversion": "xmlToCsv", "sourcePath": "/Order/Item" } } }));
+    assert_eq!(x2c["body"], "Name\nA", "{x2c}");
     let j2x = c.ok("run_flow_step", json!({ "iflowStep": "JSON to XML", "body": "{\"x\":\"1\",\"y\":2}" }));
     assert_eq!(j2x["body"], "<?xml version='1.0' encoding='UTF-8'?><Orders xmlns:ord=\"urn:orders\"><x>1</x><y>2</y></Orders>", "{j2x}");
 

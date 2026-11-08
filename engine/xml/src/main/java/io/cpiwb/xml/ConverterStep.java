@@ -80,13 +80,24 @@ public final class ConverterStep {
             }
         } catch (Exception e) {
             ok = false;
-            run.diags.add(Diagnostic.error(e.getMessage() == null ? e.toString() : e.getMessage()).toJson());
+            run.diags.add(Diagnostic.error(message(e)).toJson());
         } finally {
             ProjectResolver.end();
         }
         return result.with("ok", ok).with("diagnostics", run.diags)
                 .with("engine", "Converter (SAP's documented rules) · " + XsltStep.engineVersion())
                 .with("timing", Json.o().with("totalMs", (System.nanoTime() - t0) / 1_000_000.0));
+    }
+
+    /** Saxon 9.9 wraps the project resolver's refusal in "Exception thrown by URIResolver"; the cause says why. */
+    static String message(Exception e) {
+        String msg = e.getMessage() == null ? e.toString() : e.getMessage();
+        for (Throwable c = e.getCause(); c != null && msg.startsWith("Exception thrown by URIResolver"); c = c.getCause()) {
+            if (c.getMessage() != null) {
+                msg = c.getMessage();
+            }
+        }
+        return msg;
     }
 
     /** One conversion: its settings, message and diagnostics. */
@@ -308,6 +319,7 @@ public final class ConverterStep {
                             checkName(jsonName, jsonName);
                             return jsonName;
                         }
+                        checkPrefixed(jsonName);
                         warnOnce("prefix:" + prefix, "The JSON prefix '" + prefix + "' has no XML namespace, so '" + jsonName
                                 + "' is written as the element name, as SAP documents; the result is not namespace-well-formed.");
                         return jsonName;
@@ -319,12 +331,23 @@ public final class ConverterStep {
                             + "(\"abc.A\" to <A>) instead. Which one CPI does is to verify.");
                 }
                 if (jsonName.indexOf(':') > 0) {
+                    checkPrefixed(jsonName);
                     warnOnce("colon:" + jsonName, "'" + jsonName + "' is written as it is; without a namespace for its prefix "
                             + "the result is not namespace-well-formed (SAP: Limitations for JSON to XML Conversion).");
                     return jsonName;
                 }
                 checkName(jsonName, jsonName);
                 return jsonName;
+            }
+
+            /** A name with one colon, written as it is: the prefix and the local name must each be valid names. */
+            void checkPrefixed(String jsonName) {
+                int i = jsonName.indexOf(':');
+                if (jsonName.indexOf(':', i + 1) >= 0) {
+                    checkName("", jsonName);
+                }
+                checkName(jsonName.substring(0, i), jsonName);
+                checkName(jsonName.substring(i + 1), jsonName);
             }
 
             /** SAP's naming rules: start with a letter or underscore, then letters, digits, - _ .; not "xml...". */
@@ -631,7 +654,9 @@ public final class ConverterStep {
             XsltStep.stringMap(Json.obj(req, "namespaces")).forEach(xc::declareNamespace);
             // SAP's examples write the path without the leading slash (root/Products/Product); it starts at the root.
             String expr = path.startsWith("/") ? path : "/" + path;
-            XPathSelector sel = xc.compile(expr).load();
+            // The same guards as XPathStep: no fn:transform, and doc() etc. read inside the project only.
+            XPathSelector sel = XPathStep.compile(xc, expr, input);
+            sel.setURIResolver(resolver);
             sel.setContextItem(doc);
             List<XdmNode> out = new ArrayList<>();
             for (XdmItem item : sel.evaluate()) {
@@ -659,7 +684,10 @@ public final class ConverterStep {
             }
             Xsd xsd = new Xsd(schema);
             List<String> path = List.of(target.split("/"));
-            List<String> fields = xsd.recordFields(path);
+            List<XdmNode> pathDecls = xsd.pathDecls(path);
+            List<XdmNode> fieldDecls = xsd.recordFields(pathDecls);
+            List<String> fields = new ArrayList<>();
+            fieldDecls.forEach(d -> fields.add(xsd.declName(d)));
             String sep = fieldSeparator();
             String marker = str("recordMarker", "");
             boolean headerLine = bool("firstLineHeader");
@@ -678,7 +706,7 @@ public final class ConverterStep {
             StringBuilder out = new StringBuilder(XML_DECLARATION);
             // The root and the elements down to the record's parent are written once (SAP's example: one Products).
             for (int i = 0; i < path.size() - 1; i++) {
-                out.append('<').append(xsd.name(path.get(i), i == 0));
+                out.append('<').append(xsd.name(pathDecls.get(i)));
                 if (i == 0 && p != null) {
                     out.append(" xmlns:").append(p).append("=\"").append(escapeAttr(xsd.targetNamespace)).append('"');
                 }
@@ -690,7 +718,7 @@ public final class ConverterStep {
                     continue;
                 }
                 count++;
-                String record = xsd.name(path.get(path.size() - 1), path.size() == 1);
+                String record = xsd.name(pathDecls.get(path.size() - 1));
                 out.append('<').append(record);
                 if (path.size() == 1 && count == 1 && p != null) {
                     out.append(" xmlns:").append(p).append("=\"").append(escapeAttr(xsd.targetNamespace)).append('"');
@@ -703,7 +731,7 @@ public final class ConverterStep {
                     if (col < 0 || col >= row.size()) {
                         continue; // an assumption: a missing value leaves the element out
                     }
-                    String n = xsd.name(fields.get(f), false);
+                    String n = xsd.name(fieldDecls.get(f));
                     String v = row.get(col);
                     out.append('<').append(n);
                     out.append(v.isEmpty() ? "/>" : ">" + escapeText(v) + "</" + n + ">");
@@ -716,7 +744,7 @@ public final class ConverterStep {
                 }
             }
             for (int i = path.size() - 2; i >= 0; i--) {
-                out.append("</").append(xsd.name(path.get(i), i == 0)).append('>');
+                out.append("</").append(xsd.name(pathDecls.get(i))).append('>');
             }
             if (!marker.isEmpty() && count == 0) {
                 diags.add(Diagnostic.info("No row starts with the record marker '" + marker + "'.").toJson());
@@ -803,11 +831,28 @@ public final class ConverterStep {
                 return targetNamespace == null ? null : "ns0";
             }
 
-            String name(String local, boolean global) {
-                return prefix() != null && (global || qualified) ? prefix() + ":" + local : local;
+            /**
+             * The element's name in the output: with the prefix when it is in the target namespace. XSD rules:
+             * global declarations (also through ref) are qualified; local ones by their form attribute, else by
+             * elementFormDefault.
+             */
+            String name(XdmNode decl) {
+                String local = declName(decl);
+                return prefix() != null && qualified(decl) ? prefix() + ":" + local : local;
             }
 
-            List<String> recordFields(List<String> path) {
+            private boolean qualified(XdmNode decl) {
+                if (decl.getAttributeValue(new QName("ref")) != null || XS.equals(decl.getParent().getNodeName().getNamespaceURI())
+                        && "schema".equals(decl.getParent().getNodeName().getLocalName())) {
+                    return true;
+                }
+                String form = decl.getAttributeValue(new QName("form"));
+                return form != null ? "qualified".equals(form) : qualified;
+            }
+
+            /** The declarations of the target path's elements, from the global root element down. */
+            List<XdmNode> pathDecls(List<String> path) {
+                List<XdmNode> decls = new ArrayList<>();
                 XdmNode decl = global("element", path.get(0));
                 if (decl == null) {
                     throw new IllegalArgumentException("The XSD has no global element '" + path.get(0) + "' (Path to Target "
@@ -824,19 +869,24 @@ public final class ConverterStep {
                         throw new IllegalArgumentException("'" + path.get(i) + "' is not a child element of '" + path.get(i - 1)
                                 + "' in the XSD.");
                     }
+                    decls.add(decl);
                     decl = next;
                 }
-                List<String> fields = new ArrayList<>();
-                for (XdmNode c : contentElements(decl)) {
-                    fields.add(declName(c));
-                }
+                decls.add(decl);
+                return decls;
+            }
+
+            /** The record's field declarations, in the XSD's order. */
+            List<XdmNode> recordFields(List<XdmNode> pathDecls) {
+                XdmNode record = pathDecls.get(pathDecls.size() - 1);
+                List<XdmNode> fields = contentElements(record);
                 if (fields.isEmpty()) {
-                    throw new IllegalArgumentException("'" + path.get(path.size() - 1) + "' has no child elements in the XSD.");
+                    throw new IllegalArgumentException("'" + declName(record) + "' has no child elements in the XSD.");
                 }
                 return fields;
             }
 
-            private String declName(XdmNode el) {
+            String declName(XdmNode el) {
                 String n = el.getAttributeValue(new QName("name"));
                 return n != null ? n : local(el.getAttributeValue(new QName("ref")));
             }

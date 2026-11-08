@@ -82,7 +82,7 @@ Download the installer for your platform from the
   or *Mapping function*. You can also enter the name of a custom function of a mapping script under
   **fn** (the list offers the script's functions), such as `def String getHeader(String name,
   MappingContext context)` or `def void f(String[] values, Output output, MappingContext context)`.
-  The input pane then shows **Arguments** instead of the body: a text field per `String`, and per
+  The input pane then shows **Arguments** instead of the body: a text field per `String` (**null** passes null), and per
   `String[]` one context per line as a JSON array (`["A", "B"]`; `{"suppress": true}` and
   `{"xsiNil": true}` stand for SUPPRESS and xsi:nil). A `String[]` function runs once per context
   (*All values of a context*), a function with `String` arguments once. **Result** shows the returned value

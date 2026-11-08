@@ -130,7 +130,12 @@
           {#each valueParams as p, i}
             <label class="arg">Argument {i + 1} <span class="muted">{p}</span>
               {#if p === 'String'}
-                <input class="mono" bind:value={groovy.args[i]} oninput={changed} aria-label="Argument {i + 1}" />
+                <span class="row">
+                  <input class="mono" bind:value={groovy.args[i]} oninput={changed} aria-label="Argument {i + 1}"
+                    placeholder={groovy.args[i] === null ? 'null' : ''} />
+                  <button class="small" class:on={groovy.args[i] === null} aria-pressed={groovy.args[i] === null}
+                    title="Pass null instead of a string" onclick={() => { groovy.args[i] = groovy.args[i] === null ? '' : null; changed(); }}>null</button>
+                </span>
               {:else}
                 <textarea class="mono" rows="4" bind:value={groovy.args[i]} oninput={changed} aria-label="Argument {i + 1}"
                   placeholder={'One context per line, e.g.\n["A", "B"]\n["C", {"suppress": true}]'}></textarea>
@@ -328,6 +333,9 @@
   .arg { display: flex; flex-direction: column; gap: 3px; font-size: 11px; color: var(--muted); }
   .arg input, .arg textarea { font-size: 12px; }
   .arg textarea { resize: vertical; }
+  .arg .row { display: flex; gap: 4px; }
+  .arg .row input { flex: 1; min-width: 0; }
+  .arg .on { border-color: var(--accent); color: var(--accent); }
   .badge { font-size: 10px; padding: 1px 6px; border-radius: 8px; margin-left: 6px; text-transform: uppercase; background: var(--surface); }
   .badge.ok { background: var(--ok-bg); color: var(--ok); }
   .badge.bad { background: var(--err-bg); color: var(--err); }

@@ -6,6 +6,8 @@ of its version.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-08
+
 ### Added
 
 - **Message Mapping functions** in the Groovy tab: a custom function of a mapping script, such as
@@ -27,7 +29,8 @@ of its version.
   opens converter steps with their settings, and the MCP tool `run_flow_step` runs them.
 - iFlow import lists **Message Mapping** steps. The mapping is not simulated; clicking the step opens
   the first Groovy script its `.mmap` uses, with its first mapping function, on Groovy Script 1.x.
-- Probe `probe-mapping-v1.groovy` for how a tenant calls mapping functions.
+- Probe `probe-mapping-v1.groovy` for how a tenant calls mapping functions, and converter inputs in
+  `probes/converters/` for comparing the four conversions with a tenant.
 
 ## [0.2.0] - 2026-11-06
 
@@ -116,7 +119,8 @@ First public release.
   supported.
 - The installers and engine jars include the licence texts and notices of the bundled components.
 
-[Unreleased]: https://github.com/jsevenheck/cpi-workbench/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/jsevenheck/cpi-workbench/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/jsevenheck/cpi-workbench/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/jsevenheck/cpi-workbench/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/jsevenheck/cpi-workbench/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/jsevenheck/cpi-workbench/releases/tag/v0.1.0

@@ -6,7 +6,7 @@
   <parent>
     <groupId>io.cpiwb</groupId>
     <artifactId>cpiwb-engine-parent</artifactId>
-    <version>0.2.0</version>
+    <version>0.3.0</version>
   </parent>
   <artifactId>cpiwb-xml-he12</artifactId>
   <name>CPI Workbench XML engine (Saxon-HE 12.9)</name>

@@ -19,7 +19,7 @@ import java.util.Map;
 /** RPC dispatcher of the native XML engine (XSLT, XSD, XPath, project files, test runner). */
 public final class XmlEngine implements RpcHandler {
 
-    public static final String VERSION = "0.2.0";
+    public static final String VERSION = "0.3.0";
 
     private final XsltStep xslt = new XsltStep();
     private final XsdStep xsd = new XsdStep();

@@ -34,7 +34,7 @@ the Groovy engines now follow what they showed:
 - **Probe files** for the Message Mapping probe (`probes/mapping/`: source and target schema,
   requests) and `curl` commands for sending the probe requests (`probes/README.md`).
 - **Message Mapping functions**: a tenant runs mapping scripts on Groovy 2.4.21 and Java 21, calls a
-  `String[]` function once per context and joins the results with context changes, as the simulator
+  `String[]` function once per context (an empty context with an empty array) and joins the results with context changes, as the simulator
   does. Context change, SUPPRESS and xsi:nil now have a tenant's marker texts (`__cC_`,
   `_sUpPresSeD_`, `_!xSi#NiL$_`). `context.invalidateCache()`, which a
   tenant's `MappingContext` has, runs (it does nothing here, with a note); `output.getResultList()`

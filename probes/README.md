@@ -14,7 +14,7 @@ Groovy engines follow it since 0.3.0.
 | `probe-platform-v1.groovy` | Groovy Script **1.x** | Partner Directory, Keystore, Secure Store and number range behaviour for entries that do not exist, plus the real method lists (Q-P1) | Ran 2026-11-09 |
 | `prepare-xslt-probe.groovy` + `probe-xslt-behaviour.xsl` | Groovy 1.x, then XSLT Mapping | Header vs. property precedence, Java→XDM types, missing params, `setHeader` return value (Q-X2 … Q-X5) | Ran 2026-11-09 |
 | `converters/` | **JSON to XML, XML to JSON, XML to CSV, CSV to XML** converters | Output formatting and XML declaration, JSON escaping, CSV line ends and quoting, an unmapped JSON prefix without namespace mapping (Q-C1) | All four ran; the simulator gives the same bytes |
-| `probe-mapping-v1.groovy` | Custom function in a **Message Mapping** | Groovy and Java version of mapping scripts, the classes and methods behind `MappingContext` and `Output`, and how values reach a `String[]` function: one call per context, how the results are joined, single-value calls (Q-M1) | Ran 2026-11-09 with both targets and `request.xml`; `request-empty-context.xml` not yet |
+| `probe-mapping-v1.groovy` | Custom function in a **Message Mapping** | Groovy and Java version of mapping scripts, the classes and methods behind `MappingContext` and `Output`, and how values reach a `String[]` function: one call per context, how the results are joined, single-value calls (Q-M1) | Ran 2026-11-09 with both targets and both requests |
 
 ## How to run
 
@@ -55,7 +55,8 @@ another error, note its text and line.
        behind `Output`.
 
    The run with `request.xml` (2026-11-09, F60) showed one `Info` per `Call`, one `Value` per source
-   value and the marker texts. A first run (F59, `probe-mapping-v1-first-target.xml`) used a target `Result/Info` without `Call`: `Result` occurs once, so
+   value and the marker texts; `request-empty-context.xml` (F61) a `Call` with an empty `entries` list
+   for the empty group. A first run (F59, `probe-mapping-v1-first-target.xml`) used a target `Result/Info` without `Call`: `Result` occurs once, so
    only the first call's document (`a`, `b`) reached the output. It answered the Groovy and Java
    version and the classes behind `MappingContext` and `Output`. If the mapping does not deploy or a
    function is not offered, the error message is valuable too. The simulator's baseline used the
@@ -95,7 +96,7 @@ in them is confidential beyond version numbers, class names and the tenant's def
 ## Baseline from the simulator
 
 `baseline-simulator/` holds what the simulator returns for the same probes, so differences are
-easy to spot. `results-tenant/2026-11-09/` holds what one tenant returned (findings F48–F60 in the
+easy to spot. `results-tenant/2026-11-09/` holds what one tenant returned (findings F48–F61 in the
 plan). The differences that remain:
 
 * `xsl:product-version` is `HE 9.9.1.8` locally and `EE 9.9.1.6` on the tenant.

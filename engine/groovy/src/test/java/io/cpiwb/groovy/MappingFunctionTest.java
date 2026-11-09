@@ -90,6 +90,16 @@ class MappingFunctionTest {
         assertEquals("[[\"x\",{\"suppress\":true},{\"xsiNil\":true}]]", Json.write(mapping(r).get("queue")));
     }
 
+    /** A tenant calls a String[] function for an empty context too, with an empty array (plan F61). */
+    @Test
+    void emptyContextIsCalledWithAnEmptyArray() throws Exception {
+        String s = "def void count(String[] a, Output output, MappingContext context) {\n"
+                + "  output.addValue(a.length)\n}\n";
+        Map<String, Object> r = call(s, "count", List.of(List.of(List.of("a", "b"), List.of(), List.of("c"))));
+        assertTrue(Json.bool(r, "ok", false), () -> Json.write(r));
+        assertEquals(List.of(List.of("2"), List.of("0"), List.of("1")), mapping(r).get("queue"));
+    }
+
     /** The markers have the texts of a tenant's ResultList constants (plan F60). */
     @Test
     void markersHaveTheTenantsTexts() throws Exception {

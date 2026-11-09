@@ -13,7 +13,7 @@ Groovy engines follow it since 0.3.0.
 | `fingerprint.xsl` | XSLT Mapping 1.2+ | Saxon edition/version, supported features, localisation of `format-date` (Q-X1) | Ran 2026-11-09 |
 | `probe-platform-v1.groovy` | Groovy Script **1.x** | Partner Directory, Keystore, Secure Store and number range behaviour for entries that do not exist, plus the real method lists (Q-P1) | Ran 2026-11-09 |
 | `prepare-xslt-probe.groovy` + `probe-xslt-behaviour.xsl` | Groovy 1.x, then XSLT Mapping | Header vs. property precedence, Java→XDM types, missing params, `setHeader` return value (Q-X2 … Q-X5) | Ran 2026-11-09 |
-| `converters/` | **JSON to XML, XML to JSON, XML to CSV, CSV to XML** converters | Output formatting and XML declaration, JSON escaping, CSV line ends and quoting, an unmapped JSON prefix without namespace mapping (Q-C1) | XML to JSON ran (same as the baseline); the other three not yet |
+| `converters/` | **JSON to XML, XML to JSON, XML to CSV, CSV to XML** converters | Output formatting and XML declaration, JSON escaping, CSV line ends and quoting, an unmapped JSON prefix without namespace mapping (Q-C1) | XML to JSON and XML to CSV ran (the simulator now gives the same); JSON to XML and CSV to XML not yet |
 | `probe-mapping-v1.groovy` | Custom function in a **Message Mapping** | Groovy and Java version of mapping scripts, the classes and methods behind `MappingContext` and `Output`, and how values reach a `String[]` function: one call per context, SUPPRESS in the input array (Q-M1) | Not yet |
 
 ## How to run
@@ -59,7 +59,7 @@ another error, note its text and line.
    |---|---|---|
    | `/cpiwb/xml-to-json` | XML to JSON: *Use Namespace Mapping* with the XML namespace `http://com.sap/abc` → JSON prefix `abc` and `http://com.sap/xyz` → `xyz`, JSON prefix separator `:`, no streaming | `converters/xml-to-json.xml` |
    | `/cpiwb/json-to-xml` | JSON to XML: no namespace mapping, separator `:`, no root element | `converters/json-to-xml.json` |
-   | `/cpiwb/xml-to-csv` | XML to CSV: path `/root/Products/Product`, separator `;`, CSV header *XML based*, *Include Parent Element* with `/root`, *Include Attribute Values* | `converters/xml-to-csv.xml` |
+   | `/cpiwb/xml-to-csv` | XML to CSV: path `/root/Products/Product`, separator `,` (Comma), CSV header *XML based*, *Include Parent Element* with `/root`, no attribute values | `converters/xml-to-csv.xml` |
    | `/cpiwb/csv-to-xml` | CSV to XML: schema `converters/products.xsd` (upload it to the iFlow), path `Products/Product`, separator `;`, *Exclude First Line Header*, headers to match *XSD Elements*, no record marker | `converters/csv-to-xml.csv` |
 
    Save each response body as a file, so line ends and whitespace stay as they are (below).

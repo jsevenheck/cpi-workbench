@@ -116,7 +116,7 @@ class XmlBoundaryTest {
         Files.writeString(project.resolve("rows.xml"), "<r><i><a>inside-doc</a></i></r>");
         Map<String, Object> inside = csv(Json.o().with("sourcePath", "doc('rows.xml')/r/i"), "<root/>");
         assertTrue(Json.bool(inside, "ok", false), () -> Json.write(inside));
-        assertEquals("inside-doc", inside.get("body"));
+        assertEquals("inside-doc\n", inside.get("body"));
     }
 
     /** A symbolic link inside the project that points outside is outside (found in a review on 2026-11-08). */

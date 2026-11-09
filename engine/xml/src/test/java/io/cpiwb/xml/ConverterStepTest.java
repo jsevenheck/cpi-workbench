@@ -185,19 +185,31 @@ class ConverterStepTest {
                 + "<Product><DimensionWidth>0.3100</DimensionWidth><WeightUnit>KG</WeightUnit><ProductId>HT-1081</ProductId>"
                 + "<DimensionUnit>m</DimensionUnit><DimensionHeight>0.0700</DimensionHeight><DimensionDepth>0.4300</DimensionDepth>"
                 + "<Weight>2.400</Weight><Name>Power Scan</Name></Product></Products></root>";
-        assertEquals("Category;Type;Source\nScanners;Source Data;ERP\n"
+        // SAP's example, with the empty line after the parent's lines and the final line break a tenant writes (F55).
+        assertEquals("Category;Type;Source\nScanners;Source Data;ERP\n\n"
                 + "DimensionWidth;WeightUnit;ProductId;DimensionUnit;DimensionHeight;DimensionDepth;Weight;Name\n"
-                + "0.3400;KG;HT-1080;m;0.0500;0.4800;2.300;Photo Scan\n0.3100;KG;HT-1081;m;0.0700;0.4300;2.400;Power Scan",
+                + "0.3400;KG;HT-1080;m;0.0500;0.4800;2.300;Photo Scan\n0.3100;KG;HT-1081;m;0.0700;0.4300;2.400;Power Scan\n",
                 body(convert("xmlToCsv", xml, Json.o().with("sourcePath", "root/Products/Product").with("fieldSeparator", ";")
                         .with("csvHeader", "xml").with("includeParent", true).with("parentPath", "root").with("includeAttributes", true))));
-        assertEquals("0.3400;KG;HT-1080;m;0.0500;0.4800;2.300;Photo Scan\n0.3100;KG;HT-1081;m;0.0700;0.4300;2.400;Power Scan",
+        assertEquals("0.3400;KG;HT-1080;m;0.0500;0.4800;2.300;Photo Scan\n0.3100;KG;HT-1081;m;0.0700;0.4300;2.400;Power Scan\n",
                 body(convert("xmlToCsv", xml, Json.o().with("sourcePath", "/root/Products/Product").with("fieldSeparator", "semicolon"))));
         assertTrue(error(convert("xmlToCsv", xml, Json.o().with("sourcePath", "/root"))).contains("only simple types"));
         Map<String, Object> attrsOnly = convert("xmlToCsv", "<O><I a=\"1\"/></O>", Json.o().with("sourcePath", "/O/I"));
-        assertEquals("", body(attrsOnly));
+        assertEquals("\n", body(attrsOnly));
         assertTrue(Json.write(attrsOnly.get("diagnostics")).contains("Include Attribute Values"));
-        assertEquals("a\n1", body(convert("xmlToCsv", "<O><I a=\"1\"/></O>",
+        assertEquals("a\n1\n", body(convert("xmlToCsv", "<O><I a=\"1\"/></O>",
                 Json.o().with("sourcePath", "/O/I").with("csvHeader", "xml").with("includeAttributes", true))));
+    }
+
+    @Test
+    void xmlToCsvLikeATenant() throws Exception {
+        // probes/converters/xml-to-csv.xml with a tenant's settings and response (F55): separator comma,
+        // XML based header, parent /root, no attribute values; values are written as they are.
+        String xml = Files.readString(Path.of("../../probes/converters/xml-to-csv.xml"));
+        assertEquals("Type,Source\nSource Data,ERP\n\nProductId,Name,Note\nHT-1080,Photo Scan,a;b\n"
+                + "HT-1081,Power Scan,\"quoted\"\n",
+                body(convert("xmlToCsv", xml, Json.o().with("sourcePath", "/root/Products/Product").with("fieldSeparator", ",")
+                        .with("csvHeader", "xml").with("includeParent", true).with("parentPath", "/root"))));
     }
 
     // ---------------------------------------------------------------- CSV to XML

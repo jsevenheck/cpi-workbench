@@ -579,6 +579,9 @@ public final class ConverterStep {
                     lines.add(join(fields, 0, sep));
                 }
                 lines.add(join(fields, 1, sep));
+                // A tenant separates the parent's lines from the records with an empty line (docs/plan.md F55);
+                // SAP's documented example shows none.
+                lines.add("");
             }
             List<XdmNode> records = select(doc, sourcePath);
             if (records.isEmpty()) {
@@ -605,8 +608,11 @@ public final class ConverterStep {
                         + (attributes ? " or attributes" : "; select Include Attribute Values to write their attributes")
                         + ", so their rows are empty.").toJson());
             }
-            // An assumption: lines end with \n and the text has no trailing line break (SAP's example ends there).
-            return String.join("\n", lines);
+            // Every line ends with a line break, the last one too, as on a tenant (F55). That it is \n and not
+            // \r\n is an assumption: the tenant's response was seen in a viewer only.
+            StringBuilder out = new StringBuilder();
+            lines.forEach(l -> out.append(l).append('\n'));
+            return out.toString();
         }
 
         /** Attributes (when included), then the simple child elements: {name, value} in document order. */

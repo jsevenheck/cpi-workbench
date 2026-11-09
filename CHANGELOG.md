@@ -34,6 +34,8 @@ the Groovy engines now follow what they showed:
 - **Probe files** for the Message Mapping probe (`probes/mapping/`: source and target schema,
   requests) and `curl` commands for sending the probe requests (`probes/README.md`).
 - `$exchange` in XSLT prints as `Exchange[<id>]`, as on a tenant.
+- **XML to CSV** writes what a tenant writes: an empty line after the parent element's lines, and a
+  line break after the last line.
 - Platform API messages and results follow the tenant: Partner Directory type and empty-ID errors,
   `getAuthorizedUsers` of an unknown partner is `null`, the pattern error, Secure Store errors for an
   empty alias and an unknown OAuth2 credential, the number range error. Without
@@ -57,8 +59,8 @@ the Groovy engines now follow what they showed:
 - **Converter** step in Flow Steps: JSON to XML, XML to JSON, XML to CSV and CSV to XML with the
   settings of CPI's converter steps (namespace mapping, root element options, streaming, record marker,
   header mapping, parent element). It follows SAP's documented conversion rules and limitations; SAP's
-  examples are reproduced exactly in the tests. CSV to XML reads its XSD from the project. The iFlow import
-  opens converter steps with their settings, and the MCP tool `run_flow_step` runs them.
+  examples are reproduced in the tests (XML to CSV with the empty line and final line break a tenant
+  writes). CSV to XML reads its XSD from the project. The iFlow import opens converter steps with their settings, and the MCP tool `run_flow_step` runs them.
 - iFlow import lists **Message Mapping** steps. The mapping is not simulated; clicking the step opens
   the first Groovy script its `.mmap` uses, with its first mapping function, on Groovy Script 1.x.
 - Probe `probe-mapping-v1.groovy` for how a tenant calls mapping functions, and converter inputs in

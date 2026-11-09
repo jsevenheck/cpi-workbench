@@ -1,5 +1,6 @@
-Category;Type;Source
-Scanners;Source Data;ERP
-ProductId;Name;Note
-HT-1080;Photo Scan;a;b
-HT-1081;Power Scan;"quoted"
+Type,Source
+Source Data,ERP
+
+ProductId,Name,Note
+HT-1080,Photo Scan,a;b
+HT-1081,Power Scan,"quoted"

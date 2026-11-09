@@ -71,7 +71,7 @@ Labels follow the REA evidence rules (see §4): **Observed** = read in a source 
 | F28 | CPI has no public script API for the Data Store; scripts that access it use internal classes looked up from the Camel registry. The simulator does not mock this. | Inferred (community examples) | — |
 | F29 | SAP publishes its Script API interfaces on Maven Central (`com.sap.cloud.script:script.api` 2.14.0–2.16.4 for v1, `script.v2.api` 4.0.0–4.2.2 for v2; SAP Developer License, not bundled). The simulator's `Message`, `AttachmentWrapper`, `SoapHeader` and the v2 `Attachment`, extension-function and exception types follow these signatures. The v2 `Message` has no `getSoapHeaders`/`setSoapHeaders` and no `AttachmentWrapper` methods, but adds `getHeader(String)`, `getHeader(String, Object)`, `clearAttachments`, `resetBodyStream` and `getExtensionFunctions` (exchange timestamps, ProcessDirect). The interface is a lower bound: CPI's implementation class may offer more, which the fingerprint probes list (`messageMethods`). | Observed (published jars) / Unknown (runtime class) → Q-G4 | Maven Central `com.sap.cloud.script` |
 | F30 | The v1 API jar moved from Camel 2.24 (`script.api` 2.15.0, May 2024: imports `org.apache.camel` [2.24,3), `AttachmentWrapper` extends `org.apache.camel.impl.DefaultAttachment`) to Camel 3.14 (2.16.2, Dec 2025, and 2.16.4: [3.14,4), `org.apache.camel.attachment.DefaultAttachment`). So 1.x steps may now run on Camel 3.14, which the fingerprint confirmed (F48); since 0.3.0 the simulator's 1.x engine does too, and its `AttachmentWrapper` extends Camel 3's `DefaultAttachment`. The simulator's v1 Message has the overloads that take Camel's `Attachment` type, as a tenant's does (F49). | Observed (jar manifests, one tenant) | Maven Central `com.sap.cloud.script:script.api` |
-| F31 | Which libraries CPI puts on a script's class path besides Groovy and Camel (e.g. commons-codec, IAIK used by SAP's own sample scripts) is not known; the simulator offers none and loads jars from `lib/` and the iFlow's `src/main/resources/lib/`. | Unknown → fingerprint `classesAvailable` | SAP sample iFlows |
+| F31 | Which libraries CPI puts on a script's class path besides Groovy and Camel (e.g. commons-codec, IAIK used by SAP's own sample scripts) is not known; the simulator offers none and loads jars from `lib/` and the iFlow's `src/main/resources/lib/`. | Answered by the fingerprints (F50, F53): the simulator bundles the libraries and versions a tenant reports | SAP sample iFlows |
 | F32 | SAP's sample XSLTs call Java static methods through `java:` namespaces (e.g. `java:java.util.Date`), so CPI's Saxon-EE allows reflexive extension functions. The simulator registers them as integrated functions for JDK classes (native engines: a fixed list of JDK classes). Classes from the iFlow's or project's jars are not available to XSLT (the native engines cannot load classes at runtime). Exact argument conversion rules of Saxon-EE are not reproduced in all cases. | Observed (SAP samples) / Inferred (conversion) | SAP sample iFlows, `JavaExtensions.java` |
 | F33 | SAP also publishes the platform API interfaces as `com.sap.cloud.adk:generic.api` (4.10.2, with Javadoc; SAP Developer License, not bundled): `ITApiFactory`, `ITApiException`/`InvalidContextException`, Keystore (incl. key and trust managers), message log, number ranges (`NumberRangeConfigurationService.getNextValuefromNumberRange(name, correlationId)`), Partner Directory (incl. `getCertificateParameter(parameterId, partnerId)`, authorized users, deprecated LIKE-pattern lookups) and Secure Store (incl. OAuth2 tokens: `getAccesTokenForOauth2ClientCredential`, SAP's spelling). `ValueMappingApi` is not in it. The simulator's classes follow these signatures. | Observed (published jar + Javadoc) | S24 |
 | F34 | The Camel line is a property of the tenant: SAP numbers Cloud Integration software 8.x (Cloud Foundry) and 7.x (Neo) for runtimes on Camel 3, 6.x and 5.x for Camel 2. Patch notes from 2024 to 2026 describe the migration of tenants to Camel 3 and back-ports to the Camel 3.14.7 branch. Whether any tenant still runs Camel 2 is not stated. | Observed (SAP docs) | S25 |
@@ -325,7 +325,7 @@ Plain, git-friendly files. The engines' `test` command (`cpiwb-xml test tests/`,
 | Phase | Scope | Status |
 |---|---|---|
 | **0 — Spikes** | Saxon-HE 9.9 as GraalVM native image; CPI parameter binding and `setHeader`/`setProperty` as integrated extension functions; Tauri ⇄ engine JSON-RPC; budgets (§5.3) | Done |
-| **1 — Probe kit** | Fingerprint and probe iFlows for the questions in Appendix A | Written, baseline recorded; waiting for a tenant run |
+| **1 — Probe kit** | Fingerprint and probe iFlows for the questions in Appendix A | Ran on one tenant on 2026-11-09 (F48–F61); results in `probes/results-tenant/` |
 | **2 — XSLT MVP** | XSLT with live mode, CPI binding, both Saxon profiles, XSD validation, XPath tester, test cases, CLI | Done (0.1.0) |
 | **3 — Groovy MVP** | Groovy 1.x and 2.x, typed headers/properties, MPL, API call log, console, diff | Done (0.1.0) |
 | **4 — Productivity** | Platform API mocks, lint, runtime comparison, iFlow-zip import, flow steps, MCP server | Done (0.1.0–0.3.0) |
@@ -466,8 +466,11 @@ Taken: the build-vs-reuse principle (§3), XSLT first, tenant probes later; the 
 the Apache-2.0 licence in a public repository; the HE profiles instead of a Saxon-EE licence. With the
 first probe run (2026-11-09, F48–F52) for 0.3.0: both Groovy engines on Camel 3.14.7 and Java 21 and
 Camel 2 dropped (tenants on software 6.x / 5.x are not covered); the tenant's timezone, locale,
-bindings and libraries, in the versions it reports (F53), as the engines' defaults.
-Open: the Message Mapping and converter probes.
+bindings and libraries, in the versions it reports (F53), as the engines' defaults. With the converter
+and Message Mapping probes (F54–F61): the converters write a tenant's bytes, and mapping functions
+follow its calls and marker texts.
+Open: the questions still marked open in Appendix A (among them CSV line ends, where `ScriptLogger`
+writes, SUPPRESS in a mapping function's input).
 
 ---
 

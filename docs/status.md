@@ -5,9 +5,9 @@
 * **Built** is the share of the planned scope of an area (see [plan](plan.md) §1, §5–§10) that is
   implemented and covered by automated tests on Linux. It is an estimate made by listing the
   planned sub-features and the open items below; it is not a measured metric.
-* **Tenant-verified:** on 2026-11-09 the fingerprint, XSLT and platform [probes](../probes/README.md)
-  ran on one tenant (F48–F52, `probes/results-tenant/`). The Message Mapping and converter probes have
-  not run yet. Elsewhere "like CPI" means "like SAP's documentation, SAP's published interfaces and
+* **Tenant-verified:** on 2026-11-09 all [probes](../probes/README.md) ran on one tenant: fingerprints,
+  XSLT, platform, the four converters and the Message Mapping probe (F48–F61, `probes/results-tenant/`).
+  Elsewhere "like CPI" means "like SAP's documentation, SAP's published interfaces and
   Camel's code say".
 * Items that cannot be built with Saxon-HE (EE-only features) count as out of scope, not as gaps.
 

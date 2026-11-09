@@ -8,7 +8,7 @@ runtime profiles.
 | File | Step | Answers |
 |---|---|---|
 | `fingerprint-v1.groovy` | Groovy Script **1.x** | Java / Groovy / Camel / Saxon versions, JAXP factories, charset, timezone, locale, script bindings (Q-G2, Q-G3, Q-G6, Q-X1) |
-| `fingerprint-v2.groovy` | Groovy Script **2.x** | Same for 2.x plus the **Script API v2 method list** via reflection (Q-G4). Not yet verified on a tenant. |
+| `fingerprint-v2.groovy` | Groovy Script **2.x** | Same for 2.x plus the **Script API v2 method list** via reflection (Q-G4). Ran on a tenant on 2026-11-09. |
 | `fingerprint.xsl` | XSLT Mapping 1.2+ | Saxon edition/version, supported features, localisation of `format-date` (Q-X1) |
 | `probe-platform-v1.groovy` | Groovy Script **1.x** | Partner Directory and Keystore behaviour for entries that do not exist, plus the real method lists (Q-P1) |
 | `prepare-xslt-probe.groovy` + `probe-xslt-behaviour.xsl` | Groovy 1.x, then XSLT Mapping | Header vs. property precedence, Java→XDM types, missing params, `setHeader` return value (Q-X2 … Q-X5) |

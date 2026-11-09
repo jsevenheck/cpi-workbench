@@ -49,7 +49,7 @@ import java.util.TreeMap;
  *   <li>The serialized result becomes the new body.</li>
  * </ul>
  * Precedence when a header and a property share a name follows Camel's XsltBuilder (properties are
- * set first, headers override); this is configurable until verified on a tenant (Q-X2).
+ * set first, headers override), which a tenant confirmed (docs/plan.md F51); it stays configurable.
  */
 public final class XsltStep {
 

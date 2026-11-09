@@ -107,10 +107,10 @@ A test case can override any of these with a `platform` object (`credentials`, `
 
 **Use test-only keys and passwords here, never real tenant secrets.**
 
-Behaviour for missing entries follows SAP's published Javadoc:
+Behaviour for missing entries follows SAP's published Javadoc and a tenant's probe results (the
+messages too, [plan](plan.md) F52):
 
-* The Partner Directory and the Keystore return `null` for a missing entry or an unknown alias.
+* The Partner Directory and the Keystore return `null` for a missing entry or an unknown alias
+  (also `getAuthorizedUsers` of an unknown partner). Without `keystore.json` the keystore is empty.
 * The Secure Store throws `SecureStoreException` for an unknown alias.
 * `ITApiFactory` throws `InvalidContextException` for a service the simulator does not offer.
-
-Whether the deployed runtime matches its Javadoc is not verified yet ([plan](plan.md) F27, F33).

@@ -5,8 +5,11 @@ import org.apache.camel.Exchange;
 import org.apache.camel.attachment.Attachment;
 
 import javax.activation.DataHandler;
+import java.util.AbstractMap;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Script API v1 message ({@code com.sap.gateway.ip.core.customdev.util.Message}), a clean-room
@@ -81,9 +84,44 @@ public class Message extends MessageSupport<AttachmentWrapper> {
         attachment.removeHeader(name);
     }
 
-    @SuppressWarnings({"unchecked", "rawtypes"})
+    /**
+     * The attachments as Camel attachments: a live view of the same map. A Camel attachment put into it is
+     * stored as an {@code AttachmentWrapper}; entries cannot be replaced through {@code Entry.setValue}.
+     */
     public Map<String, Attachment> getAttachmentObjects() {
-        return (Map) attachmentMap();
+        Map<String, AttachmentWrapper> m = attachmentMap();
+        return new AbstractMap<>() {
+            @Override
+            @SuppressWarnings({"unchecked", "rawtypes"})
+            public Set<Entry<String, Attachment>> entrySet() {
+                return (Set) Collections.unmodifiableMap(m).entrySet();
+            }
+
+            @Override
+            public Attachment get(Object key) {
+                return m.get(key);
+            }
+
+            @Override
+            public boolean containsKey(Object key) {
+                return m.containsKey(key);
+            }
+
+            @Override
+            public Attachment put(String key, Attachment value) {
+                return m.put(key, wrap(value));
+            }
+
+            @Override
+            public Attachment remove(Object key) {
+                return m.remove(key);
+            }
+
+            @Override
+            public void clear() {
+                m.clear();
+            }
+        };
     }
 
     public void setAttachmentObjects(Map<String, Attachment> map) {

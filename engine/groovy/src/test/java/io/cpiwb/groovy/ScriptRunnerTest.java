@@ -452,13 +452,15 @@ class ScriptRunnerTest {
                 + "  message.addAttachmentObject('c.txt', c)\n"
                 + "  message.addAttachmentObject('w.txt', new AttachmentWrapper(new DataHandler('w', 'text/plain')))\n"
                 + "  Map<String, Attachment> all = message.getAttachmentObjects()\n"
+                + "  all.put('p.txt', new DefaultAttachment(new DataHandler('p', 'text/plain')))\n"
                 + "  message.setProperty('names', all.keySet().join(','))\n"
                 + "  message.setProperty('wrapped', message.getAttachmentWrapperObjects()['c.txt'].getHeader('x-a'))\n"
                 + "  message.setProperty('isCamel', new AttachmentWrapper(new DataHandler('x', 'text/plain')) instanceof Attachment)\n"
                 + "  return message\n}";
         Map<String, Object> r = run(s, in("", List.of(), List.of()), null);
         assertTrue(Json.bool(r, "ok", false), () -> Json.write(r));
-        assertEquals("c.txt,w.txt", entry(r, "properties", "names").get("value"));
+        assertEquals("c.txt,w.txt,p.txt", entry(r, "properties", "names").get("value"));
+        assertEquals(3, Json.arr(r, "attachments").size(), "a Camel attachment put into the map is kept as a wrapper");
         assertEquals("1", entry(r, "properties", "wrapped").get("value"));
         assertEquals("true", entry(r, "properties", "isCamel").get("value"));
     }

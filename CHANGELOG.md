@@ -82,6 +82,11 @@ the Groovy engines now follow what they showed:
   Java version from the runtime MXBean (`java`, `javaVmVersion`): the tenant's script editor refuses
   `System.getProperty` as an unsupported class.
 
+### Fixed
+
+- An engine stops as soon as the app is gone, also when a Groovy script left a thread running and the
+  app ended without closing (a crash, Task Manager). Before, such an engine kept running.
+
 ### Security
 
 - Project path checks follow symbolic links: a link inside the project that leads outside it is

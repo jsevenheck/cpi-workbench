@@ -76,6 +76,8 @@ public final class Main {
             Thread.currentThread().join();
         } else {
             server.serveStdio();
+            // The shell closed stdin (it quit or died): stop, even if a script left a non-daemon thread running.
+            System.exit(0);
         }
     }
 

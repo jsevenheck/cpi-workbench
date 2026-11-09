@@ -116,7 +116,7 @@ The installers are not code-signed yet; [Installing](install.md) shows how to st
 first time. The Windows `setup.exe` installs per user and needs no admin rights; the `.msi` installs
 per machine and needs admin rights.
 
-The Groovy runtime starts only when the Groovy or Flow Steps tab is used and stops after 10 idle minutes.
+The Groovy runtime starts only when the Groovy or Flow Steps tab is used and stops after 10 idle minutes. Closing the app stops all engines; if the app ends without closing (a crash, Task Manager), the engines stop on their own as soon as it is gone.
 
 **⚙** (bottom left, next to the status) shows the installed version. **Check for updates** asks github.com for the latest
 release and links to its page if it is newer; download and install it from there.

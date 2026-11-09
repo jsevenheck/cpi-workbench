@@ -10,12 +10,33 @@ of its version.
 
 ### Changed
 
-- Platform API messages and results follow a tenant (probe run of 2026-11-09): Partner Directory
-  type and empty-ID errors, `getAuthorizedUsers` of an unknown partner is `null`, the pattern error,
-  Secure Store errors for an empty alias and an unknown OAuth2 credential, the number range error.
-  The simulator still adds where it looked (e.g. `platform/credentials.json`).
-- Tenant results of the probes are in `probes/results-tenant/2026-11-09/`; `docs/fidelity.md` lists
-  what they confirm and the gaps they show (Camel 3.14 and Java 21 behind 1.x, libraries, defaults).
+The probes ran on a tenant for the first time (2026-11-09, results in `probes/results-tenant/`), and
+the Groovy engines now follow what they showed:
+
+- **Groovy Script 1.x runs on Camel 3.14.7**, like 2.x and like a tenant. Camel 2.24 is gone, and with
+  it the *Camel* choice in the Flow Steps tab: tenants on software 6.x / 5.x (Camel 2) are no longer
+  covered. Camel Simple rewrites CPI's `and` / `or` / `${property.x}` on both engines.
+- **Java 21**: the app's bundled Java runtime is 21, as on a tenant (was 17). The engine jars still
+  start on Java 17.
+- **UTC and `en_US`** in every engine, whatever the computer uses, as on a tenant: dates,
+  `current-dateTime()`, `implicit-timezone()` and case conversion no longer depend on the computer.
+- **Script context** as on a tenant: `javax.script.filename`, and on 1.x `log` and `logger` (their
+  type is unknown: `log.info(…)` and the other level methods print to the Console with a note); no
+  `out` variable.
+- **Message methods** as on a tenant: the 1.x message has the overloads with Camel's `Attachment`,
+  `getAttachmentObjects` and `setAttachmentObjects` (`AttachmentWrapper` is a Camel attachment); the
+  2.x message has `getSoapHeaders`, `setSoapHeaders` and `clearSoapHeaders` and receives the input's
+  SOAP headers. The lint no longer warns about the SOAP header methods on 2.x.
+- **Libraries** scripts can load, as on a tenant: commons-lang3 (1.x and 2.x), Jackson databind and
+  commons-codec (1.x), Groovy's yaml and toml modules (2.x) and Camel's `org.apache.camel.attachment`
+  (both). Their versions are assumed (the ones Camel 3.14.7 manages); the fingerprint probes now report
+  them, and the types of the bound variables.
+- `$exchange` in XSLT prints as `Exchange[<id>]`, as on a tenant.
+- Platform API messages and results follow the tenant: Partner Directory type and empty-ID errors,
+  `getAuthorizedUsers` of an unknown partner is `null`, the pattern error, Secure Store errors for an
+  empty alias and an unknown OAuth2 credential, the number range error. Without
+  `platform/keystore.json` the Keystore is empty (lookups return null, key managers hold no key)
+  instead of failing, and the run notes it. The simulator still adds where it looked.
 
 ### Added
 

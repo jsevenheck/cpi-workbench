@@ -45,6 +45,7 @@ public final class Platform {
     private final Map<String, String> numberByCorrelation = new LinkedHashMap<>();
 
     private final List<Object> apiCalls = new ArrayList<>();
+    private final java.util.Set<String> notes = new java.util.LinkedHashSet<>();
     private final List<Object> mplProperties = new ArrayList<>();
     private final List<Object> mplCustomHeaders = new ArrayList<>();
     private final List<Object> mplAttachments = new ArrayList<>();
@@ -66,6 +67,15 @@ public final class Platform {
 
     public boolean isMplEnabled() {
         return mplEnabled;
+    }
+
+    /** Notes for the run's diagnostics (each once), e.g. that a mock has no data. */
+    public void note(String text) {
+        notes.add(text);
+    }
+
+    public java.util.Set<String> notes() {
+        return notes;
     }
 
     public void recordCall(String api, String method, Object... args) {
@@ -306,7 +316,10 @@ public final class Platform {
         }
     }
 
-    /** Key managers over the simulator keystore, or over just the given alias. */
+    /**
+     * Key managers over the simulator keystore, or over just the given alias. For an alias without a key
+     * the managers hold no key, as a tenant returns key managers for an unknown alias too (F52).
+     */
     public javax.net.ssl.KeyManager[] keyManagers(String method, String alias) throws KeystoreException {
         recordCall("KeystoreService", method, alias);
         KeyStore ks = loadKeystore();
@@ -314,12 +327,11 @@ public final class Platform {
             KeyStore source = ks;
             char[] pw = keyPassword(alias == null ? "" : alias).toCharArray();
             if (alias != null) {
-                if (!ks.isKeyEntry(alias)) {
-                    return null;
-                }
                 source = KeyStore.getInstance("PKCS12");
                 source.load(null, null);
-                source.setKeyEntry(alias, ks.getKey(alias, pw), pw, ks.getCertificateChain(alias));
+                if (ks.isKeyEntry(alias)) {
+                    source.setKeyEntry(alias, ks.getKey(alias, pw), pw, ks.getCertificateChain(alias));
+                }
             }
             javax.net.ssl.KeyManagerFactory f = javax.net.ssl.KeyManagerFactory.getInstance(
                     javax.net.ssl.KeyManagerFactory.getDefaultAlgorithm());
@@ -366,8 +378,17 @@ public final class Platform {
             return keystore;
         }
         if (keystoreConfig == null || Json.str(keystoreConfig, "file", null) == null) {
-            throw new KeystoreException("No keystore configured for the simulator: create platform/keystore.json "
-                    + "with {\"file\": \"keystore.p12\", \"password\": \"...\"}");
+            // A tenant always has a keystore and returns null for an unknown alias (F52), so an empty one stands in.
+            note("The simulator's keystore is empty: create platform/keystore.json with {\"file\": \"keystore.p12\", "
+                    + "\"password\": \"...\"} to give scripts keys and certificates.");
+            try {
+                KeyStore empty = KeyStore.getInstance("PKCS12");
+                empty.load(null, null);
+                keystore = empty;
+                return empty;
+            } catch (IOException | java.security.GeneralSecurityException e) {
+                throw new KeystoreException("Cannot create an empty keystore: " + e.getMessage());
+            }
         }
         String file = Json.str(keystoreConfig, "file", null);
         try {

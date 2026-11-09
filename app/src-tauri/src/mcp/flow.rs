@@ -45,7 +45,7 @@ pub fn run(server: &Server, args: &Args) -> Result<Value, String> {
     let ctx = Ctx {
         server,
         xml: tools::xml_runtime(server),
-        camel: str_arg(args, "camel").unwrap_or(tools::camel_runtime(server)),
+        camel: tools::camel_runtime(server),
         namespaces: args.get("namespaces").cloned().unwrap_or(json!({})),
         input: tools::message(server, args)?,
     };

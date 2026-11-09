@@ -24,7 +24,9 @@ const MESSAGE: Member[] = [
   m('Map<String, Object>', 'getProperties'), m('Object', 'getProperty', 'String name'),
   m('void', 'setProperty', 'String name, Object value'), m('void', 'setProperties', 'Map<String, Object> properties'),
   m('Map<String, DataHandler>', 'getAttachments'), m('void', 'setAttachments', 'Map<String, DataHandler> attachments'),
-  m('long', 'getAttachmentsSize'), m('void', 'clearSoapHeaders'),
+  m('long', 'getAttachmentsSize'),
+  // SAP's v2 interface lacks the SOAP header list, but a tenant's v2 message class has it (F49).
+  m('List<SoapHeader>', 'getSoapHeaders'), m('void', 'setSoapHeaders', 'List<SoapHeader> headers'), m('void', 'clearSoapHeaders'),
 ];
 
 /** Script API v1 (com.sap.gateway.ip.core.customdev.util.Message). */
@@ -36,7 +38,9 @@ const MESSAGE_V1: Member[] = [
   m('Map<String, AttachmentWrapper>', 'getAttachmentWrapperObjects'),
   m('void', 'setAttachmentWrapperObjects', 'Map<String, AttachmentWrapper> attachments'),
   m('void', 'addAttachmentObject', 'String id, AttachmentWrapper attachment'),
-  m('List<SoapHeader>', 'getSoapHeaders'), m('void', 'setSoapHeaders', 'List<SoapHeader> headers'),
+  // The overloads with Camel 3's org.apache.camel.attachment.Attachment (F49).
+  m('Map<String, Attachment>', 'getAttachmentObjects'), m('void', 'setAttachmentObjects', 'Map<String, Attachment> attachments'),
+  m('void', 'addAttachmentObject', 'String id, Attachment attachment'),
 ];
 
 /** Script API v2 (com.sap.it.script.v2.api.Message). */

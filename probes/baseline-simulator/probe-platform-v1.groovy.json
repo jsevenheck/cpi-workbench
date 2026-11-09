@@ -50,24 +50,19 @@
         "result": "com.sap.it.api.keystore.KeystoreService: com.sap.it.api.keystore.KeystoreService"
     },
     "ks.getKey(missing)": {
-        "exception": "com.sap.it.api.keystore.exception.KeystoreException",
-        "message": "No keystore configured for the simulator: create platform/keystore.json with {\"file\": \"keystore.p12\", \"password\": \"...\"}"
+        "result": null
     },
     "ks.getCertificate(missing)": {
-        "exception": "com.sap.it.api.keystore.exception.KeystoreException",
-        "message": "No keystore configured for the simulator: create platform/keystore.json with {\"file\": \"keystore.p12\", \"password\": \"...\"}"
+        "result": null
     },
     "ks.getKeyPair(missing)": {
-        "exception": "com.sap.it.api.keystore.exception.KeystoreException",
-        "message": "No keystore configured for the simulator: create platform/keystore.json with {\"file\": \"keystore.p12\", \"password\": \"...\"}"
+        "result": null
     },
     "ks.getCertificateChain(missing)": {
-        "exception": "com.sap.it.api.keystore.exception.KeystoreException",
-        "message": "No keystore configured for the simulator: create platform/keystore.json with {\"file\": \"keystore.p12\", \"password\": \"...\"}"
+        "result": null
     },
     "ks.getKeyManagers(missing)": {
-        "exception": "com.sap.it.api.keystore.exception.KeystoreException",
-        "message": "No keystore configured for the simulator: create platform/keystore.json with {\"file\": \"keystore.p12\", \"password\": \"...\"}"
+        "result": null
     },
     "ks.methods": [
         "public java.security.Key com.sap.it.api.keystore.KeystoreService.getKey(java.lang.String) throws com.sap.it.api.keystore.exception.KeystoreException",

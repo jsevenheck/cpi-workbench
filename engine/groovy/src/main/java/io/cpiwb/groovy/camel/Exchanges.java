@@ -3,9 +3,9 @@ package io.cpiwb.groovy.camel;
 import org.apache.camel.CamelContext;
 import org.apache.camel.Exchange;
 import org.apache.camel.impl.DefaultCamelContext;
-import org.apache.camel.impl.DefaultExchange;
+import org.apache.camel.support.DefaultExchange;
 
-/** Camel 2.x glue (Script API v1 engine). */
+/** Camel 3.14 glue, shared by both engines (a tenant runs 1.x and 2.x on Camel 3.14.7, docs/plan.md F48). */
 public final class Exchanges {
 
     private static CamelContext context;
@@ -17,11 +17,7 @@ public final class Exchanges {
         if (context == null) {
             DefaultCamelContext c = new DefaultCamelContext();
             c.disableJMX();
-            try {
-                c.start();
-            } catch (Exception e) {
-                throw new IllegalStateException("Cannot start Camel", e);
-            }
+            c.start();
             context = c;
         }
         return context;

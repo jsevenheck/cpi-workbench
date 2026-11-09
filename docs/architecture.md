@@ -4,14 +4,14 @@
 
 | Path | What |
 |---|---|
-| `engine/core` | Shared Java 17 code: JSON, JSON-RPC server (stdio and HTTP), project files and path checks, iFlow import, test runner. |
+| `engine/core` | Shared Java code (built for Java 17, run on 21): JSON, JSON-RPC server (stdio and HTTP), project files and path checks, iFlow import, test runner. |
 | `engine/xml`, `engine/xml-he99`, `engine/xml-he12` | CPI XSLT step, XSD validation, XPath, the XPath-based flow steps (Filter, Splitter, Gather) and the converters. The same sources are built against Saxon-HE 9.9.1-8 and 12.9. |
 | `engine/native` | GraalVM native-image build (`build-native.sh`), reflection metadata generator, workload smoke test. |
-| `engine/groovy`, `engine/groovy-v1`, `engine/groovy-v2` | Groovy engines: shared runner, clean-room `com.sap.*` API (`src/api-common`, `src/api-v1`, `src/api-v2`), and the two builds (Groovy 2.4.21 with Camel 2.24.3, Groovy 4.0.29 with Camel 3.14.7). `build-jre.sh` trims the Java 17 runtime. |
+| `engine/groovy`, `engine/groovy-v1`, `engine/groovy-v2` | Groovy engines: shared runner, clean-room `com.sap.*` API (`src/api-common` with the Script API v1, `src/api-v2`), and the two builds with their entry points (Groovy 2.4.21 and Groovy 4.0.29, both on Camel 3.14.7 like a tenant). `build-jre.sh` trims the Java 21 runtime. |
 | `app/` | Svelte 5 + Monaco UI (`src/`), Tauri 2 shell (`src-tauri/`, with the MCP server in `src/mcp/`), browser e2e tests (`e2e/`). |
 | `examples/demo-project/` | Sample project for the app: mappings, scripts, a schema, inputs and platform data. |
 | `testdata/regression-project/` | Project with test cases (`case.json`) that CI, the browser e2e and the shell tests run. |
-| `probes/` | Fingerprint and behaviour probes for a real tenant, plus the simulator's baseline output. |
+| `probes/` | Fingerprint and behaviour probes for a real tenant, the simulator's baseline output and a tenant's results. |
 
 ## Engines and protocol
 
@@ -30,7 +30,8 @@ need an `X-Cpiwb` header, which forces a CORS preflight, and the origin's host i
 
 * **XML engines** are GraalVM native executables, so XSLT needs no JVM at runtime. The same code
   also runs as a jar (`java -jar engine/xml-he99/target/cpiwb-xml-he99.jar`).
-* **Groovy engines** run on a trimmed Java 17 runtime with an AppCDS archive. Groovy 2 and 4 run in
+* **Groovy engines** run on a trimmed Java 21 runtime with an AppCDS archive, in UTC with the locale `en_US`
+  like a tenant (the XML engines too). Groovy 2 and 4 run in
   separate processes, so they never mix and a runaway script only stops its own engine. The
   `Message` object is backed by a real Camel exchange, so type conversion and header handling come
   from Camel itself. On Windows, Java cannot start from a folder whose path has characters outside
@@ -51,7 +52,8 @@ The design reasons and the build-vs-reuse principle are in the [plan](plan.md) �
 
 ## Measured performance
 
-Measured on a Linux x86-64 build machine; Windows and macOS have not been measured.
+Measured on a Linux x86-64 build machine for 0.2.0 (Java 17; Groovy 1.x then on Camel 2.24) and not
+measured again since; Windows and macOS have not been measured.
 
 | | XSLT (native) | Groovy 1.x (JVM) | Groovy 2.x (JVM) |
 |---|---|---|---|
@@ -59,6 +61,6 @@ Measured on a Linux x86-64 build machine; Windows and macOS have not been measur
 | First run | ≈ 10 ms | ≈ 170 ms | ≈ 420 ms |
 | Later runs (cached) | < 1 ms | ≈ 2 ms | ≈ 2 ms |
 | Peak memory | ≈ 60 MB (270 KB input) | ≈ 75 MB | ≈ 150 MB |
-| Size | 48 / 54 MB executables (≈ 16 / 18 MB compressed) | jars 14 + 12 MB, Java 17 runtime 75 MB (≈ 47 MB compressed) | |
+| Size | 48 / 54 MB executables (≈ 16 / 18 MB compressed) | jars 15 + 16 MB, Java 21 runtime 81 MB (≈ 51 MB compressed), 0.3.0 | |
 
 A 7.4 MB message took 1.3 s through XSLT and 0.45 s through Groovy over HTTP.

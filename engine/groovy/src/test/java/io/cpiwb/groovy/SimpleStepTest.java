@@ -11,7 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** Runs on both engines; CPI's spellings must give the same result on Camel 2 and 3. */
+/** Runs on both engines (both on Camel 3.14). */
 @SuppressWarnings("unchecked")
 class SimpleStepTest {
 
@@ -45,11 +45,11 @@ class SimpleStepTest {
     @Test
     void equalsInsideQuotesAndFunctionsStays() {
         assertEquals("${header.a} == 'x=y or z' || ${header.b} >= 2",
-                SimpleStep.operatorsToCamel("${header.a} = 'x=y or z' or ${header.b} >= 2", true));
-        assertEquals("${header.a} == 1 and ${header.order} != 2", SimpleStep.operatorsToCamel("${header.a} = 1 and ${header.order} != 2", false));
-        assertEquals("${body} =~ 'abc' && ${header.android} == 1", SimpleStep.operatorsToCamel("${body} =~ 'abc' and ${header.android} = 1", true));
+                SimpleStep.operatorsToCamel("${header.a} = 'x=y or z' or ${header.b} >= 2"));
+        assertEquals("${header.a} == 1 && ${header.order} != 2", SimpleStep.operatorsToCamel("${header.a} = 1 and ${header.order} != 2"));
+        assertEquals("${body} =~ 'abc' && ${header.android} == 1", SimpleStep.operatorsToCamel("${body} =~ 'abc' and ${header.android} = 1"));
         // A quoted '}' inside ${...} does not end the function.
-        assertEquals("${header.a.replace('}', 'x')} == 'axb'", SimpleStep.operatorsToCamel("${header.a.replace('}', 'x')} = 'axb'", true));
+        assertEquals("${header.a.replace('}', 'x')} == 'axb'", SimpleStep.operatorsToCamel("${header.a.replace('}', 'x')} = 'axb'"));
     }
 
     @Test

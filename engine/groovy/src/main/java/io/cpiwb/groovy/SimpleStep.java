@@ -19,10 +19,10 @@ import java.util.regex.Pattern;
  * Camel rejects are rewritten first, and the result says so:
  * <ul>
  * <li>{@code =} as an operator (SAP's Router operator table) becomes Camel's {@code ==}.</li>
- * <li>{@code and} / {@code or} (same table) become {@code &&} / {@code ||} on Camel 3, which dropped them.</li>
- * <li>{@code ${property.x}} (SAP's Router example) becomes {@code ${exchangeProperty.x}} on Camel 3,
- * which dropped {@code property}. Camel 2 still has it. CPI does the same (SAP patch notes, August 2024:
- * "The conversion from property to exchangeProperty ...").</li>
+ * <li>{@code and} / {@code or} (same table) become {@code &&} / {@code ||}; Camel 3 dropped them.</li>
+ * <li>{@code ${property.x}} (SAP's Router example) becomes {@code ${exchangeProperty.x}}; Camel 3 dropped
+ * {@code property}. CPI does the same (SAP patch notes, August 2024: "The conversion from property to
+ * exchangeProperty ...").</li>
  * </ul>
  * That CPI evaluates {@code =}, {@code and} and {@code or} exactly like the Camel spellings is an assumption.
  */
@@ -68,11 +68,10 @@ public final class SimpleStep {
                 .with("timing", Json.o().with("totalMs", (System.nanoTime() - t0) / 1_000_000.0));
     }
 
-    /** CPI's spelling of a condition or expression in Camel's spelling for the engine's Camel line. */
+    /** CPI's spelling of a condition or expression in Camel 3's spelling. */
     static String toCamel(String expr, boolean condition) {
-        boolean camel3 = !Exchanges.camelVersion().startsWith("2.");
-        String camel = condition ? operatorsToCamel(expr, camel3) : expr;
-        return camel3 ? PROPERTY.matcher(camel).replaceAll("\\${exchangeProperty.") : camel;
+        String camel = condition ? operatorsToCamel(expr) : expr;
+        return PROPERTY.matcher(camel).replaceAll("\\${exchangeProperty.");
     }
 
     /** A Camel exchange with the input message (body as text). */
@@ -85,10 +84,10 @@ public final class SimpleStep {
     }
 
     /**
-     * Turns each {@code =} operator into {@code ==}, and with {@code camel3} {@code and} / {@code or} into
-     * {@code &&} / {@code ||}. Text in quotes and inside {@code ${…}} stays as it is.
+     * Turns each {@code =} operator into {@code ==} and {@code and} / {@code or} into {@code &&} /
+     * {@code ||}. Text in quotes and inside {@code ${…}} stays as it is.
      */
-    static String operatorsToCamel(String expr, boolean camel3) {
+    static String operatorsToCamel(String expr) {
         StringBuilder out = new StringBuilder(expr.length() + 4);
         char quote = 0;
         int depth = 0;
@@ -105,7 +104,7 @@ public final class SimpleStep {
                 depth++;
             } else if (c == '}' && depth > 0) {
                 depth--;
-            } else if (camel3 && depth == 0 && (word(expr, i, "and") || word(expr, i, "or"))) {
+            } else if (depth == 0 && (word(expr, i, "and") || word(expr, i, "or"))) {
                 boolean and = expr.charAt(i) == 'a';
                 out.append(and ? "&&" : "||");
                 i += and ? 2 : 1;

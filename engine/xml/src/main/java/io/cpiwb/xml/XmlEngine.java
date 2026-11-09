@@ -21,6 +21,10 @@ public final class XmlEngine implements RpcHandler {
 
     public static final String VERSION = "0.3.0";
 
+    static {
+        io.cpiwb.core.TenantDefaults.apply();
+    }
+
     private final XsltStep xslt = new XsltStep();
     private final XsdStep xsd = new XsdStep();
     private final XPathStep xpath = new XPathStep();

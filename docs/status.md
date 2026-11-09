@@ -13,7 +13,7 @@
 
 Automated checks:
 
-* Engine tests (`mvn -f engine/pom.xml verify`): core 13, XSLT/XSD/XPath/Splitter/Filter/Gather/Converter 71 per Saxon version (16 of them on project boundaries, 8 splitter cases from SAP's examples, 5 Filter, 3 Gather and 16 converter tests, most with SAP's examples), Groovy 39 per script version (4 Camel Simple, 4 Content Modifier, 8 Message Mapping functions).
+* Engine tests (`mvn -f engine/pom.xml verify`): core 13, XSLT/XSD/XPath/Splitter/Filter/Gather/Converter 72 per Saxon version (16 of them on project boundaries, 8 splitter cases from SAP's examples, 5 Filter, 3 Gather and 16 converter tests, most with SAP's examples), Groovy 41 per script version (4 Camel Simple, 4 Content Modifier, 8 Message Mapping functions, 2 on what a tenant probe showed).
 * Regression test cases (`testdata/regression-project`): 9.
 * Browser end-to-end tests: `app/e2e/smoke.mjs` (XML tools) and `groovy.mjs` (Groovy, Flow Steps and the iFlow import, which CI runs with the iFlow fixture as a zip).
 * UI unit tests (`npm --prefix app test`): the JSON, XSLT and Groovy formatters, test-case rows, path comparison, the Script API completions (checked against the clean-room Java classes), the Filter's `function:simple(...)` substitution, Message Mapping arguments and the update check's SemVer comparison.
@@ -27,11 +27,11 @@ Automated checks:
 | XSD validation | ≈ 90 % | XML Schema 1.0 only (JDK validator). |
 | XPath tester | ≈ 95 % | — |
 | Flow Steps: Content Modifier, Filter, Router, General / Iterating Splitter, Gather (with Camel Simple), Converter | ≈ 80 % | `=`, `and`, `or` are rewritten to Camel's spelling on an assumption (F35). Splitter rules are inferred from SAP's examples. Gather's Combine at XPath has no SAP example (an assumption); Zip and Tar are not simulated. Number Range and External Parameter sources raise `UnsupportedInSimulator`; variables use their default. Converters (JSON ↔ XML, XML ↔ CSV) follow SAP's rules and examples; output formatting, CSV quoting and line ends, and one contradiction in SAP's JSON to XML docs are open (Q-C1). Not simulated: EDI, Encoder/Decoder, XML Modifier, Message Digest, MIME Multipart. No CLI command, no test-case step. |
-| Groovy Script 1.x (Groovy 2.4.21, Camel 2.24.3, Script API v1) | ≈ 90 % | A tenant runs 1.x on Camel 3.14.7 and Java 21 (F48); the simulator's 1.x engine uses Camel 2.24.3 and Java 17. Missing: the overloads that take Camel's `Attachment` type, the `log` / `logger` bindings, the libraries a tenant offers (F50). |
-| Groovy Script 2.x (Groovy 4.0.29, Camel 3.14.7, Script API v2) | ≈ 90 % | ProcessDirect raises `UnsupportedInSimulator`. Java 17 instead of a tenant's 21; `getSoapHeaders` / `setSoapHeaders`, yaml and toml are missing (F49, F50). |
+| Groovy Script 1.x (Groovy 2.4.21, Camel 3.14.7, Java 21, Script API v1) | ≈ 90 % | Matches a tenant's fingerprint (F48–F50) except: the types of `log` / `logger` are unknown (level calls print to the console); IAIK and Camel 2's `org.apache.camel.Attachment` are not bundled; `getExtensionFunctions` (type not published); library versions are assumed. |
+| Groovy Script 2.x (Groovy 4.0.29, Camel 3.14.7, Java 21, Script API v2) | ≈ 90 % | ProcessDirect raises `UnsupportedInSimulator`. Not simulated: `setProxyHandler` and the SAP classes `Exchange` / `SimpleBuilder` a tenant's scripts can load (behaviour not published). |
 | Message Mapping functions (`MappingContext`, `Output`) | ≈ 80 % | The function runs on its own; `.mmap` is out of scope. The execution type follows the signature as community guides describe CPI (F44, not verified); the per-context join and the marker strings are assumptions, a single-value function is called once (not per value), and the Groovy version is not known (Q-M1, `probe-mapping-v1.groovy`). |
 | MPL, console, API call log | ≈ 95 % | — |
-| Platform API mocks | ≈ 85 % | Data Store (no public API). Number ranges count per run only. OAuth2 tokens are fixed values. Services outside `generic.api` other than Value Mapping. |
+| Platform API mocks | ≈ 85 % | Messages and results for unknown names match a tenant (F52). Data Store (no public API). Number ranges count per run only. OAuth2 tokens are fixed values. Services outside `generic.api` other than Value Mapping. |
 | Test cases, runner, CLI | ≈ 90 % | No test case from an exported MPL trace (format unknown, F18). Cases are written by hand and run from the CLI; the app only opens them. |
 | Runtime comparison (9.9 ↔ 12, 1.x ↔ 2.x) | ≈ 95 % | — |
 | Lint (1.x → 2.x) | ≈ 80 % | Covers the known breaks (F26, v1-only methods, imports). Others appear only as compile or runtime errors. On the 1.x runtime, the compile error for a Script API v2 or `groovy.xml.XmlSlurper` import says that it needs 2.x. |
@@ -41,12 +41,12 @@ Automated checks:
 | Distribution | ≈ 45 % | *Check for updates* (0.3.0) links to a newer release; the release page opens through the shell's own command, not yet tried in the desktop window on Windows or macOS. No code signing, no auto-update. On a managed Windows laptop, the unsigned MSI is refused as untrusted, so it could not be tried there. One all-in-one installer instead of a base app plus a separate Groovy pack (plan §5.3). |
 | Large messages | ≈ 70 % | Messages go through JSON-RPC, not temp files (plan §5.3). 7.4 MB worked (XSLT 1.3 s, Groovy 0.45 s); larger ones are untested. |
 | Performance budgets | measured on Linux | Windows and macOS not measured. |
-| Probe kit | run on one tenant: fingerprints, XSLT, platform | The Message Mapping probe (Q-M1) and the converter inputs (Q-C1) are still to run. |
+| Probe kit | run on one tenant: fingerprints, XSLT, platform | The Message Mapping probe (Q-M1) and the converter inputs (Q-C1) are still to run; the fingerprints now also report library versions and the types of the bound variables. |
 
 ## Next steps
 
 1. Manual test of 0.3.0 on Windows ([Manual test](manual-test.md)), then the release.
-2. Run the remaining probes (Message Mapping, converters). Decide on the tenant's findings: Camel 3.14 and Java 21 for the 1.x engine, the libraries a tenant offers, UTC / `en_US` / UTF-8 as the engines' defaults (F48–F50).
+2. Run the remaining probes (Message Mapping, converters) and the fingerprints again (library versions, the types of `log` / `logger`).
 3. Install and open the installer on macOS once by hand.
 4. Code signing and auto-update (Phase 5, plan §10.2).
 

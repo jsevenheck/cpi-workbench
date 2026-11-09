@@ -18,6 +18,11 @@ import java.util.Map;
 /** RPC dispatcher of a Groovy engine (one per Script API generation). */
 public final class GroovyEngine implements RpcHandler {
 
+    static {
+        io.cpiwb.core.TenantDefaults.apply();
+    }
+
+
     public static final String VERSION = "0.3.0";
 
     private final ScriptRunner runner;

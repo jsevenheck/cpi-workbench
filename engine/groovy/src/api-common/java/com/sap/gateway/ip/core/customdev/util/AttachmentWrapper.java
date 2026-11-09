@@ -1,6 +1,7 @@
 package com.sap.gateway.ip.core.customdev.util;
 
 import io.cpiwb.groovy.AttachmentHeaders;
+import org.apache.camel.attachment.DefaultAttachment;
 
 import javax.activation.DataHandler;
 import javax.activation.DataSource;
@@ -9,24 +10,20 @@ import java.util.List;
 
 /**
  * A message attachment with its MIME headers. Constructors and methods follow SAP's published Script
- * API ({@code com.sap.cloud.script:script.api}). SAP's class extends Camel's
- * {@code DefaultAttachment}; this one does not, so it is no {@code org.apache.camel.Attachment}.
+ * API ({@code com.sap.cloud.script:script.api} 2.16.x), whose class extends Camel 3's
+ * {@code org.apache.camel.attachment.DefaultAttachment} (docs/plan.md F30), so it is a Camel
+ * {@code Attachment} too.
  */
-public class AttachmentWrapper {
+public class AttachmentWrapper extends DefaultAttachment {
 
-    private final DataHandler dataHandler;
     private final AttachmentHeaders headers = new AttachmentHeaders();
 
     public AttachmentWrapper(DataHandler dataHandler) {
-        this.dataHandler = dataHandler;
+        super(dataHandler);
     }
 
     public AttachmentWrapper(DataSource dataSource) {
         this(new DataHandler(dataSource));
-    }
-
-    public DataHandler getDataHandler() {
-        return dataHandler;
     }
 
     public String getHeader(String name) {

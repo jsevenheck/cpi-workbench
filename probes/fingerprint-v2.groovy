@@ -43,6 +43,20 @@ def Message processData(Message message) {
         // Which release of SAP's Script API bundle the runtime has (Maven Central: com.sap.cloud.script).
         scriptApiBundle    : safe { def c = Class.forName('com.sap.it.script.v2.api.Message'); c.protectionDomain?.codeSource?.location?.toString() },
         bindingVariables : safe { binding.variables.keySet().sort() },
+        // Versions of the libraries a script can load (the simulator bundles the ones Camel 3.14.7 manages).
+        libraryVersions    : ['org.apache.commons/commons-lang3': 'org.apache.commons.lang3.StringUtils',
+                              'com.fasterxml.jackson.core/jackson-databind': 'com.fasterxml.jackson.databind.ObjectMapper',
+                              'commons-codec/commons-codec': 'org.apache.commons.codec.binary.Base64',
+                              'org.apache.groovy/groovy-yaml': 'groovy.yaml.YamlSlurper',
+                              'org.apache.groovy/groovy-toml': 'groovy.toml.TomlSlurper',
+                              'org.apache.camel/camel-attachments': 'org.apache.camel.attachment.Attachment']
+                              .collectEntries { ga, name -> [(ga): safe { def c = Class.forName(name)
+                                  def p = new Properties()
+                                  def s = c.getResourceAsStream('/META-INF/maven/' + ga + '/pom.properties')
+                                  if (s) { p.load(s) }
+                                  p.version ?: c.package?.implementationVersion ?: 'no version found' }] },
+        // The type of each bound variable (1.x binds log and logger; their types are not known yet).
+        bindingTypes       : safe { binding.variables.collectEntries { k, v -> [(k): v?.getClass()?.getName()] } },
     ]
     message.setBody(JsonOutput.prettyPrint(JsonOutput.toJson(info)))
     return message

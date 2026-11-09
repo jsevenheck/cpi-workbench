@@ -71,12 +71,14 @@ plan). The differences that remain:
   Saxon-HE 9.9 and `yes` on the tenant. Use the *Modern HE (Saxon-HE 12)* profile for stylesheets that need them.
 * `FormatDateGerman`: Saxon-HE only has English names (`[Language: en]5. March 2026`); the tenant
   prints `5. März 2026`. A real fidelity gap for `format-date`/`format-dateTime` in other languages.
-* `ImplicitTimezone`, `timezone`, `locale` and `defaultCharset` come from the computer running the
-  simulator; the tenant runs `Etc/UTC`, `en_US`, UTF-8.
-* Groovy: the tenant runs Java 21 and Camel 3.14.7 for 1.x and 2.x; the simulator Java 17 and, for
-  1.x, Camel 2.24.3. Bindings, message methods and libraries differ as `docs/fidelity.md` lists.
-* Platform: the simulator's messages add where it looked (e.g. `platform/credentials.json`); without
-  `platform/keystore.json` its Keystore throws instead of returning null.
+* Groovy: Java, Camel, timezone, locale, charset, bindings, message methods and libraries follow the
+  tenant since 0.3.0. What still differs: the Java build (`javaVmVersion`, `javaVendor`), Camel's
+  SAP build (`3.14.7-sap-59`), Saxon-EE and IAIK visible to 1.x scripts, Camel 2's
+  `org.apache.camel.Attachment`, SAP's v2 `Exchange` and `SimpleBuilder`, the type of `log` /
+  `logger` and of the message class, `getExtensionFunctions` (1.x) and `setProxyHandler` (2.x), and the
+  body class behind an HTTPS sender (`InputStreamCache`). `libraryVersions` and `bindingTypes` are new
+  in 0.3.0 and have not run on a tenant yet.
+* Platform: the simulator's messages add where it looked (e.g. `platform/credentials.json`).
 
 The converter baselines come from the Flow Steps tab's Converter (or `convert.run`) with the settings
 in step 7. Regenerate the XSLT baselines with:

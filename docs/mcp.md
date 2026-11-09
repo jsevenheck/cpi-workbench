@@ -80,8 +80,9 @@ server adds no function of its own.
 | `evaluate_xpath` | XPath (1.0 or 3.1, with namespaces). |
 | `run_flow_step` | Flow Steps: a Content Modifier, Filter, Router, Splitter, Gather or converter (JSON ↔ XML, XML ↔ CSV) step from an iFlow (`iflowStep`: name or id, with `iflow` when several iFlows share it) or from a configuration (`step`). |
 
-Without `runtime` or `camel`, a tool uses the app's default (Saxon-HE 9.9, Camel 3.14; Groovy from the
-script's imports), or the other runtime of that kind when the default is not installed, as the app does.
+Without `runtime`, a tool uses the app's default (Saxon-HE 9.9; Groovy from the script's imports), or the
+other runtime of that kind when the default is not installed, as the app does. Flow steps run Camel Simple
+on Camel 3.14.7 with any installed Groovy engine.
 
 A message is `body` (or `bodyPath`, a project file) and, where the tab has them, `headers` and `properties`. A header or
 property is a string, or `{"value": "…", "type": "Integer"}` for another type (the types of

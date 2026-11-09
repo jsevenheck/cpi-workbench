@@ -28,6 +28,10 @@ Download the installer for your platform from the
 * **Parameters** (XSLT) shows how each `xsl:param` was bound: header, property or default.
 * **MPL**, **Console** and **API calls** (Groovy) show message processing log entries, `println`
   output and the calls to SAP APIs with their arguments.
+* Groovy scripts run like on a tenant: Java 21, Camel 3.14.7, timezone UTC and locale `en_US`
+  whatever your computer uses, and the libraries a tenant offers (commons-lang3; on 1.x also Jackson
+  and commons-codec; on 2.x yaml and toml). On 1.x, `log.info(…)` and the other level methods print to
+  the **Console**; the real type of `log` and `logger` is not known. Other jars go into the iFlow's `lib/`.
 * **Compare** also runs the input on the other runtime of the same kind (Saxon-HE 9.9 ↔ 12,
   Groovy Script 1.x ↔ 2.x) and lists what differs: status, headers, properties and a body diff.
   This helps before you move a script from 1.x to 2.x.
@@ -59,8 +63,8 @@ Download the installer for your platform from the
   In XPath, `$name` is the header of that name, else the exchange property, as Camel's XPath variable
   resolver provides them ([Fidelity](fidelity.md), F39).
 
-  These steps have no Groovy version: *Camel* in the top bar picks the tenant's Camel line (3.14
-  for tenant software 7.x / 8.x, the default; 2.24 for 5.x / 6.x). XPath and the converters run on
+  Camel Simple and the Content Modifier run on Camel 3.14.7, as on a tenant for both script versions
+  (tenants still on software 6.x / 5.x run Camel 2 and are not covered). XPath and the converters run on
   Saxon-HE 9.9. See [Fidelity](fidelity.md#flow-steps-content-modifier-filter-router-splitter-gather-converter).
 * **Import iFlow** unpacks an iFlow exported from Integration Suite (zip) into `iflows/` and lists
   its steps. A Groovy Script or XSLT Mapping step opens its file with the step's function name and

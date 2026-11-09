@@ -24,8 +24,9 @@ it has not been checked against a tenant yet ([Fidelity](docs/fidelity.md)).
 
 **Groovy Script**
 
-* **Same Groovy versions as CPI:** Groovy **2.4.21** for script step 1.x and **4.0.29** for 2.x, on Java 17.
-* **`Message` backed by a real Apache Camel exchange** (Camel 2.24 / 3.14), so `getBody(String)`,
+* **Same runtime as CPI:** Groovy **2.4.21** for script step 1.x and **4.0.29** for 2.x, both on Camel
+  **3.14.7** and Java **21**, in UTC with `en_US`, and the libraries a tenant offers scripts (checked with probes on a tenant).
+* **`Message` backed by a real Apache Camel exchange**, so `getBody(String)`,
   `getBody(Reader)`, `getHeader(name, Integer)` and case-insensitive header names behave like CPI.
 * `messageLogFactory` with MPL properties, custom header properties and attachments;
   `ITApiFactory` with **Secure Store**, **Value Mapping**, **Partner Directory**, **Keystore** and
@@ -38,7 +39,7 @@ it has not been checked against a tenant yet ([Fidelity](docs/fidelity.md)).
 **Flow Steps**
 
 * **Content Modifier**, **Filter**, **Router**, **General / Iterating Splitter**, **Gather** and
-  **Converter** (JSON ↔ XML, XML ↔ CSV) with their CPI settings, on the tenant's Camel line (3.14 or 2.24):
+  **Converter** (JSON ↔ XML, XML ↔ CSV) with their CPI settings, on Camel 3.14:
   Camel Simple with CPI's spellings (`=`, `and`, `${property.x}`), XPath 3.1 on Saxon, SAP's documented
   conversion rules.
 * **Import iFlow** lists an exported iFlow's scripts, mappings and steps and opens them with their settings.

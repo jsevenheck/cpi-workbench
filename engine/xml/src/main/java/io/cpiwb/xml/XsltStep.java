@@ -87,10 +87,19 @@ public final class XsltStep {
         }
     }
 
-    /** Handle passed to the stylesheet as {@code $exchange}. */
+    /**
+     * Handle passed to the stylesheet as {@code $exchange}. Its text is {@code Exchange[<id>]} as on a tenant
+     * ({@code Exchange[B6E02F59020A061-0000000000000001]}, docs/plan.md F51); the ID's shape (a host part and a
+     * counter, like Camel's) is copied, its values are the simulator's own.
+     */
     public static final class ExchangeHandle {
+        private static final String HOST = String.format("%015X",
+                java.util.concurrent.ThreadLocalRandom.current().nextLong() & 0xFFFFFFFFFFFFFFFL);
+        private static final java.util.concurrent.atomic.AtomicLong COUNTER = new java.util.concurrent.atomic.AtomicLong();
+
         final SimExchange exchange;
         final List<Object> calls = new ArrayList<>();
+        private final String id = HOST + "-" + String.format("%016d", COUNTER.incrementAndGet());
 
         ExchangeHandle(SimExchange exchange) {
             this.exchange = exchange;
@@ -98,7 +107,7 @@ public final class XsltStep {
 
         @Override
         public String toString() {
-            return "Exchange";
+            return "Exchange[" + id + "]";
         }
     }
 

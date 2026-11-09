@@ -232,8 +232,8 @@ function converterDefaults() {
 export const flow = $state({
   step: 'contentModifier' as FlowStep,
   /**
-   * The Camel line, from the Groovy engine that carries it. These steps have no Groovy version: the Camel
-   * line belongs to the tenant, and SAP has moved tenants to Camel 3.14 (F34), hence the default.
+   * The Groovy engine whose Camel runs Camel Simple and the Content Modifier. Both carry Camel 3.14.7, as a
+   * tenant does for both script versions (F48), so any installed one will do.
    */
   camel: 'groovy-2.x' as Profile,
   /** The iFlow step each step's settings came from, if any. */

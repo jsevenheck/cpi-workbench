@@ -234,7 +234,7 @@ public final class XPathStep {
     /**
      * Compiles the XPath with the message's headers and properties as variables: {@code $name} is the header
      * of that name, else the exchange property, as Camel's XPath variable resolver (MessageVariableResolver,
-     * Camel 2.24 and 3.14) does for CPI's Filter, Router and Content Modifier. Real iFlows use it, e.g.
+     * Camel 3.14.7) does for CPI's Filter, Router and Content Modifier. Real iFlows use it, e.g.
      * {@code Student[Age > $AgeLimit_Header]}.
      */
     static XPathSelector compile(XPathCompiler xc, String expr, SimExchange input) throws SaxonApiException {

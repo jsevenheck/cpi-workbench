@@ -70,7 +70,7 @@ Labels follow the REA evidence rules (see §4): **Observed** = read in a source 
 | F27 | Partner Directory, Keystore, Secure Store and number ranges: SAP's Javadoc (`generic.api`, F33) documents null for a missing Partner Directory parameter, partner or certificate parameter; `IllegalArgumentException` for null/empty IDs and for types other than `String`/`BinaryData`; null for an unknown keystore alias or the wrong entry kind (`IllegalStateException` when a key cannot be recovered); `SecureStoreException` for an unknown credential. The simulator follows this. Whether the deployed runtime matches its Javadoc, and the exact messages, are not verified. | Observed (Javadoc) / Unknown (runtime) → probe Q-P1 | S24 |
 | F28 | CPI has no public script API for the Data Store; scripts that access it use internal classes looked up from the Camel registry. The simulator does not mock this. | Inferred (community examples) | — |
 | F29 | SAP publishes its Script API interfaces on Maven Central (`com.sap.cloud.script:script.api` 2.14.0–2.16.4 for v1, `script.v2.api` 4.0.0–4.2.2 for v2; SAP Developer License, not bundled). The simulator's `Message`, `AttachmentWrapper`, `SoapHeader` and the v2 `Attachment`, extension-function and exception types follow these signatures. The v2 `Message` has no `getSoapHeaders`/`setSoapHeaders` and no `AttachmentWrapper` methods, but adds `getHeader(String)`, `getHeader(String, Object)`, `clearAttachments`, `resetBodyStream` and `getExtensionFunctions` (exchange timestamps, ProcessDirect). The interface is a lower bound: CPI's implementation class may offer more, which the fingerprint probes list (`messageMethods`). | Observed (published jars) / Unknown (runtime class) → Q-G4 | Maven Central `com.sap.cloud.script` |
-| F30 | The v1 API jar moved from Camel 2.24 (`script.api` 2.15.0, May 2024: imports `org.apache.camel` [2.24,3), `AttachmentWrapper` extends `org.apache.camel.impl.DefaultAttachment`) to Camel 3.14 (2.16.2, Dec 2025, and 2.16.4: [3.14,4), `org.apache.camel.attachment.DefaultAttachment`). So 1.x steps may now run on Camel 3.14, which the fingerprint confirmed (F48); the simulator's 1.x engine still uses Camel 2.24.3. The simulator's v1 Message leaves out the overloads that take Camel's `Attachment` type. | Observed (jar manifests, one tenant) | Maven Central `com.sap.cloud.script:script.api` |
+| F30 | The v1 API jar moved from Camel 2.24 (`script.api` 2.15.0, May 2024: imports `org.apache.camel` [2.24,3), `AttachmentWrapper` extends `org.apache.camel.impl.DefaultAttachment`) to Camel 3.14 (2.16.2, Dec 2025, and 2.16.4: [3.14,4), `org.apache.camel.attachment.DefaultAttachment`). So 1.x steps may now run on Camel 3.14, which the fingerprint confirmed (F48); since 0.3.0 the simulator's 1.x engine does too, and its `AttachmentWrapper` extends Camel 3's `DefaultAttachment`. The simulator's v1 Message has the overloads that take Camel's `Attachment` type, as a tenant's does (F49). | Observed (jar manifests, one tenant) | Maven Central `com.sap.cloud.script:script.api` |
 | F31 | Which libraries CPI puts on a script's class path besides Groovy and Camel (e.g. commons-codec, IAIK used by SAP's own sample scripts) is not known; the simulator offers none and loads jars from `lib/` and the iFlow's `src/main/resources/lib/`. | Unknown → fingerprint `classesAvailable` | SAP sample iFlows |
 | F32 | SAP's sample XSLTs call Java static methods through `java:` namespaces (e.g. `java:java.util.Date`), so CPI's Saxon-EE allows reflexive extension functions. The simulator registers them as integrated functions for JDK classes (native engines: a fixed list of JDK classes). Classes from the iFlow's or project's jars are not available to XSLT (the native engines cannot load classes at runtime). Exact argument conversion rules of Saxon-EE are not reproduced in all cases. | Observed (SAP samples) / Inferred (conversion) | SAP sample iFlows, `JavaExtensions.java` |
 | F33 | SAP also publishes the platform API interfaces as `com.sap.cloud.adk:generic.api` (4.10.2, with Javadoc; SAP Developer License, not bundled): `ITApiFactory`, `ITApiException`/`InvalidContextException`, Keystore (incl. key and trust managers), message log, number ranges (`NumberRangeConfigurationService.getNextValuefromNumberRange(name, correlationId)`), Partner Directory (incl. `getCertificateParameter(parameterId, partnerId)`, authorized users, deprecated LIKE-pattern lookups) and Secure Store (incl. OAuth2 tokens: `getAccesTokenForOauth2ClientCredential`, SAP's spelling). `ValueMappingApi` is not in it. The simulator's classes follow these signatures. | Observed (published jar + Javadoc) | S24 |
@@ -91,7 +91,7 @@ Labels follow the REA evidence rules (see §4): **Observed** = read in a source 
 | F48 | The probes on one tenant (2026-11-09): Groovy Script **1.x and 2.x both run on Java 21** (SAP SE JVM 21.0.13) and **Camel 3.14.7-sap-59**; Groovy 2.4.21 and 4.0.29. Default charset UTF-8, timezone `Etc/UTC`, locale `en_US`. The 1.x runtime also offers Saxon-EE 9.9.1.6 to scripts; 2.x does not. | Observed (one tenant) | S32 |
 | F49 | Script context on that tenant: 1.x binds `log`, `logger`, `messageLogFactory` and `javax.script.filename`; 2.x only `messageLogFactory` and `javax.script.filename`. Neither binds `out`. The types of `log` and `logger` were not recorded. Runtime message classes: 1.x `com.sap.gateway.ip.core.customdev.processor.MessageImpl` with both the `AttachmentWrapper` and Camel `Attachment` overloads, `getAttachmentObjects`/`setAttachmentObjects` and `getExtensionFunctions`, but no `getHeader(String)`; 2.x `com.sap.it.script.v2.executor.impl.MessageImpl` with the v2 interface plus `getSoapHeaders`/`setSoapHeaders` and `setProxyHandler`. The body behind an HTTPS sender is an `InputStreamCache`. | Observed (one tenant) | S32 |
 | F50 | Libraries a script can load on that tenant: 1.x has commons-lang3, Jackson databind, commons-codec, IAIK and `groovy.sql`; 2.x has commons-lang3 and Groovy's yaml and toml modules, but no Jackson, commons-codec, IAIK or `groovy.sql`. Neither has POI or `groovy.ant`. Versions were not recorded. | Observed (one tenant) | S32 |
-| F51 | XSLT Mapping on that tenant: **Saxon-EE 9.9.1.6**, streaming, dynamic evaluation and higher-order functions supported, implicit timezone `PT0S`, `format-date` localises German month names (`5. März 2026`), `saxon:evaluate` available. Parameters: a header wins over a property of the same name; typed values arrive typed (Integer → `xs:integer`, Boolean, Date → `xs:dateTime`, `byte[]` → two items); a missing parameter takes the stylesheet's default; `hci:setHeader` returns the empty sequence; `$exchange` prints as `Exchange[<id>]`. All of this matches the simulator except the edition (HE) and the `Exchange` text. | Observed (one tenant) | S32 |
+| F51 | XSLT Mapping on that tenant: **Saxon-EE 9.9.1.6**, streaming, dynamic evaluation and higher-order functions supported, implicit timezone `PT0S`, `format-date` localises German month names (`5. März 2026`), `saxon:evaluate` available. Parameters: a header wins over a property of the same name; typed values arrive typed (Integer → `xs:integer`, Boolean, Date → `xs:dateTime`, `byte[]` → two items); a missing parameter takes the stylesheet's default; `hci:setHeader` returns the empty sequence; `$exchange` prints as `Exchange[<id>]`. All of this matches the simulator except the edition (HE); the `Exchange` text follows the tenant since 0.3.0. | Observed (one tenant) | S32 |
 | F52 | Platform services on that tenant, for names that do not exist: Partner Directory lookups return null (also `getAuthorizedUsers` of an unknown partner); a type other than String/BinaryData gives "The type java.lang.Integer is invalid. Allowed types are java.lang.String or com.sap.it.api.pd.BinaryData"; an empty ID "parameterId is empty"; a `[` in a pattern "The pattern '[x]' contains the invalid character '['". Keystore lookups of an unknown alias return null. Secure Store: "Could not fetch the credential for alias X" (also for an empty alias); an unknown OAuth2 client credential "Problem during retrieving the access token for the OAuth2 client credential X: No artifact descriptor found for artifactName X". Number ranges: "Error has occurred while getting next value from number range object. Cannot find nro_metadata for sequence: X". `ITApiFactory.getService(ITApi)` throws `InvalidContextException`. | Observed (one tenant) | S32 |
 
 ---
@@ -114,7 +114,7 @@ Why: the goal is to behave like CPI. CPI executes scripts with Groovy, converts 
 | **Platform API mocks** | `ITApiFactory`: Secure Store, Value Mapping, Keystore, Partner Directory, number ranges — data from local files (no Data Store: no public API, F28) |
 | **XSLT step runner** | CPI parameter binding (F10), `$exchange` + `setHeader`/`setProperty` as Saxon integrated extension functions (F11, F15), output handling, `xsl:include`/`xsl:import` resolution |
 | **XSD validator step**, **XPath tester** and **flow steps** | CPI-style configuration and error reporting; Content Modifier, Filter, Router, Splitter, Gather and Converter (§10) |
-| **Runtime profiles + calibration probes** | One engine per CPI runtime (Saxon 9.9 / 12, Groovy Script 1.x / 2.x, Camel 2.24 / 3.14); probe iFlows to verify against a real tenant (§8) |
+| **Runtime profiles + calibration probes** | One engine per CPI runtime (Saxon 9.9 / 12, Groovy Script 1.x / 2.x, both on Camel 3.14); probe iFlows to verify against a real tenant (§8) |
 | **Compatibility linter** | v1→v2 migration warnings, Groovy 2→4 breaking changes, EE-only XSLT features |
 | **Test-case format, runner, CLI** | Regression tests without a tenant |
 | **Desktop app and UI** | The editor, the panels, the diff, the "live run" loop |
@@ -124,7 +124,7 @@ Why: the goal is to behave like CPI. CPI executes scripts with Groovy, converts 
 | Component | Version | Licence | Why |
 |---|---|---|---|
 | Groovy | 2.4.21 and 4.0.29 | Apache-2.0 | Exactly what CPI uses (F1, F2) |
-| Apache Camel core (type converters, Simple) | 3.14.7 for 2.x, 2.24.3 for 1.x (to calibrate, F30) | Apache-2.0 | Same type conversion rules as CPI (F3) |
+| Apache Camel core (type converters, Simple) | 3.14.7 for 1.x and 2.x (F48) | Apache-2.0 | Same type conversion rules as CPI (F3) |
 | Saxon-HE | **9.9.1-8** (CPI line) and 12.9 | MPL-2.0 | Same engine family and release line as CPI (F8, F13) |
 | JDK (Eclipse Temurin) | 17 | GPLv2 + Classpath Exception | CPI runtime (F3) |
 | Tauri, Monaco editor | current | MIT / Apache-2.0 | App shell and code editor |
@@ -173,14 +173,14 @@ Reference products (GrooveBox, Contiva, go-xslt's desktop app, CPI's own simulat
 │  compiled with GraalVM        │        │  Simple, Content Modifier      │
 │  → no JVM at runtime          │        │  Groovy 2.4.21 | 4.0.29        │
 └───────────────────────────────┘        └────────────────────────────────┘
-          shared code base: engine/core (Java 17) — JSON-RPC, project files,
+          shared code base: engine/core (Java 17+) — JSON-RPC, project files,
           test runner, iFlow import
 ```
 
 Details: [architecture](architecture.md).
 
 ### 5.2 Technology choices and why
-- **Engine core in Java 17** (`engine/core`, `engine/xml`, `engine/groovy`): it must sit directly on Groovy, Camel and Saxon, which are Java libraries. Plain Java (rather than Kotlin) keeps the runtime small and is the safest choice for GraalVM native compilation.
+- **Engine core in Java** (built for 17, run on 21 like a tenant; `engine/core`, `engine/xml`, `engine/groovy`): it must sit directly on Groovy, Camel and Saxon, which are Java libraries. Plain Java (rather than Kotlin) keeps the runtime small and is the safest choice for GraalVM native compilation.
 - **XSLT/XSD/XPath as a native binary** (GraalVM Native Image): Saxon is pure Java and has been compiled natively before (F16). Result: fast start, low memory, no JVM for XML work. If native compilation of 9.9 hits a blocker, the same code runs on the bundled JRE (fallback, slower start).
 - **Groovy on a JVM**: unavoidable (F17). v1 and v2 run as separate worker processes so Groovy 2 and 4 never mix, and a runaway script only kills its own worker.
 - **Shell in Rust (Tauri 2)**: small native binary, uses the operating system's webview (no bundled browser), good installer and update tooling. The UI needs a real code editor, which the webview + Monaco provides; a pure-Rust UI toolkit (egui, as in ArtCraft) has no comparable editor.
@@ -274,7 +274,7 @@ Features that need Saxon-PE/EE (higher-order functions on 9.9, schema-aware XSLT
 ## 8. Fidelity: profiles, calibration, limits
 
 ### 8.1 Runtime profiles
-A profile is an engine build per CPI runtime (Saxon 9.9 / 12, Groovy Script 1.x / 2.x) and, for flow steps, a Camel line (2.24 / 3.14). Versioned profile files with a `verifiedOn` date were planned; they wait for the probe results.
+A profile is an engine build per CPI runtime (Saxon 9.9 / 12, Groovy Script 1.x / 2.x). Since the probe run of 2026-11-09 the Groovy profiles follow a tenant's fingerprint (F48–F50): Java 21, Camel 3.14.7, UTC, `en_US` and the libraries scripts can load. Camel 2 (tenant software 6.x / 5.x) was dropped in 0.3.0.
 
 ### 8.2 Isolation and safety
 Fresh exchange per run, a 30-second timeout after which the engine restarts, captured output. XML runs: no network, file access limited to the project folder (following symbolic links). Groovy: no sandbox; scripts run with the user's rights, and the user guide says to run trusted scripts only.
@@ -444,7 +444,7 @@ Modifier and Message Digest; they can follow when needed.
 |---|---|
 | CPI's runtime differs from SAP's documentation and published interfaces | Tenant probes (§8.3); assumptions are labelled in [fidelity](fidelity.md) |
 | CPI updates Groovy/Saxon/Java/Camel | Re-run the fingerprint probes; engines per runtime (§8.1) |
-| Groovy 2.4.21 on Java 17 behaves differently from CPI's 1.x runtime | Calibrate (F4) |
+| Groovy 2.4.21 behaves differently from CPI's 1.x runtime | Java and Camel follow a tenant's fingerprint (F48); behaviour probes for the rest |
 | Saxon-HE vs. EE differences | Both HE profiles, diagnostics for EE-only features (§7.3) |
 | Undocumented iFlow format | Read generically, checked against public iFlows (F36, F46) |
 
@@ -453,8 +453,11 @@ Modifier and Message Digest; they can follow when needed.
 ## 13. Decisions
 
 Taken: the build-vs-reuse principle (§3), XSLT first, tenant probes later; the name CPI Workbench and
-the Apache-2.0 licence in a public repository; the HE profiles instead of a Saxon-EE licence. Open: a
-run of the probes on a test tenant (planned after 0.3.0).
+the Apache-2.0 licence in a public repository; the HE profiles instead of a Saxon-EE licence. With the
+first probe run (2026-11-09, F48–F52) for 0.3.0: both Groovy engines on Camel 3.14.7 and Java 21 and
+Camel 2 dropped (tenants on software 6.x / 5.x are not covered); the tenant's timezone, locale,
+bindings and libraries as the engines' defaults; library versions assumed until the probes report them.
+Open: the Message Mapping and converter probes.
 
 ---
 

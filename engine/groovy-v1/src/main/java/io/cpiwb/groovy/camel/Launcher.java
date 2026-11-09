@@ -3,7 +3,7 @@ package io.cpiwb.groovy.camel;
 import io.cpiwb.groovy.GroovyEngine;
 import io.cpiwb.groovy.Main;
 
-/** Entry point of the Groovy Script 1.x engine (Groovy 2.4, Camel 2, Script API v1). */
+/** Entry point of the Groovy Script 1.x engine (Groovy 2.4, Camel 3.14, Script API v1). */
 public final class Launcher {
 
     private Launcher() {

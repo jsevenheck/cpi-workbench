@@ -9,7 +9,7 @@
     <version>0.3.0</version>
   </parent>
   <artifactId>cpiwb-groovy-v1</artifactId>
-  <name>CPI Workbench Groovy engine 1.x (Groovy 2.4.21, Camel 2, Script API v1)</name>
+  <name>CPI Workbench Groovy engine 1.x (Groovy 2.4.21, Camel 3.14, Script API v1)</name>
   <description>Built from the shared sources in ../groovy plus version-specific glue.</description>
 
   <dependencies>
@@ -25,8 +25,46 @@
     </dependency>
     <dependency>
       <groupId>org.apache.camel</groupId>
-      <artifactId>camel-core</artifactId>
-      <version>2.24.3</version>
+      <artifactId>camel-core-engine</artifactId>
+      <version>${camel.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.camel</groupId>
+      <artifactId>camel-xml-jaxp</artifactId>
+      <version>${camel.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.camel</groupId>
+      <artifactId>camel-core-languages</artifactId>
+      <version>${camel.version}</version>
+    </dependency>
+    <!-- OGNL calls in Simple (${header.x.split(',')[0]}, SAP's Content Modifier docs) need the bean language. -->
+    <dependency>
+      <groupId>org.apache.camel</groupId>
+      <artifactId>camel-bean</artifactId>
+      <version>${camel.version}</version>
+    </dependency>
+    <!-- org.apache.camel.attachment.Attachment: a tenant's scripts can load it on 1.x and 2.x (docs/plan.md F49, F50). -->
+    <dependency>
+      <groupId>org.apache.camel</groupId>
+      <artifactId>camel-attachments</artifactId>
+      <version>${camel.version}</version>
+    </dependency>
+    <!-- Libraries a tenant offers to scripts (docs/plan.md F50). Versions are an assumption: the ones Camel 3.14.7 manages. -->
+    <dependency>
+      <groupId>org.apache.commons</groupId>
+      <artifactId>commons-lang3</artifactId>
+      <version>3.12.0</version>
+    </dependency>
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
+      <version>2.12.7</version>
+    </dependency>
+    <dependency>
+      <groupId>commons-codec</groupId>
+      <artifactId>commons-codec</artifactId>
+      <version>1.15</version>
     </dependency>
     <dependency>
       <groupId>com.sun.activation</groupId>
@@ -58,7 +96,6 @@
               <sources>
                 <source>../groovy/src/main/java</source>
                 <source>../groovy/src/api-common/java</source>
-                <source>../groovy/src/camel2/java</source>
               </sources>
             </configuration>
           </execution>

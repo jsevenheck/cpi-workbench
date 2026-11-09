@@ -2,9 +2,9 @@
 
 ## Requirements
 
-* JDK 17+ and Maven.
+* JDK 17+ and Maven (CI uses 21, the Java a tenant and the app run).
 * GraalVM 21+ for the native engines.
-* A JDK 17 with jmods for the Groovy runtime (`engine/groovy/build-jre.sh`).
+* A JDK 21 with jmods for the Groovy runtime (`engine/groovy/build-jre.sh`).
 * Node 22.18+ and Rust (stable).
 * On Linux, the WebKitGTK development packages (see `.github/workflows/build.yml`).
 
@@ -15,7 +15,7 @@ mvn -f engine/pom.xml verify                         # engines + tests for both 
 GRAALVM_HOME=/path/to/graalvm engine/native/build-native.sh   # native engines → engine/native/out
 python3 engine/native/workload.py engine/native/out/cpiwb-xml-he99 serve --stdio   # smoke test
 
-JAVA_HOME=/path/to/jdk17 engine/groovy/build-jre.sh /tmp/jre    # trimmed Java 17 for Groovy
+JAVA_HOME=/path/to/jdk21 engine/groovy/build-jre.sh /tmp/jre    # trimmed Java 21 for Groovy
 
 cd app
 npm ci

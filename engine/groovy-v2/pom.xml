@@ -56,24 +56,45 @@
     <dependency>
       <groupId>org.apache.camel</groupId>
       <artifactId>camel-core-engine</artifactId>
-      <version>3.14.7</version>
+      <version>${camel.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.camel</groupId>
       <artifactId>camel-xml-jaxp</artifactId>
-      <version>3.14.7</version>
+      <version>${camel.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.camel</groupId>
       <artifactId>camel-core-languages</artifactId>
-      <version>3.14.7</version>
+      <version>${camel.version}</version>
     </dependency>
-    <!-- OGNL calls in Simple (${header.x.split(',')[0]}, SAP's Content Modifier docs) need the bean language;
-         Camel 2's camel-core includes it. -->
+    <!-- OGNL calls in Simple (${header.x.split(',')[0]}, SAP's Content Modifier docs) need the bean language. -->
     <dependency>
       <groupId>org.apache.camel</groupId>
       <artifactId>camel-bean</artifactId>
-      <version>3.14.7</version>
+      <version>${camel.version}</version>
+    </dependency>
+    <!-- org.apache.camel.attachment.Attachment: a tenant's scripts can load it on 1.x and 2.x (docs/plan.md F49, F50). -->
+    <dependency>
+      <groupId>org.apache.camel</groupId>
+      <artifactId>camel-attachments</artifactId>
+      <version>${camel.version}</version>
+    </dependency>
+    <!-- Libraries a tenant offers to scripts (docs/plan.md F50). Versions are an assumption: the ones Camel 3.14.7 manages. -->
+    <dependency>
+      <groupId>org.apache.commons</groupId>
+      <artifactId>commons-lang3</artifactId>
+      <version>3.12.0</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.groovy</groupId>
+      <artifactId>groovy-yaml</artifactId>
+      <version>4.0.29</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.groovy</groupId>
+      <artifactId>groovy-toml</artifactId>
+      <version>4.0.29</version>
     </dependency>
     <dependency>
       <groupId>com.sun.activation</groupId>
@@ -106,7 +127,6 @@
                 <source>../groovy/src/main/java</source>
                 <source>../groovy/src/api-common/java</source>
                 <source>../groovy/src/api-v2/java</source>
-                <source>../groovy/src/camel3/java</source>
               </sources>
             </configuration>
           </execution>
@@ -154,6 +174,18 @@
                   <resource>META-INF/groovy/org.codehaus.groovy.runtime.ExtensionModule</resource>
                 </transformer>
               </transformers>
+              <!-- groovy-yaml and groovy-toml need Jackson and SnakeYAML; a tenant's 2.x scripts cannot load Jackson
+                   (docs/plan.md F50), so they are moved out of the scripts' way. -->
+              <relocations>
+                <relocation>
+                  <pattern>com.fasterxml.jackson</pattern>
+                  <shadedPattern>io.cpiwb.shaded.jackson</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org.yaml.snakeyaml</pattern>
+                  <shadedPattern>io.cpiwb.shaded.snakeyaml</shadedPattern>
+                </relocation>
+              </relocations>
               <filters>
                 <filter>
                   <artifact>*:*</artifact>
@@ -162,6 +194,7 @@
                     <exclude>META-INF/*.DSA</exclude>
                     <exclude>META-INF/*.RSA</exclude>
                     <exclude>module-info.class</exclude>
+                    <exclude>META-INF/versions/*/com/fasterxml/**</exclude>
                   </excludes>
                 </filter>
               </filters>

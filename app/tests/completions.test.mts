@@ -34,7 +34,8 @@ test('receivers are recognised by name and declaration', () => {
   assert.equal(receiverKind(v2Script, 'ITApiFactory'), 'itApiFactory');
   assert.equal(receiverKind(v2Script, 'payload'), null);
   assert.ok(membersFor(v2Script, 'msg')!.some((m) => m.name === 'resetBodyStream'));
-  assert.ok(!membersFor(v2Script, 'msg')!.some((m) => m.name === 'getSoapHeaders'));
+  assert.ok(!membersFor(v2Script, 'msg')!.some((m) => m.name === 'getAttachmentWrapperObjects'));
+  assert.ok(membersFor(v2Script, 'msg')!.some((m) => m.name === 'getSoapHeaders'));
   const v1Script = 'import com.sap.gateway.ip.core.customdev.util.Message\ndef Message processData(Message message) {}';
   assert.ok(membersFor(v1Script, 'message')!.some((m) => m.name === 'getSoapHeaders'));
   assert.equal(membersFor(v1Script, 'payload'), null);

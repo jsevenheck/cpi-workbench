@@ -1,12 +1,15 @@
 package io.cpiwb.groovy;
 
+import com.sap.gateway.ip.core.customdev.util.SoapHeader;
 import org.apache.camel.Exchange;
 
 import javax.activation.DataHandler;
 import java.util.AbstractMap;
 import java.util.AbstractSet;
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -14,14 +17,15 @@ import java.util.Set;
  * Implementation of the CPI script {@code Message} on top of a real Apache Camel exchange, so that
  * {@code getBody(Class)}, {@code getHeader(String, Class)} and header name handling behave like on
  * Cloud Integration (Camel type converters, case-insensitive header names).
- * The public API classes for Script API v1/v2 extend this class; it holds only the methods both
- * published Message interfaces share. {@code A} is the API's attachment type.
+ * The public API classes for Script API v1/v2 extend this class; it holds the methods both
+ * messages share. {@code A} is the API's attachment type.
  */
 public abstract class MessageSupport<A> {
 
     private final Exchange exchange;
     private final Map<String, A> attachments = new LinkedHashMap<>();
     private final long created = System.currentTimeMillis();
+    private List<SoapHeader> soapHeaders = new ArrayList<>();
 
     protected MessageSupport(Exchange exchange) {
         this.exchange = exchange;
@@ -45,6 +49,23 @@ public abstract class MessageSupport<A> {
     /** The attachments by name; the map is live, as the script may change it. */
     protected Map<String, A> attachmentMap() {
         return attachments;
+    }
+
+    /**
+     * SOAP headers received by a SOAP channel; set ones are sent by the receiver channel. SAP's v1 interface
+     * has these methods; its v2 interface does not, but a tenant's v2 message class does (docs/plan.md F49).
+     * That the v2 list holds the same {@code SoapHeader} class is an assumption.
+     */
+    public List<SoapHeader> getSoapHeaders() {
+        return soapHeaders;
+    }
+
+    public void setSoapHeaders(List<SoapHeader> headers) {
+        soapHeaders = headers == null ? new ArrayList<>() : new ArrayList<>(headers);
+    }
+
+    public void clearSoapHeaders() {
+        soapHeaders.clear();
     }
 
     public Object getBody() {

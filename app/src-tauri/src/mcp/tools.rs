@@ -15,7 +15,7 @@ const VALUE_TYPES: &[&str] = &["String", "Integer", "Long", "Boolean", "Double",
 const RUNTIME_LABELS: &[(&str, &str)] = &[
     ("saxon-he-9.9", "XSLT, XSD, XPath and flow steps on Saxon-HE 9.9 (CPI's Saxon line; CPI runs Saxon-EE 9.9)"),
     ("saxon-he-12", "XSLT, XSD and XPath on Saxon-HE 12"),
-    ("groovy-1.x", "Groovy Script 1.x: Groovy 2.4.21, Camel 2.24.3, Script API v1"),
+    ("groovy-1.x", "Groovy Script 1.x: Groovy 2.4.21, Camel 3.14.7, Script API v1"),
     ("groovy-2.x", "Groovy Script 2.x: Groovy 4.0.29, Camel 3.14.7, Script API v2"),
 ];
 
@@ -148,8 +148,6 @@ fieldSeparator, firstLineHeader, headerMapping: \"xsd\"|\"csv\"}." } },
         ("namespaces", ns),
     ]);
     message_properties(&mut step, true);
-    step.insert("camel".into(), runtime(GROOVY_RUNTIMES, false, Some("groovy-2.x"),
-        "The Camel line for Camel Simple in the step."));
 
     vec![
         tool("project_info", "Project, runtimes and iFlow steps",
@@ -253,6 +251,7 @@ pub fn xml_runtime(server: &Server) -> &'static str {
     installed_or(server, "saxon-he-9.9", XSLT_RUNTIMES)
 }
 
+/// Camel Simple and the Content Modifier: both Groovy engines carry Camel 3.14.7, as a tenant does (F48).
 pub fn camel_runtime(server: &Server) -> &'static str {
     installed_or(server, "groovy-2.x", GROOVY_RUNTIMES)
 }

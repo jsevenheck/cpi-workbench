@@ -1,7 +1,7 @@
 //! Supervises the engine processes. Each runtime profile is a separate process speaking
 //! newline-delimited JSON-RPC over stdin/stdout:
 //!   * XSLT profiles: native executables (no JVM),
-//!   * Groovy profiles: jars on a JRE (bundled `jre/` or the system Java 17+).
+//!   * Groovy profiles: jars on a JRE (bundled `jre/`, Java 21 like a tenant, or the system Java 17+).
 //! Engines start lazily on first use, restart transparently after they exit (e.g. after a timed-out
 //! call) and JVM engines stop after a period of inactivity to give memory back.
 

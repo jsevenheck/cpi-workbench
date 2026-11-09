@@ -261,7 +261,10 @@ class ScriptRunnerTest {
                 + "  message.setProperty('pdCert', pd.getCertificateParameter('CERT', pid).getSubjectX500Principal().getName())\n"
                 + "  message.setProperty('owner', pd.getPartnerIdOfAuthorizedUser('sb-user-1'))\n"
                 + "  message.setProperty('users', pd.getAuthorizedUsers(pid).join(','))\n"
-                + "  try { pd.getParameter('ADDRESS', pid, Integer) } catch (IllegalArgumentException e) { message.setProperty('badType', 'IAE') }\n"
+                + "  try { pd.getParameter('ADDRESS', pid, Integer) } catch (IllegalArgumentException e) { message.setProperty('badType', e.message) }\n"
+                + "  message.setProperty('noUsers', String.valueOf(pd.getAuthorizedUsers('NOPE')))\n"
+                + "  try { pd.getParameter('', pid, String) } catch (IllegalArgumentException e) { message.setProperty('emptyId', e.message) }\n"
+                + "  try { pd.getParameterIdsMatchingPattern('A]x[', pid, String) } catch (IllegalArgumentException e) { message.setProperty('bracket', e.message) }\n"
                 + "  def ks = ITApiFactory.getService(KeystoreService, null)\n"
                 + "  message.setProperty('alg', ks.getKeyPair('sim_key').getPrivate().getAlgorithm())\n"
                 + "  message.setProperty('cert', ks.getCertificate('partner_cert').getSubjectX500Principal().getName())\n"
@@ -283,7 +286,12 @@ class ScriptRunnerTest {
         assertEquals("CN=cpiwb test", entry(r, "properties", "pdCert").get("value"));
         assertEquals("P1", entry(r, "properties", "owner").get("value"));
         assertEquals("sb-user-1", entry(r, "properties", "users").get("value"));
-        assertEquals("IAE", entry(r, "properties", "badType").get("value"));
+        // The tenant's texts and results (probes/results-tenant/2026-11-09/probe-platform-v1.json).
+        assertEquals("The type java.lang.Integer is invalid. Allowed types are java.lang.String or com.sap.it.api.pd.BinaryData",
+                entry(r, "properties", "badType").get("value"));
+        assertEquals("null", entry(r, "properties", "noUsers").get("value"), "an unknown partner has no list");
+        assertEquals("parameterId is empty", entry(r, "properties", "emptyId").get("value"));
+        assertEquals("The pattern 'A]x[' contains the invalid character ']'", entry(r, "properties", "bracket").get("value"));
         assertEquals("RSA", entry(r, "properties", "alg").get("value"));
         assertEquals("CN=cpiwb test", entry(r, "properties", "cert").get("value"));
         assertEquals("1", entry(r, "properties", "chain").get("value"));
@@ -341,7 +349,8 @@ class ScriptRunnerTest {
             jar.write(Files.readAllBytes(classes.resolve("demo/Util.class")));
             jar.closeEntry();
         }
-        String soap = V2 ? "" : "  def received = message.getSoapHeaders()\n"
+        // Both messages have the SOAP header list: SAP's v1 interface and a tenant's v2 class (F49).
+        String soap = "  def received = message.getSoapHeaders()\n"
                 + "  message.setProperty('soapIn', received.size() + ':' + received[0].getQname().getLocalPart()"
                 + " + ':' + received[0].getElement().getAttribute('id'))\n"
                 + "  message.clearSoapHeaders()\n"
@@ -366,17 +375,11 @@ class ScriptRunnerTest {
         String libFrom = String.valueOf(entry(r, "properties", "libFrom").get("value"));
         assertFalse(java.nio.file.Paths.get(java.net.URI.create(libFrom)).startsWith(project), libFrom);
         assertEquals("true", entry(r, "properties", "itapi").get("value"));
-        if (V2) {
-            // The v2 Message has no SOAP header getter, so the input headers are not handed over.
-            assertNull(r.get("soapHeaders"));
-            assertTrue(Json.write(r).contains("has no getSoapHeaders()"), () -> Json.write(r));
-        } else {
-            assertEquals("1:In:7", entry(r, "properties", "soapIn").get("value"));
-            Map<String, Object> out = (Map<String, Object>) Json.arr(r, "soapHeaders").get(0);
-            assertEquals("{urn:x}Out", out.get("name"));
-            assertEquals("<Out xmlns=\"urn:x\">1</Out>", out.get("value"));
-            assertEquals(true, out.get("mustUnderstand"));
-        }
+        assertEquals("1:In:7", entry(r, "properties", "soapIn").get("value"));
+        Map<String, Object> out = (Map<String, Object>) Json.arr(r, "soapHeaders").get(0);
+        assertEquals("{urn:x}Out", out.get("name"));
+        assertEquals("<Out xmlns=\"urn:x\">1</Out>", out.get("value"));
+        assertEquals(true, out.get("mustUnderstand"));
     }
 
     @Test
@@ -404,6 +407,74 @@ class ScriptRunnerTest {
     }
 
     @Test
+    void scriptContextAndDefaultsFollowATenant() throws Exception {
+        // A tenant's bindings, timezone, locale and keystore for unknown aliases (F48, F49, F52).
+        String s = IMPORT + "import com.sap.it.api.ITApiFactory\n"
+                + "import com.sap.it.api.keystore.KeystoreService\n"
+                + "def Message processData(Message message) {\n"
+                + "  message.setProperty('vars', binding.variables.keySet().sort().join(','))\n"
+                + "  message.setProperty('file', binding.getVariable('javax.script.filename'))\n"
+                + "  message.setProperty('tz', TimeZone.default.ID + ' ' + Locale.default)\n"
+                + "  message.setProperty('upper', 'title'.toUpperCase())\n"
+                + "  message.setProperty('key', String.valueOf(ITApiFactory.getService(KeystoreService, null).getKey('nope')))\n"
+                + "  println 'to the console'\n"
+                + (V2 ? "" : "  if (log) { log.logInfo('logged', 2); logger.logWarnings('careful') }\n")
+                + "  return message\n}";
+        Map<String, Object> r = (Map<String, Object>) ENGINE.call("groovy.run", Json.o()
+                .with("script", Json.o().with("content", s).with("path", "script/ctx.groovy"))
+                .with("input", in("", List.of(), List.of())));
+        assertTrue(Json.bool(r, "ok", false), () -> Json.write(r));
+        assertEquals(V2 ? "javax.script.filename,messageLogFactory" : "javax.script.filename,log,logger,messageLogFactory",
+                entry(r, "properties", "vars").get("value"));
+        assertEquals("ctx.groovy", entry(r, "properties", "file").get("value"));
+        assertEquals("Etc/UTC en_US", entry(r, "properties", "tz").get("value"));
+        assertEquals("TITLE", entry(r, "properties", "upper").get("value"));
+        assertEquals("null", entry(r, "properties", "key").get("value"));
+        String console = String.valueOf(r.get("console"));
+        assertTrue(console.contains("to the console"), console);
+        assertEquals(!V2, console.contains("[log.logInfo] logged 2"), console);
+        assertEquals(!V2, console.contains("[logger.logWarnings] careful"), console);
+        if (!V2) {
+            // A tenant's ScriptLogger has no info() (F58): the call fails as there.
+            String bad = IMPORT + "def Message processData(Message message) {\n  log.info('x')\n  return message\n}";
+            Map<String, Object> e = run(bad, in("", List.of(), List.of()), null);
+            assertFalse(Json.bool(e, "ok", true));
+            assertTrue(Json.write(e).contains("groovy.lang.MissingMethodException: No signature of method: "
+                    + "com.sap.it.script.logging.impl.ScriptLogger.info()"), () -> Json.write(e));
+        }
+        assertTrue(Json.write(r).contains("keystore is empty"), () -> Json.write(r));
+    }
+
+    @Test
+    void v1AttachmentsAreCamelAttachments() throws Exception {
+        if (V2) {
+            return;
+        }
+        // A tenant's 1.x message has the overloads with Camel 3's Attachment (F49); AttachmentWrapper is one.
+        String s = IMPORT + "import org.apache.camel.attachment.DefaultAttachment\n"
+                + "import org.apache.camel.attachment.Attachment\n"
+                + "import com.sap.gateway.ip.core.customdev.util.AttachmentWrapper\n"
+                + "import javax.activation.DataHandler\n"
+                + "def Message processData(Message message) {\n"
+                + "  def c = new DefaultAttachment(new DataHandler('camel', 'text/plain'))\n"
+                + "  c.addHeader('X-A', '1')\n"
+                + "  message.addAttachmentObject('c.txt', c)\n"
+                + "  message.addAttachmentObject('w.txt', new AttachmentWrapper(new DataHandler('w', 'text/plain')))\n"
+                + "  Map<String, Attachment> all = message.getAttachmentObjects()\n"
+                + "  all.put('p.txt', new DefaultAttachment(new DataHandler('p', 'text/plain')))\n"
+                + "  message.setProperty('names', all.keySet().join(','))\n"
+                + "  message.setProperty('wrapped', message.getAttachmentWrapperObjects()['c.txt'].getHeader('x-a'))\n"
+                + "  message.setProperty('isCamel', new AttachmentWrapper(new DataHandler('x', 'text/plain')) instanceof Attachment)\n"
+                + "  return message\n}";
+        Map<String, Object> r = run(s, in("", List.of(), List.of()), null);
+        assertTrue(Json.bool(r, "ok", false), () -> Json.write(r));
+        assertEquals("c.txt,w.txt,p.txt", entry(r, "properties", "names").get("value"));
+        assertEquals(3, Json.arr(r, "attachments").size(), "a Camel attachment put into the map is kept as a wrapper");
+        assertEquals("1", entry(r, "properties", "wrapped").get("value"));
+        assertEquals("true", entry(r, "properties", "isCamel").get("value"));
+    }
+
+    @Test
     void migrationHintsBetweenScriptVersions() throws Exception {
         String s = IMPORT + "def Message processData(Message message) {\n"
                 + "  def x = new XmlSlurper().parseText('<a/>')\n"
@@ -419,12 +490,12 @@ class ScriptRunnerTest {
         }
         if (V2) {
             String v1Only = IMPORT + "def Message processData(Message message) {\n"
-                    + "  message.getSoapHeaders()\n"
+                    + "  message.getAttachmentWrapperObjects()\n"
                     + "  return message\n}";
             Map<String, Object> e = run(v1Only, in("", List.of(), List.of()), null);
             String ej = Json.write(e);
             assertFalse(Json.bool(e, "ok", true));
-            assertTrue(ej.contains("not of SAP's published v2 interface"), ej);
+            assertTrue(ej.contains("not of the v2 Message"), ej);
             assertTrue(ej.contains("Script API v1 Message only"), ej);
 
             String ext = IMPORT + "import com.sap.it.script.v2.api.extensions.ExchangeExtensionFunctions\n"

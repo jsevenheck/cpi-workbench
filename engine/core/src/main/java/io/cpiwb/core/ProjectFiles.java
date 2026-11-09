@@ -162,6 +162,9 @@ public final class ProjectFiles {
         if (!f.startsWith(root) || f.equals(root)) {
             throw new IllegalArgumentException("Path is outside the project: " + relative);
         }
+        if (!ProjectPaths.inside(root, f)) {
+            throw new IllegalArgumentException("Path is outside the project: " + relative + " (a symbolic link leads outside)");
+        }
         return f;
     }
 }

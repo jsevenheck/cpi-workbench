@@ -37,7 +37,8 @@ my-project/
 
 * `step` is one of:
   * `xslt` (`xslt` names the mapping),
-  * `groovy` (`script` names the script; optional `function`; `options.bodyType` is `String`, `InputStream` or `byte[]`),
+  * `groovy` (`script` names the script; optional `function`; `options.bodyType` is `String`, `InputStream` or `byte[]`;
+    for a Message Mapping function see below),
   * `xsd` (`schema` names the schema; expect `valid` and `errorContains`).
 * Profiles: `saxon-he-9.9`, `saxon-he-12`, `groovy-1.x`, `groovy-2.x`.
 * Header and property types: `String`, `Integer`, `Long`, `Boolean`, `Double`, `Float`,
@@ -45,6 +46,35 @@ my-project/
 * `body` is a string, `{ "file": "…" }` or `{ "text": "…" }`. Paths are relative to the case folder.
 * `compare` is `xml` (ignores formatting and namespace declarations), `text` or `trimmed`.
 * `expect.ok: false` asserts that the mapping or script fails.
+
+### Message Mapping functions
+
+A custom function of a Message Mapping script, such as `def String f(String a, MappingContext c)`
+or `def void f(String[] a, Output output, MappingContext c)`, runs with `args` instead of a body:
+
+```json
+{
+  "step": "groovy",
+  "profile": "groovy-1.x",
+  "script": "../../scripts/mapping-functions.groovy",
+  "function": "countPerContext",
+  "args": [[["Multi Print", "Multi Color"], ["Power Scan", { "suppress": true }], []]],
+  "input": { "headers": { "OrderId": "4711" } },
+  "expect": { "queue": [["2"], ["1"], ["0"]] }
+}
+```
+
+* `args` holds one entry per `String` or `String[]` parameter, in order; `Output` and
+  `MappingContext` come from the simulator. A `String` argument may be `null` (the Groovy tab's
+  **null** button). A `String[]` argument is a list of contexts; an entry
+  is a string, `{ "suppress": true }` or `{ "xsiNil": true }`. A flat list is one context.
+* The signature decides how the function is called: with `String` arguments once (*Single values*),
+  with `String[]` arguments once per context (*All values of a context*), which needs the same number
+  of contexts in every `String[]` argument.
+* `MappingContext` reads and sets the input's headers and properties; `expect.headers` and
+  `expect.properties` check them as usual.
+* `expect.returned` is the returned value (a string or `null`); `expect.queue` the output queue in
+  the same form as the arguments.
 
 ### Further script inputs
 
@@ -77,10 +107,10 @@ A test case can override any of these with a `platform` object (`credentials`, `
 
 **Use test-only keys and passwords here, never real tenant secrets.**
 
-Behaviour for missing entries follows SAP's published Javadoc:
+Behaviour for missing entries follows SAP's published Javadoc and a tenant's probe results (the
+messages too, [plan](plan.md) F52):
 
-* The Partner Directory and the Keystore return `null` for a missing entry or an unknown alias.
+* The Partner Directory and the Keystore return `null` for a missing entry or an unknown alias
+  (also `getAuthorizedUsers` of an unknown partner). Without `keystore.json` the keystore is empty.
 * The Secure Store throws `SecureStoreException` for an unknown alias.
 * `ITApiFactory` throws `InvalidContextException` for a service the simulator does not offer.
-
-Whether the deployed runtime matches its Javadoc is not verified yet ([plan](plan.md) F27, F33).

@@ -122,7 +122,8 @@ other security controls. See also [Ubuntu's package-management guide](https://do
 
 ## Command line
 
-The engine jars run test cases in a terminal or a CI pipeline. Each needs Java 17 or later:
+The engine jars run test cases in a terminal or a CI pipeline. Each needs Java 17 or later (21 is
+what a tenant and the app run; on 17 the default charset can differ):
 
 ```sh
 java -jar cpiwb-xml-he99-<version>.jar test path/to/project/tests     # XSLT and XSD cases

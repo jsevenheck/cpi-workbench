@@ -11,7 +11,7 @@ import java.util.Map;
 
 /**
  * MIME headers of a message attachment, with the rules of Camel's {@code DefaultAttachment} (checked
- * against camel-core 2.24.3): names are case-insensitive and keep the spelling of the last write,
+ * against camel-core 2.24.3 and camel-attachments 3.14.7): names are case-insensitive and keep the spelling of the last write,
  * {@code addHeader} collects several values, {@code getHeader} joins them with commas.
  */
 public final class AttachmentHeaders {

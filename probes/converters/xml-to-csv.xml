@@ -1,0 +1,4 @@
+<root Category="Scanners"><Type>Source Data</Type><Source>ERP</Source><Products>
+<Product><ProductId>HT-1080</ProductId><Name>Photo Scan</Name><Note>a;b</Note></Product>
+<Product><ProductId>HT-1081</ProductId><Name>Power Scan</Name><Note>"quoted"</Note></Product>
+</Products></root>

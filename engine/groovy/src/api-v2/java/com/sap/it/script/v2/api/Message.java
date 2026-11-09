@@ -15,9 +15,10 @@ import java.util.Map;
 
 /**
  * Script API v2 message ({@code com.sap.it.script.v2.api.Message}), a clean-room implementation of
- * the methods of SAP's published interface ({@code com.sap.cloud.script:script.v2.api} 4.2.2). Methods
- * of the v1 message that the v2 interface lacks (SOAP header list, {@code AttachmentWrapper}) are not
- * offered; whether CPI's runtime class still has them is open (docs/plan.md F6).
+ * the methods of SAP's published interface ({@code com.sap.cloud.script:script.v2.api} 4.2.2) and the
+ * SOAP header list, which a tenant's v2 message class also has (docs/plan.md F49). Not offered: the v1
+ * {@code AttachmentWrapper} methods (a tenant's class lacks them too) and {@code setProxyHandler}, whose
+ * type is not published.
  */
 public class Message extends MessageSupport<Attachment> {
 
@@ -76,10 +77,6 @@ public class Message extends MessageSupport<Attachment> {
 
     public void clearAttachments() {
         attachmentMap().clear();
-    }
-
-    /** The simulator receives no SOAP headers on a 2.x message, so there is nothing to clear. */
-    public void clearSoapHeaders() {
     }
 
     /** Rewinds a stream body so it can be read again. */

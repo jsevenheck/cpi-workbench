@@ -1,7 +1,7 @@
 //! Flow steps for the MCP server. The Flow Steps tab leads (`app/src/lib/store.svelte.ts`, section "flow steps");
 //! this follows it call for call, so that both give the same result. Change the tab first, then this:
-//! * XPath (Content Modifier rows, XML Router conditions, Filter, Splitter, Gather) runs on the XML engine,
-//!   9.9 when installed; headers and properties are XPath variables (F39).
+//! * XPath (Content Modifier rows, XML Router conditions, Filter, Splitter, Gather) and the converters run on the
+//!   XML engine, 9.9 when installed; headers and properties are XPath variables (F39).
 //! * Camel Simple and the Content Modifier run on the Camel of a Groovy engine.
 
 use super::tools::{self, engine_call, str_arg, Args};
@@ -45,7 +45,7 @@ pub fn run(server: &Server, args: &Args) -> Result<Value, String> {
     let ctx = Ctx {
         server,
         xml: tools::xml_runtime(server),
-        camel: str_arg(args, "camel").unwrap_or(tools::camel_runtime(server)),
+        camel: tools::camel_runtime(server),
         namespaces: args.get("namespaces").cloned().unwrap_or(json!({})),
         input: tools::message(server, args)?,
     };
@@ -58,9 +58,10 @@ pub fn run(server: &Server, args: &Args) -> Result<Value, String> {
         "router" => router(&ctx, &config)?,
         "splitter" => splitter(&ctx, &config)?,
         "gather" => gather(&ctx, &config, args)?,
+        "converter" => converter(&ctx, &config)?,
         "" => return Err("The step has no type.".into()),
         other => return Err(format!("UnsupportedInSimulator: the step type '{other}' (simulated: contentModifier, filter, \
-            router, splitter, gather).")),
+            router, splitter, gather, converter).")),
     };
     result["step"] = json!({ "type": kind, "name": step.get("name"), "config": config });
     Ok(result)
@@ -74,9 +75,16 @@ fn config_keys(kind: &str) -> Option<&'static [&'static str]> {
         "router" => &["routes", "throwException"],
         "splitter" => &["splitter", "expressionType", "expression", "grouping", "streaming"],
         "gather" => &["messageType", "algorithm", "sourceXPath", "targetXPath"],
+        "converter" => &CONVERTER_KEYS,
         _ => return None,
     })
 }
+
+/// The converter's settings (`flow.converter` in `store.svelte.ts`); `ConverterStep.java` reads them.
+const CONVERTER_KEYS: [&str; 23] = ["conversion", "useNamespaces", "separator", "namespaceMapping", "addRootElement",
+    "rootElementName", "rootNamespace", "suppressRoot", "streaming", "streamingElements", "arrayPaths", "outputEncoding",
+    "sourcePath", "fieldSeparator", "csvHeader", "includeParent", "parentPath", "includeAttributes", "schema", "targetPath",
+    "recordMarker", "firstLineHeader", "headerMapping"];
 
 /// A step of the project's iFlows, by name or id.
 fn iflow_step(server: &Server, name: &str, iflow: Option<&str>) -> Result<Value, String> {
@@ -267,6 +275,44 @@ fn gather(ctx: &Ctx, config: &Value, args: &Args) -> Result<Value, String> {
         "sourceXPath": s(config, "sourceXPath"), "targetXPath": s(config, "targetXPath"),
         "namespaces": ctx.namespaces, "messages": messages,
     }))
+}
+
+/// The Flow Steps tab's converter settings before any change (`converterDefaults()` in `store.svelte.ts`).
+fn converter_defaults() -> Value {
+    json!({
+        "conversion": "xmlToJson",
+        "useNamespaces": false, "separator": ":", "namespaceMapping": "",
+        "addRootElement": false, "rootElementName": "root", "rootNamespace": "",
+        "suppressRoot": false, "streaming": false, "streamingElements": "all", "arrayPaths": "", "outputEncoding": "",
+        "sourcePath": "/Order/Item", "fieldSeparator": ",", "csvHeader": "xml", "includeParent": false, "parentPath": "",
+        "includeAttributes": false,
+        "schema": "", "targetPath": "", "recordMarker": "", "firstLineHeader": true, "headerMapping": "xsd",
+    })
+}
+
+/// JSON ↔ XML, XML ↔ CSV. CSV to XML's schema, target path and record marker may name a header or property
+/// (SAP, version 1.4); Camel Simple resolves them first, as in the tab's `runConverter`.
+fn converter(ctx: &Ctx, config: &Value) -> Result<Value, String> {
+    // Keys the config leaves out (or sets null) take the tab's defaults (`converterDefaults()` in the store).
+    let mut params = converter_defaults();
+    if let Some(given) = config.as_object() {
+        for (k, v) in given {
+            if !v.is_null() {
+                params[k.as_str()] = v.clone();
+            }
+        }
+    }
+    if s(&params, "conversion") == "csvToXml" {
+        for key in ["schema", "targetPath", "recordMarker"] {
+            let v = s(&params, key).to_string();
+            if v.contains("${") {
+                params[key] = json!(s(&ctx.simple(&v, "expression")?, "value"));
+            }
+        }
+    }
+    params["namespaces"] = ctx.namespaces.clone();
+    params["input"] = ctx.input.clone();
+    engine_call(ctx.server, ctx.xml, "convert.run", params)
 }
 
 /// SAP: `function:simple('${property.x}')` in a Filter XPath. Camel Simple gives the value, which goes into

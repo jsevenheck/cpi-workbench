@@ -8,8 +8,9 @@
   import FlowStepsView from './components/FlowStepsView.svelte';
   import Dialog from './components/Dialog.svelte';
   import FileView from './components/FileView.svelte';
+  import SettingsMenu from './components/SettingsMenu.svelte';
   import { isDesktop } from './lib/engine';
-  import { app, xslt, groovy, flow, fileView, init, runXslt, runXsd, runXpath, runFlowStep, runGroovy, onGroovyProfileChange } from './lib/store.svelte';
+  import { app, xslt, xpath, groovy, fileView, init, runXslt, runXsd, runXpath, runFlowStep, runGroovy, onGroovyProfileChange } from './lib/store.svelte';
 
   onMount(async () => {
     await init();
@@ -26,6 +27,7 @@
   });
 
   let kind = $derived<'xslt' | 'groovy'>(app.tool === 'groovy' || app.tool === 'flow' ? 'groovy' : 'xslt');
+  let xpathOnJdk = $derived(app.tool === 'xpath' && xpath.version === '1.0');
   let profile = $derived(app.profiles.find((p) => p.id === (kind === 'groovy' ? app.groovyProfile : app.profile)));
   let kindProfiles = $derived(app.profiles.filter((p) => p.kind === kind));
 
@@ -44,9 +46,6 @@
       runGroovy();
     }
   }
-
-  /** SAP: tenant software 7.x / 8.x runs on Camel 3, 5.x / 6.x on Camel 2. */
-  const CAMEL: Record<string, string> = { 'groovy-2.x': 'Camel 3.14 (tenant 7.x / 8.x)', 'groovy-1.x': 'Camel 2.24 (tenant 5.x / 6.x)' };
 
   function selectTool(id: typeof app.tool) {
     app.tool = id;
@@ -71,7 +70,6 @@
 
 <div class="app">
   <header class="top">
-    <div class="brand"><img src="./icon.svg" alt="" width="20" height="20" /> CPI Workbench</div>
     <div class="tools" role="tablist" aria-label="Tools">
       {#each tools as t}
         <button role="tab" class:active={app.tool === t.id} onclick={() => selectTool(t.id)}
@@ -84,16 +82,10 @@
       {/if}
     </div>
     <div class="spacer"></div>
-    {#if app.tool === 'flow'}
-      <label class="profile" title="Flow steps have no Groovy version; what matters is the tenant's Camel line">Camel
-        <select bind:value={flow.camel} onchange={runFlowStep} aria-label="Camel version">
-          {#each [...kindProfiles].reverse() as p}
-            <option value={p.id} disabled={!p.available}>{CAMEL[p.id] ?? p.label}{p.available ? '' : ' (not installed)'}</option>
-          {/each}
-        </select>
-      </label>
-    {:else if app.tool !== 'file'}
-      <label class="profile" title={profile?.note ?? ''}>Runtime
+    {#if app.tool !== 'file' && app.tool !== 'flow' && app.tool !== 'xsd'}
+      <!-- XSD validation uses the JDK's validator in both XML engines, so the runtime changes nothing there;
+           XPath 1.0 runs on the JDK too. -->
+      <label class="profile" title={xpathOnJdk ? 'XPath 1.0 runs on the JDK: the runtime applies to XPath 3.1 only' : profile?.note ?? ''}>Runtime
         {#if kind === 'groovy'}
         <select bind:value={app.groovyProfile} onchange={onProfile} aria-label="Runtime profile">
           {#each kindProfiles as p}
@@ -101,7 +93,7 @@
           {/each}
         </select>
         {:else}
-        <select bind:value={app.profile} onchange={onProfile} aria-label="Runtime profile">
+        <select bind:value={app.profile} onchange={onProfile} aria-label="Runtime profile" disabled={xpathOnJdk}>
           {#each kindProfiles as p}
             <option value={p.id} disabled={!p.available}>{p.label}{p.available ? '' : ' (not installed)'}</option>
           {/each}
@@ -139,6 +131,7 @@
   </div>
 
   <footer class="status">
+    {#if isDesktop}<SettingsMenu />{/if}
     <span>{app.status || 'Ready'}</span>
     <span class="spacer"></span>
     {#if app.engineInfo}
@@ -156,7 +149,6 @@
 <style>
   .app { display: flex; flex-direction: column; height: 100vh; }
   .top { display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-bottom: 1px solid var(--border); background: var(--surface); flex-wrap: wrap; }
-  .brand { display: flex; align-items: center; gap: 6px; font-weight: 700; font-size: 14px; margin-right: 8px; }
   .tools { display: flex; gap: 2px; flex-wrap: wrap; }
   .tools button { border: none; background: none; padding: 6px 10px; border-radius: 6px; color: var(--muted); font-weight: 600; font-size: 12px; cursor: pointer; }
   .tools button.active { background: var(--active); color: var(--accent); }
@@ -170,7 +162,7 @@
   .banner.error { background: var(--err-bg); color: var(--err); border-bottom: 1px solid var(--border); }
   .main { flex: 1; display: flex; min-height: 0; }
   .content { flex: 1; min-width: 0; min-height: 0; }
-  .status { display: flex; gap: 8px; font-size: 11px; color: var(--muted); padding: 3px 10px; border-top: 1px solid var(--border); background: var(--surface); }
+  .status { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); padding: 3px 10px; border-top: 1px solid var(--border); background: var(--surface); }
   .err { color: var(--err); }
   @media (max-width: 800px) { .main { flex-direction: column; } .app { height: auto; min-height: 100vh; } .content { height: 140vh; } }
 </style>

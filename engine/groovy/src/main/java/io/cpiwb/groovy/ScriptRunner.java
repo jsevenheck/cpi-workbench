@@ -34,7 +34,6 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.io.PrintStream;
-import java.io.PrintWriter;
 import java.io.Reader;
 import java.io.StringWriter;
 import java.lang.reflect.Method;
@@ -55,6 +54,7 @@ import java.util.Map;
  * Simulates the Cloud Integration <em>Groovy Script</em> step: compiles the script with the
  * profile's Groovy version, calls the configured function with a CPI {@code Message} backed by a
  * Camel exchange and reports body, headers, properties, MPL entries, console output and errors.
+ * A custom function of a Message Mapping script runs with arguments instead ({@link MappingFunction}).
  */
 public final class ScriptRunner {
 
@@ -120,11 +120,25 @@ public final class ScriptRunner {
         }
         double compileMs = (System.nanoTime() - tc) / 1_000_000.0;
 
-        Method fn = findFunction(scriptClass, function);
-        if (fn == null) {
+        List<String> mappingFunctions = MappingFunction.list(scriptClass);
+        result.with("functions", mappingFunctions);
+        MappingFunction mapping = MappingFunction.find(scriptClass, function);
+        Method fn = mapping != null ? null : findFunction(scriptClass, function);
+        if (fn == null && mapping == null) {
             diags.add(Diagnostic.error("Function '" + function + "' with one parameter was not found in the script. "
-                    + "The Groovy Script step calls " + function + "(message)."));
+                    + "The Groovy Script step calls " + function + "(message)."
+                    + (mappingFunctions.isEmpty() ? "" : " The script has Message Mapping functions: "
+                    + String.join(", ", mappingFunctions) + ". Enter one of their names as the function to run it.")));
             return finish(result, false, "compile", diags, null, null, platform, "", t0, compileMs, cached, null);
+        }
+        if (mapping == null && !Json.arr(req, "args").isEmpty()) {
+            diags.add(Diagnostic.warning("Arguments are given, but " + function + " is called like a Groovy Script step "
+                    + "with the message; only Message Mapping functions take arguments, so they are ignored."));
+        }
+        if (mapping != null && "v2".equals(apiVersion)) {
+            diags.add(Diagnostic.warning("SAP's patch notes (software increment 2602) say that Groovy Script version 2 "
+                    + "is not supported in Message Mappings; a tenant ran mapping scripts on Groovy 2.4.21. Run this function on "
+                    + "Groovy Script 1.x."));
         }
 
         // ---- build the message
@@ -134,22 +148,27 @@ public final class ScriptRunner {
         exchange.getIn().setBody(inputBody(in, bodyType));
         exchange.getIn().getHeaders().putAll(in.getHeaders());
         exchange.getProperties().putAll(in.getProperties());
-        MessageSupport<?> message = newMessage(fn.getParameterTypes()[0], exchange, diags);
-        message.setAttachments(attachments(Json.obj(req, "input")));
-        List<SoapHeader> inSoap = soapHeaders(Json.obj(req, "input"));
-        if (message instanceof com.sap.gateway.ip.core.customdev.util.Message) {
-            ((com.sap.gateway.ip.core.customdev.util.Message) message).setSoapHeaders(inSoap);
-        } else if (!inSoap.isEmpty()) {
-            diags.add(Diagnostic.info("The input SOAP headers are not passed to the script: the Script API v2 Message "
-                    + "has no getSoapHeaders()."));
+        MessageSupport<?> message = null;
+        if (mapping == null) {
+            message = newMessage(fn.getParameterTypes()[0], exchange, diags);
+            message.setAttachments(attachments(Json.obj(req, "input")));
+            message.setSoapHeaders(soapHeaders(Json.obj(req, "input")));
+        }
+        Json.Obj mappingResult = mapping == null ? null : mapping.describe();
+        if (mappingResult != null) {
+            result.with("mapping", mappingResult);
         }
 
         // ---- run
-        StringWriter console = new StringWriter();
-        PrintWriter out = new PrintWriter(console, true);
+        // The variables a tenant binds (docs/plan.md F49). There is no "out": println goes to System.out, which
+        // the run captures for the console. javax.script.filename holding the file name is an assumption.
         Binding binding = new Binding();
+        binding.setVariable("javax.script.filename", path.substring(Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\')) + 1));
+        if ("v1".equals(apiVersion)) {
+            binding.setVariable("log", new TenantLogBinding("log", diags));
+            binding.setVariable("logger", new TenantLogBinding("logger", diags));
+        }
         binding.setVariable("messageLogFactory", new MessageLogFactory());
-        binding.setVariable("out", out);
         PrintStream oldOut = System.out;
         PrintStream oldErr = System.err;
         ByteArrayOutputStream sysOut = new ByteArrayOutputStream();
@@ -163,7 +182,11 @@ public final class ScriptRunner {
             System.setErr(capture);
             Thread.currentThread().setContextClassLoader(scriptClass.getClassLoader());
             Script script = InvokerHelper.createScript(scriptClass, binding);
-            returned = script.invokeMethod(function, new Object[] {message});
+            if (mapping != null) {
+                mapping.call(script, Json.arr(req, "args"), exchange, diags, mappingResult);
+            } else {
+                returned = script.invokeMethod(function, new Object[] {message});
+            }
         } catch (Throwable e) {
             ok = false;
             diags.add(runtimeDiagnostic(e, className));
@@ -174,8 +197,7 @@ public final class ScriptRunner {
             Thread.currentThread().setContextClassLoader(oldCl);
         }
         double runMs = (System.nanoTime() - tr) / 1_000_000.0;
-        out.flush();
-        String consoleText = console + sysOut.toString(StandardCharsets.UTF_8);
+        String consoleText = sysOut.toString(StandardCharsets.UTF_8);
         if (returned != null && !(returned instanceof MessageSupport)) {
             diags.add(Diagnostic.warning("The function returned " + returned.getClass().getName()
                     + " instead of the message; the simulator continues with the message object that was passed in."));
@@ -477,6 +499,7 @@ public final class ScriptRunner {
         if (failedPhase != null) {
             result.with("failedPhase", failedPhase);
         }
+        platform.notes().forEach(n -> diags.add(Diagnostic.info(n)));
         List<Object> d = new ArrayList<>();
         diags.forEach(x -> d.add(x.toJson()));
         result.with("diagnostics", d);
@@ -490,15 +513,13 @@ public final class ScriptRunner {
                     .with("contentType", v == null ? null : v.getContentType())
                     .with("size", AttachmentHeaders.size(v))));
             result.with("attachments", att);
-            if (message instanceof com.sap.gateway.ip.core.customdev.util.Message) {
-                List<Object> soap = new ArrayList<>();
-                for (SoapHeader h : ((com.sap.gateway.ip.core.customdev.util.Message) message).getSoapHeaders()) {
-                    soap.add(Json.o().with("name", h.getQname() == null ? null : h.getQname().toString())
-                            .with("value", xml(h.getElement())).with("mustUnderstand", h.isMustUnderstand())
-                            .with("actor", h.getActor()));
-                }
-                result.with("soapHeaders", soap);
+            List<Object> soap = new ArrayList<>();
+            for (SoapHeader h : message.getSoapHeaders()) {
+                soap.add(Json.o().with("name", h.getQname() == null ? null : h.getQname().toString())
+                        .with("value", xml(h.getElement())).with("mustUnderstand", h.isMustUnderstand())
+                        .with("actor", h.getActor()));
             }
+            result.with("soapHeaders", soap);
         }
         result.with("mpl", platform.mplJson());
         result.with("apiCalls", platform.apiCallsJson());
@@ -547,7 +568,9 @@ public final class ScriptRunner {
             }
         }
         Throwable shown = unwrap(e);
-        String msg = shown.getClass().getName() + (shown.getMessage() == null ? "" : ": " + shown.getMessage());
+        // An anonymous subclass (e.g. the ScriptLogger's MissingMethodException) shows as the class it stands for.
+        Class<?> type = shown.getClass().isAnonymousClass() ? shown.getClass().getSuperclass() : shown.getClass();
+        String msg = type.getName() + (shown.getMessage() == null ? "" : ": " + shown.getMessage());
         msg += v1OnlyMethodHint(shown);
         return new Diagnostic(Diagnostic.Severity.ERROR, msg, null, null, line, -1);
     }
@@ -602,9 +625,9 @@ public final class ScriptRunner {
     private static final java.util.regex.Pattern MOVED_XML_CLASS =
             java.util.regex.Pattern.compile("\\b(XmlSlurper|XmlParser|XmlNodePrinter|GPathResult)\\b");
 
-    /** Methods of SAP's v1 Message interface that its published v2 interface lacks. */
+    /** Methods of SAP's v1 Message interface that neither its v2 interface nor a tenant's v2 class has (F49). */
     private static final java.util.regex.Pattern V1_ONLY_METHOD = java.util.regex.Pattern.compile(
-            "\\.(getSoapHeaders|setSoapHeaders|getAttachmentWrapperObjects|setAttachmentWrapperObjects)\\s*\\(");
+            "\\.(getAttachmentWrapperObjects|setAttachmentWrapperObjects)\\s*\\(");
 
     private static void lint(String source, String apiVersion, List<Diagnostic> diags) {
         String[] lines = source.split("\n", -1);
@@ -630,7 +653,8 @@ public final class ScriptRunner {
             java.util.regex.Matcher v = V1_ONLY_METHOD.matcher(l);
             if ("v2".equals(apiVersion) && v.find()) {
                 diags.add(new Diagnostic(Diagnostic.Severity.WARNING, v.group(1) + "() is part of the Script API v1 "
-                        + "Message but not of SAP's published v2 interface (script.v2.api 4.2.2).", "lint", null, i + 1, 1));
+                        + "Message but not of the v2 Message (SAP's interface script.v2.api 4.2.2 and a tenant's class).",
+                        "lint", null, i + 1, 1));
             }
         }
     }

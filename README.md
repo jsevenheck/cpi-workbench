@@ -6,8 +6,8 @@
 
 A lean, offline desktop app for testing **SAP Integration Suite (Cloud Integration)** mappings and
 scripts locally: enter a message (body, headers, exchange properties), run an **XSLT mapping**, a
-**Groovy script** or a **Content Modifier, Filter, Router, Splitter or Gather** and see the resulting body, headers, properties and log entries immediately,
-without deploy → trace → monitor round trips.
+**Groovy script** or a **flow step** and see the resulting body, headers, properties and log entries
+immediately, without deploy → trace → monitor round trips.
 
 The goal is to behave like the real CPI step, not like a generic XSLT tester or Groovy console.
 That behaviour follows SAP's documentation, SAP's published interfaces and Saxon's and Camel's code;
@@ -24,8 +24,9 @@ it has not been checked against a tenant yet ([Fidelity](docs/fidelity.md)).
 
 **Groovy Script**
 
-* **Same Groovy versions as CPI:** Groovy **2.4.21** for script step 1.x and **4.0.29** for 2.x, on Java 17.
-* **`Message` backed by a real Apache Camel exchange** (Camel 2.24 / 3.14), so `getBody(String)`,
+* **Same runtime as CPI:** Groovy **2.4.21** for script step 1.x and **4.0.29** for 2.x, both on Camel
+  **3.14.7** and Java **21**, in UTC with `en_US`, and the libraries a tenant offers scripts (checked with probes on a tenant).
+* **`Message` backed by a real Apache Camel exchange**, so `getBody(String)`,
   `getBody(Reader)`, `getHeader(name, Integer)` and case-insensitive header names behave like CPI.
 * `messageLogFactory` with MPL properties, custom header properties and attachments;
   `ITApiFactory` with **Secure Store**, **Value Mapping**, **Partner Directory**, **Keystore** and
@@ -33,15 +34,15 @@ it has not been checked against a tenant yet ([Fidelity](docs/fidelity.md)).
 * Compile and runtime errors point to the script line; `println` output is captured.
 * The editor completes SAP's Script API (`message.`, `messageLog.`, `ITApiFactory.`) for 1.x or 2.x.
 * Groovy 1.x → 2.x differences surface for real (e.g. `groovy.util.XmlSlurper` no longer exists in Groovy 4).
+* **Message Mapping functions** run on their own: single values, or all values of a context with `Output`; `MappingContext` reads headers and properties.
 
 **Flow Steps**
 
-* **Content Modifier**, **Filter**, **Router**, **General / Iterating Splitter** and **Gather** with their
-  CPI settings, on the tenant's Camel line (3.14 or 2.24): Camel Simple with CPI's spellings (`=`, `and`,
-  `${property.x}`), XPath 3.1 on Saxon, split messages with `CamelSplit*` information, gathered again in
-  SAP's multi-mapping format.
-* **Import iFlow** lists an exported iFlow's scripts, mappings and these steps and opens them with
-  their settings.
+* **Content Modifier**, **Filter**, **Router**, **General / Iterating Splitter**, **Gather** and
+  **Converter** (JSON ↔ XML, XML ↔ CSV) with their CPI settings, on Camel 3.14:
+  Camel Simple with CPI's spellings (`=`, `and`, `${property.x}`), XPath 3.1 on Saxon, SAP's documented
+  conversion rules.
+* **Import iFlow** lists an exported iFlow's scripts, mappings and steps and opens them with their settings.
 
 **Coding agents**
 
@@ -49,7 +50,8 @@ it has not been checked against a tenant yet ([Fidelity](docs/fidelity.md)).
   (XSLT, Groovy, XSD, XPath, Flow Steps) on the simulator while it writes mappings and scripts. The
   installed app brings it; the app window does not need to be open.
 
-Everything runs locally; the app never connects to a tenant.
+Everything runs locally; the app never connects to a tenant. Apart from your own scripts, the only
+network request is *Check for updates* in the ⚙ menu, to github.com, when you click it.
 
 ![XSLT view](docs/images/screenshot-xslt.png)
 

@@ -1,0 +1,11 @@
+{
+  "name": "Message Mapping function: a null argument stays null",
+  "step": "groovy",
+  "profile": "groovy-1.x",
+  "script": "../../scripts/mapping-null.groovy",
+  "function": "classify",
+  "args": [null],
+  "expect": {
+    "returned": "NULL"
+  }
+}

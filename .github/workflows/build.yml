@@ -21,7 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-java@v6
-        with: { distribution: temurin, java-version: "17", cache: maven }
+        with: { distribution: temurin, java-version: "21", cache: maven }
       - name: Unit tests (both Saxon and both Groovy engines)
         run: mvn -B -f engine/pom.xml verify
       - name: Workload on the JVM engines
@@ -65,11 +65,11 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-java@v6
-        id: jdk17
-        with: { distribution: temurin, java-version: "17" }
-      - name: Java runtime for the Groovy engines (jlink, Java 17 like CPI)
+        id: jdk21
+        with: { distribution: temurin, java-version: "21" }
+      - name: Java runtime for the Groovy engines (jlink, Java 21 like a tenant)
         shell: bash
-        run: JAVA_HOME="${{ steps.jdk17.outputs.path }}" engine/groovy/build-jre.sh "$RUNNER_TEMP/jre"
+        run: JAVA_HOME="${{ steps.jdk21.outputs.path }}" engine/groovy/build-jre.sh "$RUNNER_TEMP/jre"
       - uses: graalvm/setup-graalvm@v1
         with:
           java-version: "21"
@@ -167,7 +167,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-java@v6
-        with: { distribution: temurin, java-version: "17", cache: maven }
+        with: { distribution: temurin, java-version: "21", cache: maven }
       - uses: actions/setup-node@v7
         with: { node-version: "22", cache: npm, cache-dependency-path: app/package-lock.json }
       - run: mvn -B -f engine/pom.xml -DskipTests package

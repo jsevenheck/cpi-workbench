@@ -83,6 +83,72 @@ class XmlBoundaryTest {
         assertTrue(Json.write(xpath("transform(" + options + ")?output", "3.1", "<a/>")).contains("UnsupportedInSimulator"));
     }
 
+    private Map<String, Object> csv(Json.Obj settings, String body) {
+        return new ConverterStep().run(settings.with("conversion", "xmlToCsv").with("baseDir", project.toString())
+                .with("input", Json.o().with("body", body)));
+    }
+
+    /** The XML to CSV converter's paths are XPath: the same guards as the XPath tab (found in a review on 2026-11-08). */
+    @Test
+    void converterPathsCannotLeaveTheProject() throws Exception {
+        Path outside = tmp.resolve("outside.xml");
+        Files.writeString(outside, "<s><v>" + SECRET + "</v></s>");
+        String doc = "doc('" + outside.toUri() + "')/s";
+        String xsl = "<xsl:stylesheet version=\"3.0\" xmlns:xsl=\"http://www.w3.org/1999/XSL/Transform\">"
+                + "<xsl:template name=\"xsl:initial-template\"><x><v><xsl:value-of select=\"unparsed-text('" + secretUri + "')\"/></v></x>"
+                + "</xsl:template></xsl:stylesheet>";
+        String transform = "transform(map{'stylesheet-text': '" + xsl.replace("'", "''") + "', "
+                + "'vendor-options': map{QName('http://saxon.sf.net/', 'configuration'): "
+                + "parse-xml('<configuration xmlns=\"http://saxon.sf.net/ns/configuration\" edition=\"HE\"/>')}})?output/x";
+        for (String path : List.of("/root | " + doc, "/root | " + transform)) {
+            Map<String, Object> source = csv(Json.o().with("sourcePath", path), "<root><v>inside</v></root>");
+            assertNoLeak(source);
+            assertFalse(Json.bool(source, "ok", true), () -> Json.write(source));
+            if (path.contains("doc(")) {
+                assertTrue(Json.write(source).contains("outside the project"), () -> Json.write(source));
+            }
+            Map<String, Object> parent = csv(Json.o().with("sourcePath", "/root").with("includeParent", true)
+                    .with("parentPath", path.substring("/root | ".length())), "<root><v>inside</v></root>");
+            assertNoLeak(parent);
+            assertFalse(Json.bool(parent, "ok", true), () -> Json.write(parent));
+        }
+        // doc() inside the project still works.
+        Files.writeString(project.resolve("rows.xml"), "<r><i><a>inside-doc</a></i></r>");
+        Map<String, Object> inside = csv(Json.o().with("sourcePath", "doc('rows.xml')/r/i"), "<root/>");
+        assertTrue(Json.bool(inside, "ok", false), () -> Json.write(inside));
+        assertEquals("inside-doc\n", inside.get("body"));
+    }
+
+    /** A symbolic link inside the project that points outside is outside (found in a review on 2026-11-08). */
+    @Test
+    void symbolicLinkOutOfTheProjectIsBlocked() throws Exception {
+        Path outside = tmp.resolve("outside.xml");
+        Files.writeString(outside, "<s><v>" + SECRET + "</v></s>");
+        try {
+            Files.createSymbolicLink(project.resolve("link.xml"), outside);
+            Files.createSymbolicLink(project.resolve("same.xml"), project.resolve("inside.xml"));
+        } catch (UnsupportedOperationException | java.io.IOException e) {
+            org.junit.jupiter.api.Assumptions.abort("symbolic links are not available here: " + e);
+        }
+        Map<String, Object> csvRun = csv(Json.o().with("sourcePath", "doc('link.xml')/s"), "<root/>");
+        assertNoLeak(csvRun);
+        assertFalse(Json.bool(csvRun, "ok", true), () -> Json.write(csvRun));
+        for (String version : List.of("1.0", "3.1")) {
+            Map<String, Object> r = xpath("string(doc('link.xml'))", version, "<a/>");
+            assertNoLeak(r);
+            assertFalse(Json.bool(r, "ok", true), () -> Json.write(r));
+        }
+        Map<String, Object> text = xpath("unparsed-text('link.xml')", "3.1", "<a/>");
+        assertNoLeak(text);
+        Map<String, Object> x = xslt(select("doc('link.xml')"), "<a/>");
+        assertNoLeak(x);
+        assertFalse(Json.bool(x, "ok", true), () -> Json.write(x));
+        // A link that stays inside the project works.
+        Map<String, Object> same = xpath("string(doc('same.xml'))", "3.1", "<a/>");
+        assertTrue(Json.bool(same, "ok", false), () -> Json.write(same));
+        assertTrue(Json.write(same).contains("inside-doc"), () -> Json.write(same));
+    }
+
     @Test
     void xsltInputExternalEntityIsBlocked() {
         Map<String, Object> r = xslt(COPY, entityDoc());

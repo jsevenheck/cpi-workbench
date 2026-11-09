@@ -18,7 +18,12 @@ import java.util.Map;
 /** RPC dispatcher of a Groovy engine (one per Script API generation). */
 public final class GroovyEngine implements RpcHandler {
 
-    public static final String VERSION = "0.2.0";
+    static {
+        io.cpiwb.core.TenantDefaults.apply();
+    }
+
+
+    public static final String VERSION = "0.3.0";
 
     private final ScriptRunner runner;
     private final SimpleStep simple = new SimpleStep();
@@ -154,7 +159,7 @@ public final class GroovyEngine implements RpcHandler {
                 }
             }
             params.put("input", input);
-            for (String k : List.of("options", "platform", "classpath")) {
+            for (String k : List.of("options", "platform", "classpath", "args")) {
                 if (tc.get(k) != null) {
                     params.put(k, tc.get(k));
                 }

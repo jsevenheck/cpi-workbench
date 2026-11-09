@@ -43,8 +43,8 @@ const UNSUPPORTED_PROTOCOL_VERSION: i64 = -32022;
 const LIST_TTL_MS: u64 = 3_600_000;
 
 const INSTRUCTIONS: &str = "CPI Workbench simulates SAP Integration Suite (Cloud Integration) steps locally: \
-XSLT mappings (Saxon-HE 9.9 like CPI, or 12), Groovy scripts (Script API 1.x on Groovy 2.4 / Camel 2.24, \
-2.x on Groovy 4 / Camel 3.14), XSD validation, XPath and the flow steps Content Modifier, Filter, Router, \
+XSLT mappings (Saxon-HE 9.9 like CPI, or 12), Groovy scripts (Script API 1.x on Groovy 2.4, \
+2.x on Groovy 4, both on Camel 3.14), XSD validation, XPath and the flow steps Content Modifier, Filter, Router, \
 Splitter and Gather, as the tabs of the CPI Workbench app do. Paths are relative to the project folder: the tools \
 read bodies, mappings, scripts and schemas from it only, and XSD and XPath runs stay inside it. Groovy scripts, \
 and reflexive java: calls and fn:transform() in XSLT, run without a sandbox, with the user's rights. Call project_info first to see the project's files, iFlow steps and installed runtimes. The simulator \

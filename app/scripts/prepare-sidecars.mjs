@@ -3,7 +3,7 @@
 //   * Groovy engine jars  -> src-tauri/resources/engines/                    (Tauri resources)
 //   * Java runtime for Groovy (optional, from CPIWB_JRE_DIR) -> src-tauri/resources/jre/
 //   * licence texts: licenses/ and the desktop app's own dependencies -> src-tauri/resources/licenses/
-// Without a bundled JRE the app uses JAVA_HOME / java on PATH (Java 17+) for Groovy.
+// Without a bundled JRE the app uses JAVA_HOME / java on PATH (Java 17+; a tenant runs 21) for Groovy.
 //   node scripts/prepare-sidecars.mjs [engineOutDir]
 import { execFileSync, execSync } from 'node:child_process';
 import fs from 'node:fs';

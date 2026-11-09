@@ -77,6 +77,18 @@ class XsltStepTest {
     }
 
     @Test
+    void exchangeTextAndTimezoneFollowATenant() {
+        new XmlEngine(); // the engine sets the tenant's defaults (UTC, en_US) when it starts
+        String xsl = "<xsl:stylesheet version='3.0' xmlns:xsl='http://www.w3.org/1999/XSL/Transform'>"
+                + "<xsl:param name='exchange'/><xsl:template match='/'><r tz='{implicit-timezone()}'>"
+                + "<xsl:value-of select='$exchange'/></r></xsl:template></xsl:stylesheet>";
+        Map<String, Object> r = run(xsl, input("<x/>", List.of(), List.of()), null);
+        assertTrue(Json.bool(r, "ok", false), () -> Json.write(r));
+        // probes/results-tenant/2026-11-09/: Exchange[B6E02F59020A061-0000000000000001] and PT0S.
+        assertTrue(body(r).matches("(?s).*<r tz=\"PT0S\">Exchange\\[[0-9A-F]{15}-\\d{16}]</r>.*"), body(r));
+    }
+
+    @Test
     void reportsParameterBindings() {
         Map<String, Object> r = run(CPI_XSL, input("<x/>", List.of(hv("Shared", "h", "String")),
                 List.of(hv("OnlyProp", "p", "String"))), null);

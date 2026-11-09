@@ -75,13 +75,14 @@ server adds no function of its own.
 |---|---|
 | `project_info` | The project: its files, the steps of the iFlows under `iflows/` (flow steps with their configuration; script, XSLT and XML Validator steps with file, function and runtime) and the installed runtimes. |
 | `run_xslt` | XSLT (`mappingPath` or `mapping`). `runtime: "both"` runs Saxon-HE 9.9 and 12, as the runtime comparison does. |
-| `run_groovy` | Groovy, with the Script API and the project's `platform/` mocks, and the body type (`bodyType`). The runtime (1.x or 2.x) follows the script's imports unless given; `both` runs both. |
+| `run_groovy` | Groovy, with the Script API and the project's `platform/` mocks, and the body type (`bodyType`). The runtime (1.x or 2.x) follows the script's imports unless given; `both` runs both. A custom function of a Message Mapping script takes `args` instead, as the Groovy tab's *Arguments*; the result's `mapping` holds the returned value or the output queue. |
 | `validate_xsd` | XSD. |
 | `evaluate_xpath` | XPath (1.0 or 3.1, with namespaces). |
-| `run_flow_step` | Flow Steps: a Content Modifier, Filter, Router, Splitter or Gather step from an iFlow (`iflowStep`: name or id, with `iflow` when several iFlows share it) or from a configuration (`step`). |
+| `run_flow_step` | Flow Steps: a Content Modifier, Filter, Router, Splitter, Gather or converter (JSON ↔ XML, XML ↔ CSV) step from an iFlow (`iflowStep`: name or id, with `iflow` when several iFlows share it) or from a configuration (`step`). |
 
-Without `runtime` or `camel`, a tool uses the app's default (Saxon-HE 9.9, Camel 3.14; Groovy from the
-script's imports), or the other runtime of that kind when the default is not installed, as the app does.
+Without `runtime`, a tool uses the app's default (Saxon-HE 9.9; Groovy from the script's imports), or the
+other runtime of that kind when the default is not installed, as the app does. Flow steps run Camel Simple
+on Camel 3.14.7 with any installed Groovy engine.
 
 A message is `body` (or `bodyPath`, a project file) and, where the tab has them, `headers` and `properties`. A header or
 property is a string, or `{"value": "…", "type": "Integer"}` for another type (the types of
@@ -98,7 +99,7 @@ lists what is verified against CPI.
 
 * **Files:** only the project folder. Bodies, mappings, scripts and schemas are read through the
   engines, which refuse paths outside the project, as in the app ([What a run can access](user-guide.md#what-a-run-can-access)).
-  The check compares paths, so a symbolic link inside the project can point outside it.
+  The check follows symbolic links: a link inside the project that leads outside it is refused.
   The tools write nothing into the project; the engines keep caches in the temp folder and the
   user's cache folder, as in the app. Groovy scripts can write files (next point).
 * **Code:** Groovy scripts execute as ordinary Java code with your user's rights, without a sandbox;

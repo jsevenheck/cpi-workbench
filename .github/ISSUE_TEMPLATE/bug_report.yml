@@ -9,14 +9,14 @@ body:
     id: version
     attributes:
       label: Version and system
-      placeholder: 0.1.0 on Windows 11
+      placeholder: 0.3.0 on Windows 11
     validations:
       required: true
   - type: dropdown
     id: area
     attributes:
       label: Area
-      options: [XSLT Mapping, Groovy Script, XSD validation, XPath, iFlow import, Desktop app, Command line, Other]
+      options: [XSLT Mapping, Groovy Script, Message Mapping functions, XSD validation, XPath, Flow Steps, iFlow import, MCP server, Desktop app, Command line, Other]
     validations:
       required: true
   - type: textarea

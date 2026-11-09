@@ -11,7 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** Rows use the iFlow encoding (types and Delete names as in exported .iflw files). Runs on Camel 2 and 3. */
+/** Rows use the iFlow encoding (types and Delete names as in exported .iflw files). Runs on both engines. */
 @SuppressWarnings("unchecked")
 class ContentModifierStepTest {
 

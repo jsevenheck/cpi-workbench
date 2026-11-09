@@ -101,6 +101,10 @@ public final class ProjectResolver implements URIResolver, LSResourceResolver, E
             if (!p.startsWith(baseDir)) {
                 throw new TransformerException("Access outside the project folder is blocked: " + p);
             }
+            if (!io.cpiwb.core.ProjectPaths.inside(baseDir, p)) {
+                throw new TransformerException("Access outside the project folder is blocked: " + p
+                        + " (a symbolic link leads outside)");
+            }
             try {
                 filesRead.put(p, Files.getLastModifiedTime(p).toMillis());
                 return Files.readString(p, charset);

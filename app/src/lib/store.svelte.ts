@@ -1,5 +1,6 @@
 import { call, openProject, closeProject as closeEngineProject, availableProfiles, DEFAULT_PROFILE, type Profile, type ProfileInfo } from './engine';
 import type { Diagnostic, FileEntry, GroovyResult, Row, XsltResult } from './types';
+import { argText, mappingArgs } from './queue';
 import { toRows } from './rows';
 import { pathKey } from './paths';
 import { resolveSimpleFunctions } from './simple';
@@ -58,7 +59,9 @@ export interface IflowStep {
   iflow: string;
   id: string;
   name: string;
-  type: 'groovy' | 'xslt' | 'xsd' | FlowStep | 'error';
+  type: 'groovy' | 'xslt' | 'xsd' | 'mmap' | FlowStep | 'error';
+  /** Message Mapping steps: the Groovy scripts its .mmap uses (the mapping itself is not simulated). */
+  scripts?: string[];
   note?: string;
   /** Flow step settings (Content Modifier, Filter, Router, Splitter, Gather) as the iFlow stores them. */
   config?: any;
@@ -149,6 +152,12 @@ export const groovy = $state({
   caseExtras: null as CaseExtras | null,
   compareOn: false,
   compare: null as CompareRun<GroovyResult> | null,
+  /** A Message Mapping function, known from the last run of this function; null for processData(message). */
+  mapping: null as { function: string; parameters: string[] } | null,
+  /** The open script's Message Mapping functions (signatures), from its last run that compiled. */
+  functions: [] as string[],
+  /** Text of each String / String[] argument of the mapping function (queues: one context per line). */
+  args: [] as (string | null)[],
 });
 
 export interface CaseExtras {
@@ -178,7 +187,7 @@ export const xpath = $state({
   running: false,
 });
 
-export type FlowStep = 'contentModifier' | 'filter' | 'router' | 'splitter' | 'gather';
+export type FlowStep = 'contentModifier' | 'filter' | 'router' | 'splitter' | 'gather' | 'converter';
 
 /** A Content Modifier row in the iFlow's encoding (type: constant, header, property, xpath, expression, ...). */
 export interface CmRow {
@@ -204,11 +213,27 @@ export interface RouteResult {
   camel?: string;
 }
 
+/**
+ * JSON ↔ XML and XML ↔ CSV converters; mapping and array paths are text, one entry per line. The MCP server uses
+ * the same defaults (`converter_defaults` in `mcp/flow.rs`); change both together.
+ */
+function converterDefaults() {
+  return {
+    conversion: 'xmlToJson' as 'jsonToXml' | 'xmlToJson' | 'xmlToCsv' | 'csvToXml',
+    useNamespaces: false, separator: ':', namespaceMapping: '',
+    addRootElement: false, rootElementName: 'root', rootNamespace: '',
+    suppressRoot: false, streaming: false, streamingElements: 'all' as 'all' | 'specific', arrayPaths: '', outputEncoding: '',
+    sourcePath: '/Order/Item', fieldSeparator: ',', csvHeader: 'xml' as 'none' | 'xml' | 'xsd', includeParent: false, parentPath: '',
+    includeAttributes: false,
+    schema: '', targetPath: '', recordMarker: '', firstLineHeader: true, headerMapping: 'xsd' as 'xsd' | 'csv',
+  };
+}
+
 export const flow = $state({
   step: 'contentModifier' as FlowStep,
   /**
-   * The Camel line, from the Groovy engine that carries it. These steps have no Groovy version: the Camel
-   * line belongs to the tenant, and SAP has moved tenants to Camel 3.14 (F34), hence the default.
+   * The Groovy engine whose Camel runs Camel Simple and the Content Modifier. Both carry Camel 3.14.7, as a
+   * tenant does for both script versions (F48), so any installed one will do.
    */
   camel: 'groovy-2.x' as Profile,
   /** The iFlow step each step's settings came from, if any. */
@@ -236,11 +261,13 @@ export const flow = $state({
   filter: { expression: "/Order/Item[@qty > 1]", valueType: 'nodelist' },
   /** The messages to gather: a splitter's result or bodies added by hand. */
   gather: { messageType: 'sameXml', algorithm: 'combine', sourceXPath: '', targetXPath: '', messages: [] as string[] },
+  converter: converterDefaults(),
   cmResult: null as any,
   routerResult: null as null | { routes: RouteResult[]; taken: string; diagnostics: string[] },
   splitResult: null as any,
   filterResult: null as any,
   gatherResult: null as any,
+  converterResult: null as any,
   running: false,
 });
 
@@ -361,6 +388,19 @@ export async function importIflow(zip: string) {
 /** Opens the file of an imported iFlow step with the step's settings (function, script version). */
 export async function openIflowStep(step: IflowStep) {
   if (step.config) return openFlowStep(step);
+  if (step.type === 'mmap') {
+    const [first, ...rest] = step.scripts ?? [];
+    if (!first) {
+      app.status = `Message Mapping "${step.name}": ${step.note ?? 'not simulated.'}`;
+      return;
+    }
+    // The script opens with its first Message Mapping function (see runGroovy), on 1.x (F41).
+    pickMappingFunction = true;
+    await openFile(first, { profile: step.profile });
+    app.status = `Message Mapping "${step.name}" is not simulated; opened its script ${first.split('/').pop()}`
+      + (rest.length ? ` (also: ${rest.map((p) => p.split('/').pop()).join(', ')})` : '') + '.';
+    return;
+  }
   if (!step.file || !step.fileFound) {
     app.error = step.note ? `Step "${step.name}": ${step.note}`
       : `The file of step "${step.name}" was not found in the export (${step.file ?? 'no reference'}).`;
@@ -428,6 +468,10 @@ export async function openFile(path: string, opts: OpenOptions = {}) {
       groovy.casePath = null;
       groovy.caseExtras = null;
       groovy.functionName = opts.functionName ?? 'processData';
+      groovy.mapping = null;
+      groovy.functions = [];
+      groovy.args = [];
+      forgetGroovyRun();
       if (opts.profile && hasProfile(opts.profile)) app.groovyProfile = opts.profile;
       else if (content.includes('com.sap.it.script.v2.api') && hasProfile('groovy-2.x')) app.groovyProfile = 'groovy-2.x';
       else if (content.includes('com.sap.gateway.ip.core.customdev.util') && hasProfile('groovy-1.x')) app.groovyProfile = 'groovy-1.x';
@@ -714,9 +758,11 @@ function xsltRequest() {
 }
 
 function groovyRequest() {
+  const fn = groovy.functionName || 'processData';
   return {
     script: { content: groovy.script, path: groovy.scriptPath ?? 'script.groovy' },
-    function: groovy.functionName || 'processData',
+    function: fn,
+    args: groovy.mapping?.function === fn ? mappingArgs(groovy.mapping.parameters, groovy.args) : [],
     input: {
       body: groovy.body, headers: clean(groovy.headers), properties: clean(groovy.properties),
       attachments: groovy.caseExtras?.attachments, soapHeaders: groovy.caseExtras?.soapHeaders,
@@ -772,11 +818,21 @@ export async function runXslt() {
 
 let groovySeq = 0;
 
+/** Another script or test case is opened: a run still under way belongs to the old one and must not land here. */
+function forgetGroovyRun() {
+  groovySeq++;
+  groovy.running = false;
+}
+/** Set when a Message Mapping step opens its script: the first run picks a mapping function if there is no processData. */
+let pickMappingFunction = false;
+
 export async function runGroovy() {
   const seq = ++groovySeq;
   groovy.running = true;
   app.error = '';
   try {
+    // A mapping function's parameters are known only after a run; until then its arguments cannot be sent.
+    const known = groovy.mapping?.function === (groovy.functionName || 'processData');
     const params = groovyRequest();
     const [r, c] = await Promise.all([
       call<GroovyResult>('groovy.run', params, app.groovyProfile),
@@ -785,6 +841,23 @@ export async function runGroovy() {
     if (seq === groovySeq) {
       groovy.result = r;
       groovy.compare = c;
+      const pick = pickMappingFunction;
+      pickMappingFunction = false;
+      if (pick && !r.ok && r.failedPhase === 'compile' && r.functions?.length && !r.mapping) {
+        groovy.functionName = r.functions[0].slice(0, r.functions[0].indexOf('('));
+        return void runGroovy();
+      }
+      // A compile error says nothing about the function; keep what the last run found.
+      if (r.functions) groovy.functions = r.functions;
+      if (r.mapping) {
+        // Arguments typed for another function do not belong to this one (a test case's do: mapping is null then).
+        if (groovy.mapping && groovy.mapping.function !== r.mapping.function) groovy.args = [];
+        groovy.mapping = { function: r.mapping.function, parameters: r.mapping.parameters };
+        if (!known && groovy.args.some((a) => a === null || a.trim() !== '')) return void runGroovy();
+      } else if (r.failedPhase !== 'compile') {
+        if (groovy.mapping) groovy.args = [];
+        groovy.mapping = null;
+      }
     }
   } catch (e) {
     if (seq === groovySeq) fail(e);
@@ -801,6 +874,10 @@ function clean(rows: Row[]) {
 let xsdSeq = 0;
 
 export async function runXsd() {
+  if (!xsd.schema.trim()) {
+    app.error = 'Open an .xsd from the project or paste a schema first.';
+    return;
+  }
   const seq = ++xsdSeq;
   xsd.running = true;
   app.error = '';
@@ -882,8 +959,9 @@ async function simpleEval(run: FlowRun, expression: string, mode: 'condition' | 
 
 // A run's result goes to the step it was started for, and only if no newer run or newly opened step came since.
 let flowSeq = 0;
-const flowResultKey = { contentModifier: 'cmResult', filter: 'filterResult', router: 'routerResult', splitter: 'splitResult', gather: 'gatherResult' } as const;
-const flowConfigKey = { contentModifier: 'cm', filter: 'filter', router: 'router', splitter: 'splitter', gather: 'gather' } as const;
+const flowResultKey = { contentModifier: 'cmResult', filter: 'filterResult', router: 'routerResult', splitter: 'splitResult', gather: 'gatherResult',
+  converter: 'converterResult' } as const;
+const flowConfigKey = { contentModifier: 'cm', filter: 'filter', router: 'router', splitter: 'splitter', gather: 'gather', converter: 'converter' } as const;
 
 export async function runFlowStep() {
   const seq = ++flowSeq;
@@ -897,6 +975,7 @@ export async function runFlowStep() {
       : step === 'filter' ? await runFilter(run, config)
       : step === 'router' ? await runRouter(run, config)
       : step === 'splitter' ? await runSplitter(run, config)
+      : step === 'converter' ? await runConverter(run, config)
       : await runGather(run, config);
     if (seq === flowSeq) flow[flowResultKey[step]] = r;
   } catch (e) {
@@ -990,6 +1069,19 @@ async function runGather(run: FlowRun, g: typeof flow.gather) {
   }, run.xml);
 }
 
+async function runConverter(run: FlowRun, c: typeof flow.converter) {
+  // SAP (CSV to XML 1.4): schema, target path and record marker may come from a header or property.
+  const resolve = async (v: string) => (v.includes('${') ? (await simpleEval(run, v, 'expression')).value ?? '' : v);
+  const csv = c.conversion === 'csvToXml';
+  return await call('convert.run', {
+    ...c,
+    schema: csv ? await resolve(c.schema) : c.schema,
+    targetPath: csv ? await resolve(c.targetPath) : c.targetPath,
+    recordMarker: csv ? await resolve(c.recordMarker) : c.recordMarker,
+    namespaces: run.namespaces, input: run.input,
+  }, run.xml);
+}
+
 /** The splitter's messages go to the Gather step, as in an iFlow's Splitter → … → Gather. */
 export function gatherSplitResult() {
   flow.gather.messages = (flow.splitResult?.messages ?? []).map((m: { body: string }) => m.body);
@@ -1016,6 +1108,12 @@ function openFlowStep(step: IflowStep) {
     flow.router = { routes: c.routes ?? [], throwException: !!c.throwException };
   } else if (step.type === 'filter') {
     flow.filter = { expression: c.expression ?? '', valueType: c.valueType ?? 'nodelist' };
+  } else if (step.type === 'converter') {
+    // The iFlow's lists become the tab's text fields (one entry per line). Settings the step does not have start
+    // from the defaults, not from a converter opened before.
+    flow.converter = { ...converterDefaults(), ...c,
+      namespaceMapping: Array.isArray(c.namespaceMapping) ? c.namespaceMapping.map((m: any) => `${m.prefix} = ${m.namespace}`).join('\n') : c.namespaceMapping ?? '',
+      arrayPaths: Array.isArray(c.arrayPaths) ? c.arrayPaths.join('\n') : c.arrayPaths ?? '' };
   } else if (step.type === 'gather') {
     // The messages stay: they come from the splitter, not from the iFlow.
     flow.gather = { ...flow.gather, messageType: c.messageType ?? 'sameXml', algorithm: c.algorithm ?? 'combine',
@@ -1063,6 +1161,10 @@ async function loadGroovyCase(path: string, dir: string, tc: any) {
   groovy.properties = toRows(tc.input?.properties);
   groovy.functionName = tc.function ?? 'processData';
   groovy.bodyType = tc.options?.bodyType ?? 'String';
+  groovy.args = (tc.args ?? []).map(argText);
+  groovy.mapping = null;
+  groovy.functions = [];
+  forgetGroovyRun();
   if (tc.profile && hasProfile(tc.profile)) app.groovyProfile = tc.profile;
   const extras: CaseExtras = { dir, attachments: tc.input?.attachments, soapHeaders: tc.input?.soapHeaders, platform: tc.platform };
   groovy.caseExtras = extras.attachments || extras.soapHeaders || extras.platform ? extras : null;

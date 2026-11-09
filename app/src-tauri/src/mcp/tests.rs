@@ -255,12 +255,29 @@ fn tools_run_on_the_engines() {
     let typed = c.ok("run_groovy", json!({ "body": "x", "bodyType": "InputStream",
         "script": "def processData(m) { m.setBody(m.getBody() instanceof InputStream ? 'stream' : 'other'); m }" }));
     assert_eq!(typed["output"]["body"], "stream", "the Groovy tab's Body type: {typed}");
+    // A Message Mapping function with a queue argument, on 1.x (its imports are not v2).
+    let mm = c.ok("run_groovy", json!({ "function": "join", "args": [[["A", "B"], ["C"]]],
+        "script": "import com.sap.it.api.mapping.*\n\
+            def void join(String[] a, Output out, MappingContext c) { out.addValue(a.join('+')) }" }));
+    assert_eq!(mm["runtime"], "groovy-1.x");
+    assert_eq!(mm["mapping"]["queue"], json!([["A+B"], ["C"]]), "{mm}");
 
     let v = c.ok("validate_xsd", json!({ "schemaPath": "schemas/salesorder.xsd", "body": "<nope/>" }));
     assert_eq!(v["valid"], false, "{v}");
 
     let xp = c.ok("evaluate_xpath", json!({ "expression": "concat(/a/@x, '2')", "body": "<a x='1'/>" }));
     assert_eq!(xp["items"][0]["value"], "12", "{xp}");
+
+    // Converters: given directly, and from the iFlow (its {{RootName}} and namespace mapping).
+    let x2j = c.ok("run_flow_step", json!({ "body": "<a><b>1</b><b>2</b></a>",
+        "step": { "type": "converter", "config": { "conversion": "xmlToJson" } } }));
+    assert_eq!(x2j["body"], "{\"a\":{\"b\":[\"1\",\"2\"]}}", "{x2j}");
+    // Keys left out take the tab's defaults: XML based header for XML to CSV, header line for CSV to XML.
+    let x2c = c.ok("run_flow_step", json!({ "body": "<Order><Item><Name>A</Name></Item></Order>",
+        "step": { "type": "converter", "config": { "conversion": "xmlToCsv", "sourcePath": "/Order/Item" } } }));
+    assert_eq!(x2c["body"], "Name\nA\n", "{x2c}");
+    let j2x = c.ok("run_flow_step", json!({ "iflowStep": "JSON to XML", "body": "{\"x\":\"1\",\"y\":2}" }));
+    assert_eq!(j2x["body"], "<?xml version='1.0' encoding='UTF-8'?><Orders xmlns:ord=\"urn:orders\"><x>1</x><y>2</y></Orders>", "{j2x}");
 
     // Flow steps from the iFlow.
     let order = "<Order id=\"7\"><Item>a</Item><Item>b</Item><Item>c</Item></Order>";

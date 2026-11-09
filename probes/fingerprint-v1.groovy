@@ -8,9 +8,12 @@ def Message processData(Message message) {
     def safe = { Closure c -> try { c() } catch (Throwable t) { 'unavailable: ' + t.class.name } }
     def info = [
         probe              : 'fingerprint-v1',
-        java               : System.getProperty('java.version'),
-        javaVendor         : System.getProperty('java.vendor'),
-        javaVm             : System.getProperty('java.vm.name'),
+        // The JVM comes from the runtime MXBean: the tenant's script editor refuses JVM property lookups
+        // as an unsupported class (SAP's design guideline *Use Recommended Libraries and Classes*).
+        java               : safe { java.lang.management.ManagementFactory.runtimeMXBean.specVersion },
+        javaVmVersion      : safe { java.lang.management.ManagementFactory.runtimeMXBean.vmVersion },
+        javaVendor         : safe { java.lang.management.ManagementFactory.runtimeMXBean.vmVendor },
+        javaVm             : safe { java.lang.management.ManagementFactory.runtimeMXBean.vmName },
         groovy             : safe { GroovySystem.version },
         camel              : safe { Class.forName('org.apache.camel.CamelContext').package?.implementationVersion
                                         ?: Class.forName('org.apache.camel.impl.DefaultCamelContext').getDeclaredConstructor().newInstance().version },
@@ -45,6 +48,24 @@ def Message processData(Message message) {
         // Which release of SAP's Script API bundle the runtime has (Maven Central: com.sap.cloud.script).
         scriptApiBundle    : safe { def c = Class.forName('com.sap.gateway.ip.core.customdev.util.Message'); c.protectionDomain?.codeSource?.location?.toString() },
         bindingVariables   : safe { binding.variables.keySet().sort() },
+        // Versions of the libraries a script can load (the simulator bundles the ones Camel 3.14.7 manages).
+        libraryVersions    : ['org.apache.commons/commons-lang3': 'org.apache.commons.lang3.StringUtils',
+                              'com.fasterxml.jackson.core/jackson-databind': 'com.fasterxml.jackson.databind.ObjectMapper',
+                              'commons-codec/commons-codec': 'org.apache.commons.codec.binary.Base64',
+                              'org.apache.groovy/groovy-yaml': 'groovy.yaml.YamlSlurper',
+                              'org.apache.groovy/groovy-toml': 'groovy.toml.TomlSlurper',
+                              'org.apache.camel/camel-attachments': 'org.apache.camel.attachment.Attachment']
+                              .collectEntries { ga, name -> [(ga): safe { def c = Class.forName(name)
+                                  def p = new Properties()
+                                  def s = c.getResourceAsStream('/META-INF/maven/' + ga + '/pom.properties')
+                                  if (s) { p.load(s) }
+                                  p.version ?: c.package?.implementationVersion ?: 'no version found' }] },
+        // The type of each bound variable (1.x binds log and logger; their types are not known yet).
+        bindingTypes       : safe { binding.variables.collectEntries { k, v -> [(k): v?.getClass()?.getName()] } },
+        // The methods of 'log' (a tenant binds com.sap.it.script.logging.impl.ScriptLogger, whose API is not published).
+        logMethods         : safe { binding.variables.log?.getClass()?.methods?.findAll { it.declaringClass != Object }
+                                        ?.collect { it.name + '(' + it.parameterTypes*.simpleName.join(', ') + '): ' + it.returnType.simpleName }
+                                        ?.unique()?.sort() },
         headerTypes        : safe { message.headers.collectEntries { k, v -> [(k): v?.class?.name] } },
         propertyTypes      : safe { message.properties.collectEntries { k, v -> [(k): v?.class?.name] } },
     ]

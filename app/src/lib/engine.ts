@@ -15,13 +15,13 @@ export interface ProfileInfo {
 
 export const PROFILES: ProfileInfo[] = [
   { id: 'saxon-he-9.9', kind: 'xslt', label: 'CPI 9.9 (Saxon-HE 9.9)', available: true,
-    note: 'Same Saxon release line as Cloud Integration (Saxon-EE 9.9). No higher-order functions in HE.' },
+    note: 'Same Saxon release line as Cloud Integration (Saxon-EE 9.9.1.6). No higher-order functions in HE.' },
   { id: 'saxon-he-12', kind: 'xslt', label: 'Modern HE (Saxon-HE 12)', available: true,
     note: 'Supports higher-order functions and xsl:evaluate, which CPI\'s Saxon-EE 9.9 has but HE 9.9 lacks.' },
   { id: 'groovy-1.x', kind: 'groovy', label: 'Groovy Script 1.x (Groovy 2.4.21)', available: true,
-    note: 'Script API v1 (com.sap.gateway.ip.core.customdev.util.Message), Camel 2 type conversion.' },
+    note: 'Script API v1 (com.sap.gateway.ip.core.customdev.util.Message), Camel 3.14 type conversion, as on a tenant.' },
   { id: 'groovy-2.x', kind: 'groovy', label: 'Groovy Script 2.x (Groovy 4.0.29)', available: true,
-    note: 'Script API v2 (com.sap.it.script.v2.api.Message, provisional method list), Camel 3.14 type conversion.' },
+    note: 'Script API v2 (com.sap.it.script.v2.api.Message), Camel 3.14 type conversion.' },
 ];
 
 export const DEFAULT_PROFILE: Profile = 'saxon-he-9.9';

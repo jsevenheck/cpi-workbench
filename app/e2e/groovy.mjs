@@ -111,6 +111,13 @@ if (process.env.CPIWB_IFLOW_ZIP) {
   if ((await page.getByLabel('Filter XPath').inputValue()) !== '/Order/Item') fail('Filter XPath from the iFlow');
   await page.locator('.steps .step', { hasText: 'Gather items' }).click();
   if ((await page.getByLabel('Aggregation Algorithm').inputValue()) !== 'combineAtXPath') fail('Gather algorithm from the iFlow');
+  // A Message Mapping step is listed (not simulated); it opens its script with the first mapping function.
+  await page.locator('.steps .step', { hasText: 'Map order' }).click();
+  await page.locator('section.script h2', { hasText: 'lookup.gsh' }).waitFor({ timeout: 10000 })
+    .catch(() => fail('Message Mapping step did not open its script'));
+  await page.locator('section.output .badge.ok').waitFor({ timeout: 20000 })
+    .catch(() => fail('mapping script from the iFlow did not run'));
+  if ((await page.getByLabel('Function name').inputValue()) !== 'getHeader') fail('mapping function not picked');
   await page.getByRole('tab', { name: 'Groovy Script' }).click();
 }
 
@@ -119,6 +126,81 @@ await page.getByLabel('Function name').fill('customFunction');
 await page.locator('.tree .file', { hasText: 'route-by-partner.groovy' }).click();
 await page.locator('section.script h2', { hasText: 'route-by-partner.groovy' }).waitFor({ timeout: 10000 });
 if ((await page.getByLabel('Function name').inputValue()) !== 'processData') fail('function name kept from the previous script');
+if (await page.locator('.functions').count()) fail('function bar shown for a script without mapping functions');
+if ((await page.locator('section.script .mode').innerText()) !== 'Script step') fail('mode label for a script step');
+// 4c2) Live off: a run that answers after another script was opened does not land in that script.
+// The first run is held until the other script is open; any later run is held until the check is done.
+await page.getByLabel('Live').uncheck();
+await page.locator('.tree .file', { hasText: 'mapping-null.groovy' }).click();
+await page.locator('section.script h2', { hasText: 'mapping-null.groovy' }).waitFor({ timeout: 10000 });
+await page.getByLabel('Function name').fill('classify');
+await page.getByLabel('Runtime profile').selectOption('groovy-1.x');
+await page.locator('section.output .badge.run').waitFor({ state: 'detached', timeout: 20000 }).catch(() => {});
+let releaseFirst, releaseLater;
+const first = new Promise((r) => (releaseFirst = r));
+const later = new Promise((r) => (releaseLater = r));
+const groovyRpc = /127\.0\.0\.1:777[89]\/rpc/;
+let heldRuns = 0;
+await page.route(groovyRpc, async (route) => {
+  if (route.request().postData()?.includes('groovy.run')) await (++heldRuns === 1 ? first : later);
+  await route.continue().catch(() => {}); // unroute may have let it through already
+});
+await page.getByRole('button', { name: /^\W*Run$/ }).click();
+// enrich-order.groovy is a 1.x script too, so opening it changes no runtime (which would start a run of its own).
+await page.locator('.tree .file', { hasText: 'enrich-order.groovy' }).first().click();
+await page.locator('section.script h2', { hasText: 'enrich-order.groovy' }).waitFor({ timeout: 10000 });
+releaseFirst();
+await page.waitForTimeout(1500);
+if (heldRuns === 0) fail('the late-run check held no run');
+if (await page.locator('.functions').count()) fail('a late run of the previous script showed its functions');
+if ((await page.locator('section.script .mode').innerText()) !== 'Script step') fail('a late run of the previous script set its mode');
+releaseLater();
+await page.unroute(groovyRpc);
+await page.getByLabel('Live').check();
+
+// 4d) Message Mapping functions: arguments instead of a body, the output queue as the result.
+// One call per context: each call counts its own context, the calls are joined by context changes.
+await page.locator('.tree .file', { hasText: 'mapping-context/case.json' }).click();
+// The output keeps the tab chosen before (Headers in 4a2), so open the result.
+await page.locator('section.output').getByRole('tab', { name: 'Result' }).click();
+await page.locator('section.output pre', { hasText: '["2"]\n["1"]\n["0"]' }).waitFor({ timeout: 20000 })
+  .catch(async () => fail('mapping queue: ' + (await page.locator('section.output').innerText()).slice(0, 400)));
+if (!(await page.getByLabel('Argument 1').inputValue()).includes('"Multi Print"')) fail('mapping argument from the case');
+if (shots) await page.screenshot({ path: path.join(shots, 'g3c-mapping-context.png') });
+// Compare runs the function on 2.x too and compares the function result, not only the body.
+await page.getByRole('button', { name: 'Compare', exact: true }).click();
+await page.locator('section.output .compare .same', { hasText: 'function result' }).waitFor({ timeout: 20000 })
+  .catch(async () => fail('compare of a mapping function: ' + (await page.locator('section.output').innerText()).slice(0, 400)));
+await page.getByRole('button', { name: 'Comparing' }).click();
+await page.getByLabel('Argument 1').fill('["A", "B", "C"]');
+await page.locator('section.output pre', { hasText: '["3"]' }).waitFor({ timeout: 20000 })
+  .catch(() => fail('mapping argument typed in the tab'));
+await page.locator('.tree .file', { hasText: 'mapping-get-header/case.json' }).click();
+await page.locator('section.output pre', { hasText: '4711' }).waitFor({ timeout: 20000 })
+  .catch(async () => fail('mapping returned value: ' + (await page.locator('section.output').innerText()).slice(0, 400)));
+// A test case's null argument stays null in the tab (not an empty string); the null button toggles it.
+await page.locator('.tree .file', { hasText: 'mapping-null-arg/case.json' }).click();
+await page.locator('section.output .pad', { hasText: 'NULL' }).waitFor({ timeout: 20000 })
+  .catch(async () => fail('null argument from the case: ' + (await page.locator('section.output').innerText()).slice(0, 300)));
+if ((await page.getByRole('button', { name: 'null', exact: true }).getAttribute('aria-pressed')) !== 'true') fail('null button not pressed');
+await page.getByRole('button', { name: 'null', exact: true }).click();
+await page.locator('section.output .pad', { hasText: 'EMPTY' }).waitFor({ timeout: 20000 })
+  .catch(() => fail('the null button did not switch to an empty string'));
+await page.locator('.tree .file', { hasText: 'mapping-get-header/case.json' }).click();
+await page.locator('section.output pre', { hasText: '4711' }).waitFor({ timeout: 20000 });
+await page.getByLabel('Argument 1').fill('Missing');
+await page.locator('section.output .pad .hint', { hasText: 'null' }).waitFor({ timeout: 20000 })
+  .catch(() => fail('getHeader of a missing header is not null'));
+// The function bar shows the script's mapping functions; a click switches the function and the mode label.
+if ((await page.locator('section.script .mode').innerText()) !== 'Mapping function') fail('mode label for a mapping function');
+await page.locator('.functions .chip', { hasText: 'countPerContext' }).click();
+await page.locator('.functions .chip.active', { hasText: 'countPerContext' }).waitFor({ timeout: 10000 })
+  .catch(() => fail('function chip did not switch the function'));
+if ((await page.getByLabel('Function name').inputValue()) !== 'countPerContext') fail('function chip did not set fn');
+// Opening a script starts with processData again, so the Body tab is back.
+await page.locator('.tree .file', { hasText: 'route-by-partner.groovy' }).click();
+await page.locator('section.input').getByRole('tab', { name: 'Body' }).waitFor({ timeout: 10000 })
+  .catch(() => fail('no Body tab after opening a script'));
 
 // 5) A file from inputs/ opens as the Groovy input body.
 fs.mkdirSync(path.join(project, 'inputs'), { recursive: true });
@@ -174,6 +256,18 @@ await page.getByLabel('Value Type').selectOption('nodelist');
 await page.getByRole('button', { name: 'Run step' }).click();
 await page.locator('.res h3', { hasText: '1 item(s) selected' }).waitFor({ timeout: 10000 })
   .catch(() => fail('Filter did not select the one item with qty > 1'));
+// Converter: XML to JSON on the sample body, the result back as input, then JSON to XML.
+await page.getByRole('tab', { name: 'Converter' }).click();
+await page.getByLabel('Converter', { exact: true }).selectOption('xmlToJson');
+await page.getByRole('button', { name: 'Run step' }).click();
+await page.locator('.res pre', { hasText: '{"Order":{"@id":"4711"' }).waitFor({ timeout: 10000 })
+  .catch(async () => fail('XML to JSON: ' + (await page.locator('.res').innerText()).slice(0, 300)));
+await page.locator('.res h3').getByRole('button', { name: 'Use as input' }).click();
+await page.getByLabel('Converter', { exact: true }).selectOption('jsonToXml');
+await page.getByRole('button', { name: 'Run step' }).click();
+await page.locator('.res pre', { hasText: "<?xml version='1.0' encoding='UTF-8'?><Order id=\"4711\">" }).waitFor({ timeout: 10000 })
+  .catch(async () => fail('JSON to XML: ' + (await page.locator('.res').innerText()).slice(0, 300)));
+await page.locator('.res h3').getByRole('button', { name: 'Use as input' }).click();
 // Jumping between the steps keeps each step's settings and result.
 await page.getByRole('tab', { name: 'Content Modifier' }).click();
 await page.locator('.res .row', { hasText: 'OrderId' }).filter({ hasText: '4711' }).waitFor({ timeout: 5000 })

@@ -12,12 +12,15 @@ and notices as their projects publish them. It is copied into every engine jar
 | xmlresolver | 5.3.3 | Apache-2.0 | XML engine 12 | [`Apache-2.0.txt`](Apache-2.0.txt) |
 | Apache Groovy | 2.4.21 | Apache-2.0 (bundles ANTLR 2, ASM, JLine 2 under BSD-style licences) | Groovy engine 1.x | [`groovy-2.4/`](groovy-2.4/) |
 | Apache Groovy | 4.0.29 | Apache-2.0 (bundles ANTLR 4, ASM under BSD-style licences) | Groovy engine 2.x | [`groovy-4/`](groovy-4/) |
-| Apache Camel | 2.24.3 | Apache-2.0 | Groovy engine 1.x | [`camel-2.24/`](camel-2.24/) |
-| Apache Camel | 3.14.7 | Apache-2.0 | Groovy engine 2.x | [`camel-3.14/`](camel-3.14/) |
+| Apache Camel | 3.14.7 | Apache-2.0 | Groovy engines | [`camel-3.14/`](camel-3.14/) |
+| Apache Commons Lang | 3.20.0 | Apache-2.0 | Groovy engines | [`apache-commons/`](apache-commons/) |
+| Apache Commons Codec | 1.16.1 | Apache-2.0 | Groovy engine 1.x | [`apache-commons/`](apache-commons/) |
+| Jackson (databind, core, annotations) | 2.21.7 | Apache-2.0 (core bundles FastDoubleParser and Schubfach, MIT) | Groovy engine 1.x | [`jackson/2.21/`](jackson/2.21/) |
+| Jackson (databind, core, annotations, YAML and TOML formats; moved to `io.cpiwb.shaded.jackson`) | 2.19.2 | Apache-2.0 (core bundles FastDoubleParser, MIT, and fast_float, MIT) | Groovy engine 2.x | [`jackson/2.19/`](jackson/2.19/) |
+| SnakeYAML (moved to `io.cpiwb.shaded.snakeyaml`) | 2.4 | Apache-2.0 | Groovy engine 2.x | [`Apache-2.0.txt`](Apache-2.0.txt) |
 | JavaBeans Activation (`com.sun.activation`) | 1.2.0 | CDDL-1.1 or GPL-2.0 with Classpath Exception | Groovy engines | [`jakarta-activation-jaxb/`](jakarta-activation-jaxb/) |
-| JAXB (`com.sun.xml.bind`) | 2.3.0 | CDDL-1.1 or GPL-2.0 with Classpath Exception | Groovy engine 1.x | [`jakarta-activation-jaxb/`](jakarta-activation-jaxb/) |
-| SLF4J | 1.7.26 / 1.7.36 | MIT | Groovy engines | [`slf4j/`](slf4j/) |
-| OpenJDK class library | 17 (JRE), 21 (native images) | GPL-2.0 with Classpath Exception | installers: bundled JRE and native XML engines | [`openjdk/`](openjdk/); the bundled JRE also has its own `legal/` folder |
+| SLF4J | 1.7.36 | MIT | Groovy engines | [`slf4j/`](slf4j/) |
+| OpenJDK class library | 21 (JRE and native images) | GPL-2.0 with Classpath Exception | installers: bundled JRE and native XML engines | [`openjdk/`](openjdk/); the bundled JRE also has its own `legal/` folder |
 | GraalVM Native Image runtime (Community Edition) | 21.0.2 | GPL-2.0 with Classpath Exception | native XML engines | [`graalvm/`](graalvm/) |
 
 The desktop shell (Tauri, Rust crates) and the UI (Svelte, Monaco Editor and other npm packages)
@@ -31,10 +34,11 @@ The licences above let you obtain the source code of these components from their
 - Saxon-HE 12: <https://github.com/Saxonica/Saxon-HE> (folder `12/source`); Saxon-HE 9.9:
   <https://sourceforge.net/projects/saxon/files/Saxon-HE/9.9/>. Both are also on Maven Central as
   `net.sf.saxon:Saxon-HE` source jars.
-- Apache Groovy, Apache Camel, xmlresolver, SLF4J, JavaBeans Activation and JAXB: the source jars on
-  Maven Central for the versions above.
-- OpenJDK: <https://github.com/adoptium/jdk17u> (the JRE comes from Eclipse Temurin 17) and
+- Apache Groovy, Apache Camel, Apache Commons, Jackson, SnakeYAML, xmlresolver, SLF4J and JavaBeans
+  Activation: the source jars on Maven Central for the versions above.
+- OpenJDK: <https://github.com/adoptium/jdk21u> (the JRE comes from Eclipse Temurin 21) and
   <https://github.com/openjdk/jdk21u>.
 - GraalVM Community Edition: <https://github.com/oracle/graal> (tag `jdk-21.0.2`).
 
-CPI Workbench does not modify these components.
+CPI Workbench does not modify these components; the Groovy engine 2.x only moves Jackson and SnakeYAML
+to other package names (shading), so that scripts do not see them, as on a tenant.

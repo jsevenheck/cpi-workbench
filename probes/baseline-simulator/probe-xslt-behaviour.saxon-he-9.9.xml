@@ -9,5 +9,5 @@
    <Bytes>count=2; value=65 66; integer=false; int=false; string=false; boolean=false; dateTime=false; untyped=false; node=false</Bytes>
    <Missing>DEFAULT-USED</Missing>
    <SetHeaderReturn>count=0; value=; integer=false; int=false; string=false; boolean=false; dateTime=false; untyped=false; node=false</SetHeaderReturn>
-   <ExchangeParam>count=1; value=Exchange; integer=false; int=false; string=false; boolean=false; dateTime=false; untyped=false; node=false</ExchangeParam>
+   <ExchangeParam>count=1; value=Exchange[xxxxxxxxxxxxxxx-0000000000000001]; integer=false; int=false; string=false; boolean=false; dateTime=false; untyped=false; node=false</ExchangeParam>
 </XsltBehaviourProbe>

@@ -6,6 +6,94 @@ of its version.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-08
+
+### Changed
+
+The probes ran on a tenant for the first time (2026-11-09, results in `probes/results-tenant/`), and
+the Groovy engines now follow what they showed:
+
+- **Groovy Script 1.x runs on Camel 3.14.7**, like 2.x and like a tenant. Camel 2.24 is gone, and with
+  it the *Camel* choice in the Flow Steps tab: tenants on software 6.x / 5.x (Camel 2) are no longer
+  covered. Camel Simple rewrites CPI's `and` / `or` / `${property.x}` on both engines.
+- **Java 21**: the app's bundled Java runtime is 21, as on a tenant (was 17). The engine jars still
+  start on Java 17.
+- **UTC and `en_US`** in every engine, whatever the computer uses, as on a tenant: dates,
+  `current-dateTime()`, `implicit-timezone()` and case conversion no longer depend on the computer.
+- **Script context** as on a tenant: `javax.script.filename`, and on 1.x `log` and `logger`, SAP's
+  `ScriptLogger` with `logInfo`, `logWarnings` and `logErrors` (they print to the Console) and no
+  `info` or `debug`: `log.info(…)` fails as on a tenant. No `out` variable.
+- **Message methods** as on a tenant: the 1.x message has the overloads with Camel's `Attachment`,
+  `getAttachmentObjects` and `setAttachmentObjects` (`AttachmentWrapper` is a Camel attachment); the
+  2.x message has `getSoapHeaders`, `setSoapHeaders` and `clearSoapHeaders` and receives the input's
+  SOAP headers. The lint no longer warns about the SOAP header methods on 2.x.
+- **Libraries** scripts can load, in the versions a tenant reports: commons-lang3 3.20.0 (1.x and
+  2.x), Jackson databind 2.21.7 and commons-codec 1.16.1 (1.x), Groovy's yaml and toml modules (2.x)
+  and Camel's `org.apache.camel.attachment` (both). The fingerprint probes report library versions,
+  the types of the bound variables and the methods of `log`.
+- **Probe files** for the Message Mapping probe (`probes/mapping/`: source and target schema,
+  requests) and `curl` commands for sending the probe requests (`probes/README.md`).
+- **Message Mapping functions**: a tenant runs mapping scripts on Groovy 2.4.21 and Java 21, calls a
+  `String[]` function once per context (an empty context with an empty array) and joins the results with context changes, as the simulator
+  does. Context change, SUPPRESS and xsi:nil now have a tenant's marker texts (`__cC_`,
+  `_sUpPresSeD_`, `_!xSi#NiL$_`). `context.invalidateCache()`, which a
+  tenant's `MappingContext` has, runs (it does nothing here, with a note); `output.getResultList()`
+  fails with `UnsupportedInSimulator`. The mapping probe has a second function and a target with one
+  element per source context.
+- The top bar is plainer: no app name left of the tabs, and **▶ Run** is the only run button in the
+  XSD Validation and XPath tabs (their *Validate* and *Evaluate* buttons did the same). The *Runtime*
+  choice is gone from XSD Validation, where both runtimes use the same JDK validator, and is greyed
+  out for XPath 1.0, which runs on the JDK.
+- `$exchange` in XSLT prints as `Exchange[<id>]`, as on a tenant.
+- **XML to CSV** writes what a tenant writes: an empty line after the parent element's lines, and a
+  line break after the last line, and a value that contains the separator in double quotes (inner
+  quotes are not doubled). **JSON to XML** and **CSV to XML** write an empty value as
+  `<Name></Name>`, as a tenant does (JSON `null` stays `<Name/>`). All four converters now give the
+  same bytes as a tenant for the probe inputs.
+- Platform API messages and results follow the tenant: Partner Directory type and empty-ID errors,
+  `getAuthorizedUsers` of an unknown partner is `null`, the pattern error, Secure Store errors for an
+  empty alias and an unknown OAuth2 credential, the number range error. Without
+  `platform/keystore.json` the Keystore is empty (lookups return null, key managers hold no key)
+  instead of failing, and the run notes it. The simulator still adds where it looked.
+
+### Added
+
+- **Message Mapping functions** in the Groovy tab: a custom function of a mapping script, such as
+  `getHeader(String, MappingContext)` or `f(String[], Output, MappingContext)`, runs on its own with
+  *Arguments* instead of a body (`String[]` arguments one context per line, `String` arguments may be
+  null); a `String[]` function runs once per context (*All values of a context*). *Result* shows the
+  returned value or the output queue with context changes, SUPPRESS and xsi:nil. `MappingContext` and
+  `Output` follow SAP's Javadoc. *Run as* above the editor lists a script's mapping functions, and a
+  label next to *fn* says whether the function runs as a script step or as a mapping function. Test
+  cases take `args`, `expect.returned` and `expect.queue`; the MCP tool `run_groovy` takes `args`.
+  Graphical Message Mapping (`.mmap`) is still not simulated.
+- **Check for updates** in a new ⚙ menu (desktop app, status bar bottom left): shows the installed version, asks github.com
+  for the latest release on click, and opens its page if it is newer. If GitHub refuses (e.g. its hourly
+  limit for requests without sign-in), it says why and offers the releases page. The app makes no request on its own.
+- **Converter** step in Flow Steps: JSON to XML, XML to JSON, XML to CSV and CSV to XML with the
+  settings of CPI's converter steps (namespace mapping, root element options, streaming, record marker,
+  header mapping, parent element). It follows SAP's documented conversion rules and limitations; SAP's
+  examples are reproduced in the tests (XML to CSV with the empty line and final line break a tenant
+  writes). CSV to XML reads its XSD from the project. The iFlow import opens converter steps with their settings, and the MCP tool `run_flow_step` runs them.
+- iFlow import lists **Message Mapping** steps. The mapping is not simulated; clicking the step opens
+  the first Groovy script its `.mmap` uses, with its first mapping function, on Groovy Script 1.x.
+- Probe `probe-mapping-v1.groovy` for how a tenant calls mapping functions, and converter inputs in
+  `probes/converters/` for comparing the four conversions with a tenant. The Groovy probes read the
+  Java version from the runtime MXBean (`java`, `javaVmVersion`): the tenant's script editor refuses
+  `System.getProperty` as an unsupported class.
+
+### Fixed
+
+- An engine stops as soon as the app is gone, also when a Groovy script left a thread running and the
+  app ended without closing (a crash, Task Manager). Before, such an engine kept running.
+
+### Security
+
+- Project path checks follow symbolic links: a link inside the project that leads outside it is
+  refused for XML runs (includes, `doc()`, `unparsed-text()`, entities), the File tab, the MCP tools
+  and the iFlow import. Links that stay inside the project still work. Before, the checks compared
+  the paths as written.
+
 ## [0.2.0] - 2026-11-06
 
 ### Added
@@ -93,7 +181,8 @@ First public release.
   supported.
 - The installers and engine jars include the licence texts and notices of the bundled components.
 
-[Unreleased]: https://github.com/jsevenheck/cpi-workbench/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/jsevenheck/cpi-workbench/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/jsevenheck/cpi-workbench/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/jsevenheck/cpi-workbench/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/jsevenheck/cpi-workbench/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/jsevenheck/cpi-workbench/releases/tag/v0.1.0

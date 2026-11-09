@@ -2,17 +2,18 @@
 
 CPI Workbench simulates SAP Integration Suite (Cloud Integration) steps locally:
 * XSLT Mapping on Saxon-HE 9.9 and 12, as GraalVM native images.
-* Groovy Script 1.x (Groovy 2.4.21, Camel 2.24.3) and 2.x (Groovy 4.0.29, Camel 3.14.7).
+* Groovy Script 1.x (Groovy 2.4.21) and 2.x (Groovy 4.0.29), both on Camel 3.14.7 and Java 21, as a tenant runs them.
 * XSD validation and XPath.
-* Flow Steps: Content Modifier, Filter, Router, General / Iterating Splitter and Gather (Camel Simple on
-  the Groovy engines' Camel; XPath, filtering, splitting and gathering on the XML engines).
+* Flow Steps: Content Modifier, Filter, Router, General / Iterating Splitter, Gather and Converter (Camel Simple on
+  the Groovy engines' Camel; XPath, filtering, splitting, gathering and JSON / XML / CSV conversion on the XML engines).
+* Message Mapping functions (Groovy custom functions with `MappingContext` and `Output`), run on their own.
 
 The UI is Tauri 2 + Svelte 5 + Monaco. Everything runs offline; the app never connects to a tenant.
 
 ## Commands
 
 ```sh
-mvn -f engine/pom.xml verify                    # all engine tests (Java 17+, Maven)
+mvn -f engine/pom.xml verify                    # all engine tests (Java 17+, Maven; a tenant and the app run 21)
 mvn -f engine/pom.xml package -DskipTests       # jars only
 mvn -f engine/pom.xml package -pl groovy-v1,groovy-v2 -am   # one module and its dependencies
 java -jar engine/xml-he99/target/cpiwb-xml-he99.jar test testdata/regression-project/tests     # regression cases
@@ -32,16 +33,18 @@ in `docs/building.md` (*Releasing*).
 
 ## Layout
 
-* `engine/core`: JSON-RPC, project files, test runner, iFlow import.
-* `engine/xml*`: XSLT, XSD and XPath against both Saxon versions.
+* `engine/core`: JSON-RPC, project files and path checks (`ProjectPaths`), test runner, iFlow import.
+* `engine/xml*`: XSLT, XSD, XPath, the XPath flow steps and the converters, against both Saxon versions.
 * `engine/groovy*`: the script runner and the clean-room `com.sap.*` API.
-  * `src/api-common`: platform services shared by both versions.
-  * `src/api-v1`, `src/api-v2`: the Script API of each version.
+  * `src/api-common`: the Script API v1 and the platform services shared by both versions.
+  * `src/api-v2`: the Script API v2.
+  * `groovy-v1`, `groovy-v2`: the two builds and their entry points.
 * `app/src`: the UI. `app/src-tauri`: the Rust shell; `src/mcp/` is the MCP server (`cpi-workbench mcp`).
-  `mcp/flow.rs` repeats the Flow Steps tab's calls (`app/src/lib/store.svelte.ts`); change both together.
+  `mcp/flow.rs` repeats the Flow Steps tab's calls (`app/src/lib/store.svelte.ts`), including the converter
+  defaults; change both together.
 * `examples/demo-project`: the sample project users open in the app (no test cases).
 * `testdata/regression-project`: the project with test cases that CI, the e2e and the shell tests run.
-* `probes`: tenant probes and the simulator's baseline output.
+* `probes`: tenant probes, the simulator's baseline output and a tenant's results (`results-tenant/`).
 
 ## Rules
 

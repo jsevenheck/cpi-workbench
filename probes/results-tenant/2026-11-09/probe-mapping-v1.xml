@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Result><Call><Info>{
+    &quot;probe&quot;: &quot;probe-mapping-v1&quot;,
+    &quot;java&quot;: &quot;21&quot;,
+    &quot;javaVmVersion&quot;: &quot;21.0.13.0.3+1-LTS&quot;,
+    &quot;groovy&quot;: &quot;2.4.21&quot;,
+    &quot;valuesClass&quot;: &quot;[Ljava.lang.String;&quot;,
+    &quot;entries&quot;: [
+        {
+            &quot;class&quot;: &quot;java.lang.String&quot;,
+            &quot;text&quot;: &quot;a&quot;,
+            &quot;contextChange&quot;: false,
+            &quot;suppress&quot;: false,
+            &quot;xsiNil&quot;: false
+        },
+        {
+            &quot;class&quot;: &quot;java.lang.String&quot;,
+            &quot;text&quot;: &quot;b&quot;,
+            &quot;contextChange&quot;: false,
+            &quot;suppress&quot;: false,
+            &quot;xsiNil&quot;: false
+        }
+    ],
+    &quot;contextClass&quot;: &quot;com.sap.xi.mapping.camel.impl.MappingContextImpl&quot;,
+    &quot;contextMethods&quot;: [
+        &quot;public java.lang.Object com.sap.xi.mapping.camel.impl.MappingContextImpl.getHeader(java.lang.String)&quot;,
+        &quot;public java.lang.Object com.sap.xi.mapping.camel.impl.MappingContextImpl.getProperty(java.lang.String)&quot;,
+        &quot;public void com.sap.xi.mapping.camel.impl.MappingContextImpl.invalidateCache()&quot;,
+        &quot;public void com.sap.xi.mapping.camel.impl.MappingContextImpl.setHeader(java.lang.String,java.lang.Object)&quot;,
+        &quot;public void com.sap.xi.mapping.camel.impl.MappingContextImpl.setProperty(java.lang.String,java.lang.Object)&quot;
+    ],
+    &quot;outputClass&quot;: &quot;com.sap.xi.mapping.camel.impl.OutputImpl&quot;,
+    &quot;outputMethods&quot;: [
+        &quot;public boolean com.sap.xi.mapping.camel.impl.OutputImpl.isContextChange(java.lang.Object)&quot;,
+        &quot;public boolean com.sap.xi.mapping.camel.impl.OutputImpl.isSuppress(java.lang.Object)&quot;,
+        &quot;public boolean com.sap.xi.mapping.camel.impl.OutputImpl.isXSINIL(java.lang.Object)&quot;,
+        &quot;public com.sap.aii.mappingtool.tf7.rt.ResultList com.sap.xi.mapping.camel.impl.OutputImpl.getResultList()&quot;,
+        &quot;public void com.sap.xi.mapping.camel.impl.OutputImpl.addContextChange()&quot;,
+        &quot;public void com.sap.xi.mapping.camel.impl.OutputImpl.addSuppress()&quot;,
+        &quot;public void com.sap.xi.mapping.camel.impl.OutputImpl.addValue(java.lang.Object)&quot;,
+        &quot;public void com.sap.xi.mapping.camel.impl.OutputImpl.addXSINIL()&quot;,
+        &quot;public void com.sap.xi.mapping.camel.impl.OutputImpl.clear()&quot;
+    ],
+    &quot;resultList&quot;: {
+        &quot;class&quot;: &quot;com.sap.aii.mappingtool.tf7.rt.ResultListImpl&quot;,
+        &quot;methods&quot;: [
+            &quot;public boolean com.sap.aii.mappingtool.tf7.rt.ResultListImpl.isEmpty()&quot;,
+            &quot;public java.lang.Object com.sap.aii.mappingtool.tf7.rt.ResultListImpl.get()&quot;,
+            &quot;public void com.sap.aii.mappingtool.tf7.rt.ResultListImpl.addContextChange()&quot;,
+            &quot;public void com.sap.aii.mappingtool.tf7.rt.ResultListImpl.addSuppress()&quot;,
+            &quot;public void com.sap.aii.mappingtool.tf7.rt.ResultListImpl.addValue(java.lang.Object)&quot;,
+            &quot;public void com.sap.aii.mappingtool.tf7.rt.ResultListImpl.append(com.sap.aii.mappingtool.tf7.rt.ResultListImpl$SimpleQueue)&quot;,
+            &quot;public void com.sap.aii.mappingtool.tf7.rt.ResultListImpl.append(com.sap.aii.mappingtool.tf7.rt.ResultListImpl)&quot;,
+            &quot;public void com.sap.aii.mappingtool.tf7.rt.ResultListImpl.clear()&quot;,
+            &quot;public void com.sap.aii.mappingtool.tf7.rt.ResultListImpl.mark()&quot;,
+            &quot;public void com.sap.aii.mappingtool.tf7.rt.ResultListImpl.pop()&quot;,
+            &quot;public void com.sap.aii.mappingtool.tf7.rt.ResultListImpl.putObject(java.lang.Object)&quot;
+        ],
+        &quot;constants&quot;: {
+            &quot;SUPPRESS&quot;: &quot;java.lang.String: _sUpPresSeD_&quot;,
+            &quot;CC&quot;: &quot;java.lang.String: __cC_&quot;,
+            &quot;XSI_NIL&quot;: &quot;java.lang.String: _!xSi#NiL$_&quot;
+        }
+    },
+    &quot;unknownHeader&quot;: null,
+    &quot;headerCamelHttpMethod&quot;: &quot;GET&quot;
+}</Info><Value>{&quot;value&quot;:&quot;a&quot;,&quot;class&quot;:&quot;java.lang.String&quot;}</Value><Value>{&quot;value&quot;:&quot;b&quot;,&quot;class&quot;:&quot;java.lang.String&quot;}</Value></Call><Call><Info>{
+    &quot;probe&quot;: &quot;probe-mapping-v1&quot;,
+    &quot;java&quot;: &quot;21&quot;,
+    &quot;javaVmVersion&quot;: &quot;21.0.13.0.3+1-LTS&quot;,
+    &quot;groovy&quot;: &quot;2.4.21&quot;,
+    &quot;valuesClass&quot;: &quot;[Ljava.lang.String;&quot;,
+    &quot;entries&quot;: [
+        {
+            &quot;class&quot;: &quot;java.lang.String&quot;,
+            &quot;text&quot;: &quot;c&quot;,
+            &quot;contextChange&quot;: false,
+            &quot;suppress&quot;: false,
+            &quot;xsiNil&quot;: false
+        }
+    ],
+    &quot;contextClass&quot;: &quot;com.sap.xi.mapping.camel.impl.MappingContextImpl&quot;,
+    &quot;contextMethods&quot;: [
+        &quot;public java.lang.Object com.sap.xi.mapping.camel.impl.MappingContextImpl.getHeader(java.lang.String)&quot;,
+        &quot;public java.lang.Object com.sap.xi.mapping.camel.impl.MappingContextImpl.getProperty(java.lang.String)&quot;,
+        &quot;public void com.sap.xi.mapping.camel.impl.MappingContextImpl.invalidateCache()&quot;,
+        &quot;public void com.sap.xi.mapping.camel.impl.MappingContextImpl.setHeader(java.lang.String,java.lang.Object)&quot;,
+        &quot;public void com.sap.xi.mapping.camel.impl.MappingContextImpl.setProperty(java.lang.String,java.lang.Object)&quot;
+    ],
+    &quot;outputClass&quot;: &quot;com.sap.xi.mapping.camel.impl.OutputImpl&quot;,
+    &quot;outputMethods&quot;: [
+        &quot;public boolean com.sap.xi.mapping.camel.impl.OutputImpl.isContextChange(java.lang.Object)&quot;,
+        &quot;public boolean com.sap.xi.mapping.camel.impl.OutputImpl.isSuppress(java.lang.Object)&quot;,
+        &quot;public boolean com.sap.xi.mapping.camel.impl.OutputImpl.isXSINIL(java.lang.Object)&quot;,
+        &quot;public com.sap.aii.mappingtool.tf7.rt.ResultList com.sap.xi.mapping.camel.impl.OutputImpl.getResultList()&quot;,
+        &quot;public void com.sap.xi.mapping.camel.impl.OutputImpl.addContextChange()&quot;,
+        &quot;public void com.sap.xi.mapping.camel.impl.OutputImpl.addSuppress()&quot;,
+        &quot;public void com.sap.xi.mapping.camel.impl.OutputImpl.addValue(java.lang.Object)&quot;,
+        &quot;public void com.sap.xi.mapping.camel.impl.OutputImpl.addXSINIL()&quot;,
+        &quot;public void com.sap.xi.mapping.camel.impl.OutputImpl.clear()&quot;
+    ],
+    &quot;resultList&quot;: {
+        &quot;class&quot;: &quot;com.sap.aii.mappingtool.tf7.rt.ResultListImpl&quot;,
+        &quot;methods&quot;: [
+            &quot;public boolean com.sap.aii.mappingtool.tf7.rt.ResultListImpl.isEmpty()&quot;,
+            &quot;public java.lang.Object com.sap.aii.mappingtool.tf7.rt.ResultListImpl.get()&quot;,
+            &quot;public void com.sap.aii.mappingtool.tf7.rt.ResultListImpl.addContextChange()&quot;,
+            &quot;public void com.sap.aii.mappingtool.tf7.rt.ResultListImpl.addSuppress()&quot;,
+            &quot;public void com.sap.aii.mappingtool.tf7.rt.ResultListImpl.addValue(java.lang.Object)&quot;,
+            &quot;public void com.sap.aii.mappingtool.tf7.rt.ResultListImpl.append(com.sap.aii.mappingtool.tf7.rt.ResultListImpl$SimpleQueue)&quot;,
+            &quot;public void com.sap.aii.mappingtool.tf7.rt.ResultListImpl.append(com.sap.aii.mappingtool.tf7.rt.ResultListImpl)&quot;,
+            &quot;public void com.sap.aii.mappingtool.tf7.rt.ResultListImpl.clear()&quot;,
+            &quot;public void com.sap.aii.mappingtool.tf7.rt.ResultListImpl.mark()&quot;,
+            &quot;public void com.sap.aii.mappingtool.tf7.rt.ResultListImpl.pop()&quot;,
+            &quot;public void com.sap.aii.mappingtool.tf7.rt.ResultListImpl.putObject(java.lang.Object)&quot;
+        ],
+        &quot;constants&quot;: {
+            &quot;SUPPRESS&quot;: &quot;java.lang.String: _sUpPresSeD_&quot;,
+            &quot;CC&quot;: &quot;java.lang.String: __cC_&quot;,
+            &quot;XSI_NIL&quot;: &quot;java.lang.String: _!xSi#NiL$_&quot;
+        }
+    },
+    &quot;unknownHeader&quot;: null,
+    &quot;headerCamelHttpMethod&quot;: &quot;GET&quot;
+}</Info><Value>{&quot;value&quot;:&quot;c&quot;,&quot;class&quot;:&quot;java.lang.String&quot;}</Value></Call></Result>

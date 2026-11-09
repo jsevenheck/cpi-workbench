@@ -8,7 +8,9 @@
 
   const panes = paneSizes('flow', [1, 1.2, 1]);
   const STEPS: [FlowStep, string][] = [['contentModifier', 'Content Modifier'], ['filter', 'Filter'], ['router', 'Router'],
-    ['splitter', 'Splitter'], ['gather', 'Gather']];
+    ['splitter', 'Splitter'], ['gather', 'Gather'], ['converter', 'Converter']];
+  // SAP's JSON prefix separators.
+  const SEPARATORS: [string, string][] = [[':', 'Colon (:)'], [',', 'Comma (,)'], ['.', 'Dot (.)'], ['|', 'Pipe (|)'], [';', 'Semicolon (;)'], [' ', 'Space']];
   // SAP: which Aggregation Algorithm each Incoming Format allows.
   const ALGORITHMS: Record<string, [string, string][]> = {
     sameXml: [['combine', 'Combine'], ['combineAtXPath', 'Combine at XPath']],
@@ -42,6 +44,8 @@
   let split = $derived(flow.splitResult);
   let filtered = $derived(flow.filterResult);
   let gathered = $derived(flow.gatherResult);
+  let converted = $derived(flow.converterResult);
+  let conv = $derived(flow.converter.conversion);
 
   function useGroovyInput() {
     useAsFlowInput(groovy.body, groovy.headers, groovy.properties);
@@ -169,6 +173,91 @@
           </label>
         {/if}
         <p class="hint">The messages are on the left. Gather combines their bodies; headers and properties are not aggregated (SAP).</p>
+      {:else if flow.step === 'converter'}
+        <label class="field">Converter
+          <select bind:value={flow.converter.conversion} aria-label="Converter">
+            <option value="jsonToXml">JSON to XML</option><option value="xmlToJson">XML to JSON</option>
+            <option value="xmlToCsv">XML to CSV</option><option value="csvToXml">CSV to XML</option>
+          </select>
+        </label>
+        {#if conv === 'jsonToXml' || conv === 'xmlToJson'}
+          <label class="check"><input type="checkbox" bind:checked={flow.converter.useNamespaces} /> Use Namespace Mapping</label>
+          {#if flow.converter.useNamespaces}
+            <label class="field">Namespace Mapping (JSON prefix = XML namespace, one per line)
+              <textarea class="mono" rows="3" bind:value={flow.converter.namespaceMapping} spellcheck="false" aria-label="Namespace mapping"
+                placeholder="abc = http://com.sap/abc"></textarea>
+            </label>
+            <label class="field">JSON Prefix Separator
+              <select bind:value={flow.converter.separator} aria-label="JSON Prefix Separator">
+                {#each SEPARATORS as [v, l]}<option value={v}>{l}</option>{/each}
+              </select>
+            </label>
+          {/if}
+        {/if}
+        {#if conv === 'jsonToXml'}
+          <label class="check"><input type="checkbox" bind:checked={flow.converter.addRootElement} /> Add XML Root Element</label>
+          {#if flow.converter.addRootElement}
+            <label class="field">Name <input class="mono" bind:value={flow.converter.rootElementName} aria-label="Root element name" /></label>
+            <label class="field">Namespace (a prefix from the Namespaces tab; optional)
+              <input class="mono" bind:value={flow.converter.rootNamespace} aria-label="Root element namespace" placeholder="ns0" /></label>
+          {/if}
+          <p class="hint">The JSON must be one object with one member, or select Add XML Root Element. <code>@name</code> members
+            become attributes (first), <code>$</code> the text; numbers keep their text.</p>
+        {:else if conv === 'xmlToJson'}
+          <label class="check"><input type="checkbox" bind:checked={flow.converter.suppressRoot} /> Suppress JSON Root Element</label>
+          <label class="check"><input type="checkbox" bind:checked={flow.converter.streaming} /> Streaming</label>
+          {#if flow.converter.streaming}
+            <label class="field">Convert to JSON arrays
+              <select bind:value={flow.converter.streamingElements} aria-label="Streaming elements">
+                <option value="all">All</option><option value="specific">Specific Ones</option>
+              </select>
+            </label>
+            {#if flow.converter.streamingElements === 'specific'}
+              <label class="field">Elements as arrays (absolute paths, one per line)
+                <textarea class="mono" rows="3" bind:value={flow.converter.arrayPaths} spellcheck="false" aria-label="Array elements"
+                  placeholder="/Order/Item"></textarea>
+              </label>
+            {/if}
+          {/if}
+          <label class="field">JSON Output Encoding
+            <input class="mono" bind:value={flow.converter.outputEncoding} aria-label="JSON Output Encoding" placeholder="from header or property (CamelCharsetName), else UTF-8" /></label>
+          <p class="hint">All values become strings. Without streaming, repeated elements become one array (their order among other
+            siblings is lost); with streaming, list every repeated element, or the JSON gets duplicate members (SAP).</p>
+        {:else if conv === 'xmlToCsv'}
+          <label class="field">Path to Source Element in XML
+            <input class="mono" bind:value={flow.converter.sourcePath} aria-label="Path to Source Element" placeholder="/Products/Product" /></label>
+          <label class="field">Field Separator in CSV
+            <input class="mono" bind:value={flow.converter.fieldSeparator} aria-label="Field Separator" placeholder=", ; | or 	" /></label>
+          <label class="field">CSV Header
+            <select bind:value={flow.converter.csvHeader} aria-label="CSV Header">
+              <option value="none">None</option><option value="xml">XML based</option><option value="xsd">XSD annotation based (not simulated)</option>
+            </select>
+          </label>
+          <label class="check"><input type="checkbox" bind:checked={flow.converter.includeParent} /> Include Parent Element</label>
+          {#if flow.converter.includeParent}
+            <label class="field">Path to Parent Element
+              <input class="mono" bind:value={flow.converter.parentPath} aria-label="Path to Parent Element" placeholder="/root" /></label>
+          {/if}
+          <label class="check"><input type="checkbox" bind:checked={flow.converter.includeAttributes} /> Include Attribute Values</label>
+          <p class="hint">One row per source element: its simple child elements in document order. The parent's values come first, on lines of their own.</p>
+        {:else}
+          <label class="field">XML Schema (a project file)
+            <input class="mono" bind:value={flow.converter.schema} aria-label="XML Schema" placeholder="schemas/products.xsd" /></label>
+          <label class="field">Path to Target Element in XSD
+            <input class="mono" bind:value={flow.converter.targetPath} aria-label="Path to Target Element" placeholder="Products/Product" /></label>
+          <label class="field">Record Marker in CSV
+            <input class="mono" bind:value={flow.converter.recordMarker} aria-label="Record Marker" placeholder="empty: all rows" /></label>
+          <label class="field">Field Separator in CSV
+            <input class="mono" bind:value={flow.converter.fieldSeparator} aria-label="CSV Field Separator" placeholder=", ; | or 	" /></label>
+          <label class="check"><input type="checkbox" bind:checked={flow.converter.firstLineHeader} /> Exclude First Line Header</label>
+          <label class="field">Configure CSV Headers to Match
+            <select bind:value={flow.converter.headerMapping} aria-label="Configure CSV Headers to Match">
+              <option value="xsd">XSD Elements</option><option value="csv">CSV Fields Sequence</option>
+            </select>
+          </label>
+          <p class="hint">Rows become record elements in the XSD's order. The marker must be a row's first value. Schema, path and
+            marker may be <code>${'{'}header.x{'}'}</code> or <code>${'{'}property.x{'}'}</code>.</p>
+        {/if}
       {:else if flow.step === 'router'}
         <table class="routes">
           <colgroup><col style="width: 24%" /><col style="width: 92px" /><col /><col style="width: 52px" /><col style="width: 28px" /></colgroup>
@@ -249,11 +338,11 @@
             <pre>{m.body}</pre>
           </div>
         {/each}
-      {:else if (flow.step === 'filter' && filtered) || (flow.step === 'gather' && gathered)}
-        {@const r = flow.step === 'filter' ? filtered : gathered}
+      {:else if (flow.step === 'filter' && filtered) || (flow.step === 'gather' && gathered) || (flow.step === 'converter' && converted)}
+        {@const r = flow.step === 'filter' ? filtered : flow.step === 'gather' ? gathered : converted}
         {#each r.diagnostics as d}<div class="d {d.severity}">{d.message}</div>{/each}
         {#if r.ok}
-          <h3>Output <span class="muted" title={r.engine}>· {r.count ?? 1} {flow.step === 'filter' ? 'item(s) selected' : 'message(s) gathered'}</span>
+          <h3>Output <span class="muted" title={r.engine}>{#if flow.step === 'converter'}{#if r.encoding}· {r.encoding}{/if}{:else}· {r.count ?? 1} {flow.step === 'filter' ? 'item(s) selected' : 'message(s) gathered'}{/if}</span>
             <button class="small" onclick={() => useAsFlowInput(r.body)}>Use as input</button></h3>
           <pre>{r.body}</pre>
         {/if}

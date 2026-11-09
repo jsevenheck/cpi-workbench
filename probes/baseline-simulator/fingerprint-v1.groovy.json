@@ -1,12 +1,14 @@
 {
     "probe": "fingerprint-v1",
-    "java": "21.0.12.1",
+    "java": "21",
+    "javaVmVersion": "21.0.12.1+1-1-24.04.4-Ubuntu",
     "javaVendor": "Ubuntu",
     "javaVm": "OpenJDK 64-Bit Server VM",
     "groovy": "2.4.21",
-    "camel": "unavailable: java.lang.NoClassDefFoundError",
+    "camel": "3.14.7",
     "camelPom": [
-        "camel-core 2.24.3"
+        "camel-api 3.14.7",
+        "camel-core-engine 3.14.7"
     ],
     "saxon": "unavailable: java.lang.ClassNotFoundException",
     "defaultCharset": "UTF-8",
@@ -19,10 +21,14 @@
     "messageClass": "com.sap.gateway.ip.core.customdev.util.Message",
     "bodyClass": "java.lang.String",
     "messageMethods": [
+        "addAttachmentHeader(String, String, Attachment): void",
         "addAttachmentHeader(String, String, AttachmentWrapper): void",
+        "addAttachmentObject(String, Attachment): void",
         "addAttachmentObject(String, AttachmentWrapper): void",
         "clearSoapHeaders(): void",
+        "getAttachmentHeader(String, Attachment): String",
         "getAttachmentHeader(String, AttachmentWrapper): String",
+        "getAttachmentObjects(): Map",
         "getAttachmentWrapperObjects(): Map",
         "getAttachments(): Map",
         "getAttachmentsSize(): long",
@@ -35,8 +41,11 @@
         "getProperties(): Map",
         "getProperty(String): Object",
         "getSoapHeaders(): List",
+        "removeAttachmentHeader(String, Attachment): void",
         "removeAttachmentHeader(String, AttachmentWrapper): void",
+        "setAttachmentHeader(String, String, Attachment): void",
         "setAttachmentHeader(String, String, AttachmentWrapper): void",
+        "setAttachmentObjects(Map): void",
         "setAttachmentWrapperObjects(Map): void",
         "setAttachments(Map): void",
         "setBody(Object): void",
@@ -56,20 +65,50 @@
         "groovy.yaml.YamlSlurper": "unavailable: java.lang.ClassNotFoundException",
         "groovy.toml.TomlSlurper": "unavailable: java.lang.ClassNotFoundException",
         "groovy.ant.AntBuilder": "unavailable: java.lang.ClassNotFoundException",
-        "org.apache.commons.lang3.StringUtils": "unavailable: java.lang.ClassNotFoundException",
-        "com.fasterxml.jackson.databind.ObjectMapper": "unavailable: java.lang.ClassNotFoundException",
+        "org.apache.commons.lang3.StringUtils": true,
+        "com.fasterxml.jackson.databind.ObjectMapper": true,
         "org.apache.poi.ss.usermodel.Workbook": "unavailable: java.lang.ClassNotFoundException",
-        "org.apache.commons.codec.binary.Base64": "unavailable: java.lang.ClassNotFoundException",
+        "org.apache.commons.codec.binary.Base64": true,
         "iaik.cms.EnvelopedDataStream": "unavailable: java.lang.ClassNotFoundException",
-        "org.apache.camel.Attachment": true,
-        "org.apache.camel.attachment.Attachment": "unavailable: java.lang.ClassNotFoundException",
+        "org.apache.camel.Attachment": "unavailable: java.lang.ClassNotFoundException",
+        "org.apache.camel.attachment.Attachment": true,
         "com.sap.it.script.v2.api.Exchange": "unavailable: java.lang.ClassNotFoundException",
         "com.sap.it.script.v2.api.language.SimpleBuilder": "unavailable: java.lang.ClassNotFoundException"
     },
     "scriptApiBundle": "file:cpiwb-groovy-v1.jar",
     "bindingVariables": [
-        "messageLogFactory",
-        "out"
+        "javax.script.filename",
+        "log",
+        "logger",
+        "messageLogFactory"
+    ],
+    "libraryVersions": {
+        "org.apache.commons/commons-lang3": "3.20.0",
+        "com.fasterxml.jackson.core/jackson-databind": "2.21.7",
+        "commons-codec/commons-codec": "1.16.1",
+        "org.apache.groovy/groovy-yaml": "unavailable: java.lang.ClassNotFoundException",
+        "org.apache.groovy/groovy-toml": "unavailable: java.lang.ClassNotFoundException",
+        "org.apache.camel/camel-attachments": "3.14.7"
+    },
+    "bindingTypes": {
+        "javax.script.filename": "java.lang.String",
+        "log": "io.cpiwb.groovy.TenantLogBinding",
+        "logger": "io.cpiwb.groovy.TenantLogBinding",
+        "messageLogFactory": "com.sap.it.api.msglog.MessageLogFactory"
+    },
+    "logMethods": [
+        "getCategoryLogger(Class): Object",
+        "getLogger(Class): Object",
+        "getMetaClass(): MetaClass",
+        "getProperty(String): Object",
+        "invokeMethod(String, Object): Object",
+        "logErrors(Object[]): void",
+        "logInfo(Object[]): void",
+        "logWarnings(Object[]): void",
+        "methodMissing(String, Object): Object",
+        "setMetaClass(MetaClass): void",
+        "setProperty(String, Object): void",
+        "toString(): String"
     ],
     "headerTypes": {
         

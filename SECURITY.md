@@ -10,7 +10,7 @@ not in a public issue. You should get an answer within a week.
 
 CPI Workbench runs locally and never connects to a tenant. Relevant reports include:
 
-- XSLT, XSD or XPath runs that read or write files outside the open project folder,
+- XML runs (XSLT, XSD, XPath, flow steps, converters) that read or write files outside the open project folder,
 - file operations that escape the project folder,
 - web pages that can drive a local engine in browser mode.
 

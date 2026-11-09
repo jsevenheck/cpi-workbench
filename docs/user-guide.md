@@ -40,6 +40,8 @@ Download the installer for your platform from the
   a case file can hold (attachments, SOAP headers, platform overrides) are kept while the case is
   open and are shown below the input.
 * **XSD** validates a document against a schema; **XPath** evaluates an expression (3.1 by default, or 1.0).
+  Both run with **▶ Run** (Ctrl+Enter). XSD validation uses the JDK's validator, so it has no
+  *Runtime* choice; for XPath the runtime picks the Saxon version of XPath 3.1 (1.0 runs on the JDK).
 * **Flow Steps** runs a **Content Modifier**, **Filter**, **Router**, **General / Iterating Splitter**,
   **Gather** or **Converter** on an input message (body, headers, properties, namespace mapping):
   * Content Modifier: header and property rows with their source types and data types, and the

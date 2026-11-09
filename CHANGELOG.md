@@ -40,6 +40,10 @@ the Groovy engines now follow what they showed:
   tenant's `MappingContext` has, runs (it does nothing here, with a note); `output.getResultList()`
   fails with `UnsupportedInSimulator`. The mapping probe has a second function and a target with one
   element per source context.
+- The top bar is plainer: no app name left of the tabs, and **▶ Run** is the only run button in the
+  XSD Validation and XPath tabs (their *Validate* and *Evaluate* buttons did the same). The *Runtime*
+  choice is gone from XSD Validation, where both runtimes use the same JDK validator, and is greyed
+  out for XPath 1.0, which runs on the JDK.
 - `$exchange` in XSLT prints as `Exchange[<id>]`, as on a tenant.
 - **XML to CSV** writes what a tenant writes: an empty line after the parent element's lines, and a
   line break after the last line, and a value that contains the separator in double quotes (inner

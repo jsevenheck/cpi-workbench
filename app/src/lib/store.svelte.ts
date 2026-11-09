@@ -874,6 +874,10 @@ function clean(rows: Row[]) {
 let xsdSeq = 0;
 
 export async function runXsd() {
+  if (!xsd.schema.trim()) {
+    app.error = 'Open an .xsd from the project or paste a schema first.';
+    return;
+  }
   const seq = ++xsdSeq;
   xsd.running = true;
   app.error = '';

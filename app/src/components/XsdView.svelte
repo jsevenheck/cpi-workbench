@@ -41,7 +41,6 @@
       <div class="spacer"></div>
       <button class="small" onclick={saveSchema} disabled={!app.project}>Save</button>
       <button class="small" onclick={saveSchemaAs} disabled={!app.project} title="Save under a new name; the open file stays as it is">Save as…</button>
-      <button class="primary small" onclick={runXsd} disabled={xsd.running || !xsd.schema.trim()}>Validate</button>
     </header>
     <div class="body schema">
       {#if !xsd.schema.trim()}
@@ -59,7 +58,7 @@
           <div class="d {d.severity}"><b>{d.severity}</b>{#if d.line} line {d.line}{#if d.column}:{d.column}{/if}{/if}{#if d.systemId} ({d.systemId}){/if}: {d.message}</div>
         {/each}
       {:else}
-        <p class="hint">Ctrl+Enter validates.</p>
+        <p class="hint">▶ Run or Ctrl+Enter validates.</p>
       {/if}
     </div>
   </section>

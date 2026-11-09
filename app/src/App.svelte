@@ -10,7 +10,7 @@
   import FileView from './components/FileView.svelte';
   import SettingsMenu from './components/SettingsMenu.svelte';
   import { isDesktop } from './lib/engine';
-  import { app, xslt, groovy, fileView, init, runXslt, runXsd, runXpath, runFlowStep, runGroovy, onGroovyProfileChange } from './lib/store.svelte';
+  import { app, xslt, xpath, groovy, fileView, init, runXslt, runXsd, runXpath, runFlowStep, runGroovy, onGroovyProfileChange } from './lib/store.svelte';
 
   onMount(async () => {
     await init();
@@ -27,6 +27,7 @@
   });
 
   let kind = $derived<'xslt' | 'groovy'>(app.tool === 'groovy' || app.tool === 'flow' ? 'groovy' : 'xslt');
+  let xpathOnJdk = $derived(app.tool === 'xpath' && xpath.version === '1.0');
   let profile = $derived(app.profiles.find((p) => p.id === (kind === 'groovy' ? app.groovyProfile : app.profile)));
   let kindProfiles = $derived(app.profiles.filter((p) => p.kind === kind));
 
@@ -69,7 +70,6 @@
 
 <div class="app">
   <header class="top">
-    <div class="brand"><img src="./icon.svg" alt="" width="20" height="20" /> CPI Workbench</div>
     <div class="tools" role="tablist" aria-label="Tools">
       {#each tools as t}
         <button role="tab" class:active={app.tool === t.id} onclick={() => selectTool(t.id)}
@@ -82,8 +82,10 @@
       {/if}
     </div>
     <div class="spacer"></div>
-    {#if app.tool !== 'file' && app.tool !== 'flow'}
-      <label class="profile" title={profile?.note ?? ''}>Runtime
+    {#if app.tool !== 'file' && app.tool !== 'flow' && app.tool !== 'xsd'}
+      <!-- XSD validation uses the JDK's validator in both XML engines, so the runtime changes nothing there;
+           XPath 1.0 runs on the JDK too. -->
+      <label class="profile" title={xpathOnJdk ? 'XPath 1.0 runs on the JDK: the runtime applies to XPath 3.1 only' : profile?.note ?? ''}>Runtime
         {#if kind === 'groovy'}
         <select bind:value={app.groovyProfile} onchange={onProfile} aria-label="Runtime profile">
           {#each kindProfiles as p}
@@ -91,7 +93,7 @@
           {/each}
         </select>
         {:else}
-        <select bind:value={app.profile} onchange={onProfile} aria-label="Runtime profile">
+        <select bind:value={app.profile} onchange={onProfile} aria-label="Runtime profile" disabled={xpathOnJdk}>
           {#each kindProfiles as p}
             <option value={p.id} disabled={!p.available}>{p.label}{p.available ? '' : ' (not installed)'}</option>
           {/each}
@@ -147,7 +149,6 @@
 <style>
   .app { display: flex; flex-direction: column; height: 100vh; }
   .top { display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-bottom: 1px solid var(--border); background: var(--surface); flex-wrap: wrap; }
-  .brand { display: flex; align-items: center; gap: 6px; font-weight: 700; font-size: 14px; margin-right: 8px; }
   .tools { display: flex; gap: 2px; flex-wrap: wrap; }
   .tools button { border: none; background: none; padding: 6px 10px; border-radius: 6px; color: var(--muted); font-weight: 600; font-size: 12px; cursor: pointer; }
   .tools button.active { background: var(--active); color: var(--accent); }

@@ -34,7 +34,6 @@
         <option value="3.1">3.1 (Saxon, as in Content Modifier and Filter)</option>
       </select>
     </label>
-    <button class="primary" onclick={runXpath} disabled={xpath.running}>Evaluate</button>
   </div>
   <div class="grid" style:grid-template-columns={paneColumns(panes.sizes)}>
     <section class="pane">
@@ -57,7 +56,7 @@
           {#each xpath.result.items as it, i}
             <div class="item"><span class="k">{i + 1} · {it.kind}{it.name ? ' ' + it.name : ''}{it.type ? ' (' + it.type + ')' : ''}</span><pre>{it.value}</pre></div>
           {/each}
-        {:else}<p class="muted">Press Enter in the expression field.</p>{/if}
+        {:else}<p class="muted">Press Enter in the expression field or ▶ Run.</p>{/if}
       </div>
     </section>
   </div>

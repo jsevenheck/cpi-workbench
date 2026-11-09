@@ -95,7 +95,7 @@ await page.getByRole('tab', { name: 'XSD Validation' }).click();
 await page.getByRole('tab', { name: 'XSLT Mapping' }).click();
 await page.locator('.tree .file', { hasText: 'salesorder.xsd' }).click();
 await page.getByRole('button', { name: 'Use XSLT output' }).click();
-await page.getByRole('button', { name: 'Validate' }).click();
+await page.getByTitle('Run (Ctrl+Enter)').click();
 await page.locator('.verdict').waitFor({ timeout: 10000 });
 const verdict = await page.locator('.verdict').innerText();
 if (!verdict.includes('Valid')) fail('xsd verdict: ' + verdict);
@@ -133,7 +133,7 @@ if (fs.existsSync(path.join(project, 'schemas/renamed.xsd'))) fail('delete left 
 // 7) XPath.
 await page.getByRole('tab', { name: 'XPath' }).click();
 await page.getByLabel('XPath expression').fill('count(//Item)');
-await page.getByRole('button', { name: 'Evaluate' }).click();
+await page.getByTitle('Run (Ctrl+Enter)').click();
 await page.locator('.res .item').first().waitFor({ timeout: 10000 });
 if (shots) await page.screenshot({ path: path.join(shots, '6-xpath.png') });
 

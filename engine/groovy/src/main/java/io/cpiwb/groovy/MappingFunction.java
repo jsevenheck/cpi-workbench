@@ -18,10 +18,11 @@ import java.util.Map;
  * {@code def String f(String a, MappingContext context)} is "Single Values" (one call here; CPI calls
  * it once per value), {@code def void f(String[] a, Output output, MappingContext context)} is "All
  * values of a context": an argument is a list of contexts and the function is called once per context,
- * without context changes in its arrays, as SAP's PI documentation describes the type (plan F42).
- * Each call gets an Output of its own; joining the results with a context change is an assumption from
- * that documentation. SUPPRESS and
- * xsi:nil are marker strings of the simulator, compared by identity; CPI's own values are not known.
+ * without context changes in its arrays. A tenant's probe showed that for the first context (plan F59);
+ * SAP's PI documentation describes the type the same way (plan F42). Each call gets an Output of its
+ * own; joining the results with a context change is an assumption from that documentation (in the probe,
+ * only the first call's result reached a target field that occurs once, which fits it). SUPPRESS and xsi:nil are marker
+ * strings of the simulator, compared by identity; CPI's own values are not known.
  */
 final class MappingFunction {
 
@@ -178,7 +179,7 @@ final class MappingFunction {
             }
         }
         SimOutput output = new SimOutput();
-        Context context = new Context(exchange);
+        Context context = new Context(exchange, diags);
         if (!advanced()) {
             Object r = method.invoke(script, build(single, queues, -1, output, context));
             result.with("execution", "single");
@@ -286,15 +287,25 @@ final class MappingFunction {
 
     // ---------------------------------------------------------------- API objects
 
-    /** Headers and exchange properties of the run's exchange (a class, not a record: no public exchange()). */
+    /**
+     * Headers and exchange properties of the run's exchange (a class, not a record: no public exchange()).
+     * A tenant's MappingContextImpl also has a public {@code invalidateCache()} (plan F59); what it does is
+     * not known, so here it does nothing and says so.
+     */
     private static final class Context implements MappingContext {
         private final Exchange exchange;
+        private final List<Diagnostic> diags;
 
-        Context(Exchange exchange) { this.exchange = exchange; }
+        Context(Exchange exchange, List<Diagnostic> diags) { this.exchange = exchange; this.diags = diags; }
         public Object getHeader(String name) { return exchange.getIn().getHeader(name); }
         public void setHeader(String name, Object value) { exchange.getIn().setHeader(name, value); }
         public Object getProperty(String name) { return exchange.getProperty(name); }
         public void setProperty(String name, Object value) { exchange.setProperty(name, value); }
+
+        public void invalidateCache() {
+            diags.add(Diagnostic.info("context.invalidateCache() exists on a tenant's MappingContext but is not "
+                    + "documented; the simulator does nothing."));
+        }
     }
 
     /** Collects the entries; a value that is a marker counts as that marker. */
@@ -309,6 +320,13 @@ final class MappingFunction {
         public boolean isContextChange(Object value) { return value == CONTEXT_CHANGE; }
         public boolean isSuppress(Object value) { return value == SUPPRESS; }
         public boolean isXSINIL(Object value) { return value == XSI_NIL; }
+
+        /** A tenant's OutputImpl returns SAP's internal ResultList here (plan F59); its API is not published. */
+        public Object getResultList() {
+            throw new UnsupportedOperationException("UnsupportedInSimulator: output.getResultList() returns SAP's "
+                    + "internal ResultList on a tenant, whose methods are not published. Use addValue, addContextChange, "
+                    + "addSuppress, addXSINIL and clear.");
+        }
 
         /** Contexts of values; SUPPRESS and xsi:nil as {"suppress": true} and {"xsiNil": true}. */
         List<Object> toJson() {

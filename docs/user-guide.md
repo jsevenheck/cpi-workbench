@@ -88,7 +88,8 @@ Download the installer for your platform from the
   `String[]` function runs once per context, a `String` function once. **Result** shows the returned
   value or the output queue; `MappingContext` reads and sets the Headers and Properties tabs. The
   mapping itself (`.mmap`) is not simulated. SAP does not support Groovy Script 2.x in Message
-  Mappings, so use 1.x ([Fidelity](fidelity.md)).
+  Mappings, and a tenant ran mapping scripts on Groovy 2.4.21 and Java 21, so use 1.x
+  ([Fidelity](fidelity.md)).
 * **Lint** shows hints about what breaks when a script moves from 1.x to 2.x:
   * `XmlSlurper` or `XmlParser` used without a `groovy.xml` import,
   * Script API v1 imports or v1-only methods in a 2.x step,

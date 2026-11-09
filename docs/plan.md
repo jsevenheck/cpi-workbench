@@ -99,6 +99,7 @@ Labels follow the REA evidence rules (see §4): **Observed** = read in a source 
 | F56 | JSON to XML and CSV to XML on that tenant with `probes/converters/` and the settings of step 7. JSON to XML (no namespace mapping, separator `:`): `<?xml version='1.0' encoding='UTF-8'?><abc.A><xyz.B xyz.attr1="1" attr2="2">valueB</xyz.B><C>valueC1</C><C>valueC2</C><D></D><E/><F>1.50</F></abc.A>`: the prefix stays in the name (SAP's rule; SAP's example drops it, which settles F47), `""` is `<D></D>` and `null` is `<E/>` (SAP's example writes `""` as `<D/>`), numbers keep their text, compact with SAP's declaration. CSV to XML (`products.xsd`, `Products/Product`, `;`, header line, *XSD Elements*): compact with SAP's declaration and no final line break (376 bytes, as the client reported), the quoted field `"Notebook; Basic 15"` without its quotes, the empty line skipped, the empty value as `<Name></Name>`, element order from the XSD. Copied from screenshots; the simulator gives the same bytes. | Observed (one tenant) | S32 |
 | F57 | XML to CSV on that tenant again, with separator `;` and *Include Attribute Values*: `Category;Type;Source` / `Scanners;Source Data;ERP` / an empty line / `ProductId;Name;Note` / `HT-1080;Photo Scan;"a;b"` / `HT-1081;Power Scan;"quoted"`. A value with the separator is put in double quotes; the quotes inside `"quoted"` are not doubled (not RFC 4180). The comma run (F55) wrote `a;b` without quotes. Pasted as text. | Observed (one tenant) | S32 |
 | F58 | `fingerprint-v1.groovy` with `logMethods` on that tenant: the `ScriptLogger` behind 1.x `log` / `logger` has `logInfo(Object[])`, `logWarnings(Object[])`, `logErrors(Object[])`, `logErrors(LogMessage)`, `logErrors(LogMessage, Object[])`, `getLogger(Class)` and `getCategoryLogger(Class)` (both return `ILogger`), and no `info`, `debug`, `warn` or `error`. Where its output goes is not known. | Observed (one tenant) | S32 |
+| F59 | `probe-mapping-v1.groovy` in a Message Mapping on that tenant (`Root` → `Result`, `Value` → `describeQueue` → `Info`, input `a`, `b` / `c` in two `Group`s): mapping scripts run on **Groovy 2.4.21 and Java 21** (SAP SE 21.0.13). The `String[]` function received the first context only, `a` and `b`, as `String`s without a context change entry, so the signature `(String[], Output, MappingContext)` gave *All values of a context*. Only that call's document reached the output: `Result` occurs once, so a target field under it takes the first context (expected if the calls' results are joined by context changes; not shown directly). Behind the interfaces: `com.sap.xi.mapping.camel.impl.MappingContextImpl` (`getHeader`, `getProperty`, `setHeader`, `setProperty` and an undocumented `invalidateCache()`) and `com.sap.xi.mapping.camel.impl.OutputImpl` (SAP's documented methods and `getResultList()`, which returns `com.sap.aii.mappingtool.tf7.rt.ResultList`, PI's mapping runtime class). An unknown header is null; `CamelHttpMethod` was `GET`. | Observed (one tenant) | S32 |
 
 ---
 
@@ -415,8 +416,9 @@ patch notes (F41) and SAP's PI documentation of queues (F42):
   arguments instead of a message; the result has its returned value or output queue, and headers
   and properties as for a script step. On 2.x a warning cites F41.
 * Execution types follow the signature (F44): *single* (no `String[]`: one call) and *All values of
-  a context* (`String[]`: one call per context, without context changes in the arrays, F42). Each
-  call gets an `Output` of its own; joining the results with a context change is an assumption.
+  a context* (`String[]`: one call per context, without context changes in the arrays, F42; a tenant
+  showed it for the first context, F59). Each call gets an `Output` of its own; joining the results
+  with a context change is an assumption.
   A first version also offered *All values of a queue*; it was removed when two community guides
   said CPI has no such type.
 * The iFlow import lists Message Mapping steps (F45) and opens the scripts their `.mmap` uses.
@@ -485,7 +487,7 @@ Open: the Message Mapping and converter probes.
 | Q-X6 | Source/target from header/property in newer step versions | Open | SAP docs + probe |
 | Q-V1 | XSD engine and version behind the XML Validator step | Open | Probe iFlow (error message format) |
 | Q-T1 | Format of exported MPL trace content | Open (F18) | Export one sample |
-| Q-M1 | Message Mapping scripts: Groovy and Java version, whether the signature alone picks the execution type (single value or context, F44), how the per-context results are joined, the marker value of SUPPRESS, whether a single-value function is called once per value | Partial (F40–F44) | `probe-mapping-v1.groovy` |
+| Q-M1 | Message Mapping scripts: Groovy and Java version, whether the signature alone picks the execution type (single value or context, F44), how the per-context results are joined, the marker value of SUPPRESS, whether a single-value function is called once per value | Partial: versions and the per-context call of a `String[]` function answered (F59); open: the join, an empty context, the SUPPRESS marker, single-value calls | `probe-mapping-v1.groovy` with the `Call` target (probes/README.md, step 6) |
 | Q-C1 | Converters: compact or indented output, the XML declaration, CSV line ends and quoting, an unmapped JSON prefix without namespace mapping (F47), the XML to JSON namespace table's cell order | Answered for the probes' cases (F54–F57); open: the XML to JSON namespace table's cell order, `\r\n` or `\n` in CSV | Save a response with `curl --output` |
 | Q-P1 | Partner Directory / Keystore / Secure Store edge cases: missing parameter, unknown partner, unknown keystore alias (null or exception, which message) | Answered (F52) | — |
 

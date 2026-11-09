@@ -3,13 +3,14 @@ import com.sap.it.api.mapping.Output
 import groovy.json.JsonOutput
 
 /*
- * Probe Q-M1: how does a Message Mapping call a script's custom function? Assign this script to a
+ * Probe Q-M1: how does a Message Mapping call a script's custom functions? Assign this script to a
  * Message Mapping (Groovy Script 1.x: SAP's patch notes say version 2 is not supported in Message
- * Mappings) and map a repeating source field through describeQueue to a repeating target field (see
- * probes/README.md). Each call adds one JSON document: runtime versions, the classes and methods
- * behind MappingContext and Output, and each input entry with its class, text and what
- * Output.isContextChange / isSuppress / isXSINIL say. One document per source context means one call
- * per context ("All values of a context"); context changes inside the entries would mean a queue.
+ * Mappings) and map it as probes/README.md (step 6) describes:
+ * - describeQueue (All values of a context): each call adds one JSON document with the runtime
+ *   versions, the classes and methods behind MappingContext and Output (and Output's result list),
+ *   and each input entry with its class, text and what Output.isContextChange / isSuppress / isXSINIL
+ *   say. The target's Call elements show which documents land in which source context.
+ * - describeValue (single values): returns the value and its class; one target Value per call.
  */
 def void describeQueue(String[] values, Output output, MappingContext context) {
     def safe = { Closure c -> try { c() } catch (Throwable t) { 'unavailable: ' + t.getClass().getName() } }
@@ -32,8 +33,23 @@ def void describeQueue(String[] values, Output output, MappingContext context) {
         contextMethods: methods(context),
         outputClass  : output?.getClass()?.getName(),
         outputMethods: methods(output),
+        resultList   : safe {
+            def list = output.getResultList()
+            [
+                'class'  : list?.getClass()?.getName(),
+                methods  : methods(list),
+                // public constants such as the context change and SUPPRESS markers: class and text
+                constants: list == null ? null : list.getClass().getFields()
+                        .findAll { (it.modifiers & 8) != 0 } // static
+                        .collectEntries { f -> [(f.name): safe { def v = f.get(null); v == null ? null : v.getClass().getName() + ': ' + v }] },
+            ]
+        },
         unknownHeader: safe { context.getHeader('CPIWB_PROBE_DOES_NOT_EXIST') },
         headerCamelHttpMethod: safe { context.getHeader('CamelHttpMethod')?.toString() },
     ]
     output.addValue(JsonOutput.prettyPrint(JsonOutput.toJson(info)))
+}
+
+def String describeValue(String value, MappingContext context) {
+    return JsonOutput.toJson([value: value, 'class': value == null ? null : value.getClass().getName()])
 }

@@ -33,6 +33,11 @@ the Groovy engines now follow what they showed:
   the types of the bound variables and the methods of `log`.
 - **Probe files** for the Message Mapping probe (`probes/mapping/`: source and target schema,
   requests) and `curl` commands for sending the probe requests (`probes/README.md`).
+- **Message Mapping functions**: a tenant runs mapping scripts on Groovy 2.4.21 and Java 21 and calls a
+  `String[]` function once per context, as the simulator does. `context.invalidateCache()`, which a
+  tenant's `MappingContext` has, runs (it does nothing here, with a note); `output.getResultList()`
+  fails with `UnsupportedInSimulator`. The mapping probe has a second function and a target with one
+  element per source context, so a run shows how the calls' results are joined.
 - `$exchange` in XSLT prints as `Exchange[<id>]`, as on a tenant.
 - **XML to CSV** writes what a tenant writes: an empty line after the parent element's lines, and a
   line break after the last line, and a value that contains the separator in double quotes (inner

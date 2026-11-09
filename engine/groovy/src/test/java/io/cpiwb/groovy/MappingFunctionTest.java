@@ -90,6 +90,21 @@ class MappingFunctionTest {
         assertEquals("[[\"x\",{\"suppress\":true},{\"xsiNil\":true}]]", Json.write(mapping(r).get("queue")));
     }
 
+    /** The tenant's implementations have two methods beyond SAP's interfaces (plan F59). */
+    @Test
+    void tenantOnlyMethodsAreNotedOrUnsupported() throws Exception {
+        String s = "def void f(String[] a, Output output, MappingContext context) {\n"
+                + "  context.invalidateCache()\n  output.addValue('ok')\n}\n"
+                + "def void g(String[] a, Output output, MappingContext context) {\n"
+                + "  output.getResultList()\n}\n";
+        Map<String, Object> r = call(s, "f", List.of(List.of("x")));
+        assertTrue(Json.bool(r, "ok", false), () -> Json.write(r));
+        assertTrue(Json.write(r).contains("invalidateCache() exists on a tenant"), () -> Json.write(r));
+        Map<String, Object> g = call(s, "g", List.of(List.of("x")));
+        assertFalse(Json.bool(g, "ok", true));
+        assertTrue(Json.write(g).contains("UnsupportedInSimulator: output.getResultList()"), () -> Json.write(g));
+    }
+
     /** As in a community guide: sum of a context, addValue with a BigDecimal, no MappingContext needed for the sum. */
     @Test
     void contextChangesAddedByTheFunctionAndClear() throws Exception {

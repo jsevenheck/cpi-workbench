@@ -137,7 +137,8 @@ public final class ScriptRunner {
         }
         if (mapping != null && "v2".equals(apiVersion)) {
             diags.add(Diagnostic.warning("SAP's patch notes (software increment 2602) say that Groovy Script version 2 "
-                    + "is not supported in Message Mappings; run this function on Groovy Script 1.x."));
+                    + "is not supported in Message Mappings; a tenant ran mapping scripts on Groovy 2.4.21. Run this function on "
+                    + "Groovy Script 1.x."));
         }
 
         // ---- build the message

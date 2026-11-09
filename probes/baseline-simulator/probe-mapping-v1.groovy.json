@@ -1,88 +1,102 @@
-[
-    {
-        "probe": "probe-mapping-v1",
-        "java": "21",
-        "javaVmVersion": "21.0.12.1+1-1-24.04.4-Ubuntu",
-        "groovy": "2.4.21",
-        "valuesClass": "[Ljava.lang.String;",
-        "entries": [
-            {
-                "class": "java.lang.String",
-                "text": "a",
-                "contextChange": false,
-                "suppress": false,
-                "xsiNil": false
-            },
-            {
-                "class": "java.lang.String",
-                "text": "b",
-                "contextChange": false,
-                "suppress": false,
-                "xsiNil": false
-            }
-        ],
-        "contextClass": "io.cpiwb.groovy.MappingFunction$Context",
-        "contextMethods": [
-            "public java.lang.Object io.cpiwb.groovy.MappingFunction$Context.getHeader(java.lang.String)",
-            "public java.lang.Object io.cpiwb.groovy.MappingFunction$Context.getProperty(java.lang.String)",
-            "public void io.cpiwb.groovy.MappingFunction$Context.setHeader(java.lang.String,java.lang.Object)",
-            "public void io.cpiwb.groovy.MappingFunction$Context.setProperty(java.lang.String,java.lang.Object)"
-        ],
-        "outputClass": "io.cpiwb.groovy.MappingFunction$SimOutput",
-        "outputMethods": [
-            "public boolean io.cpiwb.groovy.MappingFunction$SimOutput.isContextChange(java.lang.Object)",
-            "public boolean io.cpiwb.groovy.MappingFunction$SimOutput.isSuppress(java.lang.Object)",
-            "public boolean io.cpiwb.groovy.MappingFunction$SimOutput.isXSINIL(java.lang.Object)",
-            "public void io.cpiwb.groovy.MappingFunction$SimOutput.addContextChange()",
-            "public void io.cpiwb.groovy.MappingFunction$SimOutput.addSuppress()",
-            "public void io.cpiwb.groovy.MappingFunction$SimOutput.addValue(java.lang.Object)",
-            "public void io.cpiwb.groovy.MappingFunction$SimOutput.addXSINIL()",
-            "public void io.cpiwb.groovy.MappingFunction$SimOutput.clear()"
-        ],
-        "unknownHeader": null,
-        "headerCamelHttpMethod": "POST"
-    },
-    {
-        "probe": "probe-mapping-v1",
-        "java": "21",
-        "javaVmVersion": "21.0.12.1+1-1-24.04.4-Ubuntu",
-        "groovy": "2.4.21",
-        "valuesClass": "[Ljava.lang.String;",
-        "entries": [
-            {
-                "class": "java.lang.String",
-                "text": "c",
-                "contextChange": false,
-                "suppress": false,
-                "xsiNil": false
-            },
-            {
-                "class": "java.lang.String",
-                "text": "[SUPPRESS]",
-                "contextChange": false,
-                "suppress": true,
-                "xsiNil": false
-            }
-        ],
-        "contextClass": "io.cpiwb.groovy.MappingFunction$Context",
-        "contextMethods": [
-            "public java.lang.Object io.cpiwb.groovy.MappingFunction$Context.getHeader(java.lang.String)",
-            "public java.lang.Object io.cpiwb.groovy.MappingFunction$Context.getProperty(java.lang.String)",
-            "public void io.cpiwb.groovy.MappingFunction$Context.setHeader(java.lang.String,java.lang.Object)",
-            "public void io.cpiwb.groovy.MappingFunction$Context.setProperty(java.lang.String,java.lang.Object)"
-        ],
-        "outputClass": "io.cpiwb.groovy.MappingFunction$SimOutput",
-        "outputMethods": [
-            "public boolean io.cpiwb.groovy.MappingFunction$SimOutput.isContextChange(java.lang.Object)",
-            "public boolean io.cpiwb.groovy.MappingFunction$SimOutput.isSuppress(java.lang.Object)",
-            "public boolean io.cpiwb.groovy.MappingFunction$SimOutput.isXSINIL(java.lang.Object)",
-            "public void io.cpiwb.groovy.MappingFunction$SimOutput.addContextChange()",
-            "public void io.cpiwb.groovy.MappingFunction$SimOutput.addSuppress()",
-            "public void io.cpiwb.groovy.MappingFunction$SimOutput.addValue(java.lang.Object)",
-            "public void io.cpiwb.groovy.MappingFunction$SimOutput.addXSINIL()",
-            "public void io.cpiwb.groovy.MappingFunction$SimOutput.clear()"
-        ],
-        "unknownHeader": null,
-        "headerCamelHttpMethod": "POST"
-    }
-]
+{
+    "describeQueue": [
+        {
+            "probe": "probe-mapping-v1",
+            "java": "21",
+            "javaVmVersion": "21.0.12.1+1-1-24.04.4-Ubuntu",
+            "groovy": "2.4.21",
+            "valuesClass": "[Ljava.lang.String;",
+            "entries": [
+                {
+                    "class": "java.lang.String",
+                    "text": "a",
+                    "contextChange": false,
+                    "suppress": false,
+                    "xsiNil": false
+                },
+                {
+                    "class": "java.lang.String",
+                    "text": "b",
+                    "contextChange": false,
+                    "suppress": false,
+                    "xsiNil": false
+                }
+            ],
+            "contextClass": "io.cpiwb.groovy.MappingFunction$Context",
+            "contextMethods": [
+                "public java.lang.Object io.cpiwb.groovy.MappingFunction$Context.getHeader(java.lang.String)",
+                "public java.lang.Object io.cpiwb.groovy.MappingFunction$Context.getProperty(java.lang.String)",
+                "public void io.cpiwb.groovy.MappingFunction$Context.invalidateCache()",
+                "public void io.cpiwb.groovy.MappingFunction$Context.setHeader(java.lang.String,java.lang.Object)",
+                "public void io.cpiwb.groovy.MappingFunction$Context.setProperty(java.lang.String,java.lang.Object)"
+            ],
+            "outputClass": "io.cpiwb.groovy.MappingFunction$SimOutput",
+            "outputMethods": [
+                "public boolean io.cpiwb.groovy.MappingFunction$SimOutput.isContextChange(java.lang.Object)",
+                "public boolean io.cpiwb.groovy.MappingFunction$SimOutput.isSuppress(java.lang.Object)",
+                "public boolean io.cpiwb.groovy.MappingFunction$SimOutput.isXSINIL(java.lang.Object)",
+                "public java.lang.Object io.cpiwb.groovy.MappingFunction$SimOutput.getResultList()",
+                "public void io.cpiwb.groovy.MappingFunction$SimOutput.addContextChange()",
+                "public void io.cpiwb.groovy.MappingFunction$SimOutput.addSuppress()",
+                "public void io.cpiwb.groovy.MappingFunction$SimOutput.addValue(java.lang.Object)",
+                "public void io.cpiwb.groovy.MappingFunction$SimOutput.addXSINIL()",
+                "public void io.cpiwb.groovy.MappingFunction$SimOutput.clear()"
+            ],
+            "resultList": "unavailable: java.lang.UnsupportedOperationException",
+            "unknownHeader": null,
+            "headerCamelHttpMethod": "POST"
+        },
+        {
+            "probe": "probe-mapping-v1",
+            "java": "21",
+            "javaVmVersion": "21.0.12.1+1-1-24.04.4-Ubuntu",
+            "groovy": "2.4.21",
+            "valuesClass": "[Ljava.lang.String;",
+            "entries": [
+                {
+                    "class": "java.lang.String",
+                    "text": "c",
+                    "contextChange": false,
+                    "suppress": false,
+                    "xsiNil": false
+                },
+                {
+                    "class": "java.lang.String",
+                    "text": "[SUPPRESS]",
+                    "contextChange": false,
+                    "suppress": true,
+                    "xsiNil": false
+                }
+            ],
+            "contextClass": "io.cpiwb.groovy.MappingFunction$Context",
+            "contextMethods": [
+                "public java.lang.Object io.cpiwb.groovy.MappingFunction$Context.getHeader(java.lang.String)",
+                "public java.lang.Object io.cpiwb.groovy.MappingFunction$Context.getProperty(java.lang.String)",
+                "public void io.cpiwb.groovy.MappingFunction$Context.invalidateCache()",
+                "public void io.cpiwb.groovy.MappingFunction$Context.setHeader(java.lang.String,java.lang.Object)",
+                "public void io.cpiwb.groovy.MappingFunction$Context.setProperty(java.lang.String,java.lang.Object)"
+            ],
+            "outputClass": "io.cpiwb.groovy.MappingFunction$SimOutput",
+            "outputMethods": [
+                "public boolean io.cpiwb.groovy.MappingFunction$SimOutput.isContextChange(java.lang.Object)",
+                "public boolean io.cpiwb.groovy.MappingFunction$SimOutput.isSuppress(java.lang.Object)",
+                "public boolean io.cpiwb.groovy.MappingFunction$SimOutput.isXSINIL(java.lang.Object)",
+                "public java.lang.Object io.cpiwb.groovy.MappingFunction$SimOutput.getResultList()",
+                "public void io.cpiwb.groovy.MappingFunction$SimOutput.addContextChange()",
+                "public void io.cpiwb.groovy.MappingFunction$SimOutput.addSuppress()",
+                "public void io.cpiwb.groovy.MappingFunction$SimOutput.addValue(java.lang.Object)",
+                "public void io.cpiwb.groovy.MappingFunction$SimOutput.addXSINIL()",
+                "public void io.cpiwb.groovy.MappingFunction$SimOutput.clear()"
+            ],
+            "resultList": "unavailable: java.lang.UnsupportedOperationException",
+            "unknownHeader": null,
+            "headerCamelHttpMethod": "POST"
+        }
+    ],
+    "describeValue": [
+        {
+            "value": "a",
+            "class": "java.lang.String"
+        }
+    ]
+}

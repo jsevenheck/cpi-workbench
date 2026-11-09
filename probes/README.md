@@ -14,7 +14,7 @@ Groovy engines follow it since 0.3.0.
 | `probe-platform-v1.groovy` | Groovy Script **1.x** | Partner Directory, Keystore, Secure Store and number range behaviour for entries that do not exist, plus the real method lists (Q-P1) | Ran 2026-11-09 |
 | `prepare-xslt-probe.groovy` + `probe-xslt-behaviour.xsl` | Groovy 1.x, then XSLT Mapping | Header vs. property precedence, Java→XDM types, missing params, `setHeader` return value (Q-X2 … Q-X5) | Ran 2026-11-09 |
 | `converters/` | **JSON to XML, XML to JSON, XML to CSV, CSV to XML** converters | Output formatting and XML declaration, JSON escaping, CSV line ends and quoting, an unmapped JSON prefix without namespace mapping (Q-C1) | All four ran; the simulator gives the same bytes |
-| `probe-mapping-v1.groovy` | Custom function in a **Message Mapping** | Groovy and Java version of mapping scripts, the classes and methods behind `MappingContext` and `Output`, and how values reach a `String[]` function: one call per context, SUPPRESS in the input array (Q-M1) | Not yet |
+| `probe-mapping-v1.groovy` | Custom function in a **Message Mapping** | Groovy and Java version of mapping scripts, the classes and methods behind `MappingContext` and `Output`, and how values reach a `String[]` function: one call per context, how the results are joined, single-value calls (Q-M1) | Ran 2026-11-09 with the first target (`Result/Info`); the `Call` target is still to run |
 
 ## How to run
 
@@ -39,17 +39,27 @@ another error, note its text and line.
 6. iFlow **Probe_Mapping**: `HTTPS sender (address /cpiwb/mapping)` → `Message Mapping` → end. The files
    are in `mapping/`:
    * Create the message mapping with `mapping/source.xsd` as source (`Root/Group/Value`, both
-     repeating) and `mapping/target.xsd` as target (`Result/Info`, repeating).
-   * Add `probe-mapping-v1.groovy` to the mapping as a script (Groovy Script 1.x). Its function
-     `describeQueue` then appears among the mapping's custom functions.
-   * Map `Root` → `Result`, and `Value` → `describeQueue` → `Info` (keep `Value`'s default context,
-     `Group`).
-   * Post `mapping/request.xml` (two groups: `a`, `b` and `c`). Each `Info` holds the JSON of one call.
-     Optionally post `mapping/request-empty-context.xml` too (an empty group in between).
+     repeating) and `mapping/target.xsd` as target (`Result/Call`, repeating, with `Info` and `Value`).
+   * Add `probe-mapping-v1.groovy` to the mapping as a script (Groovy Script 1.x). Its functions
+     `describeQueue` and `describeValue` then appear among the mapping's custom functions.
+   * Map `Root` → `Result` and `Group` → `Call`; `Value` → `describeQueue` → `Info`, and `Value` →
+     `describeValue` → `Value` (keep `Value`'s default context, `Group`).
+   * Post `mapping/request.xml` (two groups: `a`, `b` and `c`) and `mapping/request-empty-context.xml`
+     (an empty group in between). The response shows each call:
+     * one `Info` per `Call` (for `a`, `b` and for `c`): one call per context, the results joined by
+       context changes; both documents in the first `Call`: joined without them;
+     * with the empty group: a `Call` whose `Info` lists no entries means the empty context is called
+       too; an empty `Call` means it is not;
+     * `Value`: one per source value means `describeValue` is called once per value;
+     * `resultList`: the class, methods and constants (such as the SUPPRESS marker) of the list
+       behind `Output`.
 
-   If the mapping does not deploy or the function is not offered, the error message is valuable too.
-   The simulator's baseline used the argument `[["a","b"],["c",{"suppress":true}]]` (two contexts, so
-   two calls).
+   A first run (2026-11-09, F59) used a target `Result/Info` without `Call`: `Result` occurs once, so
+   only the first call's document (`a`, `b`) reached the output. It answered the Groovy and Java
+   version and the classes behind `MappingContext` and `Output`. If the mapping does not deploy or a
+   function is not offered, the error message is valuable too. The simulator's baseline used the
+   argument `[["a","b"],["c",{"suppress":true}]]` for `describeQueue` (two contexts, so two calls) and
+   `"a"` for `describeValue`.
 
 7. iFlow **Probe_Converters**: four small iFlows (or one with four HTTPS addresses), each
    `HTTPS sender` → converter → end. The request bodies are in `converters/`; the settings are those of
@@ -84,7 +94,7 @@ in them is confidential beyond version numbers, class names and the tenant's def
 ## Baseline from the simulator
 
 `baseline-simulator/` holds what the simulator returns for the same probes, so differences are
-easy to spot. `results-tenant/2026-11-09/` holds what one tenant returned (findings F48–F52 in the
+easy to spot. `results-tenant/2026-11-09/` holds what one tenant returned (findings F48–F59 in the
 plan). The differences that remain:
 
 * `xsl:product-version` is `HE 9.9.1.8` locally and `EE 9.9.1.6` on the tenant.
@@ -98,6 +108,10 @@ plan). The differences that remain:
   `org.apache.camel.Attachment`, SAP's v2 `Exchange` and `SimpleBuilder`, the classes behind `log` /
   `logger` (SAP's `ScriptLogger`; the simulator has its methods but no `LogMessage` overloads), `messageLogFactory` and the message, `getExtensionFunctions` (1.x) and
   `setProxyHandler` (2.x), and the body class behind an HTTPS sender (`InputStreamCache`).
+* Message Mapping: the classes behind `MappingContext` and `Output` (SAP's `MappingContextImpl` and
+  `OutputImpl`; the simulator has their extra methods `invalidateCache()`, a no-op, and
+  `getResultList()`, `UnsupportedInSimulator`), the Java build, and `CamelHttpMethod`, which is the
+  request's.
 * Platform: the simulator's messages add where it looked (e.g. `platform/credentials.json`).
 
 The converter baselines come from the Flow Steps tab's Converter (or `convert.run`) with the settings
@@ -110,6 +124,10 @@ G=engine/groovy-v1/target/cpiwb-groovy-v1.jar   # groovy-v2 for fingerprint-v2.g
 java -jar $G run --script probes/fingerprint-v1.groovy --in any.xml
 java -jar $G run --script probes/probe-platform-v1.groovy --in any.xml
 ```
+
+The mapping baseline comes from the Groovy tab (*Run as* `describeQueue` and `describeValue` with the
+arguments in step 6, header `CamelHttpMethod` = `POST`) or the `groovy.run` call with `function` and
+`args`; it lists the documents of both functions.
 
 and the XSLT baselines with:
 

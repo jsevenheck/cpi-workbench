@@ -1,11 +1,20 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Target of the Probe_Mapping message mapping (probes/README.md, step 6): each Info holds the JSON
-     that one call of describeQueue returned. -->
+<!-- Target of the Probe_Mapping message mapping (probes/README.md, step 6). Call repeats like the
+     source's Group (map Group to Call), so each source context has a target element of its own:
+     Info holds the JSON documents describeQueue added for that context, Value what describeValue
+     returned for its values. -->
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:element name="Result">
     <xs:complexType>
       <xs:sequence>
-        <xs:element name="Info" type="xs:string" minOccurs="0" maxOccurs="unbounded"/>
+        <xs:element name="Call" minOccurs="0" maxOccurs="unbounded">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element name="Info" type="xs:string" minOccurs="0" maxOccurs="unbounded"/>
+              <xs:element name="Value" type="xs:string" minOccurs="0" maxOccurs="unbounded"/>
+            </xs:sequence>
+          </xs:complexType>
+        </xs:element>
       </xs:sequence>
     </xs:complexType>
   </xs:element>

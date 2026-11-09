@@ -1,19 +1,19 @@
 # Tenant probes
 
 These artifacts close the open questions in [docs/plan.md](../docs/plan.md) (Appendix A) by observing a real
-Cloud Integration tenant as a black box: no decompiling, just inputs and outputs. You run them once
-on a test tenant; the results tell us whether the simulator matches CPI and where to adjust the
-runtime profiles.
+Cloud Integration tenant as a black box: no decompiling, just inputs and outputs. The results tell us
+whether the simulator matches CPI and where to adjust the runtime profiles. The first run on a tenant
+(2026-11-09) is in `results-tenant/2026-11-09/`; the Groovy engines follow it since 0.3.0.
 
-| File | Step | Answers |
-|---|---|---|
-| `fingerprint-v1.groovy` | Groovy Script **1.x** | Java / Groovy / Camel / Saxon versions, JAXP factories, charset, timezone, locale, script bindings (Q-G2, Q-G3, Q-G6, Q-X1) |
-| `fingerprint-v2.groovy` | Groovy Script **2.x** | Same for 2.x plus the **Script API v2 method list** via reflection (Q-G4). Ran on a tenant on 2026-11-09. |
-| `fingerprint.xsl` | XSLT Mapping 1.2+ | Saxon edition/version, supported features, localisation of `format-date` (Q-X1) |
-| `probe-platform-v1.groovy` | Groovy Script **1.x** | Partner Directory and Keystore behaviour for entries that do not exist, plus the real method lists (Q-P1) |
-| `prepare-xslt-probe.groovy` + `probe-xslt-behaviour.xsl` | Groovy 1.x, then XSLT Mapping | Header vs. property precedence, Java→XDM types, missing params, `setHeader` return value (Q-X2 … Q-X5) |
-| `converters/` | **JSON to XML, XML to JSON, XML to CSV, CSV to XML** converters | Output formatting and XML declaration, JSON escaping, CSV line ends and quoting, an unmapped JSON prefix without namespace mapping (Q-C1) |
-| `probe-mapping-v1.groovy` | Custom function in a **Message Mapping** | Groovy and Java version of mapping scripts, the classes and methods behind `MappingContext` and `Output`, and how values reach a `String[]` function: one call per context, SUPPRESS in the input array (Q-M1) |
+| File | Step | Answers | On a tenant |
+|---|---|---|---|
+| `fingerprint-v1.groovy` | Groovy Script **1.x** | Java / Groovy / Camel / Saxon versions, JAXP factories, charset, timezone, locale, the message's methods, the libraries scripts can load and their versions, the script's variables and their types (Q-G2, Q-G3, Q-G6, Q-X1) | Ran 2026-11-09; run again for `libraryVersions` and `bindingTypes` (new) |
+| `fingerprint-v2.groovy` | Groovy Script **2.x** | Same for 2.x, with the message's interfaces (Q-G4) | Ran 2026-11-09; run again as above |
+| `fingerprint.xsl` | XSLT Mapping 1.2+ | Saxon edition/version, supported features, localisation of `format-date` (Q-X1) | Ran 2026-11-09 |
+| `probe-platform-v1.groovy` | Groovy Script **1.x** | Partner Directory, Keystore, Secure Store and number range behaviour for entries that do not exist, plus the real method lists (Q-P1) | Ran 2026-11-09 |
+| `prepare-xslt-probe.groovy` + `probe-xslt-behaviour.xsl` | Groovy 1.x, then XSLT Mapping | Header vs. property precedence, Java→XDM types, missing params, `setHeader` return value (Q-X2 … Q-X5) | Ran 2026-11-09 |
+| `converters/` | **JSON to XML, XML to JSON, XML to CSV, CSV to XML** converters | Output formatting and XML declaration, JSON escaping, CSV line ends and quoting, an unmapped JSON prefix without namespace mapping (Q-C1) | Not yet |
+| `probe-mapping-v1.groovy` | Custom function in a **Message Mapping** | Groovy and Java version of mapping scripts, the classes and methods behind `MappingContext` and `Output`, and how values reach a `String[]` function: one call per context, SUPPRESS in the input array (Q-M1) | Not yet |
 
 ## How to run
 
@@ -57,8 +57,8 @@ another error, note its text and line.
    * CSV to XML, body `csv-to-xml.csv`: schema `products.xsd` (upload it to the iFlow), path
      `Products/Product`, separator `;`, *Exclude First Line Header*, headers to match *XSD Elements*.
 
-Send the response bodies (or attach them to an issue). Nothing in them is confidential beyond
-version numbers and the tenant's default timezone/locale.
+Send the response bodies (or attach them to an issue); they go into `results-tenant/<date>/`. Nothing
+in them is confidential beyond version numbers, class names and the tenant's default timezone/locale.
 
 ## Baseline from the simulator
 
@@ -81,7 +81,17 @@ plan). The differences that remain:
 * Platform: the simulator's messages add where it looked (e.g. `platform/credentials.json`).
 
 The converter baselines come from the Flow Steps tab's Converter (or `convert.run`) with the settings
-in step 7. Regenerate the XSLT baselines with:
+in step 7. In the baselines, IDs that change with each run are replaced by `x` (the random alias suffix
+of the platform probe, the host part of the exchange ID), and the script API jar's path by its file
+name. Regenerate the Groovy baselines with:
+
+```sh
+G=engine/groovy-v1/target/cpiwb-groovy-v1.jar   # groovy-v2 for fingerprint-v2.groovy
+java -jar $G run --script probes/fingerprint-v1.groovy --in any.xml
+java -jar $G run --script probes/probe-platform-v1.groovy --in any.xml
+```
+
+and the XSLT baselines with:
 
 ```sh
 E=engine/native/out/cpiwb-xml-he99   # or: java -jar engine/xml-he99/target/cpiwb-xml-he99.jar

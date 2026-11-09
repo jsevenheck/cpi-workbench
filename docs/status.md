@@ -13,7 +13,7 @@
 
 Automated checks:
 
-* Engine tests (`mvn -f engine/pom.xml verify`): core 13, XSLT/XSD/XPath/Splitter/Filter/Gather/Converter 72 per Saxon version (16 of them on project boundaries, 8 splitter cases from SAP's examples, 5 Filter, 3 Gather and 16 converter tests, most with SAP's examples), Groovy 41 per script version (4 Camel Simple, 4 Content Modifier, 8 Message Mapping functions, 2 on what a tenant probe showed).
+* Engine tests (`mvn -f engine/pom.xml verify`): core 13, XSLT/XSD/XPath/Splitter/Filter/Gather/Converter 74 per Saxon version (16 of them on project boundaries, 8 splitter cases from SAP's examples, 5 Filter, 3 Gather and 18 converter tests, most with SAP's examples), Groovy 41 per script version (4 Camel Simple, 4 Content Modifier, 8 Message Mapping functions, 2 on what a tenant probe showed).
 * Regression test cases (`testdata/regression-project`): 9.
 * Browser end-to-end tests: `app/e2e/smoke.mjs` (XML tools) and `groovy.mjs` (Groovy, Flow Steps and the iFlow import, which CI runs with the iFlow fixture as a zip).
 * UI unit tests (`npm --prefix app test`): the JSON, XSLT and Groovy formatters, test-case rows, path comparison, the Script API completions (checked against the clean-room Java classes), the Filter's `function:simple(...)` substitution, Message Mapping arguments and the update check's SemVer comparison.
@@ -41,12 +41,12 @@ Automated checks:
 | Distribution | ≈ 45 % | *Check for updates* (0.3.0) links to a newer release; the release page opens through the shell's own command, not yet tried in the desktop window on Windows or macOS. No code signing, no auto-update. On a managed Windows laptop, the unsigned MSI is refused as untrusted, so it could not be tried there. One all-in-one installer instead of a base app plus a separate Groovy pack (plan §5.3). |
 | Large messages | ≈ 70 % | Messages go through JSON-RPC, not temp files (plan §5.3). 7.4 MB worked (XSLT 1.3 s, Groovy 0.45 s); larger ones are untested. |
 | Performance budgets | measured on Linux | Windows and macOS not measured. |
-| Probe kit | run on one tenant: fingerprints (twice), XSLT, platform | The Message Mapping probe (Q-M1) and two of the four converter inputs (Q-C1: JSON to XML, CSV to XML; F54, F55 answered the others) are still to run; `probes/mapping/` and `probes/converters/` hold their files. `fingerprint-v1.groovy` now also lists the methods of `log`. |
+| Probe kit | run on one tenant: fingerprints (twice), XSLT, platform, converters | The Message Mapping probe (Q-M1) is still to run (the converters matched, F54–F56); `probes/mapping/` and `probes/converters/` hold their files. `fingerprint-v1.groovy` now also lists the methods of `log`. |
 
 ## Next steps
 
 1. Manual test of 0.3.0 on Windows ([Manual test](manual-test.md)), then the release.
-2. Run the remaining probes (Message Mapping, converters) and `fingerprint-v1.groovy` once more (the methods of `log`).
+2. Run the Message Mapping probe and `fingerprint-v1.groovy` once more (the methods of `log`).
 3. Install and open the installer on macOS once by hand.
 4. Code signing and auto-update (Phase 5, plan §10.2).
 

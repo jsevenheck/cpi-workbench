@@ -129,16 +129,17 @@ class ConverterStepTest {
     void jsonToXmlWithNamespaceMapping() {
         String json = "{\"abc:A\":{\"xyz:B\":{\"@xyz:attr1\":\"1\",\"@attr2\":\"2\",\"$\":\"valueB\"},\"C\":[\"valueC1\",\"valueC2\"],"
                 + "\"D\":\"\",\"E\":\"valueE\"}}";
+        // SAP's example writes "D":"" as <D/>; a tenant writes <D></D> (docs/plan.md F56).
         assertEquals("<?xml version='1.0' encoding='UTF-8'?><abc:A xmlns:abc=\"http://com.sap/abc\" xmlns:xyz=\"http://com.sap/xyz\">"
-                + "<xyz:B xyz:attr1=\"1\" attr2=\"2\">valueB</xyz:B><C>valueC1</C><C>valueC2</C><D/><E>valueE</E></abc:A>",
+                + "<xyz:B xyz:attr1=\"1\" attr2=\"2\">valueB</xyz:B><C>valueC1</C><C>valueC2</C><D></D><E>valueE</E></abc:A>",
                 body(convert("jsonToXml", json, Json.o().with("useNamespaces", true).with("separator", ":")
                         .with("namespaceMapping", "abc = http://com.sap/abc\nxyz = http://com.sap/xyz"))));
     }
 
     @Test
     void jsonToXmlRules() {
-        // null is an empty element; numbers keep their text; attributes come first.
-        assertEquals("<?xml version='1.0' encoding='UTF-8'?><parent attr1=\"123\" attr2=\"1234\"><id>000039002</id><href/>"
+        // null is an empty element, "" a start and end tag (a tenant, F56); numbers keep their text; attributes come first.
+        assertEquals("<?xml version='1.0' encoding='UTF-8'?><parent attr1=\"123\" attr2=\"1234\"><id>000039002</id><href></href>"
                 + "<externalId>Test_3</externalId><C/><n>1.50</n><t>true</t></parent>", body(convert("jsonToXml",
                 "{\"parent\":{\"@attr1\":123,\"@attr2\":1234,\"id\":\"000039002\",\"href\":\"\",\"externalId\":\"Test_3\","
                         + "\"C\":null,\"n\":1.50,\"t\":true}}", Json.o())));
@@ -171,7 +172,7 @@ class ConverterStepTest {
                 body(convert("jsonToXml", "{\"abc.A\":{\"p.B\":\"x\"}}", ns)), "SAP: an unmapped prefix keeps the full name");
         Map<String, Object> plain = convert("jsonToXml", "{\"abc.A\":\"v\"}", Json.o());
         assertEquals("<?xml version='1.0' encoding='UTF-8'?><abc.A>v</abc.A>", body(plain));
-        assertTrue(Json.write(plain.get("diagnostics")).contains("to verify"), "SAP's example and rule disagree here");
+        assertEquals(List.of(), plain.get("diagnostics"), "a tenant keeps the prefix too (F56), so nothing to note");
     }
 
     // ---------------------------------------------------------------- XML to CSV
@@ -199,6 +200,25 @@ class ConverterStepTest {
         assertTrue(Json.write(attrsOnly.get("diagnostics")).contains("Include Attribute Values"));
         assertEquals("a\n1\n", body(convert("xmlToCsv", "<O><I a=\"1\"/></O>",
                 Json.o().with("sourcePath", "/O/I").with("csvHeader", "xml").with("includeAttributes", true))));
+    }
+
+    @Test
+    void jsonAndCsvToXmlLikeATenant() throws Exception {
+        // probes/converters/ with a tenant's responses (F56): "" is <D></D> and null <E/>; an unmapped prefix stays
+        // in the name; a quoted CSV field loses its quotes, an empty line is skipped, an empty value is <Name></Name>.
+        String json = Files.readString(Path.of("../../probes/converters/json-to-xml.json"));
+        assertEquals("<?xml version='1.0' encoding='UTF-8'?><abc.A><xyz.B xyz.attr1=\"1\" attr2=\"2\">valueB</xyz.B>"
+                + "<C>valueC1</C><C>valueC2</C><D></D><E/><F>1.50</F></abc.A>",
+                body(convert("jsonToXml", json, Json.o().with("separator", ":"))));
+        Path project = Files.createTempDirectory("cpiwb-csv");
+        Files.copy(Path.of("../../probes/converters/products.xsd"), project.resolve("products.xsd"));
+        String csv = Files.readString(Path.of("../../probes/converters/csv-to-xml.csv"));
+        assertEquals("<?xml version='1.0' encoding='UTF-8'?><Products><Product><ProductId>HT-1000</ProductId>"
+                + "<Name>Notebook; Basic 15</Name><Category>Notebooks</Category></Product><Product><ProductId>HT-1081"
+                + "</ProductId><Name></Name><Category>Scanners</Category></Product><Product><ProductId>HT-1010</ProductId>"
+                + "<Name>Notebook Professional 15</Name><Category>Notebooks</Category></Product></Products>",
+                body(convert("csvToXml", csv, Json.o().with("schema", "products.xsd").with("targetPath", "Products/Product")
+                        .with("fieldSeparator", ";").with("firstLineHeader", true).with("baseDir", project.toString()))));
     }
 
     @Test

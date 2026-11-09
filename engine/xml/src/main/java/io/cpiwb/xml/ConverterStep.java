@@ -128,12 +128,6 @@ public final class ConverterStep {
             }
         }
 
-        void infoOnce(String key, String message) {
-            if (warned.add(key)) {
-                diags.add(Diagnostic.info(message).toJson());
-            }
-        }
-
         XdmNode parseBody() throws Exception {
             return processor.newDocumentBuilder().build(resolver.source(
                     new InputSource(new ByteArrayInputStream(input.getBody())), ProjectResolver.MEMORY_BASE + "input.xml"));
@@ -244,8 +238,10 @@ public final class ConverterStep {
                 }
                 String text = scalar(value);
                 out.append('<').append(name).append(decls);
-                if (text.isEmpty()) {
-                    out.append("/>"); // SAP: "C": null and "D": "" give an empty element
+                if (value == null) {
+                    out.append("/>"); // SAP: null gives an empty element; a tenant writes <E/> (docs/plan.md F56)
+                } else if (text.isEmpty()) {
+                    out.append("></").append(name).append('>'); // "" too, which a tenant writes as <D></D> (F56)
                 } else {
                     out.append('>').append(escapeText(text)).append("</").append(name).append('>');
                 }
@@ -325,11 +321,8 @@ public final class ConverterStep {
                         return jsonName;
                     }
                 }
-                if (!useNs && (jsonName.indexOf('.') > 0 || jsonName.indexOf(':') > 0)) {
-                    infoOnce("noNsPrefix", "'" + jsonName + "' keeps its full name without namespace mapping, as SAP's rule "
-                            + "says (\"p.A\" leads to <p.A>); SAP's example without namespace mapping drops the prefix "
-                            + "(\"abc.A\" to <A>) instead. Which one CPI does is to verify.");
-                }
+                // Without namespace mapping a prefix stays in the name ("abc.A" to <abc.A>): SAP's rule and a tenant
+                // (docs/plan.md F56); SAP's example drops it.
                 if (jsonName.indexOf(':') > 0) {
                     checkPrefixed(jsonName);
                     warnOnce("colon:" + jsonName, "'" + jsonName + "' is written as it is; without a namespace for its prefix "
@@ -740,7 +733,8 @@ public final class ConverterStep {
                     String n = xsd.name(fieldDecls.get(f));
                     String v = row.get(col);
                     out.append('<').append(n);
-                    out.append(v.isEmpty() ? "/>" : ">" + escapeText(v) + "</" + n + ">");
+                    // An empty value is <Name></Name>, as on a tenant (docs/plan.md F56).
+                    out.append('>').append(escapeText(v)).append("</").append(n).append('>');
                 }
                 out.append("</").append(record).append('>');
                 if (path.size() == 1 && count == 1 && rows.size() > 1) {

@@ -100,6 +100,7 @@ Labels follow the REA evidence rules (see §4): **Observed** = read in a source 
 | F57 | XML to CSV on that tenant again, with separator `;` and *Include Attribute Values*: `Category;Type;Source` / `Scanners;Source Data;ERP` / an empty line / `ProductId;Name;Note` / `HT-1080;Photo Scan;"a;b"` / `HT-1081;Power Scan;"quoted"`. A value with the separator is put in double quotes; the quotes inside `"quoted"` are not doubled (not RFC 4180). The comma run (F55) wrote `a;b` without quotes. Pasted as text. | Observed (one tenant) | S32 |
 | F58 | `fingerprint-v1.groovy` with `logMethods` on that tenant: the `ScriptLogger` behind 1.x `log` / `logger` has `logInfo(Object[])`, `logWarnings(Object[])`, `logErrors(Object[])`, `logErrors(LogMessage)`, `logErrors(LogMessage, Object[])`, `getLogger(Class)` and `getCategoryLogger(Class)` (both return `ILogger`), and no `info`, `debug`, `warn` or `error`. Where its output goes is not known. | Observed (one tenant) | S32 |
 | F59 | `probe-mapping-v1.groovy` in a Message Mapping on that tenant (`Root` → `Result`, `Value` → `describeQueue` → `Info`, input `a`, `b` / `c` in two `Group`s): mapping scripts run on **Groovy 2.4.21 and Java 21** (SAP SE 21.0.13). The `String[]` function received the first context only, `a` and `b`, as `String`s without a context change entry, so the signature `(String[], Output, MappingContext)` gave *All values of a context*. Only that call's document reached the output: `Result` occurs once, so a target field under it takes the first context (expected if the calls' results are joined by context changes; not shown directly). Behind the interfaces: `com.sap.xi.mapping.camel.impl.MappingContextImpl` (`getHeader`, `getProperty`, `setHeader`, `setProperty` and an undocumented `invalidateCache()`) and `com.sap.xi.mapping.camel.impl.OutputImpl` (SAP's documented methods and `getResultList()`, which returns `com.sap.aii.mappingtool.tf7.rt.ResultList`, PI's mapping runtime class). An unknown header is null; `CamelHttpMethod` was `GET`. | Observed (one tenant) | S32 |
+| F60 | The same probe with the target `Result/Call/Info`, `Value` (`Group` → `Call`) and `request.xml`: one `Call` per source context, each with the document of one `describeQueue` call (`a`, `b`, then `c`), so the per-context results are **joined by context changes**. `describeValue(String, MappingContext)` returned `a`, `b` and `c` in their contexts: a single-value function is **called once per value**. The `ResultList` behind `Output` is `com.sap.aii.mappingtool.tf7.rt.ResultListImpl`; its public constants are the strings `CC` = `__cC_`, `SUPPRESS` = `_sUpPresSeD_` and `XSI_NIL` = `_!xSi#NiL$_`. Not run: the empty context (`request-empty-context.xml`), SUPPRESS in a function's input. | Observed (one tenant) | S32 |
 
 ---
 
@@ -417,14 +418,14 @@ patch notes (F41) and SAP's PI documentation of queues (F42):
   and properties as for a script step. On 2.x a warning cites F41.
 * Execution types follow the signature (F44): *single* (no `String[]`: one call) and *All values of
   a context* (`String[]`: one call per context, without context changes in the arrays, F42; a tenant
-  showed it for the first context, F59). Each call gets an `Output` of its own; joining the results
-  with a context change is an assumption.
+  showed it, F59, F60). Each call gets an `Output` of its own; the results are joined by context
+  changes, as on a tenant (F60).
   A first version also offered *All values of a queue*; it was removed when two community guides
   said CPI has no such type.
 * The iFlow import lists Message Mapping steps (F45) and opens the scripts their `.mmap` uses.
 * Not simulated: graphical Message Mapping and `.mmap` files; calling a single-value function once per
-  value of a queue (PI does; for CPI see Q-M1); CPI's own marker values (the simulator's markers are its
-  own strings, compared by identity).
+  value of a queue (a tenant does, F60; the simulator runs it once with the values given). The markers
+  have a tenant's texts (F60) and are compared by identity (an assumption).
 
 ### 10.4 Converters (built for 0.3.0)
 
@@ -487,7 +488,7 @@ Open: the Message Mapping and converter probes.
 | Q-X6 | Source/target from header/property in newer step versions | Open | SAP docs + probe |
 | Q-V1 | XSD engine and version behind the XML Validator step | Open | Probe iFlow (error message format) |
 | Q-T1 | Format of exported MPL trace content | Open (F18) | Export one sample |
-| Q-M1 | Message Mapping scripts: Groovy and Java version, whether the signature alone picks the execution type (single value or context, F44), how the per-context results are joined, the marker value of SUPPRESS, whether a single-value function is called once per value | Partial: versions and the per-context call of a `String[]` function answered (F59); open: the join, an empty context, the SUPPRESS marker, single-value calls | `probe-mapping-v1.groovy` with the `Call` target (probes/README.md, step 6) |
+| Q-M1 | Message Mapping scripts: Groovy and Java version, whether the signature alone picks the execution type (single value or context, F44), how the per-context results are joined, the marker value of SUPPRESS, whether a single-value function is called once per value | Partial: versions, one call per context, the join by context changes, single-value calls once per value and the marker texts answered (F59, F60); open: whether an empty context is called, SUPPRESS in a function's input, identity or equals for the markers | `probe-mapping-v1.groovy` with the `Call` target (probes/README.md, step 6) |
 | Q-C1 | Converters: compact or indented output, the XML declaration, CSV line ends and quoting, an unmapped JSON prefix without namespace mapping (F47), the XML to JSON namespace table's cell order | Answered for the probes' cases (F54–F57); open: the XML to JSON namespace table's cell order, `\r\n` or `\n` in CSV | Save a response with `curl --output` |
 | Q-P1 | Partner Directory / Keystore / Secure Store edge cases: missing parameter, unknown partner, unknown keystore alias (null or exception, which message) | Answered (F52) | — |
 

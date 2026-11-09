@@ -14,21 +14,22 @@ import java.util.Map;
 
 /**
  * A custom function of a Message Mapping script, run on its own. The signature decides the execution
- * type, as community guides describe CPI (plan F44; CPI has no "All values of a queue"):
- * {@code def String f(String a, MappingContext context)} is "Single Values" (one call here; CPI calls
- * it once per value), {@code def void f(String[] a, Output output, MappingContext context)} is "All
- * values of a context": an argument is a list of contexts and the function is called once per context,
- * without context changes in its arrays. A tenant's probe showed that for the first context (plan F59);
- * SAP's PI documentation describes the type the same way (plan F42). Each call gets an Output of its
- * own; joining the results with a context change is an assumption from that documentation (in the probe,
- * only the first call's result reached a target field that occurs once, which fits it). SUPPRESS and xsi:nil are marker
- * strings of the simulator, compared by identity; CPI's own values are not known.
+ * type, as community guides describe CPI (plan F44; CPI has no "All values of a queue") and a tenant
+ * showed (plan F59, F60): {@code def String f(String a, MappingContext context)} is "Single Values"
+ * (a tenant calls it once per value; here it runs once with the values given),
+ * {@code def void f(String[] a, Output output, MappingContext context)} is "All values of a context":
+ * an argument is a list of contexts and the function is called once per context, without context
+ * changes in its arrays. Each call gets an Output of its own and the results are joined by context
+ * changes, as on a tenant (F60). SUPPRESS and xsi:nil are marker strings with a tenant's texts,
+ * compared by identity.
  */
 final class MappingFunction {
 
-    static final String CONTEXT_CHANGE = new String("[ContextChange]");
-    static final String SUPPRESS = new String("[SUPPRESS]");
-    static final String XSI_NIL = new String("[xsi:nil]");
+    // The texts of a tenant's ResultList constants CC, SUPPRESS and XSI_NIL (plan F60). Compared by identity
+    // here; whether a tenant compares by identity or by equals is not known (an assumption).
+    static final String CONTEXT_CHANGE = new String("__cC_");
+    static final String SUPPRESS = new String("_sUpPresSeD_");
+    static final String XSI_NIL = new String("_!xSi#NiL$_");
 
     enum Kind { VALUE, QUEUE, OUTPUT, CONTEXT }
 

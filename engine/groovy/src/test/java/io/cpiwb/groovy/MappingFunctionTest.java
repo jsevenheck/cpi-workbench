@@ -90,6 +90,16 @@ class MappingFunctionTest {
         assertEquals("[[\"x\",{\"suppress\":true},{\"xsiNil\":true}]]", Json.write(mapping(r).get("queue")));
     }
 
+    /** The markers have the texts of a tenant's ResultList constants (plan F60). */
+    @Test
+    void markersHaveTheTenantsTexts() throws Exception {
+        String s = "def void show(String[] a, Output output, MappingContext context) {\n"
+                + "  output.addValue(a.join('|'))\n}\n";
+        Map<String, Object> r = call(s, "show", List.of(List.of("x", Json.o().with("suppress", true),
+                Json.o().with("xsiNil", true))));
+        assertEquals(List.of(List.of("x|_sUpPresSeD_|_!xSi#NiL$_")), mapping(r).get("queue"));
+    }
+
     /** The tenant's implementations have two methods beyond SAP's interfaces (plan F59). */
     @Test
     void tenantOnlyMethodsAreNotedOrUnsupported() throws Exception {

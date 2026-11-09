@@ -85,7 +85,8 @@ Download the installer for your platform from the
   or *Mapping function*. A mapping function takes **Arguments** instead of the body: a text field per
   `String` (**null** passes null), and per `String[]` one context per line as a JSON array
   (`["A", "B"]`; `{"suppress": true}` and `{"xsiNil": true}` stand for SUPPRESS and xsi:nil). A
-  `String[]` function runs once per context, a `String` function once. **Result** shows the returned
+  `String[]` function runs once per context, a `String` function once (a tenant calls it once per
+  value). **Result** shows the returned
   value or the output queue; `MappingContext` reads and sets the Headers and Properties tabs. The
   mapping itself (`.mmap`) is not simulated. SAP does not support Groovy Script 2.x in Message
   Mappings, and a tenant ran mapping scripts on Groovy 2.4.21 and Java 21, so use 1.x

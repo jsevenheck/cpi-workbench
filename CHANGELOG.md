@@ -8,6 +8,15 @@ of its version.
 
 ## [0.3.0] - 2026-11-08
 
+### Changed
+
+- Platform API messages and results follow a tenant (probe run of 2026-11-09): Partner Directory
+  type and empty-ID errors, `getAuthorizedUsers` of an unknown partner is `null`, the pattern error,
+  Secure Store errors for an empty alias and an unknown OAuth2 credential, the number range error.
+  The simulator still adds where it looked (e.g. `platform/credentials.json`).
+- Tenant results of the probes are in `probes/results-tenant/2026-11-09/`; `docs/fidelity.md` lists
+  what they confirm and the gaps they show (Camel 3.14 and Java 21 behind 1.x, libraries, defaults).
+
 ### Added
 
 - **Message Mapping functions** in the Groovy tab: a custom function of a mapping script, such as

@@ -140,8 +140,10 @@ public final class Platform {
     }
 
     private static java.util.regex.Pattern likePattern(String pattern) {
-        if (pattern.indexOf('[') >= 0 || pattern.indexOf(']') >= 0) {
-            throw new IllegalArgumentException("The pattern must not contain '[' or ']': " + pattern);
+        for (char ch : pattern.toCharArray()) {
+            if (ch == '[' || ch == ']') { // the tenant's text (probe-platform-v1, 2026-11-09)
+                throw new IllegalArgumentException("The pattern '" + pattern + "' contains the invalid character '" + ch + "'");
+            }
         }
         StringBuilder re = new StringBuilder();
         for (int i = 0; i < pattern.length(); i++) {
@@ -159,12 +161,18 @@ public final class Platform {
         return java.util.regex.Pattern.compile(re.toString(), java.util.regex.Pattern.DOTALL);
     }
 
-    /** Authorized users of a partner ({@code "authorizedUsers": [...]} in the mocked directory). */
+    /**
+     * Authorized users of a partner ({@code "authorizedUsers": [...]} in the mocked directory). An unknown
+     * partner gives null, as on a tenant; a known one without users an empty list (an assumption).
+     */
     @SuppressWarnings("unchecked")
     public List<String> pdAuthorizedUsers(String partnerId) {
         recordCall("PartnerDirectoryService", "getAuthorizedUsers", partnerId);
-        List<String> out = new ArrayList<>();
         Object partner = partners.get(partnerId);
+        if (partner == null) {
+            return null;
+        }
+        List<String> out = new ArrayList<>();
         if (partner instanceof Map) {
             for (Object u : Json.arr((Map<String, Object>) partner, "authorizedUsers")) {
                 out.add(String.valueOf(u));
@@ -407,8 +415,9 @@ public final class Platform {
         }
         Object def = name == null ? null : numberRanges.get(name);
         if (!(def instanceof Map)) {
-            throw new com.sap.it.api.nrc.exception.NumberRangeConfigException("Number range " + name
-                    + " is not defined in the simulator's platform/number-ranges.json");
+            throw new com.sap.it.api.nrc.exception.NumberRangeConfigException("Error has occurred while getting next value "
+                    + "from number range object. Cannot find nro_metadata for sequence: " + name
+                    + " (not defined in the simulator's platform/number-ranges.json)");
         }
         @SuppressWarnings("unchecked")
         Map<String, Object> d = (Map<String, Object>) def;

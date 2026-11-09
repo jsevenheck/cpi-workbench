@@ -1,0 +1,107 @@
+{
+  "pd.service": {
+    "result": "com.sap.esb.pd.rt.external.PartnerDirectoryServiceImpl: com.sap.esb.pd.rt.external.PartnerDirectoryServiceImpl@4aeebf78"
+  },
+  "pd.getParameter(missing parameter, missing partner, String)": {
+    "result": null
+  },
+  "pd.getParameter(.., BinaryData)": {
+    "result": null
+  },
+  "pd.getParameter(.., Integer)": {
+    "exception": "java.lang.IllegalArgumentException",
+    "message": "The type java.lang.Integer is invalid. Allowed types are java.lang.String or com.sap.it.api.pd.BinaryData"
+  },
+  "pd.getPartnerId(missing)": {
+    "result": null
+  },
+  "pd.getAlternativePartnerId(missing)": {
+    "result": null
+  },
+  "pd.getParameter(empty id)": {
+    "exception": "java.lang.IllegalArgumentException",
+    "message": "parameterId is empty"
+  },
+  "pd.getCertificateParameter(missing)": {
+    "result": null
+  },
+  "pd.getAuthorizedUsers(missing)": {
+    "result": null
+  },
+  "pd.getPartnerIdOfAuthorizedUser(missing)": {
+    "result": null
+  },
+  "pd.getParameterIdsMatchingPattern(bracket)": {
+    "exception": "java.lang.IllegalArgumentException",
+    "message": "The pattern '[x]' contains the invalid character '['"
+  },
+  "pd.methods": [
+    "public <T> T com.sap.esb.pd.rt.external.PartnerDirectoryServiceImpl.getParameter(java.lang.String,java.lang.String,java.lang.Class<T>) throws com.sap.it.api.pd.exception.PartnerDirectoryException",
+    "public <T> java.util.Map<java.lang.String, T> com.sap.esb.pd.rt.external.PartnerDirectoryServiceImpl.getParameters(java.lang.String,java.lang.Class<T>) throws com.sap.it.api.pd.exception.PartnerDirectoryException",
+    "public <T> java.util.Map<java.lang.String, T> com.sap.esb.pd.rt.external.PartnerDirectoryServiceImpl.getParametersMatchingPattern(java.lang.String,java.lang.String,java.lang.Class<T>) throws com.sap.it.api.pd.exception.PartnerDirectoryException",
+    "public java.lang.String com.sap.esb.pd.rt.external.PartnerDirectoryServiceImpl.getAlternativePartnerId(java.lang.String,java.lang.String,java.lang.String) throws com.sap.it.api.pd.exception.PartnerDirectoryException",
+    "public java.lang.String com.sap.esb.pd.rt.external.PartnerDirectoryServiceImpl.getPartnerId(java.lang.String,java.lang.String,java.lang.String) throws com.sap.it.api.pd.exception.PartnerDirectoryException",
+    "public java.lang.String com.sap.esb.pd.rt.external.PartnerDirectoryServiceImpl.getPartnerIdOfAuthorizedUser(java.lang.String) throws com.sap.it.api.pd.exception.PartnerDirectoryException",
+    "public java.security.cert.Certificate com.sap.esb.pd.rt.external.PartnerDirectoryServiceImpl.getCertificateParameter(java.lang.String,java.lang.String) throws com.sap.it.api.pd.exception.PartnerDirectoryException",
+    "public java.util.Collection<java.lang.String> com.sap.esb.pd.rt.external.PartnerDirectoryServiceImpl.getParameterIdsMatchingPattern(java.lang.String,java.lang.String,java.lang.Class<?>) throws com.sap.it.api.pd.exception.PartnerDirectoryException",
+    "public java.util.List<java.lang.String> com.sap.esb.pd.rt.external.PartnerDirectoryServiceImpl.getAuthorizedUsers(java.lang.String) throws com.sap.it.api.pd.exception.PartnerDirectoryException",
+    "public static synchronized com.sap.esb.pd.rt.external.PartnerDirectoryServiceImpl com.sap.esb.pd.rt.external.PartnerDirectoryServiceImpl.getInstance()"
+  ],
+  "ks.service": {
+    "result": "com.sap.it.api.external.keystore.impl.KeystoreServiceImpl: com.sap.it.api.external.keystore.impl.KeystoreServiceImpl@2a746a14"
+  },
+  "ks.getKey(missing)": {
+    "result": null
+  },
+  "ks.getCertificate(missing)": {
+    "result": null
+  },
+  "ks.getKeyPair(missing)": {
+    "result": null
+  },
+  "ks.getCertificateChain(missing)": {
+    "result": null
+  },
+  "ks.getKeyManagers(missing)": {
+    "result": "[Ljavax.net.ssl.KeyManager;: [com.sap.esb.security.impl.AliasX509ExtendedKeyManagerDelegate@8e64f067]"
+  },
+  "ks.methods": [
+    "public java.security.Key com.sap.it.api.external.keystore.impl.KeystoreServiceImpl.getKey(java.lang.String) throws com.sap.it.api.keystore.exception.KeystoreException",
+    "public java.security.KeyPair com.sap.it.api.external.keystore.impl.KeystoreServiceImpl.getKeyPair(java.lang.String) throws com.sap.it.api.keystore.exception.KeystoreException",
+    "public java.security.cert.Certificate com.sap.it.api.external.keystore.impl.KeystoreServiceImpl.getCertificate(java.lang.String) throws com.sap.it.api.keystore.exception.KeystoreException",
+    "public java.security.cert.Certificate[] com.sap.it.api.external.keystore.impl.KeystoreServiceImpl.getCertificateChain(java.lang.String) throws com.sap.it.api.keystore.exception.KeystoreException",
+    "public javax.net.ssl.KeyManager com.sap.it.api.external.keystore.impl.KeystoreServiceImpl.getKeyManager() throws com.sap.it.api.keystore.exception.KeystoreException",
+    "public javax.net.ssl.KeyManager com.sap.it.api.external.keystore.impl.KeystoreServiceImpl.getKeyManager(java.lang.String) throws com.sap.it.api.keystore.exception.KeystoreException",
+    "public javax.net.ssl.KeyManager[] com.sap.it.api.external.keystore.impl.KeystoreServiceImpl.getKeyManagers() throws com.sap.it.api.keystore.exception.KeystoreException",
+    "public javax.net.ssl.KeyManager[] com.sap.it.api.external.keystore.impl.KeystoreServiceImpl.getKeyManagers(java.lang.String) throws com.sap.it.api.keystore.exception.KeystoreException",
+    "public javax.net.ssl.TrustManager com.sap.it.api.external.keystore.impl.KeystoreServiceImpl.getTrustManager() throws com.sap.it.api.keystore.exception.KeystoreException",
+    "public javax.net.ssl.TrustManager[] com.sap.it.api.external.keystore.impl.KeystoreServiceImpl.getTrustManagers() throws com.sap.it.api.keystore.exception.KeystoreException",
+    "public static com.sap.it.api.external.keystore.impl.KeystoreServiceImpl com.sap.it.api.external.keystore.impl.KeystoreServiceImpl.getInstance()"
+  ],
+  "ss.service": {
+    "result": "com.sap.it.api.external.securestore.impl.SecureStoreServiceImpl: com.sap.it.api.external.securestore.impl.SecureStoreServiceImpl@19d09641"
+  },
+  "ss.getUserCredential(missing)": {
+    "exception": "com.sap.it.api.securestore.exception.SecureStoreException",
+    "message": "Could not fetch the credential for alias CPIWB_PROBE_DOES_NOT_EXIST_8db9abf5"
+  },
+  "ss.getUserCredential(empty)": {
+    "exception": "com.sap.it.api.securestore.exception.SecureStoreException",
+    "message": "Could not fetch the credential for alias "
+  },
+  "ss.getAccesTokenForOauth2ClientCredential(missing)": {
+    "exception": "com.sap.it.api.securestore.exception.SecureStoreException",
+    "message": "Problem during retrieving the access token for the OAuth2 client credential CPIWB_PROBE_DOES_NOT_EXIST_8db9abf5: No artifact descriptor found for artifactName CPIWB_PROBE_DOES_NOT_EXIST_8db9abf5"
+  },
+  "nrc.service": {
+    "result": "com.sap.it.api.external.number.range.impl.NumberRangeServiceImpl: com.sap.it.api.external.number.range.impl.NumberRangeServiceImpl@11c38558"
+  },
+  "nrc.getNextValuefromNumberRange(missing)": {
+    "exception": "com.sap.it.api.nrc.exception.NumberRangeConfigException",
+    "message": "Error has occurred while getting next value from number range object. Cannot find nro_metadata for sequence: CPIWB_PROBE_DOES_NOT_EXIST_8db9abf5"
+  },
+  "factory.getService(ITApi)": {
+    "exception": "com.sap.it.api.exception.InvalidContextException",
+    "message": "Exception occurred while trying to retrieve API Factory for the apiType: interface com.sap.it.api.ITApi"
+  }
+}

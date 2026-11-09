@@ -63,15 +63,20 @@ version numbers and the tenant's default timezone/locale.
 ## Baseline from the simulator
 
 `baseline-simulator/` holds what the simulator returns for the same probes, so differences are
-easy to spot. Known, expected differences:
+easy to spot. `results-tenant/2026-11-09/` holds what one tenant returned (findings F48–F52 in the
+plan). The differences that remain:
 
-* `xsl:product-version` is `HE 9.9.1.8` locally and (reportedly) `EE 9.9.1.x` on CPI.
-* `xsl:supports-higher-order-functions` / `xsl:supports-dynamic-evaluation` are `no` in Saxon-HE 9.9
-  and should be `yes` on CPI (Saxon-EE). Use the *Modern HE (Saxon-HE 12)* profile for stylesheets that need them.
-* `FormatDateGerman`: Saxon-HE only has English names (`[Language: en]5. March 2026`).
-  Saxon-EE on CPI is expected to print `5. März 2026` — this is a real fidelity gap for
-  `format-date`/`format-dateTime` with a language other than English.
-* `ImplicitTimezone` depends on the machine running the simulator; CPI tenants usually run in UTC.
+* `xsl:product-version` is `HE 9.9.1.8` locally and `EE 9.9.1.6` on the tenant.
+* `xsl:supports-higher-order-functions` / `xsl:supports-dynamic-evaluation` / streaming are `no` in
+  Saxon-HE 9.9 and `yes` on the tenant. Use the *Modern HE (Saxon-HE 12)* profile for stylesheets that need them.
+* `FormatDateGerman`: Saxon-HE only has English names (`[Language: en]5. March 2026`); the tenant
+  prints `5. März 2026`. A real fidelity gap for `format-date`/`format-dateTime` in other languages.
+* `ImplicitTimezone`, `timezone`, `locale` and `defaultCharset` come from the computer running the
+  simulator; the tenant runs `Etc/UTC`, `en_US`, UTF-8.
+* Groovy: the tenant runs Java 21 and Camel 3.14.7 for 1.x and 2.x; the simulator Java 17 and, for
+  1.x, Camel 2.24.3. Bindings, message methods and libraries differ as `docs/fidelity.md` lists.
+* Platform: the simulator's messages add where it looked (e.g. `platform/credentials.json`); without
+  `platform/keystore.json` its Keystore throws instead of returning null.
 
 The converter baselines come from the Flow Steps tab's Converter (or `convert.run`) with the settings
 in step 7. Regenerate the XSLT baselines with:

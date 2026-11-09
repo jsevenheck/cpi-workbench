@@ -261,7 +261,10 @@ class ScriptRunnerTest {
                 + "  message.setProperty('pdCert', pd.getCertificateParameter('CERT', pid).getSubjectX500Principal().getName())\n"
                 + "  message.setProperty('owner', pd.getPartnerIdOfAuthorizedUser('sb-user-1'))\n"
                 + "  message.setProperty('users', pd.getAuthorizedUsers(pid).join(','))\n"
-                + "  try { pd.getParameter('ADDRESS', pid, Integer) } catch (IllegalArgumentException e) { message.setProperty('badType', 'IAE') }\n"
+                + "  try { pd.getParameter('ADDRESS', pid, Integer) } catch (IllegalArgumentException e) { message.setProperty('badType', e.message) }\n"
+                + "  message.setProperty('noUsers', String.valueOf(pd.getAuthorizedUsers('NOPE')))\n"
+                + "  try { pd.getParameter('', pid, String) } catch (IllegalArgumentException e) { message.setProperty('emptyId', e.message) }\n"
+                + "  try { pd.getParameterIdsMatchingPattern('A]x[', pid, String) } catch (IllegalArgumentException e) { message.setProperty('bracket', e.message) }\n"
                 + "  def ks = ITApiFactory.getService(KeystoreService, null)\n"
                 + "  message.setProperty('alg', ks.getKeyPair('sim_key').getPrivate().getAlgorithm())\n"
                 + "  message.setProperty('cert', ks.getCertificate('partner_cert').getSubjectX500Principal().getName())\n"
@@ -283,7 +286,12 @@ class ScriptRunnerTest {
         assertEquals("CN=cpiwb test", entry(r, "properties", "pdCert").get("value"));
         assertEquals("P1", entry(r, "properties", "owner").get("value"));
         assertEquals("sb-user-1", entry(r, "properties", "users").get("value"));
-        assertEquals("IAE", entry(r, "properties", "badType").get("value"));
+        // The tenant's texts and results (probes/results-tenant/2026-11-09/probe-platform-v1.json).
+        assertEquals("The type java.lang.Integer is invalid. Allowed types are java.lang.String or com.sap.it.api.pd.BinaryData",
+                entry(r, "properties", "badType").get("value"));
+        assertEquals("null", entry(r, "properties", "noUsers").get("value"), "an unknown partner has no list");
+        assertEquals("parameterId is empty", entry(r, "properties", "emptyId").get("value"));
+        assertEquals("The pattern 'A]x[' contains the invalid character ']'", entry(r, "properties", "bracket").get("value"));
         assertEquals("RSA", entry(r, "properties", "alg").get("value"));
         assertEquals("CN=cpiwb test", entry(r, "properties", "cert").get("value"));
         assertEquals("1", entry(r, "properties", "chain").get("value"));

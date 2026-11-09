@@ -89,7 +89,7 @@ public class PartnerDirectoryService implements ITApi {
         return Platform.current().pdPartnerIdOfAuthorizedUser(authorizedUser);
     }
 
-    /** Authorized users of a partner; empty list if none. */
+    /** Authorized users of a partner; null for an unknown partner (a tenant, 2026-11-09). */
     public List<String> getAuthorizedUsers(String partnerId) throws PartnerDirectoryException {
         require(partnerId, "partnerId");
         return Platform.current().pdAuthorizedUsers(partnerId);
@@ -119,13 +119,17 @@ public class PartnerDirectoryService implements ITApi {
         if (type == BinaryData.class) {
             return true;
         }
-        throw new IllegalArgumentException("Unsupported parameter type " + (type == null ? "null" : type.getName())
-                + " (String or com.sap.it.api.pd.BinaryData)");
+        // The tenant's text (probe-platform-v1, 2026-11-09).
+        throw new IllegalArgumentException("The type " + (type == null ? "null" : type.getName())
+                + " is invalid. Allowed types are java.lang.String or com.sap.it.api.pd.BinaryData");
     }
 
     private static void require(String v, String name) {
-        if (v == null || v.isEmpty()) {
-            throw new IllegalArgumentException(name + " must not be null or empty");
+        if (v == null) {
+            throw new IllegalArgumentException(name + " must not be null");
+        }
+        if (v.isEmpty()) {
+            throw new IllegalArgumentException(name + " is empty"); // the tenant's text for an empty ID
         }
     }
 

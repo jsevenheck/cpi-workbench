@@ -30,7 +30,18 @@ public class SecureStoreService implements ITApi {
     }
 
     private static AccessTokenAndUser token(String method, String name) throws SecureStoreException {
-        Map<String, Object> c = lookup(method, name);
+        Map<String, Object> c;
+        try {
+            c = lookup(method, name);
+        } catch (SecureStoreException e) {
+            if (!method.equals("getAccesTokenForOauth2ClientCredential")) {
+                throw e;
+            }
+            // The tenant's text for an unknown OAuth2 credential (probe-platform-v1, 2026-11-09).
+            throw new SecureStoreException("Problem during retrieving the access token for the OAuth2 client credential "
+                    + name + ": No artifact descriptor found for artifactName " + name
+                    + " (not defined in the simulator's platform/credentials.json)");
+        }
         String token = Json.str(c, "accessToken", null);
         if (token == null) {
             throw new SecureStoreException("Credential " + name + " is no OAuth2 credential in the simulator's "
@@ -44,7 +55,7 @@ public class SecureStoreService implements ITApi {
     private static Map<String, Object> lookup(String method, String alias) throws SecureStoreException {
         Platform.current().recordCall("SecureStoreService", method, alias);
         if (alias == null || alias.isEmpty()) {
-            throw new SecureStoreException("The alias must not be null or empty");
+            throw new SecureStoreException("Could not fetch the credential for alias " + (alias == null ? "null" : ""));
         }
         Map<String, Object> c = Platform.current().credential(alias);
         if (c == null) {

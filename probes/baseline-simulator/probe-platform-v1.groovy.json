@@ -10,7 +10,7 @@
     },
     "pd.getParameter(.., Integer)": {
         "exception": "java.lang.IllegalArgumentException",
-        "message": "Unsupported parameter type java.lang.Integer (String or com.sap.it.api.pd.BinaryData)"
+        "message": "The type java.lang.Integer is invalid. Allowed types are java.lang.String or com.sap.it.api.pd.BinaryData"
     },
     "pd.getPartnerId(missing)": {
         "result": null
@@ -20,20 +20,20 @@
     },
     "pd.getParameter(empty id)": {
         "exception": "java.lang.IllegalArgumentException",
-        "message": "parameterId must not be null or empty"
+        "message": "parameterId is empty"
     },
     "pd.getCertificateParameter(missing)": {
         "result": null
     },
     "pd.getAuthorizedUsers(missing)": {
-        "result": "java.util.ArrayList: []"
+        "result": null
     },
     "pd.getPartnerIdOfAuthorizedUser(missing)": {
         "result": null
     },
     "pd.getParameterIdsMatchingPattern(bracket)": {
         "exception": "java.lang.IllegalArgumentException",
-        "message": "The pattern must not contain '[' or ']': [x]"
+        "message": "The pattern '[x]' contains the invalid character '['"
     },
     "pd.methods": [
         "public <T> T com.sap.it.api.pd.PartnerDirectoryService.getParameter(java.lang.String,java.lang.String,java.lang.Class<T>) throws com.sap.it.api.pd.exception.PartnerDirectoryException",
@@ -90,18 +90,18 @@
     },
     "ss.getUserCredential(empty)": {
         "exception": "com.sap.it.api.securestore.exception.SecureStoreException",
-        "message": "The alias must not be null or empty"
+        "message": "Could not fetch the credential for alias "
     },
     "ss.getAccesTokenForOauth2ClientCredential(missing)": {
         "exception": "com.sap.it.api.securestore.exception.SecureStoreException",
-        "message": "Could not fetch the credential for alias CPIWB_PROBE_DOES_NOT_EXIST_xxxxxxxx (not defined in the simulator's platform/credentials.json)"
+        "message": "Problem during retrieving the access token for the OAuth2 client credential CPIWB_PROBE_DOES_NOT_EXIST_xxxxxxxx: No artifact descriptor found for artifactName CPIWB_PROBE_DOES_NOT_EXIST_xxxxxxxx (not defined in the simulator's platform/credentials.json)"
     },
     "nrc.service": {
         "result": "com.sap.it.api.nrc.NumberRangeConfigurationService: com.sap.it.api.nrc.NumberRangeConfigurationService"
     },
     "nrc.getNextValuefromNumberRange(missing)": {
         "exception": "com.sap.it.api.nrc.exception.NumberRangeConfigException",
-        "message": "Number range CPIWB_PROBE_DOES_NOT_EXIST_xxxxxxxx is not defined in the simulator's platform/number-ranges.json"
+        "message": "Error has occurred while getting next value from number range object. Cannot find nro_metadata for sequence: CPIWB_PROBE_DOES_NOT_EXIST_xxxxxxxx (not defined in the simulator's platform/number-ranges.json)"
     },
     "factory.getService(ITApi)": {
         "exception": "com.sap.it.api.exception.InvalidContextException",

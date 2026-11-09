@@ -1,13 +1,14 @@
-# Implementation status (2026-11-08)
+# Implementation status (2026-11-09)
 
 ## How to read the numbers
 
 * **Built** is the share of the planned scope of an area (see [plan](plan.md) §1, §5–§10) that is
   implemented and covered by automated tests on Linux. It is an estimate made by listing the
   planned sub-features and the open items below; it is not a measured metric.
-* **Tenant-verified** is 0 % for every area: the [probes](../probes/README.md) are written but have
-  not been run on a tenant yet. Until then, "like CPI" means "like SAP's documentation, SAP's
-  published interfaces and Camel's code say".
+* **Tenant-verified:** on 2026-11-09 the fingerprint, XSLT and platform [probes](../probes/README.md)
+  ran on one tenant (F48–F52, `probes/results-tenant/`). The Message Mapping and converter probes have
+  not run yet. Elsewhere "like CPI" means "like SAP's documentation, SAP's published interfaces and
+  Camel's code say".
 * Items that cannot be built with Saxon-HE (EE-only features) count as out of scope, not as gaps.
 
 Automated checks:
@@ -26,8 +27,8 @@ Automated checks:
 | XSD validation | ≈ 90 % | XML Schema 1.0 only (JDK validator). |
 | XPath tester | ≈ 95 % | — |
 | Flow Steps: Content Modifier, Filter, Router, General / Iterating Splitter, Gather (with Camel Simple), Converter | ≈ 80 % | `=`, `and`, `or` are rewritten to Camel's spelling on an assumption (F35). Splitter rules are inferred from SAP's examples. Gather's Combine at XPath has no SAP example (an assumption); Zip and Tar are not simulated. Number Range and External Parameter sources raise `UnsupportedInSimulator`; variables use their default. Converters (JSON ↔ XML, XML ↔ CSV) follow SAP's rules and examples; output formatting, CSV quoting and line ends, and one contradiction in SAP's JSON to XML docs are open (Q-C1). Not simulated: EDI, Encoder/Decoder, XML Modifier, Message Digest, MIME Multipart. No CLI command, no test-case step. |
-| Groovy Script 1.x (Groovy 2.4.21, Camel 2.24.3, Script API v1) | ≈ 90 % | Overloads that take Camel's `Attachment` type. Camel 3.14 variant in case the fingerprint shows it (F30). |
-| Groovy Script 2.x (Groovy 4.0.29, Camel 3.14.7, Script API v2) | ≈ 90 % | ProcessDirect raises `UnsupportedInSimulator`. Methods the runtime class may have beyond the interface. |
+| Groovy Script 1.x (Groovy 2.4.21, Camel 2.24.3, Script API v1) | ≈ 90 % | A tenant runs 1.x on Camel 3.14.7 and Java 21 (F48); the simulator's 1.x engine uses Camel 2.24.3 and Java 17. Missing: the overloads that take Camel's `Attachment` type, the `log` / `logger` bindings, the libraries a tenant offers (F50). |
+| Groovy Script 2.x (Groovy 4.0.29, Camel 3.14.7, Script API v2) | ≈ 90 % | ProcessDirect raises `UnsupportedInSimulator`. Java 17 instead of a tenant's 21; `getSoapHeaders` / `setSoapHeaders`, yaml and toml are missing (F49, F50). |
 | Message Mapping functions (`MappingContext`, `Output`) | ≈ 80 % | The function runs on its own; `.mmap` is out of scope. The execution type follows the signature as community guides describe CPI (F44, not verified); the per-context join and the marker strings are assumptions, a single-value function is called once (not per value), and the Groovy version is not known (Q-M1, `probe-mapping-v1.groovy`). |
 | MPL, console, API call log | ≈ 95 % | — |
 | Platform API mocks | ≈ 85 % | Data Store (no public API). Number ranges count per run only. OAuth2 tokens are fixed values. Services outside `generic.api` other than Value Mapping. |
@@ -40,12 +41,12 @@ Automated checks:
 | Distribution | ≈ 45 % | *Check for updates* (0.3.0) links to a newer release; the release page opens through the shell's own command, not yet tried in the desktop window on Windows or macOS. No code signing, no auto-update. On a managed Windows laptop, the unsigned MSI is refused as untrusted, so it could not be tried there. One all-in-one installer instead of a base app plus a separate Groovy pack (plan §5.3). |
 | Large messages | ≈ 70 % | Messages go through JSON-RPC, not temp files (plan §5.3). 7.4 MB worked (XSLT 1.3 s, Groovy 0.45 s); larger ones are untested. |
 | Performance budgets | measured on Linux | Windows and macOS not measured. |
-| Probe kit | written 100 %, run 0 % | Needs one run on a test tenant. |
+| Probe kit | run on one tenant: fingerprints, XSLT, platform | The Message Mapping probe (Q-M1) and the converter inputs (Q-C1) are still to run. |
 
 ## Next steps
 
 1. Manual test of 0.3.0 on Windows ([Manual test](manual-test.md)), then the release.
-2. Run the probes on a test tenant (Appendix A of the plan) and turn "to verify" into facts.
+2. Run the remaining probes (Message Mapping, converters). Decide on the tenant's findings: Camel 3.14 and Java 21 for the 1.x engine, the libraries a tenant offers, UTC / `en_US` / UTF-8 as the engines' defaults (F48–F50).
 3. Install and open the installer on macOS once by hand.
 4. Code signing and auto-update (Phase 5, plan §10.2).
 

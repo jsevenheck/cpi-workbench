@@ -8,13 +8,13 @@ Finding numbers (F…) and questions (Q…) refer to the [plan](plan.md).
 
 | Area | Status |
 |---|---|
-| Saxon release line (9.9) | Same line as CPI. CPI runs the **EE** edition, the simulator **HE** (F8). |
+| Saxon release line (9.9) | Same line as CPI. CPI runs **EE 9.9.1.6** (probe, F51), the simulator **HE 9.9.1.8**. |
 | Higher-order functions, `xsl:evaluate` | Not in HE 9.9; use the *Modern HE (Saxon 12)* profile. The error message says so. |
 | Schema-aware XSLT, streaming | EE only; not available. The error message says that CPI supports it. |
-| `format-date` with languages other than English | HE prints English names (`[Language: en]…`); CPI's EE probably localises them (F20). |
-| Header vs. property with the same name | Header wins (Camel XsltBuilder order). **To verify** (Q-X2). |
-| Declared parameter without header or property | The XSLT default is used; can be switched to "error". **To verify** (Q-X4). |
-| Typed parameter values | Passed as Java objects, so Saxon converts them (F21). **To verify** (Q-X3). |
+| `format-date` with languages other than English | HE prints English names (`[Language: en]…`); CPI's EE localises them (`5. März 2026`, F51). A known gap. |
+| Header vs. property with the same name | Header wins, as on a tenant (F51). |
+| Declared parameter without header or property | The XSLT default is used, as on a tenant (F51); can be switched to "error". |
+| Typed parameter values | Passed as Java objects, so Saxon converts them (F21); the probe gives the same types on a tenant (F51). `$exchange` prints as `Exchange` locally, `Exchange[<id>]` on a tenant. |
 | Reflexive Java calls (`java:` namespaces) | Supported for JDK classes, since SAP's own samples use them (F32). Classes from the iFlow's jars are not available to XSLT. Argument conversion follows simple rules, not all of Saxon-EE's. |
 | XSD validation | JDK validator, XML Schema 1.0. CPI's validator is **to verify** (Q-V1). |
 | XPath tab | 3.1 (Saxon) by default, as SAP documents for the Content Modifier and Filter and as Router conditions in real iFlows need (F37). 1.0 (JDK) stays available; no CPI step is known to use it. |
@@ -62,14 +62,16 @@ The steps (SAP: *Define Content Modifier*, *Define Filter*, *Define Router*, *De
 | Area | Status |
 |---|---|
 | Groovy versions | Groovy 2.4.21 for 1.x and 4.0.29 for 2.x, as SAP documents (F1, F2). |
-| Java version | Java 17, as reported for 2.x (F3). The Java version behind 1.x is **to verify** (F4). |
-| Camel version | 3.14.7 for 2.x (reported). 1.x runs on 2.24.3, but SAP's v1 API jar targets Camel 3.14 since late 2025, so 1.x may run on 3.14 now: **to verify** (F30, Q-G3). |
-| Script API v1 | The methods of SAP's published interface (`script.api` on Maven Central): body, headers, properties, attachments (`AttachmentWrapper`), SOAP headers, sizes (F29). Not offered: the overloads that take Camel's own `Attachment` type. |
-| Script API v2 | The methods of SAP's published interface (`script.v2.api` 4.2.2): attachments, `getHeader(name, default)`, `resetBodyStream`, exchange timestamps. ProcessDirect calls raise `UnsupportedInSimulator`. CPI's runtime class may offer more than the interface; `fingerprint-v2.groovy` lists it (Q-G4). |
+| Java version | The simulator runs Java 17. A tenant runs **Java 21** for 1.x and 2.x (F48), so JDK-dependent output (F25) can differ. |
+| Camel version | 3.14.7 for 2.x. A tenant runs **Camel 3.14.7 for 1.x as well** (F48); the simulator's 1.x engine still uses Camel 2.24.3, so Camel 3 classes (e.g. `org.apache.camel.attachment.Attachment`) are missing there and Camel Simple on the 1.x profile accepts Camel 2 syntax. A known gap. |
+| Script API v1 | The methods of SAP's published interface (`script.api` on Maven Central): body, headers, properties, attachments (`AttachmentWrapper`), SOAP headers, sizes (F29). Not offered: the overloads that take Camel's own `Attachment` type, `getAttachmentObjects` and `getExtensionFunctions`, which a tenant's 1.x message has (F49). |
+| Script API v2 | The methods of SAP's published interface (`script.v2.api` 4.2.2): attachments, `getHeader(name, default)`, `resetBodyStream`, exchange timestamps. ProcessDirect calls raise `UnsupportedInSimulator`. A tenant's runtime class also has `getSoapHeaders`, `setSoapHeaders` and `setProxyHandler` (F49), which the simulator does not offer. |
 | Message log | `messageLogFactory` and `MessageLog` follow SAP's published interface; MPL disabled gives `null`. |
-| Platform APIs | Follow SAP's published `generic.api` (F33): Secure Store (user credentials, OAuth2 tokens from a fixed value), Value Mapping (`getMappedValue`), Partner Directory (parameters, certificate parameters, partner IDs, authorized users, deprecated pattern lookups), Keystore (keys, certificates, chains, key pairs, key and trust managers), number ranges. Other services raise `InvalidContextException`. The runtime's edge cases are **to verify** (Q-P1). |
+| Script context | A tenant binds `messageLogFactory` (and on 1.x also `log` and `logger`, types unknown); the simulator binds `messageLogFactory` and `out` (for the console). `log` and `logger` are not simulated (F49). |
+| Runtime defaults | A tenant runs with UTF-8, `Etc/UTC` and `en_US` (F48). The simulator uses the computer's charset, timezone and locale, so dates, `toUpperCase()` and `new String(bytes)` can differ. |
+| Platform APIs | Follow SAP's published `generic.api` (F33): Secure Store (user credentials, OAuth2 tokens from a fixed value), Value Mapping (`getMappedValue`), Partner Directory (parameters, certificate parameters, partner IDs, authorized users, deprecated pattern lookups), Keystore (keys, certificates, chains, key pairs, key and trust managers), number ranges. Other services raise `InvalidContextException`. For names that do not exist, the results and messages match a tenant (F52); the simulator adds where it looks (e.g. `platform/credentials.json`). Without `platform/keystore.json` the Keystore throws instead of returning null. |
 | Data Store from scripts | Not simulated: CPI has no public script API for it (F28). |
 | Scripts of a Message Mapping (custom functions) | A function runs on its own with arguments: `MappingContext` (headers, properties) and `Output` follow SAP's Javadoc (F40). The signature picks the execution type, as community guides describe CPI (F44): a single-value function (`String` arguments) is called once with one value per argument (CPI, per these guides, calls it once per value); a `String[]` function is *All values of a context*: one call per context, without context changes in its arrays (F42), each call with its own `Output`, the results joined by context changes (an **assumption**). According to the same guides CPI has no *All values of a queue*; this is **to verify** (Q-M1). SUPPRESS and xsi:nil are the simulator's own marker strings. The Groovy version behind mapping scripts is **to verify** (Q-M1); SAP says Groovy Script 2.x is not supported in Message Mappings (F41), so 2.x runs warn. The mapping itself (`.mmap`) is not simulated. |
-| Extra libraries on the class path | Unknown (F31). The simulator adds only `lib/` jars. |
-| Groovy modules on 2.x | xml, json, dateutil, datetime, templates and nio are bundled. CPI's set is **to verify**. Scripts on 2.x also see Camel's `camel-bean` (bundled for Camel Simple's OGNL calls; Camel 2's core has it built in). |
-| Pretty-printing (`XmlUtil.serialize`) | Depends on the JDK version (F25), so byte-exact comparisons depend on Java 17 being right. |
+| Extra libraries on the class path | A tenant offers commons-lang3, Jackson, commons-codec and IAIK to 1.x scripts and commons-lang3 to 2.x (F50). The simulator bundles none of them; add the jars to `lib/`. |
+| Groovy modules on 2.x | xml, json, dateutil, datetime, templates and nio are bundled. A tenant also has yaml and toml (F50), which the simulator does not bundle. Scripts on 2.x also see Camel's `camel-bean` (bundled for Camel Simple's OGNL calls; Camel 2's core has it built in). |
+| Pretty-printing (`XmlUtil.serialize`) | Depends on the JDK version (F25), so byte-exact comparisons depend on the Java version (a tenant runs Java 21, F48). |

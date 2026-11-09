@@ -93,6 +93,8 @@ Labels follow the REA evidence rules (see §4): **Observed** = read in a source 
 | F50 | Libraries a script can load on that tenant: 1.x has commons-lang3, Jackson databind, commons-codec, IAIK and `groovy.sql`; 2.x has commons-lang3 and Groovy's yaml and toml modules, but no Jackson, commons-codec, IAIK or `groovy.sql`. Neither has POI or `groovy.ant`. Versions were not recorded. | Observed (one tenant) | S32 |
 | F51 | XSLT Mapping on that tenant: **Saxon-EE 9.9.1.6**, streaming, dynamic evaluation and higher-order functions supported, implicit timezone `PT0S`, `format-date` localises German month names (`5. März 2026`), `saxon:evaluate` available. Parameters: a header wins over a property of the same name; typed values arrive typed (Integer → `xs:integer`, Boolean, Date → `xs:dateTime`, `byte[]` → two items); a missing parameter takes the stylesheet's default; `hci:setHeader` returns the empty sequence; `$exchange` prints as `Exchange[<id>]`. All of this matches the simulator except the edition (HE); the `Exchange` text follows the tenant since 0.3.0. | Observed (one tenant) | S32 |
 | F52 | Platform services on that tenant, for names that do not exist: Partner Directory lookups return null (also `getAuthorizedUsers` of an unknown partner); a type other than String/BinaryData gives "The type java.lang.Integer is invalid. Allowed types are java.lang.String or com.sap.it.api.pd.BinaryData"; an empty ID "parameterId is empty"; a `[` in a pattern "The pattern '[x]' contains the invalid character '['". Keystore lookups of an unknown alias return null. Secure Store: "Could not fetch the credential for alias X" (also for an empty alias); an unknown OAuth2 client credential "Problem during retrieving the access token for the OAuth2 client credential X: No artifact descriptor found for artifactName X". Number ranges: "Error has occurred while getting next value from number range object. Cannot find nro_metadata for sequence: X". `ITApiFactory.getService(ITApi)` throws `InvalidContextException`. | Observed (one tenant) | S32 |
+| F53 | A second run of the fingerprints on that tenant (results merged into the files of the first run): scripts load commons-lang3 3.20.0 (1.x and 2.x), Jackson databind 2.21.7 and commons-codec 1.16.1 (1.x) and camel-attachments 3.14.7-sap-59 (both); groovy-yaml and groovy-toml carry no version. 1.x binds `log` and `logger` as `com.sap.it.script.logging.impl.ScriptLogger`; `messageLogFactory` is `com.sap.it.op.agent.mpl.factory.impl.MessageLogFactoryImpl` on both. All other values match the first run. | Observed (one tenant) | S32 |
+| F54 | XML to JSON on that tenant with `probes/converters/xml-to-json.xml` and the settings of step 7 (namespace mapping `http://com.sap/abc` → `abc`, `http://com.sap/xyz` → `xyz`, separator `:`, no streaming): `{"abc:A":{"xyz:B":{"@xyz:attr1":"1","@attr2":"2","$":"valueB"},"C":["valueC1","valueC2"],"D":"","E":"valueE","F":" ","G":"a/b \"quoted\" ü"}}`, the same as the simulator's baseline: compact, `/` and non-ASCII unescaped, `"` escaped, `""` for an empty element, a whitespace value kept. Copied from a screenshot of the response, so a trailing line break and the bytes of `ü` are not verified. | Observed (one tenant) | S32 |
 
 ---
 
@@ -456,7 +458,7 @@ Taken: the build-vs-reuse principle (§3), XSLT first, tenant probes later; the 
 the Apache-2.0 licence in a public repository; the HE profiles instead of a Saxon-EE licence. With the
 first probe run (2026-11-09, F48–F52) for 0.3.0: both Groovy engines on Camel 3.14.7 and Java 21 and
 Camel 2 dropped (tenants on software 6.x / 5.x are not covered); the tenant's timezone, locale,
-bindings and libraries as the engines' defaults; library versions assumed until the probes report them.
+bindings and libraries, in the versions it reports (F53), as the engines' defaults.
 Open: the Message Mapping and converter probes.
 
 ---
@@ -470,7 +472,7 @@ Open: the Message Mapping and converter probes.
 | Q-G3 | Camel version per step | Answered: 3.14.7 for 1.x and 2.x (F48) | — |
 | Q-G4 | v2 API method list | Answered (F29, F49) | — |
 | Q-G5 | `getBody(Class)` conversions for String/byte[]/InputStream/Document bodies | Inferred (Camel) | Probe iFlow |
-| Q-G6 | Which bindings are in the script context (`messageLogFactory`, others?) | Answered (F49); the types of 1.x `log` and `logger` are open | Probe listing the binding's types |
+| Q-G6 | Which bindings are in the script context (`messageLogFactory`, others?) | Answered (F49, F53); the methods of 1.x `log` / `logger` (SAP's `ScriptLogger`) are open | `fingerprint-v1.groovy` (`logMethods`) |
 | Q-X1 | Saxon edition/version | Answered: EE 9.9.1.6 (F51) | — |
 | Q-X2 | `xsl:param` precedence when header and property share a name | Answered: the header (F51) | — |
 | Q-X3 | Type of bound parameter values (string vs. typed) | Answered: typed (F51) | — |
@@ -480,7 +482,7 @@ Open: the Message Mapping and converter probes.
 | Q-V1 | XSD engine and version behind the XML Validator step | Open | Probe iFlow (error message format) |
 | Q-T1 | Format of exported MPL trace content | Open (F18) | Export one sample |
 | Q-M1 | Message Mapping scripts: Groovy and Java version, whether the signature alone picks the execution type (single value or context, F44), how the per-context results are joined, the marker value of SUPPRESS, whether a single-value function is called once per value | Partial (F40–F44) | `probe-mapping-v1.groovy` |
-| Q-C1 | Converters: compact or indented output, the XML declaration, CSV line ends and quoting, an unmapped JSON prefix without namespace mapping (F47), the XML to JSON namespace table's cell order | Partial (F46, F47) | `probes/converters/` |
+| Q-C1 | Converters: compact or indented output, the XML declaration, CSV line ends and quoting, an unmapped JSON prefix without namespace mapping (F47), the XML to JSON namespace table's cell order | Partial (F46, F47; XML to JSON confirmed, F54) | `probes/converters/` (the other three) |
 | Q-P1 | Partner Directory / Keystore / Secure Store edge cases: missing parameter, unknown partner, unknown keystore alias (null or exception, which message) | Answered (F52) | — |
 
 ## Sources

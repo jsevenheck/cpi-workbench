@@ -80,6 +80,20 @@
     "logger",
     "messageLogFactory"
   ],
+  "libraryVersions": {
+    "org.apache.commons/commons-lang3": "3.20.0",
+    "com.fasterxml.jackson.core/jackson-databind": "2.21.7",
+    "commons-codec/commons-codec": "1.16.1",
+    "org.apache.groovy/groovy-yaml": "unavailable: java.lang.ClassNotFoundException",
+    "org.apache.groovy/groovy-toml": "unavailable: java.lang.ClassNotFoundException",
+    "org.apache.camel/camel-attachments": "3.14.7-sap-59"
+  },
+  "bindingTypes": {
+    "log": "com.sap.it.script.logging.impl.ScriptLogger",
+    "logger": "com.sap.it.script.logging.impl.ScriptLogger",
+    "javax.script.filename": "java.lang.String",
+    "messageLogFactory": "com.sap.it.op.agent.mpl.factory.impl.MessageLogFactoryImpl"
+  },
   "headerTypes": {
     "CamelHttpMethod": "java.lang.String",
     "CamelHttpPath": "java.lang.String",

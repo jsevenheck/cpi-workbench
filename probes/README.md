@@ -3,16 +3,17 @@
 These artifacts close the open questions in [docs/plan.md](../docs/plan.md) (Appendix A) by observing a real
 Cloud Integration tenant as a black box: no decompiling, just inputs and outputs. The results tell us
 whether the simulator matches CPI and where to adjust the runtime profiles. The first run on a tenant
-(2026-11-09) is in `results-tenant/2026-11-09/`; the Groovy engines follow it since 0.3.0.
+(2026-11-09) is in `results-tenant/2026-11-09/`, with the fingerprints' second run merged in; the
+Groovy engines follow it since 0.3.0.
 
 | File | Step | Answers | On a tenant |
 |---|---|---|---|
-| `fingerprint-v1.groovy` | Groovy Script **1.x** | Java / Groovy / Camel / Saxon versions, JAXP factories, charset, timezone, locale, the message's methods, the libraries scripts can load and their versions, the script's variables and their types (Q-G2, Q-G3, Q-G6, Q-X1) | Ran 2026-11-09; run again for `libraryVersions` and `bindingTypes` (new) |
-| `fingerprint-v2.groovy` | Groovy Script **2.x** | Same for 2.x, with the message's interfaces (Q-G4) | Ran 2026-11-09; run again as above |
+| `fingerprint-v1.groovy` | Groovy Script **1.x** | Java / Groovy / Camel / Saxon versions, JAXP factories, charset, timezone, locale, the message's methods, the libraries scripts can load and their versions, the script's variables and their types (Q-G2, Q-G3, Q-G6, Q-X1) | Ran twice (the second time with `libraryVersions` and `bindingTypes`); run again for `logMethods` (new) |
+| `fingerprint-v2.groovy` | Groovy Script **2.x** | Same for 2.x, with the message's interfaces (Q-G4) | Ran twice |
 | `fingerprint.xsl` | XSLT Mapping 1.2+ | Saxon edition/version, supported features, localisation of `format-date` (Q-X1) | Ran 2026-11-09 |
 | `probe-platform-v1.groovy` | Groovy Script **1.x** | Partner Directory, Keystore, Secure Store and number range behaviour for entries that do not exist, plus the real method lists (Q-P1) | Ran 2026-11-09 |
 | `prepare-xslt-probe.groovy` + `probe-xslt-behaviour.xsl` | Groovy 1.x, then XSLT Mapping | Header vs. property precedence, Java→XDM types, missing params, `setHeader` return value (Q-X2 … Q-X5) | Ran 2026-11-09 |
-| `converters/` | **JSON to XML, XML to JSON, XML to CSV, CSV to XML** converters | Output formatting and XML declaration, JSON escaping, CSV line ends and quoting, an unmapped JSON prefix without namespace mapping (Q-C1) | Not yet |
+| `converters/` | **JSON to XML, XML to JSON, XML to CSV, CSV to XML** converters | Output formatting and XML declaration, JSON escaping, CSV line ends and quoting, an unmapped JSON prefix without namespace mapping (Q-C1) | XML to JSON ran (same as the baseline); the other three not yet |
 | `probe-mapping-v1.groovy` | Custom function in a **Message Mapping** | Groovy and Java version of mapping scripts, the classes and methods behind `MappingContext` and `Output`, and how values reach a `String[]` function: one call per context, SUPPRESS in the input array (Q-M1) | Not yet |
 
 ## How to run
@@ -35,27 +36,47 @@ another error, note its text and line.
 5. iFlow **Probe_Platform**: `HTTPS sender` → `Groovy Script 1.x: probe-platform-v1.groovy` → end.
    It only looks up names that cannot exist; no Partner Directory content or keys are needed.
 
-6. iFlow **Probe_Mapping**: `HTTPS sender` → `Message Mapping` → end. Source and target can be any
-   XML schemas with a repeating field in a repeating group and a repeating string field, e.g. source
-   `<Root><Group><Value/>…</Group>…</Root>`, target `<Result><Info/>…</Result>` (`Info` 0..unbounded).
-   Add `probe-mapping-v1.groovy` as the mapping's script (Groovy Script 1.x), map `Value` (its
-   default context, `Group`) through `describeQueue` to `Info`, and post a body such as
-   `<Root><Group><Value>a</Value><Value>b</Value></Group><Group><Value>c</Value></Group></Root>`.
-   Each `Info` holds the JSON of one call. If the mapping does not deploy or the function is not
-   offered, the error message is valuable too. The baseline used the argument
-   `[["a","b"],["c",{"suppress":true}]]` (two contexts, so two calls).
+6. iFlow **Probe_Mapping**: `HTTPS sender (address /cpiwb/mapping)` → `Message Mapping` → end. The files
+   are in `mapping/`:
+   * Create the message mapping with `mapping/source.xsd` as source (`Root/Group/Value`, both
+     repeating) and `mapping/target.xsd` as target (`Result/Info`, repeating).
+   * Add `probe-mapping-v1.groovy` to the mapping as a script (Groovy Script 1.x). Its function
+     `describeQueue` then appears among the mapping's custom functions.
+   * Map `Root` → `Result`, and `Value` → `describeQueue` → `Info` (keep `Value`'s default context,
+     `Group`).
+   * Post `mapping/request.xml` (two groups: `a`, `b` and `c`). Each `Info` holds the JSON of one call.
+     Optionally post `mapping/request-empty-context.xml` too (an empty group in between).
+
+   If the mapping does not deploy or the function is not offered, the error message is valuable too.
+   The simulator's baseline used the argument `[["a","b"],["c",{"suppress":true}]]` (two contexts, so
+   two calls).
 
 7. iFlow **Probe_Converters**: four small iFlows (or one with four HTTPS addresses), each
-   `HTTPS sender` → converter → end, with the files in `converters/` as request bodies. Save each
-   response body as a file (e.g. `curl --data-binary @file … --output result`), so line ends and
-   whitespace stay as they are. Settings as for the baseline in `baseline-simulator/converters/`:
-   * XML to JSON, body `xml-to-json.xml`: *Use Namespace Mapping* with `http://com.sap/abc` → `abc`
-     and `http://com.sap/xyz` → `xyz`, JSON prefix separator `:`, no streaming.
-   * JSON to XML, body `json-to-xml.json`: no namespace mapping, separator `:`, no root element.
-   * XML to CSV, body `xml-to-csv.xml`: path `/root/Products/Product`, separator `;`, CSV header
-     *XML based*, *Include Parent Element* with `/root`, *Include Attribute Values*.
-   * CSV to XML, body `csv-to-xml.csv`: schema `products.xsd` (upload it to the iFlow), path
-     `Products/Product`, separator `;`, *Exclude First Line Header*, headers to match *XSD Elements*.
+   `HTTPS sender` → converter → end. The request bodies are in `converters/`; the settings are those of
+   the baseline in `baseline-simulator/converters/`:
+
+   | Address | Converter and settings | Body |
+   |---|---|---|
+   | `/cpiwb/xml-to-json` | XML to JSON: *Use Namespace Mapping* with the XML namespace `http://com.sap/abc` → JSON prefix `abc` and `http://com.sap/xyz` → `xyz`, JSON prefix separator `:`, no streaming | `converters/xml-to-json.xml` |
+   | `/cpiwb/json-to-xml` | JSON to XML: no namespace mapping, separator `:`, no root element | `converters/json-to-xml.json` |
+   | `/cpiwb/xml-to-csv` | XML to CSV: path `/root/Products/Product`, separator `;`, CSV header *XML based*, *Include Parent Element* with `/root`, *Include Attribute Values* | `converters/xml-to-csv.xml` |
+   | `/cpiwb/csv-to-xml` | CSV to XML: schema `converters/products.xsd` (upload it to the iFlow), path `Products/Product`, separator `;`, *Exclude First Line Header*, headers to match *XSD Elements*, no record marker | `converters/csv-to-xml.csv` |
+
+   Save each response body as a file, so line ends and whitespace stay as they are (below).
+
+**Sending the requests.** With the runtime URL of the tenant (`https://<runtime host>/http`) and the
+client ID and secret of a service key for the Process Integration Runtime, `curl` sends a file
+unchanged and saves the answer unchanged. In Windows PowerShell write `curl.exe`. The credentials are
+typed into the command only; keep them out of files in this repository.
+
+```sh
+U=https://<runtime host>/http
+curl -s -u "<clientid>:<clientsecret>" --data-binary @probes/mapping/request.xml -H "Content-Type: application/xml" "$U/cpiwb/mapping" --output mapping.xml
+curl -s -u "<clientid>:<clientsecret>" --data-binary @probes/converters/xml-to-json.xml -H "Content-Type: application/xml" "$U/cpiwb/xml-to-json" --output xml-to-json.json
+curl -s -u "<clientid>:<clientsecret>" --data-binary @probes/converters/json-to-xml.json -H "Content-Type: application/json" "$U/cpiwb/json-to-xml" --output json-to-xml.xml
+curl -s -u "<clientid>:<clientsecret>" --data-binary @probes/converters/xml-to-csv.xml -H "Content-Type: application/xml" "$U/cpiwb/xml-to-csv" --output xml-to-csv.csv
+curl -s -u "<clientid>:<clientsecret>" --data-binary @probes/converters/csv-to-xml.csv -H "Content-Type: text/plain" "$U/cpiwb/csv-to-xml" --output csv-to-xml.xml
+```
 
 Send the response bodies (or attach them to an issue); they go into `results-tenant/<date>/`. Nothing
 in them is confidential beyond version numbers, class names and the tenant's default timezone/locale.
@@ -74,10 +95,10 @@ plan). The differences that remain:
 * Groovy: Java, Camel, timezone, locale, charset, bindings, message methods and libraries follow the
   tenant since 0.3.0. What still differs: the Java build (`javaVmVersion`, `javaVendor`), Camel's
   SAP build (`3.14.7-sap-59`), Saxon-EE and IAIK visible to 1.x scripts, Camel 2's
-  `org.apache.camel.Attachment`, SAP's v2 `Exchange` and `SimpleBuilder`, the type of `log` /
-  `logger` and of the message class, `getExtensionFunctions` (1.x) and `setProxyHandler` (2.x), and the
-  body class behind an HTTPS sender (`InputStreamCache`). `libraryVersions` and `bindingTypes` are new
-  in 0.3.0 and have not run on a tenant yet.
+  `org.apache.camel.Attachment`, SAP's v2 `Exchange` and `SimpleBuilder`, the classes behind `log` /
+  `logger` (SAP's `ScriptLogger`), `messageLogFactory` and the message, `getExtensionFunctions` (1.x) and
+  `setProxyHandler` (2.x), and the body class behind an HTTPS sender (`InputStreamCache`). `logMethods`
+  is new and has not run on a tenant yet.
 * Platform: the simulator's messages add where it looked (e.g. `platform/credentials.json`).
 
 The converter baselines come from the Flow Steps tab's Converter (or `convert.run`) with the settings

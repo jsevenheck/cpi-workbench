@@ -9,10 +9,11 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * The {@code log} and {@code logger} variables a tenant binds for Groovy Script 1.x (docs/plan.md F49).
- * Their type is not known. An assumption: the usual logger calls ({@code trace} … {@code error}) are
- * accepted and printed to the console, with a note that the type is unknown, and {@code isDebugEnabled()}
- * and its siblings answer true; anything else raises {@code UnsupportedInSimulator}.
+ * The {@code log} and {@code logger} variables a tenant binds for Groovy Script 1.x (docs/plan.md F49, F53):
+ * SAP's internal {@code com.sap.it.script.logging.impl.ScriptLogger}, whose methods are not published. An
+ * assumption: the usual logger calls ({@code trace} … {@code error}) are accepted and printed to the
+ * console, with a note, and {@code isDebugEnabled()} and its siblings answer true; anything else raises
+ * {@code UnsupportedInSimulator}.
  */
 public final class TenantLogBinding extends GroovyObjectSupport implements GroovyInterceptable {
 
@@ -42,8 +43,8 @@ public final class TenantLogBinding extends GroovyObjectSupport implements Groov
         if (LEVELS.contains(method)) {
             if (!noted) {
                 noted = true;
-                diags.add(Diagnostic.info("'" + name + "' is bound on a tenant's Groovy Script 1.x, but its type is "
-                        + "not known; the simulator prints " + name + "." + method + "(…) to the console."));
+                diags.add(Diagnostic.info("'" + name + "' is bound on a tenant's Groovy Script 1.x, as SAP's "
+                        + "ScriptLogger, whose methods are not published; the simulator prints " + name + "." + method + "(…) to the console."));
             }
             Object[] a = args instanceof Object[] ? (Object[]) args : new Object[] {args};
             StringBuilder sb = new StringBuilder("[" + name + "." + method + "]");
@@ -55,17 +56,17 @@ public final class TenantLogBinding extends GroovyObjectSupport implements Groov
             return null;
         }
         throw new UnsupportedOperationException("UnsupportedInSimulator: '" + name + "' is bound on a tenant's Groovy "
-                + "Script 1.x, but its type is not known, so " + name + "." + method + "(…) is not simulated.");
+                + "Script 1.x as SAP's ScriptLogger, whose methods are not published, so " + name + "." + method + "(…) is not simulated.");
     }
 
     @Override
     public Object getProperty(String property) {
         throw new UnsupportedOperationException("UnsupportedInSimulator: '" + name + "' is bound on a tenant's Groovy "
-                + "Script 1.x, but its type is not known, so " + name + "." + property + " is not simulated.");
+                + "Script 1.x as SAP's ScriptLogger, whose methods are not published, so " + name + "." + property + " is not simulated.");
     }
 
     @Override
     public String toString() {
-        return name + " (bound on a tenant's Groovy Script 1.x; type not known to the simulator)";
+        return name + " (SAP's ScriptLogger on a tenant's Groovy Script 1.x; simulated for the usual logger calls)";
     }
 }

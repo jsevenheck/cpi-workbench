@@ -20,17 +20,19 @@ the Groovy engines now follow what they showed:
   start on Java 17.
 - **UTC and `en_US`** in every engine, whatever the computer uses, as on a tenant: dates,
   `current-dateTime()`, `implicit-timezone()` and case conversion no longer depend on the computer.
-- **Script context** as on a tenant: `javax.script.filename`, and on 1.x `log` and `logger` (their
-  type is unknown: `log.info(…)` and the other level methods print to the Console with a note); no
-  `out` variable.
+- **Script context** as on a tenant: `javax.script.filename`, and on 1.x `log` and `logger` (SAP's
+  `ScriptLogger`, whose methods are not published: `log.info(…)` and the other level methods print to
+  the Console with a note); no `out` variable.
 - **Message methods** as on a tenant: the 1.x message has the overloads with Camel's `Attachment`,
   `getAttachmentObjects` and `setAttachmentObjects` (`AttachmentWrapper` is a Camel attachment); the
   2.x message has `getSoapHeaders`, `setSoapHeaders` and `clearSoapHeaders` and receives the input's
   SOAP headers. The lint no longer warns about the SOAP header methods on 2.x.
-- **Libraries** scripts can load, as on a tenant: commons-lang3 (1.x and 2.x), Jackson databind and
-  commons-codec (1.x), Groovy's yaml and toml modules (2.x) and Camel's `org.apache.camel.attachment`
-  (both). Their versions are assumed (the ones Camel 3.14.7 manages); the fingerprint probes now report
-  them, and the types of the bound variables.
+- **Libraries** scripts can load, in the versions a tenant reports: commons-lang3 3.20.0 (1.x and
+  2.x), Jackson databind 2.21.7 and commons-codec 1.16.1 (1.x), Groovy's yaml and toml modules (2.x)
+  and Camel's `org.apache.camel.attachment` (both). The fingerprint probes report library versions,
+  the types of the bound variables and the methods of `log`.
+- **Probe files** for the Message Mapping probe (`probes/mapping/`: source and target schema,
+  requests) and `curl` commands for sending the probe requests (`probes/README.md`).
 - `$exchange` in XSLT prints as `Exchange[<id>]`, as on a tenant.
 - Platform API messages and results follow the tenant: Partner Directory type and empty-ID errors,
   `getAuthorizedUsers` of an unknown partner is `null`, the pattern error, Secure Store errors for an

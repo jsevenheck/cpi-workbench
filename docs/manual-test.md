@@ -67,7 +67,7 @@ The first run starts the Java engines and can take a few seconds.
 | 2.11a | `scripts/mapping-functions.groovy`: **Run as** shows its functions; click `countPerContext`, Argument 1 `["A", "B"]` and `["C"]` on two lines | The label next to **fn** says *Mapping function*; **Arguments** replaces the body; **Result** shows `["2"]` and `["1"]`. |
 | 2.11b | **Run as** `getHeader`, Argument 1 `SenderSystem` with that header set; then **null** | **Result** shows the header's value; with **null**, `null`. Opening another script brings the **Body** tab back. |
 | 2.11c | **⚙** (bottom left) → **Check for updates** | The installed version is shown. Before the release: "This is the latest version (latest release: 0.2.0)"; with a newer release, **Open release page** opens it in the browser. If GitHub refuses (e.g. 403), the reason is shown and **Open releases page** opens the list. |
-| 2.11d | New script in 1.x with `log.info(TimeZone.default.ID + ' ' + org.apache.commons.lang3.StringUtils.reverse('abc'))` in `processData` | **Console** shows `[log.info] Etc/UTC cba`; a note says the type of `log` is not known. |
+| 2.11d | New script in 1.x with `log.info(TimeZone.default.ID + ' ' + org.apache.commons.lang3.StringUtils.reverse('abc'))` in `processData` | **Console** shows `[log.info] Etc/UTC cba`; a note says that `log` is SAP's ScriptLogger, whose methods are not published. |
 
 ### XSD and XPath
 

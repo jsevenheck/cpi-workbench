@@ -62,6 +62,10 @@ def Message processData(Message message) {
                                   p.version ?: c.package?.implementationVersion ?: 'no version found' }] },
         // The type of each bound variable (1.x binds log and logger; their types are not known yet).
         bindingTypes       : safe { binding.variables.collectEntries { k, v -> [(k): v?.getClass()?.getName()] } },
+        // The methods of 'log' (a tenant binds com.sap.it.script.logging.impl.ScriptLogger, whose API is not published).
+        logMethods         : safe { binding.variables.log?.getClass()?.methods?.findAll { it.declaringClass != Object }
+                                        ?.collect { it.name + '(' + it.parameterTypes*.simpleName.join(', ') + '): ' + it.returnType.simpleName }
+                                        ?.unique()?.sort() },
         headerTypes        : safe { message.headers.collectEntries { k, v -> [(k): v?.class?.name] } },
         propertyTypes      : safe { message.properties.collectEntries { k, v -> [(k): v?.class?.name] } },
     ]

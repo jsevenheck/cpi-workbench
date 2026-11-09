@@ -27,7 +27,7 @@ Automated checks:
 | XSD validation | ≈ 90 % | XML Schema 1.0 only (JDK validator). |
 | XPath tester | ≈ 95 % | — |
 | Flow Steps: Content Modifier, Filter, Router, General / Iterating Splitter, Gather (with Camel Simple), Converter | ≈ 80 % | `=`, `and`, `or` are rewritten to Camel's spelling on an assumption (F35). Splitter rules are inferred from SAP's examples. Gather's Combine at XPath has no SAP example (an assumption); Zip and Tar are not simulated. Number Range and External Parameter sources raise `UnsupportedInSimulator`; variables use their default. Converters (JSON ↔ XML, XML ↔ CSV) follow SAP's rules and examples; output formatting, CSV quoting and line ends, and one contradiction in SAP's JSON to XML docs are open (Q-C1). Not simulated: EDI, Encoder/Decoder, XML Modifier, Message Digest, MIME Multipart. No CLI command, no test-case step. |
-| Groovy Script 1.x (Groovy 2.4.21, Camel 3.14.7, Java 21, Script API v1) | ≈ 90 % | Matches a tenant's fingerprint (F48–F50) except: the types of `log` / `logger` are unknown (level calls print to the console); IAIK and Camel 2's `org.apache.camel.Attachment` are not bundled; `getExtensionFunctions` (type not published); library versions are assumed. |
+| Groovy Script 1.x (Groovy 2.4.21, Camel 3.14.7, Java 21, Script API v1) | ≈ 90 % | Matches a tenant's fingerprint (F48–F50, F53), library versions included, except: the methods of `log` / `logger` (SAP's `ScriptLogger`) are not published (level calls print to the console); IAIK and Camel 2's `org.apache.camel.Attachment` are not bundled; `getExtensionFunctions` (type not published). |
 | Groovy Script 2.x (Groovy 4.0.29, Camel 3.14.7, Java 21, Script API v2) | ≈ 90 % | ProcessDirect raises `UnsupportedInSimulator`. Not simulated: `setProxyHandler` and the SAP classes `Exchange` / `SimpleBuilder` a tenant's scripts can load (behaviour not published). |
 | Message Mapping functions (`MappingContext`, `Output`) | ≈ 80 % | The function runs on its own; `.mmap` is out of scope. The execution type follows the signature as community guides describe CPI (F44, not verified); the per-context join and the marker strings are assumptions, a single-value function is called once (not per value), and the Groovy version is not known (Q-M1, `probe-mapping-v1.groovy`). |
 | MPL, console, API call log | ≈ 95 % | — |
@@ -41,12 +41,12 @@ Automated checks:
 | Distribution | ≈ 45 % | *Check for updates* (0.3.0) links to a newer release; the release page opens through the shell's own command, not yet tried in the desktop window on Windows or macOS. No code signing, no auto-update. On a managed Windows laptop, the unsigned MSI is refused as untrusted, so it could not be tried there. One all-in-one installer instead of a base app plus a separate Groovy pack (plan §5.3). |
 | Large messages | ≈ 70 % | Messages go through JSON-RPC, not temp files (plan §5.3). 7.4 MB worked (XSLT 1.3 s, Groovy 0.45 s); larger ones are untested. |
 | Performance budgets | measured on Linux | Windows and macOS not measured. |
-| Probe kit | run on one tenant: fingerprints, XSLT, platform | The Message Mapping probe (Q-M1) and the converter inputs (Q-C1) are still to run; the fingerprints now also report library versions and the types of the bound variables. |
+| Probe kit | run on one tenant: fingerprints (twice), XSLT, platform | The Message Mapping probe (Q-M1) and three of the four converter inputs (Q-C1; XML to JSON matched, F54) are still to run; `probes/mapping/` and `probes/converters/` hold their files. `fingerprint-v1.groovy` now also lists the methods of `log`. |
 
 ## Next steps
 
 1. Manual test of 0.3.0 on Windows ([Manual test](manual-test.md)), then the release.
-2. Run the remaining probes (Message Mapping, converters) and the fingerprints again (library versions, the types of `log` / `logger`).
+2. Run the remaining probes (Message Mapping, converters) and `fingerprint-v1.groovy` once more (the methods of `log`).
 3. Install and open the installer on macOS once by hand.
 4. Code signing and auto-update (Phase 5, plan §10.2).
 

@@ -17,8 +17,8 @@ test('compareVersions follows SemVer precedence', () => {
   assert.throws(() => compareVersions('latest', '1.0.0'), /Not a version/);
 });
 
-const answer = (status: number, body: unknown) => (async () =>
-  new Response(JSON.stringify(body), { status, statusText: status === 200 ? 'OK' : 'Forbidden' })) as unknown as typeof fetch;
+const answer = (status: number, body: unknown, headers: Record<string, string> = {}) => (async () =>
+  new Response(typeof body === 'string' ? body : JSON.stringify(body), { status, headers, statusText: status === 200 ? 'OK' : 'Forbidden' })) as unknown as typeof fetch;
 
 test('checkForUpdate links to a newer release only', async () => {
   const url = 'https://github.com/jsevenheck/cpi-workbench/releases/tag/v0.3.0';
@@ -27,4 +27,8 @@ test('checkForUpdate links to a newer release only', async () => {
   const elsewhere = await checkForUpdate('0.2.0', answer(200, { tag_name: 'v0.3.0', html_url: 'https://example.invalid/x' }));
   assert.equal(elsewhere.newer && elsewhere.url, 'https://github.com/jsevenheck/cpi-workbench/releases/', 'only GitHub release pages');
   await assert.rejects(checkForUpdate('0.2.0', answer(403, {})), /GitHub answered 403 Forbidden/);
+  await assert.rejects(checkForUpdate('0.2.0', answer(403, '<html>blocked</html>')), /^Error: GitHub answered 403 Forbidden$/);
+  await assert.rejects(checkForUpdate('0.2.0', answer(403, { message: 'API rate limit exceeded for 192.0.2.1.' }, { 'x-ratelimit-remaining': '0' })),
+    /GitHub answered 403 Forbidden: API rate limit exceeded for 192\.0\.2\.1\.\nGitHub allows 60 requests per hour/);
+  await assert.rejects(checkForUpdate('0.2.0', answer(403, { message: 'Forbidden by policy' })), /403 Forbidden: Forbidden by policy$/);
 });

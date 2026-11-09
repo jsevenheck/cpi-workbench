@@ -19,8 +19,9 @@ of its version.
   label next to *fn* says whether the function runs as a script step or as a mapping function. Test
   cases take `args`, `expect.returned` and `expect.queue`; the MCP tool `run_groovy` takes `args`.
   Graphical Message Mapping (`.mmap`) is still not simulated.
-- **Check for updates** in a new ⚙ menu (desktop app): shows the installed version, asks github.com
-  for the latest release on click, and opens its page if it is newer. The app makes no request on its own.
+- **Check for updates** in a new ⚙ menu (desktop app, status bar bottom left): shows the installed version, asks github.com
+  for the latest release on click, and opens its page if it is newer. If GitHub refuses (e.g. its hourly
+  limit for requests without sign-in), it says why and offers the releases page. The app makes no request on its own.
 - **Converter** step in Flow Steps: JSON to XML, XML to JSON, XML to CSV and CSV to XML with the
   settings of CPI's converter steps (namespace mapping, root element options, streaming, record marker,
   header mapping, parent element). It follows SAP's documented conversion rules and limitations; SAP's

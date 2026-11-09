@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { checkForUpdate, type UpdateCheck } from '../lib/version';
+  import { checkForUpdate, RELEASES_PAGE, type UpdateCheck } from '../lib/version';
 
   let open = $state(false);
   let version = $state('');
@@ -47,7 +47,10 @@
       <p><b>CPI Workbench</b> {version}</p>
       <button onclick={runCheck} disabled={checking || !version}>{checking ? 'Checking…' : 'Check for updates'}</button>
       <p class="hint">This button asks github.com for the latest release. The app never checks on its own and never contacts a tenant.</p>
-      {#if error}<p class="err">{error}</p>{/if}
+      {#if error}
+        <p class="err">{error}</p>
+        <button onclick={() => openRelease(RELEASES_PAGE)}>Open releases page</button>
+      {/if}
       {#if check && !check.newer}<p>This is the latest version{check.latest !== version ? ` (latest release: ${check.latest})` : ''}.</p>{/if}
       {#if check?.newer}
         <p>Version {check.latest} is available. Download and install it from its release page.</p>
@@ -59,9 +62,9 @@
 
 <style>
   .settings { position: relative; }
-  .gear { font-size: 16px; line-height: 1; padding: 4px 6px; }
+  .gear { font-size: 13px; line-height: 1; padding: 0 4px; }
   .backdrop { position: fixed; inset: 0; z-index: 90; }
-  .menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 91; width: 280px; background: var(--bg); color: var(--fg);
+  .menu { position: absolute; left: 0; bottom: calc(100% + 6px); z-index: 91; width: 280px; background: var(--bg); color: var(--fg);
     border: 1px solid var(--border); border-radius: 8px; padding: 12px; box-shadow: 0 8px 30px rgba(0, 0, 0, 0.2);
     display: flex; flex-direction: column; gap: 8px; font-size: 12px; }
   p { margin: 0; }

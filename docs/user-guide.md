@@ -110,8 +110,10 @@ per machine and needs admin rights.
 
 The Groovy runtime starts only when the Groovy or Flow Steps tab is used and stops after 10 idle minutes.
 
-**⚙** (top right) shows the installed version. **Check for updates** asks github.com for the latest
-release and links to its page if it is newer; download and install it from there. Apart from your
+**⚙** (bottom left, next to the status) shows the installed version. **Check for updates** asks github.com for the latest
+release and links to its page if it is newer; download and install it from there.
+If GitHub refuses, the menu shows its reason (without sign-in GitHub allows 60 requests per hour per
+network address, which a shared company network can use up) and **Open releases page**. Apart from your
 own scripts, this is the app's only network request, and it is made only when you click.
 
 ## Coding agents (MCP)

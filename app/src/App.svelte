@@ -118,7 +118,6 @@
     {#if app.tool !== 'file'}
       <button class="primary" onclick={run} title="Run (Ctrl+Enter)">▶ Run</button>
     {/if}
-    {#if isDesktop}<SettingsMenu />{/if}
   </header>
 
   {#if app.error}
@@ -141,6 +140,7 @@
   </div>
 
   <footer class="status">
+    {#if isDesktop}<SettingsMenu />{/if}
     <span>{app.status || 'Ready'}</span>
     <span class="spacer"></span>
     {#if app.engineInfo}
@@ -172,7 +172,7 @@
   .banner.error { background: var(--err-bg); color: var(--err); border-bottom: 1px solid var(--border); }
   .main { flex: 1; display: flex; min-height: 0; }
   .content { flex: 1; min-width: 0; min-height: 0; }
-  .status { display: flex; gap: 8px; font-size: 11px; color: var(--muted); padding: 3px 10px; border-top: 1px solid var(--border); background: var(--surface); }
+  .status { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); padding: 3px 10px; border-top: 1px solid var(--border); background: var(--surface); }
   .err { color: var(--err); }
   @media (max-width: 800px) { .main { flex-direction: column; } .app { height: auto; min-height: 100vh; } .content { height: 140vh; } }
 </style>

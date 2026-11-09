@@ -34,10 +34,30 @@ export type UpdateCheck = { newer: false; latest: string } | { newer: true; late
 /** Asks GitHub for the latest release (drafts and pre-releases are not "latest") and compares it with `current`. */
 export async function checkForUpdate(current: string, fetchFn: typeof fetch = fetch): Promise<UpdateCheck> {
   const res = await fetchFn(RELEASES_API, { headers: { Accept: 'application/vnd.github+json' } });
-  if (!res.ok) throw new Error(`GitHub answered ${res.status} ${res.statusText}`.trim());
+  if (!res.ok) throw new Error(await failure(res));
   const release = (await res.json()) as { tag_name?: string; html_url?: string };
   const latest = String(release.tag_name ?? '').replace(/^v/, '');
   if (compareVersions(latest, current) <= 0) return { newer: false, latest };
   const url = typeof release.html_url === 'string' && release.html_url.startsWith(RELEASES_PAGE) ? release.html_url : RELEASES_PAGE;
   return { newer: true, latest, url };
+}
+
+/**
+ * Why GitHub refused, in words: its own `message` (JSON) if there is one, and for a used-up rate limit
+ * (403 or 429 with `x-ratelimit-remaining: 0`) what that means. Without sign-in GitHub allows 60 requests
+ * per hour per network address, which a shared company network can use up.
+ */
+async function failure(res: Response): Promise<string> {
+  let message = '';
+  try {
+    const body = (await res.json()) as { message?: unknown };
+    if (typeof body.message === 'string') message = body.message;
+  } catch {
+    // not JSON, e.g. a proxy's HTML page
+  }
+  const head = `GitHub answered ${res.status} ${res.statusText}`.trim() + (message ? `: ${message}` : '');
+  if ((res.status === 403 || res.status === 429) && res.headers.get('x-ratelimit-remaining') === '0') {
+    return `${head}\nGitHub allows 60 requests per hour per network address without sign-in; a shared network may have used them up. Try again later or open the releases page.`;
+  }
+  return head;
 }

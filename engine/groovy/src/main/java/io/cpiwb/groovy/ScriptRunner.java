@@ -567,7 +567,9 @@ public final class ScriptRunner {
             }
         }
         Throwable shown = unwrap(e);
-        String msg = shown.getClass().getName() + (shown.getMessage() == null ? "" : ": " + shown.getMessage());
+        // An anonymous subclass (e.g. the ScriptLogger's MissingMethodException) shows as the class it stands for.
+        Class<?> type = shown.getClass().isAnonymousClass() ? shown.getClass().getSuperclass() : shown.getClass();
+        String msg = type.getName() + (shown.getMessage() == null ? "" : ": " + shown.getMessage());
         msg += v1OnlyMethodHint(shown);
         return new Diagnostic(Diagnostic.Severity.ERROR, msg, null, null, line, -1);
     }

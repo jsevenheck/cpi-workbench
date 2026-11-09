@@ -20,9 +20,9 @@ the Groovy engines now follow what they showed:
   start on Java 17.
 - **UTC and `en_US`** in every engine, whatever the computer uses, as on a tenant: dates,
   `current-dateTime()`, `implicit-timezone()` and case conversion no longer depend on the computer.
-- **Script context** as on a tenant: `javax.script.filename`, and on 1.x `log` and `logger` (SAP's
-  `ScriptLogger`, whose methods are not published: `log.info(…)` and the other level methods print to
-  the Console with a note); no `out` variable.
+- **Script context** as on a tenant: `javax.script.filename`, and on 1.x `log` and `logger`, SAP's
+  `ScriptLogger` with `logInfo`, `logWarnings` and `logErrors` (they print to the Console) and no
+  `info` or `debug`: `log.info(…)` fails as on a tenant. No `out` variable.
 - **Message methods** as on a tenant: the 1.x message has the overloads with Camel's `Attachment`,
   `getAttachmentObjects` and `setAttachmentObjects` (`AttachmentWrapper` is a Camel attachment); the
   2.x message has `getSoapHeaders`, `setSoapHeaders` and `clearSoapHeaders` and receives the input's

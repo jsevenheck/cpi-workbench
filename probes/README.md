@@ -8,7 +8,7 @@ Groovy engines follow it since 0.3.0.
 
 | File | Step | Answers | On a tenant |
 |---|---|---|---|
-| `fingerprint-v1.groovy` | Groovy Script **1.x** | Java / Groovy / Camel / Saxon versions, JAXP factories, charset, timezone, locale, the message's methods, the libraries scripts can load and their versions, the script's variables and their types (Q-G2, Q-G3, Q-G6, Q-X1) | Ran twice (the second time with `libraryVersions` and `bindingTypes`); run again for `logMethods` (new) |
+| `fingerprint-v1.groovy` | Groovy Script **1.x** | Java / Groovy / Camel / Saxon versions, JAXP factories, charset, timezone, locale, the message's methods, the libraries scripts can load and their versions, the script's variables and their types (Q-G2, Q-G3, Q-G6, Q-X1) | Ran three times (with `libraryVersions`, `bindingTypes` and `logMethods` the last time) |
 | `fingerprint-v2.groovy` | Groovy Script **2.x** | Same for 2.x, with the message's interfaces (Q-G4) | Ran twice |
 | `fingerprint.xsl` | XSLT Mapping 1.2+ | Saxon edition/version, supported features, localisation of `format-date` (Q-X1) | Ran 2026-11-09 |
 | `probe-platform-v1.groovy` | Groovy Script **1.x** | Partner Directory, Keystore, Secure Store and number range behaviour for entries that do not exist, plus the real method lists (Q-P1) | Ran 2026-11-09 |
@@ -96,9 +96,8 @@ plan). The differences that remain:
   tenant since 0.3.0. What still differs: the Java build (`javaVmVersion`, `javaVendor`), Camel's
   SAP build (`3.14.7-sap-59`), Saxon-EE and IAIK visible to 1.x scripts, Camel 2's
   `org.apache.camel.Attachment`, SAP's v2 `Exchange` and `SimpleBuilder`, the classes behind `log` /
-  `logger` (SAP's `ScriptLogger`), `messageLogFactory` and the message, `getExtensionFunctions` (1.x) and
-  `setProxyHandler` (2.x), and the body class behind an HTTPS sender (`InputStreamCache`). `logMethods`
-  is new and has not run on a tenant yet.
+  `logger` (SAP's `ScriptLogger`; the simulator has its methods but no `LogMessage` overloads), `messageLogFactory` and the message, `getExtensionFunctions` (1.x) and
+  `setProxyHandler` (2.x), and the body class behind an HTTPS sender (`InputStreamCache`).
 * Platform: the simulator's messages add where it looked (e.g. `platform/credentials.json`).
 
 The converter baselines come from the Flow Steps tab's Converter (or `convert.run`) with the settings

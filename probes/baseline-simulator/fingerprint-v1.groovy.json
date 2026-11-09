@@ -97,9 +97,15 @@
         "messageLogFactory": "com.sap.it.api.msglog.MessageLogFactory"
     },
     "logMethods": [
+        "getCategoryLogger(Class): Object",
+        "getLogger(Class): Object",
         "getMetaClass(): MetaClass",
         "getProperty(String): Object",
         "invokeMethod(String, Object): Object",
+        "logErrors(Object[]): void",
+        "logInfo(Object[]): void",
+        "logWarnings(Object[]): void",
+        "methodMissing(String, Object): Object",
         "setMetaClass(MetaClass): void",
         "setProperty(String, Object): void",
         "toString(): String"

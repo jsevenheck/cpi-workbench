@@ -418,7 +418,7 @@ class ScriptRunnerTest {
                 + "  message.setProperty('upper', 'title'.toUpperCase())\n"
                 + "  message.setProperty('key', String.valueOf(ITApiFactory.getService(KeystoreService, null).getKey('nope')))\n"
                 + "  println 'to the console'\n"
-                + (V2 ? "" : "  if (log && log.isDebugEnabled()) { log.info('logged', 2) }\n")
+                + (V2 ? "" : "  if (log) { log.logInfo('logged', 2); logger.logWarnings('careful') }\n")
                 + "  return message\n}";
         Map<String, Object> r = (Map<String, Object>) ENGINE.call("groovy.run", Json.o()
                 .with("script", Json.o().with("content", s).with("path", "script/ctx.groovy"))
@@ -432,7 +432,16 @@ class ScriptRunnerTest {
         assertEquals("null", entry(r, "properties", "key").get("value"));
         String console = String.valueOf(r.get("console"));
         assertTrue(console.contains("to the console"), console);
-        assertEquals(!V2, console.contains("[log.info] logged 2"), console);
+        assertEquals(!V2, console.contains("[log.logInfo] logged 2"), console);
+        assertEquals(!V2, console.contains("[logger.logWarnings] careful"), console);
+        if (!V2) {
+            // A tenant's ScriptLogger has no info() (F58): the call fails as there.
+            String bad = IMPORT + "def Message processData(Message message) {\n  log.info('x')\n  return message\n}";
+            Map<String, Object> e = run(bad, in("", List.of(), List.of()), null);
+            assertFalse(Json.bool(e, "ok", true));
+            assertTrue(Json.write(e).contains("groovy.lang.MissingMethodException: No signature of method: "
+                    + "com.sap.it.script.logging.impl.ScriptLogger.info()"), () -> Json.write(e));
+        }
         assertTrue(Json.write(r).contains("keystore is empty"), () -> Json.write(r));
     }
 

@@ -94,6 +94,15 @@
     "javax.script.filename": "java.lang.String",
     "messageLogFactory": "com.sap.it.op.agent.mpl.factory.impl.MessageLogFactoryImpl"
   },
+  "logMethods": [
+    "getCategoryLogger(Class): ILogger",
+    "getLogger(Class): ILogger",
+    "logErrors(LogMessage): void",
+    "logErrors(LogMessage, Object[]): void",
+    "logErrors(Object[]): void",
+    "logInfo(Object[]): void",
+    "logWarnings(Object[]): void"
+  ],
   "headerTypes": {
     "CamelHttpMethod": "java.lang.String",
     "CamelHttpPath": "java.lang.String",

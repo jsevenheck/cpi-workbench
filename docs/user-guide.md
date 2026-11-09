@@ -30,8 +30,8 @@ Download the installer for your platform from the
   output and the calls to SAP APIs with their arguments.
 * Groovy scripts run like on a tenant: Java 21, Camel 3.14.7, timezone UTC and locale `en_US`
   whatever your computer uses, and the libraries a tenant offers (commons-lang3; on 1.x also Jackson
-  and commons-codec; on 2.x yaml and toml). On 1.x, `log.info(…)` and the other level methods print to
-  the **Console**; on a tenant they are SAP's `ScriptLogger`, whose methods are not published. Other jars go into the iFlow's `lib/`.
+  and commons-codec; on 2.x yaml and toml). On 1.x, `log` and `logger` are SAP's `ScriptLogger`: `log.logInfo(…)`,
+  `logWarnings(…)` and `logErrors(…)` print to the **Console**; `log.info(…)` fails, as on a tenant. Other jars go into the iFlow's `lib/`.
 * **Compare** also runs the input on the other runtime of the same kind (Saxon-HE 9.9 ↔ 12,
   Groovy Script 1.x ↔ 2.x) and lists what differs: status, headers, properties and a body diff.
   This helps before you move a script from 1.x to 2.x.

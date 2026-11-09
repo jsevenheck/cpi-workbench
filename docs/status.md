@@ -41,7 +41,7 @@ Automated checks:
 | Distribution | ≈ 45 % | *Check for updates* (0.3.0) links to a newer release; the release page opens through the shell's own command, not yet tried in the desktop window on Windows or macOS. No code signing, no auto-update. On a managed Windows laptop, the unsigned MSI is refused as untrusted, so it could not be tried there. One all-in-one installer instead of a base app plus a separate Groovy pack (plan §5.3). |
 | Large messages | ≈ 70 % | Messages go through JSON-RPC, not temp files (plan §5.3). 7.4 MB worked (XSLT 1.3 s, Groovy 0.45 s); larger ones are untested. |
 | Performance budgets | measured on Linux | Windows and macOS not measured. |
-| Probe kit | run on one tenant: fingerprints (twice), XSLT, platform, converters | The Message Mapping probe (Q-M1) is still to run (the converters matched, F54–F56); `probes/mapping/` and `probes/converters/` hold their files. `fingerprint-v1.groovy` now also lists the methods of `log`. |
+| Probe kit | run on one tenant: fingerprints (twice), XSLT, platform, converters | The Message Mapping probe (Q-M1) is still to run (the converters matched, F54–F57); `probes/mapping/` and `probes/converters/` hold their files. `fingerprint-v1.groovy` now also lists the methods of `log`. |
 
 ## Next steps
 

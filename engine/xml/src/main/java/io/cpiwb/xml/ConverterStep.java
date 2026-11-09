@@ -613,7 +613,7 @@ public final class ConverterStep {
             List<String[]> out = new ArrayList<>();
             if (attributes) {
                 for (XdmNode a : children(el, Axis.ATTRIBUTE, null)) {
-                    out.add(new String[] {a.getNodeName().getLocalName(), a.getStringValue()});
+                    out.add(new String[] {a.getNodeName().getLocalName(), csvValue(a.getStringValue(), sep)});
                 }
             }
             for (XdmNode c : children(el, Axis.CHILD, XdmNodeKind.ELEMENT)) {
@@ -628,12 +628,18 @@ public final class ConverterStep {
                 if (v.contains("\n") || v.contains("\r")) {
                     warnOnce("newline", "A value contains a line break, which SAP's XML to CSV converter does not support.");
                 }
-                if (v.contains(sep)) {
-                    warnOnce("sep", "A value contains the field separator; it is written as it is (an assumption: no quoting).");
-                }
-                out.add(new String[] {c.getNodeName().getLocalName(), v});
+                out.add(new String[] {c.getNodeName().getLocalName(), csvValue(v, sep)});
             }
             return out;
+        }
+
+        /**
+         * A value as a tenant writes it (docs/plan.md F57): in double quotes when it contains the separator
+         * ({@code a;b} → {@code "a;b"}), otherwise as it is; quotes inside a value are not doubled ({@code "quoted"}
+         * stays {@code "quoted"}). That a value with both gets only the outer quotes is an assumption.
+         */
+        private static String csvValue(String v, String sep) {
+            return v.contains(sep) ? '"' + v + '"' : v;
         }
 
         private String join(List<String[]> fields, int part, String sep) {

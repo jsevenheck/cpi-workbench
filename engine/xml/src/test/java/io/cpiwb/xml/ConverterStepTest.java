@@ -230,6 +230,13 @@ class ConverterStepTest {
                 + "HT-1081,Power Scan,\"quoted\"\n",
                 body(convert("xmlToCsv", xml, Json.o().with("sourcePath", "/root/Products/Product").with("fieldSeparator", ",")
                         .with("csvHeader", "xml").with("includeParent", true).with("parentPath", "/root"))));
+        // The same with separator ';' and attribute values (F57): a value with the separator is quoted, inner
+        // quotes are not doubled.
+        assertEquals("Category;Type;Source\nScanners;Source Data;ERP\n\nProductId;Name;Note\nHT-1080;Photo Scan;\"a;b\"\n"
+                + "HT-1081;Power Scan;\"quoted\"\n",
+                body(convert("xmlToCsv", xml, Json.o().with("sourcePath", "/root/Products/Product").with("fieldSeparator", ";")
+                        .with("csvHeader", "xml").with("includeParent", true).with("parentPath", "/root")
+                        .with("includeAttributes", true))));
     }
 
     // ---------------------------------------------------------------- CSV to XML

@@ -35,7 +35,8 @@ the Groovy engines now follow what they showed:
   requests) and `curl` commands for sending the probe requests (`probes/README.md`).
 - `$exchange` in XSLT prints as `Exchange[<id>]`, as on a tenant.
 - **XML to CSV** writes what a tenant writes: an empty line after the parent element's lines, and a
-  line break after the last line. **JSON to XML** and **CSV to XML** write an empty value as
+  line break after the last line, and a value that contains the separator in double quotes (inner
+  quotes are not doubled). **JSON to XML** and **CSV to XML** write an empty value as
   `<Name></Name>`, as a tenant does (JSON `null` stays `<Name/>`). All four converters now give the
   same bytes as a tenant for the probe inputs.
 - Platform API messages and results follow the tenant: Partner Directory type and empty-ID errors,

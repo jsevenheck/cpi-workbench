@@ -59,7 +59,7 @@ another error, note its text and line.
    |---|---|---|
    | `/cpiwb/xml-to-json` | XML to JSON: *Use Namespace Mapping* with the XML namespace `http://com.sap/abc` → JSON prefix `abc` and `http://com.sap/xyz` → `xyz`, JSON prefix separator `:`, no streaming | `converters/xml-to-json.xml` |
    | `/cpiwb/json-to-xml` | JSON to XML: no namespace mapping, separator `:`, no root element | `converters/json-to-xml.json` |
-   | `/cpiwb/xml-to-csv` | XML to CSV: path `/root/Products/Product`, separator `,` (Comma), CSV header *XML based*, *Include Parent Element* with `/root`, no attribute values | `converters/xml-to-csv.xml` |
+   | `/cpiwb/xml-to-csv` | XML to CSV: path `/root/Products/Product`, separator `,` (Comma), CSV header *XML based*, *Include Parent Element* with `/root`, no attribute values (baseline `xml-to-csv.csv`); a second run with separator `;` and *Include Attribute Values* (baseline `xml-to-csv-semicolon.csv`) | `converters/xml-to-csv.xml` |
    | `/cpiwb/csv-to-xml` | CSV to XML: schema `converters/products.xsd` (upload it to the iFlow), path `Products/Product`, separator `;`, *Exclude First Line Header*, headers to match *XSD Elements*, no record marker | `converters/csv-to-xml.csv` |
 
    Save each response body as a file, so line ends and whitespace stay as they are (below).

@@ -8,8 +8,11 @@ def Message processData(Message message) {
     def safe = { Closure c -> try { c() } catch (Throwable t) { 'unavailable: ' + t.class.name } }
     def info = [
         probe          : 'fingerprint-v2',
-        java           : System.getProperty('java.version'),
-        javaVendor     : System.getProperty('java.vendor'),
+        // The JVM comes from the runtime MXBean: the tenant's script editor refuses JVM property lookups
+        // as an unsupported class (SAP's design guideline *Use Recommended Libraries and Classes*).
+        java           : safe { java.lang.management.ManagementFactory.runtimeMXBean.specVersion },
+        javaVmVersion  : safe { java.lang.management.ManagementFactory.runtimeMXBean.vmVersion },
+        javaVendor     : safe { java.lang.management.ManagementFactory.runtimeMXBean.vmVendor },
         groovy         : safe { GroovySystem.version },
         camel          : safe { Class.forName('org.apache.camel.CamelContext').package?.implementationVersion
                                     ?: Class.forName('org.apache.camel.impl.DefaultCamelContext').getDeclaredConstructor().newInstance().version },

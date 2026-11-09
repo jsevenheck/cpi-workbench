@@ -17,7 +17,8 @@ def void describeQueue(String[] values, Output output, MappingContext context) {
             .collect { it.toGenericString() }.sort() }
     def info = [
         probe        : 'probe-mapping-v1',
-        java         : System.getProperty('java.version'),
+        java         : safe { java.lang.management.ManagementFactory.runtimeMXBean.specVersion }, // the runtime MXBean: the script editor refuses JVM property lookups
+        javaVmVersion: safe { java.lang.management.ManagementFactory.runtimeMXBean.vmVersion },
         groovy       : safe { GroovySystem.version },
         valuesClass  : values.getClass().getName(),
         entries      : values.collect { v -> [

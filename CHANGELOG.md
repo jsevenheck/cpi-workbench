@@ -30,7 +30,9 @@ of its version.
 - iFlow import lists **Message Mapping** steps. The mapping is not simulated; clicking the step opens
   the first Groovy script its `.mmap` uses, with its first mapping function, on Groovy Script 1.x.
 - Probe `probe-mapping-v1.groovy` for how a tenant calls mapping functions, and converter inputs in
-  `probes/converters/` for comparing the four conversions with a tenant.
+  `probes/converters/` for comparing the four conversions with a tenant. The Groovy probes read the
+  Java version from the runtime MXBean (`java`, `javaVmVersion`): the tenant's script editor refuses
+  `System.getProperty` as an unsupported class.
 
 ### Security
 

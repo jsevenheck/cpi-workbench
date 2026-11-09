@@ -17,6 +17,11 @@ runtime profiles.
 
 ## How to run
 
+The tenant's script editor checks scripts against SAP's *Upgrade Readiness* design guidelines. The
+probes avoid what it flags as an error (`System.getProperty`); warnings about internal classes such as
+Camel's are expected, because finding their versions is what the probes are for. If the editor reports
+another error, note its text and line.
+
 1. Create a test package and an iFlow **Probe_Fingerprint**:
    `HTTPS sender (address /cpiwb/fingerprint)` → `Groovy Script 1.x: fingerprint-v1.groovy` → end.
    Call it with any HTTP client; the response body is JSON.

@@ -1,7 +1,8 @@
 [
     {
         "probe": "probe-mapping-v1",
-        "java": "21.0.12.1",
+        "java": "21",
+        "javaVmVersion": "21.0.12.1+1-1-24.04.4-Ubuntu",
         "groovy": "2.4.21",
         "valuesClass": "[Ljava.lang.String;",
         "entries": [
@@ -43,7 +44,8 @@
     },
     {
         "probe": "probe-mapping-v1",
-        "java": "21.0.12.1",
+        "java": "21",
+        "javaVmVersion": "21.0.12.1+1-1-24.04.4-Ubuntu",
         "groovy": "2.4.21",
         "valuesClass": "[Ljava.lang.String;",
         "entries": [

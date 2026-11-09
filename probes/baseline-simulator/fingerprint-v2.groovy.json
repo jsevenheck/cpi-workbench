@@ -1,6 +1,7 @@
 {
     "probe": "fingerprint-v2",
-    "java": "21.0.12.1",
+    "java": "21",
+    "javaVmVersion": "21.0.12.1+1-1-24.04.4-Ubuntu",
     "javaVendor": "Ubuntu",
     "groovy": "4.0.29",
     "camel": "3.14.7",

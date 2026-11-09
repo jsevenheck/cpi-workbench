@@ -162,7 +162,7 @@ public final class ScriptRunner {
         // The variables a tenant binds (docs/plan.md F49). There is no "out": println goes to System.out, which
         // the run captures for the console. javax.script.filename holding the file name is an assumption.
         Binding binding = new Binding();
-        binding.setVariable("javax.script.filename", path.substring(path.lastIndexOf('/') + 1));
+        binding.setVariable("javax.script.filename", path.substring(Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\')) + 1));
         if ("v1".equals(apiVersion)) {
             binding.setVariable("log", new TenantLogBinding("log", diags));
             binding.setVariable("logger", new TenantLogBinding("logger", diags));

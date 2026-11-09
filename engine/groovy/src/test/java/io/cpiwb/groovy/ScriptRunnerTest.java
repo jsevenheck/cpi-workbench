@@ -418,7 +418,7 @@ class ScriptRunnerTest {
                 + "  message.setProperty('upper', 'title'.toUpperCase())\n"
                 + "  message.setProperty('key', String.valueOf(ITApiFactory.getService(KeystoreService, null).getKey('nope')))\n"
                 + "  println 'to the console'\n"
-                + (V2 ? "" : "  log.info('logged')\n")
+                + (V2 ? "" : "  if (log && log.isDebugEnabled()) { log.info('logged', 2) }\n")
                 + "  return message\n}";
         Map<String, Object> r = (Map<String, Object>) ENGINE.call("groovy.run", Json.o()
                 .with("script", Json.o().with("content", s).with("path", "script/ctx.groovy"))
@@ -432,7 +432,7 @@ class ScriptRunnerTest {
         assertEquals("null", entry(r, "properties", "key").get("value"));
         String console = String.valueOf(r.get("console"));
         assertTrue(console.contains("to the console"), console);
-        assertEquals(!V2, console.contains("[log.info] logged"), console);
+        assertEquals(!V2, console.contains("[log.info] logged 2"), console);
         assertTrue(Json.write(r).contains("keystore is empty"), () -> Json.write(r));
     }
 

@@ -11,13 +11,16 @@ import java.util.Set;
 /**
  * The {@code log} and {@code logger} variables a tenant binds for Groovy Script 1.x (docs/plan.md F49).
  * Their type is not known. An assumption: the usual logger calls ({@code trace} … {@code error}) are
- * accepted and printed to the console, with a note that the type is unknown; anything else raises
- * {@code UnsupportedInSimulator}.
+ * accepted and printed to the console, with a note that the type is unknown, and {@code isDebugEnabled()}
+ * and its siblings answer true; anything else raises {@code UnsupportedInSimulator}.
  */
 public final class TenantLogBinding extends GroovyObjectSupport implements GroovyInterceptable {
 
     private static final Set<String> LEVELS = Set.of("trace", "debug", "info", "warn", "error");
-    private static final Set<String> OBJECT_METHODS = Set.of("toString", "hashCode", "equals", "getClass", "getMetaClass");
+    private static final Set<String> OBJECT_METHODS = Set.of("toString", "hashCode", "equals", "getClass", "getMetaClass",
+            "asBoolean");
+    private static final Set<String> ENABLED = Set.of("isTraceEnabled", "isDebugEnabled", "isInfoEnabled",
+            "isWarnEnabled", "isErrorEnabled");
 
     private final String name;
     private final List<Diagnostic> diags;
@@ -32,6 +35,9 @@ public final class TenantLogBinding extends GroovyObjectSupport implements Groov
     public Object invokeMethod(String method, Object args) {
         if (OBJECT_METHODS.contains(method)) {
             return getMetaClass().invokeMethod(this, method, args);
+        }
+        if (ENABLED.contains(method)) {
+            return true;
         }
         if (LEVELS.contains(method)) {
             if (!noted) {

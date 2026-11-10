@@ -6,6 +6,13 @@ of its version.
 
 ## [Unreleased]
 
+### Fixed
+
+- Groovy: clicking the open script in the file tree again (e.g. after a visit to another tab) no longer
+  resets it to `processData` and drops the arguments of its mapping function. Each script keeps its
+  function and arguments for the session, so they are back when you return to it from another script.
+  A script with only mapping functions opens with its first one instead of failing on `processData`.
+
 ## [0.3.0] - 2026-11-08
 
 ### Changed

@@ -2,6 +2,8 @@
 // which supervises one engine process per profile. In web mode the engine itself serves the UI
 // and answers on /rpc (single profile).
 
+import { isLocalEngine } from './trust';
+
 export type Profile = 'saxon-he-9.9' | 'saxon-he-12' | 'groovy-1.x' | 'groovy-2.x';
 export type Kind = 'xslt' | 'groovy';
 
@@ -56,7 +58,8 @@ if (!isDesktop && typeof location !== 'undefined') {
   const spec = new URLSearchParams(location.search).get('engines') ?? '';
   for (const part of spec.split(',').map((x) => x.trim()).filter(Boolean)) {
     const at = part.indexOf('@');
-    if (at > 0) webEngines.set(part.slice(0, at) as Profile, part.slice(at + 1).replace(/\/$/, ''));
+    // Engines on this machine only: a link with a foreign engine would send mappings and messages there.
+    if (at > 0 && isLocalEngine(part.slice(at + 1))) webEngines.set(part.slice(0, at) as Profile, part.slice(at + 1).replace(/\/$/, ''));
   }
 }
 

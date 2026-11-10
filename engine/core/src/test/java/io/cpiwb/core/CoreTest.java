@@ -123,4 +123,107 @@ class CoreTest {
         files.write(Map.of("path", "sub/new.txt", "content", "y"));
         assertEquals("y", files.read(Map.of("path", "sub/new.txt")).get("content"));
     }
+
+    /** A page reached by DNS rebinding is same-origin for the browser; its Host header still names the foreign host. */
+    @Test
+    void httpAnswersOnlyThisMachinesNames() {
+        for (String ok : List.of("localhost", "localhost:7777", "127.0.0.1:7777", "LOCALHOST:1", "[::1]:7777", "[::1]")) {
+            assertTrue(RpcServer.isLocalHost(ok), ok);
+        }
+        for (String bad : new String[] {null, "", "attacker.example:7777", "localhost.attacker.example", "127.0.0.1.attacker.example:80",
+                "localhost:7777@attacker.example", "localhost:x", "[::1].attacker.example", "10.0.0.5:7777"}) {
+            assertFalse(RpcServer.isLocalHost(bad), String.valueOf(bad));
+        }
+    }
+
+    @Test
+    void httpRefusesForeignHostAndOrigin() throws Exception {
+        RpcHandler echo = new RpcHandler() {
+            public Object call(String method, Map<String, Object> params) {
+                return Json.o().with("pong", true);
+            }
+
+            public Map<String, Object> describe() {
+                return Json.o();
+            }
+        };
+        com.sun.net.httpserver.HttpServer server = new RpcServer(echo, 5000).serveHttp(0, null);
+        try {
+            int port = server.getAddress().getPort();
+            assertEquals(200, post(port, "127.0.0.1:" + port, null));
+            assertEquals(200, post(port, "localhost:" + port, "http://localhost:" + port));
+            assertEquals(403, post(port, "attacker.example:" + port, null));
+            assertEquals(403, post(port, "127.0.0.1:" + port, "http://attacker.example:" + port));
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    /** A raw request: java.net.http does not let a caller set Host. */
+    private static int post(int port, String host, String origin) throws Exception {
+        String body = "{\"id\":1,\"method\":\"ping\"}";
+        try (java.net.Socket s = new java.net.Socket(java.net.InetAddress.getLoopbackAddress(), port)) {
+            s.getOutputStream().write(("POST /rpc HTTP/1.1\r\nHost: " + host + "\r\n" + (origin == null ? "" : "Origin: " + origin + "\r\n")
+                    + "X-Cpiwb: 1\r\nContent-Length: " + body.length() + "\r\nConnection: close\r\n\r\n" + body)
+                    .getBytes(java.nio.charset.StandardCharsets.US_ASCII));
+            String status = new java.io.BufferedReader(new java.io.InputStreamReader(s.getInputStream())).readLine();
+            return Integer.parseInt(status.split(" ")[1]);
+        }
+    }
+
+    @Test
+    void textTakesTheEncodingItsXmlDeclarationNames(@TempDir Path tmp) throws Exception {
+        String xml = "<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?><a>Müller</a>";
+        assertEquals(java.nio.charset.StandardCharsets.ISO_8859_1, TextFiles.declaredCharset(xml));
+        assertNull(TextFiles.declaredCharset("<a>encoding=\"ISO-8859-1\"</a>"));
+        assertNull(TextFiles.declaredCharset("<?xml version='1.0' encoding='no-such-charset'?><a/>"));
+        SimExchange in = SimExchange.fromJson(Json.o().with("body", xml));
+        assertEquals("ISO-8859-1", in.getCharset().name());
+        assertEquals(xml, new String(in.getBody(), java.nio.charset.StandardCharsets.ISO_8859_1));
+        // A character the encoding lacks is an error, not a silent "?".
+        IllegalArgumentException lacks = assertThrows(IllegalArgumentException.class,
+                () -> SimExchange.fromJson(Json.o().with("body", xml.replace("Müller", "5 €"))));
+        assertTrue(lacks.getMessage().contains("'€' in line 1"), lacks.getMessage());
+        // An explicit encoding wins, and plain text stays UTF-8.
+        assertEquals("UTF-8", SimExchange.fromJson(Json.o().with("body", xml).with("encoding", "UTF-8")).getCharset().name());
+        assertEquals("UTF-8", SimExchange.fromJson(Json.o().with("body", "Müller")).getCharset().name());
+
+        // Files: read and written in the declared encoding, so the file stays what its declaration says.
+        Files.write(tmp.resolve("latin1.xml"), xml.getBytes(java.nio.charset.StandardCharsets.ISO_8859_1));
+        Files.write(tmp.resolve("binary.bin"), new byte[] {(byte) 0xC3, (byte) 0x28, 0, 1});
+        ProjectFiles files = new ProjectFiles();
+        files.open(Json.o().with("dir", tmp.toString()));
+        assertEquals(xml, files.read(Json.o().with("path", "latin1.xml")).get("content"));
+        files.write(Json.o().with("path", "copy.xml").with("content", xml));
+        assertEquals(-1, java.util.Arrays.mismatch(Files.readAllBytes(tmp.resolve("latin1.xml")), Files.readAllBytes(tmp.resolve("copy.xml"))));
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> files.read(Json.o().with("path", "binary.bin")));
+        assertTrue(e.getMessage().contains("not UTF-8"), e.getMessage());
+    }
+
+    @Test
+    void initWritesValidJsonForAnyFolderName(@TempDir Path tmp) throws Exception {
+        Path dir = Files.createDirectories(tmp.resolve("we\"ird"));
+        new ProjectFiles().open(Json.o().with("dir", dir.toString()).with("init", true));
+        assertEquals("we\"ird", Json.parseObject(Files.readString(dir.resolve("cpi-workbench.json"))).get("name"));
+    }
+
+    @Test
+    void aCaseWithAnUnknownProfileIsAnErrorNotSkipped(@TempDir Path tmp) throws Exception {
+        Files.writeString(tmp.resolve("case.json"), "{\"step\":\"xslt\",\"profile\":\"saxon-he-9\"}");
+        TestRunner.CaseResult r = new TestRunner(null, "saxon-he-9.9").run(tmp.resolve("case.json"));
+        assertEquals("error", r.status);
+        assertTrue(r.messages.get(0).contains("Unknown profile 'saxon-he-9'"), r.messages.toString());
+        Files.writeString(tmp.resolve("case.json"), "{\"step\":\"xslt\",\"profile\":\"groovy-1.x\"}");
+        assertEquals("skipped", new TestRunner(null, "saxon-he-9.9").run(tmp.resolve("case.json")).status);
+    }
+
+    @Test
+    void testRunExitCodes() {
+        Map<String, Object> none = Json.o().with("results", List.of()).with("passed", 0).with("failed", 0).with("skipped", 0);
+        assertEquals(1, Cli.printTestResults(none, true, false));
+        Map<String, Object> skipped = Json.o().with("results", List.of(Json.o().with("status", "skipped").with("name", "x").with("ms", 0).with("messages", List.of())))
+                .with("passed", 0).with("failed", 0).with("skipped", 1);
+        assertEquals(0, Cli.printTestResults(skipped, true, false));
+        assertEquals(1, Cli.printTestResults(skipped, true, true));
+    }
 }

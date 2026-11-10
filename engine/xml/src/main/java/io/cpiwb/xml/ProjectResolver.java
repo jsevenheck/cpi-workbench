@@ -85,10 +85,13 @@ public final class ProjectResolver implements URIResolver, LSResourceResolver, E
 
     /** Returns the content for an absolute system id, or throws if it is outside the project. */
     public String load(String systemId) throws TransformerException {
-        return load(systemId, StandardCharsets.UTF_8);
+        return load(systemId, null);
     }
 
-    /** Like {@link #load(String)}; files are decoded with {@code charset} (editor buffers are text already). */
+    /**
+     * Like {@link #load(String)}; files are decoded with {@code charset} (editor buffers are text already), or
+     * without one as XML: in the encoding their XML declaration names, else UTF-8.
+     */
     public String load(String systemId, java.nio.charset.Charset charset) throws TransformerException {
         String normalized = normalize(systemId);
         String mem = resources.get(normalized);
@@ -107,8 +110,8 @@ public final class ProjectResolver implements URIResolver, LSResourceResolver, E
             }
             try {
                 filesRead.put(p, Files.getLastModifiedTime(p).toMillis());
-                return Files.readString(p, charset);
-            } catch (java.io.IOException e) {
+                return charset == null ? io.cpiwb.core.TextFiles.read(p) : Files.readString(p, charset);
+            } catch (java.io.IOException | IllegalArgumentException e) {
                 throw new TransformerException("Cannot read " + p + ": " + e.getMessage());
             }
         }
@@ -238,6 +241,25 @@ public final class ProjectResolver implements URIResolver, LSResourceResolver, E
             throw new XPathException("UnsupportedInSimulator: collection() is not available ("
                     + (collectionURI == null ? "default collection" : collectionURI) + ")", "FODC0002");
         });
+    }
+
+    /**
+     * XPath runs see no environment variables: {@code environment-variable()} would show the computer's
+     * (tokens, paths) to an expression that came with an imported iFlow. XSLT keeps Saxon's default.
+     */
+    public static void hideEnvironment(Configuration config) {
+        config.setConfigurationProperty(net.sf.saxon.lib.FeatureKeys.ENVIRONMENT_VARIABLE_RESOLVER,
+                new net.sf.saxon.lib.EnvironmentVariableResolver() {
+                    @Override
+                    public java.util.Set<String> getAvailableEnvironmentVariables() {
+                        return java.util.Set.of();
+                    }
+
+                    @Override
+                    public String getEnvironmentVariable(String name) {
+                        return null;
+                    }
+                });
     }
 
     // ---------------------------------------------------------------- XSD includes/imports

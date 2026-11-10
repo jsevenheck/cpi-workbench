@@ -409,15 +409,27 @@ public final class XsltStep {
             }
             t = t.getCause();
         }
-        String msg = e.getMessage();
-        if (msg == null && e.getCause() != null) {
-            msg = e.getCause().getMessage();
-        }
-        msg = editionHint(msg);
+        String msg = editionHint(message(e));
         return new Diagnostic(severity, msg, code,
                 loc == null ? null : displayId(loc.getSystemId()),
                 loc == null ? -1 : loc.getLineNumber(),
                 loc == null ? -1 : loc.getColumnNumber());
+    }
+
+    /**
+     * The exception's message. Saxon 9.9 wraps what the project resolver refused in "Exception thrown by
+     * URIResolver"; the reason (e.g. access outside the project) is in the cause.
+     */
+    static String message(Throwable e) {
+        String msg = e.getMessage();
+        Throwable c = e.getCause();
+        if (c != null && c != e && (msg == null || msg.startsWith("Exception thrown by URIResolver"))) {
+            String inner = message(c);
+            if (inner != null) {
+                return inner;
+            }
+        }
+        return msg == null ? e.toString() : msg;
     }
 
     /** Explains Saxon's "needs PE/EE" errors: CPI runs Saxon-EE, the simulator Saxon-HE. */

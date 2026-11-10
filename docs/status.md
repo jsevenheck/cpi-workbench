@@ -13,7 +13,7 @@
 
 Automated checks:
 
-* Engine tests (`mvn -f engine/pom.xml verify`): core 13, XSLT/XSD/XPath/Splitter/Filter/Gather/Converter 74 per Saxon version (16 of them on project boundaries, 8 splitter cases from SAP's examples, 5 Filter, 3 Gather and 18 converter tests, most with SAP's examples), Groovy 44 per script version (4 Camel Simple, 4 Content Modifier, 11 Message Mapping functions, 2 on what a tenant probe showed).
+* Engine tests (`mvn -f engine/pom.xml verify`): core 19, XSLT/XSD/XPath/Splitter/Filter/Gather/Converter 78 per Saxon version (19 of them on project boundaries, 8 splitter cases from SAP's examples, 5 Filter, 3 Gather and 18 converter tests, most with SAP's examples), Groovy 46 per script version (4 Camel Simple, 4 Content Modifier, 11 Message Mapping functions, 2 on what a tenant probe showed).
 * Regression test cases (`testdata/regression-project`): 9.
 * Browser end-to-end tests: `app/e2e/smoke.mjs` (XML tools) and `groovy.mjs` (Groovy, Flow Steps and the iFlow import, which CI runs with the iFlow fixture as a zip).
 * UI unit tests (`npm --prefix app test`): the JSON, XSLT and Groovy formatters, test-case rows, path comparison, the Script API completions (checked against the clean-room Java classes), the Filter's `function:simple(...)` substitution, Message Mapping arguments and the update check's SemVer comparison.
@@ -46,8 +46,7 @@ Automated checks:
 ## Next steps
 
 1. Manual test of 0.3.0 on Windows ([Manual test](manual-test.md)), then the release.
-2. Run the Message Mapping probe.
-3. Install and open the installer on macOS once by hand.
-4. Code signing and auto-update (Phase 5, plan §10.2).
+2. Install and open the installer on macOS once by hand.
+3. Code signing and auto-update (Phase 5, plan §10.2).
 
 Fixes from reviews and earlier rounds are listed in the [changelog](../CHANGELOG.md).

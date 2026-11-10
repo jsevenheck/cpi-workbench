@@ -5,7 +5,7 @@
   import Editor from './Editor.svelte';
   import KeyValueTable from './KeyValueTable.svelte';
   import CompareView from './CompareView.svelte';
-  import { app, groovy, runGroovy, saveScript, saveScriptAs, formatXml, otherProfile, saveInput } from '../lib/store.svelte';
+  import { app, groovy, runGroovy, autoRunGroovy, saveScript, saveScriptAs, formatXml, otherProfile, saveInput } from '../lib/store.svelte';
   import { reindentGroovy } from '../lib/indent';
   import { formatQueue } from '../lib/queue';
   import type { CaseExtras } from '../lib/store.svelte';
@@ -23,7 +23,8 @@
   function changed() {
     if (!groovy.live) return;
     clearTimeout(timer);
-    timer = setTimeout(runGroovy, 500);
+    // A script that was opened and never started stays unrun while it is edited (autoRunGroovy).
+    timer = setTimeout(autoRunGroovy, 500);
   }
 
   let result = $derived(groovy.result);
@@ -83,7 +84,7 @@
     groovy.compare = null;
     if (groovy.compareOn) {
       outputTab = 'compare';
-      runGroovy();
+      autoRunGroovy();
     } else if (outputTab === 'compare') {
       outputTab = 'body';
     }

@@ -27,6 +27,9 @@ browser mode. The main methods are:
 File methods and XML runs stay inside the open project (`ProjectFiles`, `ProjectResolver`; `ProjectPaths` follows symbolic links). Over
 HTTP, the engines answer pages from `localhost`, `127.0.0.1` and the desktop shell only: requests
 need an `X-Cpiwb` header, which forces a CORS preflight, and the origin's host is compared exactly.
+A request whose `Host` header does not name this machine, or whose `Origin` is not local, gets 403:
+after DNS rebinding a foreign page is same-origin for the browser and no preflight happens, but its
+requests still carry the foreign host name.
 
 * **XML engines** are GraalVM native executables, so XSLT needs no JVM at runtime. The same code
   also runs as a jar (`java -jar engine/xml-he99/target/cpiwb-xml-he99.jar`).

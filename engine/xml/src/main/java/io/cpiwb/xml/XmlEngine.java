@@ -164,6 +164,6 @@ public final class XmlEngine implements RpcHandler {
         }
         Path file = dir.resolve(value.toString()).normalize();
         String rel = root.relativize(file).toString().replace('\\', '/');
-        return Json.o().with("path", rel).with("content", Files.readString(file, StandardCharsets.UTF_8));
+        return Json.o().with("path", rel).with("content", io.cpiwb.core.TextFiles.read(file));
     }
 }

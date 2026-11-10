@@ -6,6 +6,41 @@ of its version.
 
 ## [Unreleased]
 
+Fixes from a review of the whole app (2026-11-10).
+
+### Security
+
+- **Browser mode**: an engine served over HTTP answers only requests that name this machine in the
+  `Host` header and come from a local origin. Before, a web page whose name was re-pointed to
+  127.0.0.1 (DNS rebinding) could open any folder, read and write files and run Groovy. `?engines=`
+  takes engines on this machine only. The desktop app was not affected.
+- **Opening a file no longer runs its code**: a Groovy script, a Groovy test case and a stylesheet with
+  reflexive `java:` calls run for the first time when you press Run or Ctrl+Enter; live runs follow
+  after that. Before, a click on a script of an imported iFlow ran it with your rights.
+- The installed app looks for engines only next to itself and in `CPIWB_ENGINE_DIR`, no longer in
+  `engine/…/target` of every folder above it (debug builds still do).
+- A script or attachment path that is a symbolic link out of the project is refused by the Groovy
+  engines too. XPath runs see no environment variables.
+
+### Fixed
+
+- **Messages that name an encoding**: a body starting with `<?xml version="1.0" encoding="ISO-8859-1"?>`
+  came out as `MÃ¼ller` in XSLT, XPath, XSD, the converters and a script's `InputStream`, and **Format**
+  wrote that back into the editor. The body now reaches the parser in the declared encoding;
+  Format keeps the declaration. Files in such an encoding open (they failed with
+  "Input length = …") and are saved in it.
+- **Test cases**: a case with a misspelt profile was skipped by every engine and never ran; it is an
+  error now. `test <path>` fails when it finds no `case.json`, and with `--fail-if-none` when the
+  engine ran no case. `errorContains` finds texts with quotes or backslashes.
+- **Rename / Copy** to the file's own name in another spelling (`./a.xsl`, or another case where the
+  file system ignores case) deleted the file; it is refused now.
+- XSD: a problem in the input's external entities or DTD is reported for the input, not as "Schema
+  cannot be loaded". Saxon 9.9 reports why `doc()` was refused instead of "Exception thrown by URIResolver".
+- A test case's attachment file is found when the project path is written with `..`.
+- **Init** writes valid JSON for a folder name with quotes. In browser mode the timeout message no
+  longer promises a restart.
+- CI runs the regression cases on Saxon-HE 12 too and gives its jobs read-only access to the repository.
+
 ## [0.3.0] - 2026-11-08
 
 ### Changed

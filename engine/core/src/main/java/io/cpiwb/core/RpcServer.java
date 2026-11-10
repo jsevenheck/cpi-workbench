@@ -38,6 +38,8 @@ public final class RpcServer {
 
     private final RpcHandler handler;
     private final long defaultTimeoutMs;
+    /** Over HTTP nothing starts the engine again after a timeout; the desktop shell does over stdio. */
+    private volatile boolean http;
     private final ExecutorService worker = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "cpiwb-worker");
         t.setDaemon(true);
@@ -64,7 +66,8 @@ public final class RpcServer {
             // A running transformation cannot be stopped safely; tell the caller and restart.
             scheduleExit();
             return Json.o().with("id", id).with("error", Json.o()
-                    .with("message", "Timeout: the call did not finish within " + timeout + " ms. The engine restarts.")
+                    .with("message", "Timeout: the call did not finish within " + timeout + " ms. "
+                            + (http ? "The engine stops; start it again." : "The engine restarts."))
                     .with("timeout", true));
         } catch (ExecutionException e) {
             Throwable cause = e.getCause() == null ? e : e.getCause();
@@ -118,8 +121,16 @@ public final class RpcServer {
 
     public HttpServer serveHttp(int port, Path uiDir) throws IOException {
         HttpServer server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), port), 0);
+        http = true;
         server.createContext("/rpc", ex -> {
             try {
+                // DNS rebinding: a foreign page whose name now resolves to 127.0.0.1 is same-origin for the
+                // browser, so no preflight protects the engine. Such a request still names the foreign host.
+                String origin = ex.getRequestHeaders().getFirst("Origin");
+                if (!isLocalHost(ex.getRequestHeaders().getFirst("Host")) || origin != null && !isLocalOrigin(origin)) {
+                    send(ex, 403, "text/plain", "Requests from this machine only".getBytes(StandardCharsets.UTF_8));
+                    return;
+                }
                 cors(ex);
                 if ("OPTIONS".equals(ex.getRequestMethod())) {
                     send(ex, 204, "text/plain", new byte[0]);
@@ -149,6 +160,10 @@ public final class RpcServer {
         });
         server.createContext("/", ex -> {
             try {
+                if (!isLocalHost(ex.getRequestHeaders().getFirst("Host"))) {
+                    send(ex, 403, "text/plain", "Requests from this machine only".getBytes(StandardCharsets.UTF_8));
+                    return;
+                }
                 serveStatic(ex, uiDir);
             } finally {
                 ex.close();
@@ -194,6 +209,19 @@ public final class RpcServer {
         } catch (URISyntaxException e) {
             return false;
         }
+    }
+
+    /** A Host header that names this machine: localhost, 127.0.0.1 or [::1], with or without a port. */
+    static boolean isLocalHost(String host) {
+        if (host == null) {
+            return false;
+        }
+        String h = host.trim().toLowerCase(java.util.Locale.ROOT);
+        String name = h.startsWith("[") ? (h.contains("]") ? h.substring(0, h.indexOf(']') + 1) : h)
+                : (h.contains(":") ? h.substring(0, h.indexOf(':')) : h);
+        String port = h.substring(name.length());
+        return (name.equals("localhost") || name.equals("127.0.0.1") || name.equals("[::1]"))
+                && (port.isEmpty() || port.matches(":\\d{1,5}"));
     }
 
     private static void serveStatic(HttpExchange ex, Path uiDir) throws IOException {

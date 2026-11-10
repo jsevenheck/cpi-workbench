@@ -23,6 +23,14 @@ await page.evaluate(() => localStorage.clear());
 await page.reload();
 await page.locator('.status', { hasText: 'engine(s) available' }).waitFor({ timeout: 20000 });
 
+const runIt = () => page.getByRole('button', { name: /^\W*Run$/ }).click();
+/** Opens a file from the tree and starts it once it is open: opening alone runs no script. */
+async function openAndRun(file, statusText) {
+  await page.locator('.tree .file', { hasText: file }).click();
+  await page.locator('.status', { hasText: statusText }).waitFor({ timeout: 10000 });
+  await runIt();
+}
+
 // 1) Sample script on Groovy 1.x.
 await page.getByRole('tab', { name: 'Groovy Script' }).click();
 await page.locator('section.output .badge.ok').waitFor({ timeout: 20000 });
@@ -68,6 +76,11 @@ await page.getByRole('button', { name: 'Open' }).click();
 await page.locator('.tree .file', { hasText: 'groovy-enrich-order/case.json' }).click();
 // The script typed in step 3 is unsaved, so the case asks before it replaces the script.
 await page.getByRole('dialog').filter({ hasText: 'Discard the unsaved changes' }).getByRole('button', { name: 'OK' }).click();
+// Opening does not run a script (it runs with the user's rights and may come from someone else): Run starts it.
+await page.locator('.status', { hasText: 'it has not run' }).waitFor({ timeout: 10000 })
+  .catch(() => fail('opening a Groovy case did not say that it has not run'));
+if (await page.locator('section.output .badge.ok, section.output .badge.bad').count()) fail('a Groovy case ran when it was opened');
+await runIt();
 await page.locator('section.output .badge.ok').waitFor({ timeout: 20000 });
 await page.getByRole('tab', { name: /^API calls/ }).click();
 const calls = await page.locator('section.output .pad').innerText();
@@ -87,6 +100,8 @@ await page.locator('.tree .file', { hasText: 'groovy-attachment/case.json' }).cl
 // The previous case's result stays visible until this run ends, so wait for content, not the badge.
 await page.locator('.extras', { hasText: '1 attachment' }).waitFor({ timeout: 20000 })
   .catch(() => fail('case extras missing'));
+await page.locator('.status', { hasText: 'read a message attachment' }).waitFor({ timeout: 10000 });
+await runIt();
 await page.locator('section.output').getByRole('tab', { name: /^Headers/ }).click();
 await page.locator('section.output tr', { hasText: 'DN-4711' }).waitFor({ timeout: 20000 })
   .catch(async () => fail('attachment header: ' + (await page.locator('section.output').innerText()).slice(0, 400)));
@@ -115,6 +130,8 @@ if (process.env.CPIWB_IFLOW_ZIP) {
   await page.locator('.steps .step', { hasText: 'Map order' }).click();
   await page.locator('section.script h2', { hasText: 'lookup.gsh' }).waitFor({ timeout: 10000 })
     .catch(() => fail('Message Mapping step did not open its script'));
+  await page.locator('.status', { hasText: 'Press Ctrl+Enter to run it' }).waitFor({ timeout: 10000 });
+  await runIt();
   await page.locator('section.output .badge.ok').waitFor({ timeout: 20000 })
     .catch(() => fail('mapping script from the iFlow did not run'));
   if ((await page.getByLabel('Function name').inputValue()) !== 'getHeader') fail('mapping function not picked');
@@ -160,7 +177,7 @@ await page.getByLabel('Live').check();
 
 // 4d) Message Mapping functions: arguments instead of a body, the output queue as the result.
 // One call per context: each call counts its own context, the calls are joined by context changes.
-await page.locator('.tree .file', { hasText: 'mapping-context/case.json' }).click();
+await openAndRun('mapping-context/case.json', 'all values of a context');
 // The output keeps the tab chosen before (Headers in 4a2), so open the result.
 await page.locator('section.output').getByRole('tab', { name: 'Result' }).click();
 await page.locator('section.output pre', { hasText: '["2"]\n["1"]\n["0"]' }).waitFor({ timeout: 20000 })
@@ -175,18 +192,18 @@ await page.getByRole('button', { name: 'Comparing' }).click();
 await page.getByLabel('Argument 1').fill('["A", "B", "C"]');
 await page.locator('section.output pre', { hasText: '["3"]' }).waitFor({ timeout: 20000 })
   .catch(() => fail('mapping argument typed in the tab'));
-await page.locator('.tree .file', { hasText: 'mapping-get-header/case.json' }).click();
+await openAndRun('mapping-get-header/case.json', 'getHeader through MappingContext');
 await page.locator('section.output pre', { hasText: '4711' }).waitFor({ timeout: 20000 })
   .catch(async () => fail('mapping returned value: ' + (await page.locator('section.output').innerText()).slice(0, 400)));
 // A test case's null argument stays null in the tab (not an empty string); the null button toggles it.
-await page.locator('.tree .file', { hasText: 'mapping-null-arg/case.json' }).click();
+await openAndRun('mapping-null-arg/case.json', 'a null argument stays null');
 await page.locator('section.output .pad', { hasText: 'NULL' }).waitFor({ timeout: 20000 })
   .catch(async () => fail('null argument from the case: ' + (await page.locator('section.output').innerText()).slice(0, 300)));
 if ((await page.getByRole('button', { name: 'null', exact: true }).getAttribute('aria-pressed')) !== 'true') fail('null button not pressed');
 await page.getByRole('button', { name: 'null', exact: true }).click();
 await page.locator('section.output .pad', { hasText: 'EMPTY' }).waitFor({ timeout: 20000 })
   .catch(() => fail('the null button did not switch to an empty string'));
-await page.locator('.tree .file', { hasText: 'mapping-get-header/case.json' }).click();
+await openAndRun('mapping-get-header/case.json', 'getHeader through MappingContext');
 await page.locator('section.output pre', { hasText: '4711' }).waitFor({ timeout: 20000 });
 await page.getByLabel('Argument 1').fill('Missing');
 await page.locator('section.output .pad .hint', { hasText: 'null' }).waitFor({ timeout: 20000 })

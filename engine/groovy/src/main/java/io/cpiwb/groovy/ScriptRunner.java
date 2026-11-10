@@ -407,6 +407,9 @@ public final class ScriptRunner {
         if (!p.startsWith(baseDir)) {
             throw new IllegalArgumentException("Path is outside the project: " + relative);
         }
+        if (!io.cpiwb.core.ProjectPaths.inside(baseDir, p)) {
+            throw new IllegalArgumentException("Path is outside the project: " + relative + " (a symbolic link leads outside)");
+        }
         return p;
     }
 
@@ -468,7 +471,9 @@ public final class ScriptRunner {
             } else if (body instanceof String) {
                 text = (String) body;
             } else if (body instanceof byte[]) {
-                text = new String((byte[]) body, charset);
+                // Bytes that name their own encoding (an XML declaration) are read in it, else in the input's.
+                java.nio.charset.Charset own = io.cpiwb.core.TextFiles.declaredCharset((byte[]) body);
+                text = new String((byte[]) body, own == null ? charset : own);
             } else if (body instanceof InputStream || body instanceof Reader) {
                 text = exchange.getIn().getBody(String.class);
             } else {

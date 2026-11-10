@@ -121,7 +121,8 @@ public final class GroovyEngine implements RpcHandler {
             Object file = m.remove("file");
             if (file != null) {
                 Path p = dir.resolve(file.toString()).normalize();
-                if (!p.startsWith(root)) {
+                // Real paths: a link out of the project counts as outside, and a root written with ".." still matches.
+                if (!io.cpiwb.core.ProjectPaths.inside(root, p)) {
                     throw new IllegalArgumentException("Attachment file is outside the project: " + file);
                 }
                 m.put("base64", java.util.Base64.getEncoder().encodeToString(Files.readAllBytes(p)));
@@ -140,7 +141,7 @@ public final class GroovyEngine implements RpcHandler {
             }
             Path file = dir.resolve(ref.toString()).normalize();
             params.put("script", Json.o().with("path", root.relativize(file).toString().replace('\\', '/'))
-                    .with("content", Files.readString(file, StandardCharsets.UTF_8)));
+                    .with("content", io.cpiwb.core.TextFiles.read(file)));
             params.put("baseDir", root.toString());
             if (tc.get("function") != null) {
                 params.put("function", tc.get("function"));

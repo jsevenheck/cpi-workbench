@@ -54,6 +54,7 @@ public final class XPathStep {
 
     public XPathStep() {
         ProjectResolver.install(processor.getUnderlyingConfiguration());
+        ProjectResolver.hideEnvironment(processor.getUnderlyingConfiguration());
     }
 
     /**
@@ -98,7 +99,7 @@ public final class XPathStep {
             }
             result.with("ok", true);
         } catch (Exception e) {
-            diags.add(Diagnostic.error(e.getMessage() == null ? e.toString() : e.getMessage()).toJson());
+            diags.add(Diagnostic.error(XsltStep.message(e)).toJson());
             result.with("ok", false);
         }
         result.with("items", items).with("count", items.size()).with("diagnostics", diags);
@@ -271,11 +272,15 @@ public final class XPathStep {
         try {
             // Formatting reads no files: no project, so external entities fail instead of expanding.
             XdmNode doc = processor.newDocumentBuilder().build(new ProjectResolver(null, null).source(
-                    new InputSource(new ByteArrayInputStream(text.getBytes(java.nio.charset.StandardCharsets.UTF_8))),
-                    ProjectResolver.MEMORY_BASE + "input.xml"));
+                    new InputSource(new java.io.StringReader(text)), ProjectResolver.MEMORY_BASE + "input.xml"));
             StringWriter w = new StringWriter();
             Serializer s = processor.newSerializer(w);
             s.setOutputProperty(Serializer.Property.INDENT, "yes");
+            // The declaration keeps the encoding it names; characters that encoding lacks become references.
+            java.nio.charset.Charset declared = io.cpiwb.core.TextFiles.declaredCharset(text);
+            if (declared != null) {
+                s.setOutputProperty(Serializer.Property.ENCODING, declared.name());
+            }
             s.setOutputProperty(Serializer.Property.OMIT_XML_DECLARATION,
                     text.stripLeading().startsWith("<?xml") ? "no" : "yes");
             s.serializeNode(doc);

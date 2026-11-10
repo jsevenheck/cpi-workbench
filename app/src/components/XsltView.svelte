@@ -4,7 +4,7 @@
   import Editor from './Editor.svelte';
   import KeyValueTable from './KeyValueTable.svelte';
   import CompareView from './CompareView.svelte';
-  import { app, xslt, runXslt, saveMapping, saveMappingAs, formatXml, otherProfile, saveInput } from '../lib/store.svelte';
+  import { app, xslt, runXslt, autoRunXslt, saveMapping, saveMappingAs, formatXml, otherProfile, saveInput } from '../lib/store.svelte';
   import { reindentXml } from '../lib/indent';
   import { languageFor } from '../lib/monaco';
   import type { Diagnostic } from '../lib/types';
@@ -20,7 +20,7 @@
   function changed() {
     if (!xslt.live) return;
     clearTimeout(timer);
-    timer = setTimeout(runXslt, 450);
+    timer = setTimeout(autoRunXslt, 450);
   }
 
   let result = $derived(xslt.result);
@@ -56,7 +56,7 @@
     xslt.compare = null;
     if (xslt.compareOn) {
       outputTab = 'compare';
-      runXslt();
+      autoRunXslt();
     } else if (outputTab === 'compare') {
       outputTab = 'body';
     }

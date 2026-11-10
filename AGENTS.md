@@ -17,6 +17,7 @@ mvn -f engine/pom.xml verify                    # all engine tests (Java 17+, Ma
 mvn -f engine/pom.xml package -DskipTests       # jars only
 mvn -f engine/pom.xml package -pl groovy-v1,groovy-v2 -am   # one module and its dependencies
 java -jar engine/xml-he99/target/cpiwb-xml-he99.jar test testdata/regression-project/tests     # regression cases
+java -jar engine/xml-he12/target/cpiwb-xml-he12.jar test testdata/regression-project/tests
 java -jar engine/groovy-v1/target/cpiwb-groovy-v1.jar test testdata/regression-project/tests
 java -jar engine/groovy-v2/target/cpiwb-groovy-v2.jar test testdata/regression-project/tests
 npm --prefix app run check                      # Svelte/TypeScript checks

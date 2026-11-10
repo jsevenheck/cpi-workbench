@@ -9,6 +9,10 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Jobs read the repository; only the release job below may write (it publishes the release).
+permissions:
+  contents: read
+
 jobs:
   engine-tests:
     strategy:
@@ -30,9 +34,10 @@ jobs:
           python3 engine/native/workload.py java -jar engine/xml-he12/target/cpiwb-xml-he12.jar serve --stdio
       - name: Regression test cases
         run: |
-          java -jar engine/xml-he99/target/cpiwb-xml-he99.jar test testdata/regression-project/tests
-          java -jar engine/groovy-v1/target/cpiwb-groovy-v1.jar test testdata/regression-project/tests
-          java -jar engine/groovy-v2/target/cpiwb-groovy-v2.jar test testdata/regression-project/tests
+          java -jar engine/xml-he99/target/cpiwb-xml-he99.jar test testdata/regression-project/tests --fail-if-none
+          java -jar engine/xml-he12/target/cpiwb-xml-he12.jar test testdata/regression-project/tests --fail-if-none
+          java -jar engine/groovy-v1/target/cpiwb-groovy-v1.jar test testdata/regression-project/tests --fail-if-none
+          java -jar engine/groovy-v2/target/cpiwb-groovy-v2.jar test testdata/regression-project/tests --fail-if-none
       # The engine jars run on any Java 17+ (command line, CI pipelines); a release attaches them.
       - if: matrix.os == 'ubuntu-latest'
         uses: actions/upload-artifact@v7

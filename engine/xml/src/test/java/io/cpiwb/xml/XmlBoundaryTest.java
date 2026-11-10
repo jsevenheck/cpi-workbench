@@ -265,4 +265,32 @@ class XmlBoundaryTest {
     void formatDoesNotExpandExternalEntities() {
         assertNoLeak(new XPathStep().format(Json.o().with("text", entityDoc())));
     }
+
+    /** Saxon 9.9 reports a refused doc() as "Exception thrown by URIResolver"; the reason is what helps. */
+    @Test
+    void refusedDocSaysWhy() {
+        Map<String, Object> r = xpath("doc('" + secretUri.replace("secret.txt", "s.xml") + "')", "3.1", "<a/>");
+        assertEquals(false, r.get("ok"));
+        assertTrue(Json.write(r).contains("outside the project"), Json.write(r));
+    }
+
+    /** An XPath that came with an imported iFlow must not read the computer's environment. */
+    @Test
+    void xpathSeesNoEnvironmentVariables() {
+        Map<String, Object> r = xpath("string-join((available-environment-variables(), environment-variable('PATH')), '|')", "3.1", "<a/>");
+        assertEquals(true, r.get("ok"), Json.write(r));
+        assertEquals("", ((Map<?, ?>) ((List<?>) r.get("items")).get(0)).get("value"), Json.write(r));
+    }
+
+    /** A refused entity of the input is a finding about the input, not "Schema cannot be loaded". */
+    @Test
+    void xsdReportsARefusedInputEntityAsInput() {
+        Map<String, Object> r = new XsdStep().run(Json.o()
+                .with("schema", Json.o().with("content", "<xs:schema xmlns:xs='http://www.w3.org/2001/XMLSchema'><xs:element name='r' type='xs:string'/></xs:schema>"))
+                .with("baseDir", project.toString()).with("input", Json.o().with("body", entityDoc())));
+        assertNoLeak(r);
+        assertEquals(true, r.get("ok"), Json.write(r));
+        assertEquals(false, r.get("valid"));
+        assertFalse(Json.write(r).contains("Schema cannot be loaded"), Json.write(r));
+    }
 }

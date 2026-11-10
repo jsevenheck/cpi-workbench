@@ -44,6 +44,7 @@ public final class FilterStep {
 
     public FilterStep() {
         ProjectResolver.install(processor.getUnderlyingConfiguration());
+        ProjectResolver.hideEnvironment(processor.getUnderlyingConfiguration());
     }
 
     /**
@@ -88,7 +89,7 @@ public final class FilterStep {
             result.with("body", body);
         } catch (Exception e) {
             ok = false;
-            diags.add(Diagnostic.error(e.getMessage() == null ? e.toString() : e.getMessage()).toJson());
+            diags.add(Diagnostic.error(XsltStep.message(e)).toJson());
         } finally {
             ProjectResolver.end();
         }

@@ -18,9 +18,7 @@ import javax.xml.transform.stream.StreamResult;
 import javax.xml.xpath.XPath;
 import javax.xml.xpath.XPathConstants;
 import javax.xml.xpath.XPathFactory;
-import java.io.ByteArrayInputStream;
 import java.io.StringWriter;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -163,7 +161,7 @@ public final class GatherStep {
         Element at = null;
         List<Node> nodes = new ArrayList<>();
         for (int i = 0; i < messages.size(); i++) {
-            InputSource in = new InputSource(new ByteArrayInputStream(messages.get(i).getBytes(StandardCharsets.UTF_8)));
+            InputSource in = new InputSource(new java.io.StringReader(messages.get(i)));
             in.setSystemId(ProjectResolver.MEMORY_BASE + "message" + (i + 1) + ".xml");
             Document doc;
             try {

@@ -202,7 +202,14 @@ class CoreTest {
 
     @Test
     void initWritesValidJsonForAnyFolderName(@TempDir Path tmp) throws Exception {
-        Path dir = Files.createDirectories(tmp.resolve("we\"ird"));
+        Path dir;
+        try {
+            dir = Files.createDirectories(tmp.resolve("we\"ird"));
+        } catch (java.nio.file.InvalidPathException e) {
+            // Windows allows no quote in a file name, so the case cannot arise there.
+            org.junit.jupiter.api.Assumptions.assumeTrue(false, "no quotes in file names here");
+            return;
+        }
         new ProjectFiles().open(Json.o().with("dir", dir.toString()).with("init", true));
         assertEquals("we\"ird", Json.parseObject(Files.readString(dir.resolve("cpi-workbench.json"))).get("name"));
     }

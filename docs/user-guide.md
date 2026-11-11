@@ -32,7 +32,7 @@ Download the installer for your platform from the
 * A message or file whose XML declaration names an encoding (`<?xml version="1.0" encoding="ISO-8859-1"?>`)
   is handled in that encoding: the body reaches the parser, or a script's `InputStream` / `byte[]`,
   in it, and the file is read and saved in it. A character the
-  declared encoding lacks (`€` in ISO-8859-1) is an error. Text without such a declaration is UTF-8.
+  declared encoding lacks (`€` in ISO-8859-1) is an error, in a run and when saving. Text without such a declaration is UTF-8.
 * A file cannot be renamed or copied to its own name in another spelling (`./a.xsl`, or `A.xsl` where
   the file system ignores case).
 * **Parameters** (XSLT) shows how each `xsl:param` was bound: header, property or default.

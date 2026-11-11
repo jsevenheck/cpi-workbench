@@ -66,7 +66,32 @@ public final class TextFiles {
     /** The bytes of a text: in the charset its XML declaration names, else UTF-8. */
     public static byte[] encode(String text) {
         Charset cs = declaredCharset(text);
+        requireEncodable(text, cs, "The text");
         return text.getBytes(cs == null ? StandardCharsets.UTF_8 : cs);
+    }
+
+    /**
+     * Fails when {@code text} has a character that {@code cs} (its declared encoding) cannot hold: encoding it
+     * anyway would turn the character into "?" without a word.
+     */
+    public static void requireEncodable(String text, Charset cs, String what) {
+        if (text == null || cs == null) {
+            return;
+        }
+        java.nio.charset.CharsetEncoder enc = cs.newEncoder();
+        if (enc.canEncode(text)) {
+            return;
+        }
+        for (int i = 0; i < text.length(); ) {
+            String ch = new String(Character.toChars(text.codePointAt(i)));
+            if (!enc.canEncode(ch)) {
+                long line = text.substring(0, i).chars().filter(c -> c == '\n').count() + 1;
+                throw new IllegalArgumentException(what + " has a character that the encoding its XML declaration names ("
+                        + cs.name() + ") cannot hold: '" + ch + "' in line " + line
+                        + ". Write it as a character reference (&#x...;) or change the declaration.");
+            }
+            i += ch.length();
+        }
     }
 
     /** The text of bytes: in the charset their XML declaration (or UTF-16 byte order mark) names, else UTF-8. */

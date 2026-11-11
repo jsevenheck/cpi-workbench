@@ -78,6 +78,9 @@ public final class Main {
                 }
             }
             server.supervised(a.has(RpcServer.WORKER));
+            if (a.has(RpcServer.WORKER)) {
+                RpcServer.exitWithParent();
+            }
             int port = (int) a.num("--http", 7777);
             Path ui = a.get("--ui") == null ? null : Path.of(a.get("--ui"));
             server.serveHttp(port, ui);

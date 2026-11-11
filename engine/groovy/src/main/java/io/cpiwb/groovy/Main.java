@@ -47,6 +47,9 @@ public final class Main {
                         }
                     }
                     server.supervised(a.has(RpcServer.WORKER));
+                    if (a.has(RpcServer.WORKER)) {
+                        RpcServer.exitWithParent();
+                    }
                     server.serveHttp((int) a.num("--http", 7778), a.get("--ui") == null ? null : Path.of(a.get("--ui")));
                     System.err.println(name + " listening on http://127.0.0.1:" + a.num("--http", 7778));
                     Thread.currentThread().join();

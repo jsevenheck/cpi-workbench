@@ -196,6 +196,11 @@ class CoreTest {
         assertEquals(xml, files.read(Json.o().with("path", "latin1.xml")).get("content"));
         files.write(Json.o().with("path", "copy.xml").with("content", xml));
         assertEquals(-1, java.util.Arrays.mismatch(Files.readAllBytes(tmp.resolve("latin1.xml")), Files.readAllBytes(tmp.resolve("copy.xml"))));
+        // Saving a character the declared encoding lacks is an error too, not a "?" in the file.
+        IllegalArgumentException lost = assertThrows(IllegalArgumentException.class,
+                () -> files.write(Json.o().with("path", "euro.xml").with("content", xml.replace("Müller", "5 €"))));
+        assertTrue(lost.getMessage().contains("'€' in line 1"), lost.getMessage());
+        assertFalse(Files.exists(tmp.resolve("euro.xml")));
         IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> files.read(Json.o().with("path", "binary.bin")));
         assertTrue(e.getMessage().contains("not UTF-8"), e.getMessage());
     }

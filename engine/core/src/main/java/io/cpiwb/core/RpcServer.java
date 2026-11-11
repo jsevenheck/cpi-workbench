@@ -169,9 +169,28 @@ public final class RpcServer {
         }
     }
 
+    /**
+     * In the process that serves ({@link #WORKER}): exit when the supervising process is gone, so a supervisor
+     * killed without its shutdown hooks (kill -9, Task Manager) leaves no engine holding the port.
+     */
+    public static void exitWithParent() {
+        ProcessHandle.current().parent().ifPresent(p -> p.onExit().thenRun(() -> System.exit(0)));
+    }
+
     /** This process's command line with {@link #WORKER} added, or null when it cannot be told. */
     static java.util.List<String> relaunchCommand(String[] args) {
         java.util.List<String> command = new java.util.ArrayList<>();
+        // The command line as the system reports it, with the JVM options (e.g. -Xmx) the user gave; where the
+        // system does not report it (Windows), it is rebuilt below without them.
+        ProcessHandle.Info info = ProcessHandle.current().info();
+        String[] own = info.arguments().orElse(new String[0]);
+        if (info.command().isPresent() && own.length >= args.length
+                && java.util.Arrays.equals(java.util.Arrays.copyOfRange(own, own.length - args.length, own.length), args)) {
+            command.add(info.command().get());
+            command.addAll(java.util.List.of(own));
+            command.add(WORKER);
+            return command;
+        }
         if (System.getProperty("org.graalvm.nativeimage.imagecode") != null) {
             String exe = ProcessHandle.current().info().command().orElse(null);
             if (exe == null) {

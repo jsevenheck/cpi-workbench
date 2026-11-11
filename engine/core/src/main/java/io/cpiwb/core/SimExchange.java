@@ -42,30 +42,11 @@ public final class SimExchange {
         // encoding (XML 1.0, 4.3.3). That such a message arrives on a tenant in it is an assumption.
         Charset declared = input.get("encoding") == null ? TextFiles.declaredCharset(text) : null;
         Charset cs = declared != null ? declared : Charset.forName(Json.str(input, "encoding", "UTF-8"));
-        if (declared != null && !declared.newEncoder().canEncode(text)) {
-            // Encoding it anyway would turn the character into "?" without a word.
-            throw new IllegalArgumentException("The body has a character that the encoding its XML declaration names ("
-                    + declared.name() + ") cannot hold" + firstUnmappable(text, declared)
-                    + ". Write it as a character reference (&#x...;) or change the declaration.");
-        }
+        TextFiles.requireEncodable(text, declared, "The body");
         byte[] body = text == null ? Base64.getDecoder().decode(Json.str(input, "bodyBase64", "")) : text.getBytes(cs);
         return new SimExchange(body, cs,
                 TypedValue.readMap(input.get("headers")),
                 TypedValue.readMap(input.get("properties")));
-    }
-
-    private static String firstUnmappable(String text, Charset cs) {
-        java.nio.charset.CharsetEncoder enc = cs.newEncoder();
-        for (int i = 0; i < text.length(); ) {
-            int cp = text.codePointAt(i);
-            String ch = new String(Character.toChars(cp));
-            if (!enc.canEncode(ch)) {
-                long line = text.substring(0, i).chars().filter(c -> c == '\n').count() + 1;
-                return ": '" + ch + "' in line " + line;
-            }
-            i += ch.length();
-        }
-        return "";
     }
 
     public byte[] getBody() {

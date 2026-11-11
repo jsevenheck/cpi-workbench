@@ -40,7 +40,8 @@ Fixes from a review of the whole app (2026-11-10), and the Groovy tab keeps a sc
   came out as `MÃ¼ller` in XSLT, XPath, XSD, the converters and a script's `InputStream`, and **Format**
   wrote that back into the editor. The body now reaches the parser in the declared encoding;
   Format keeps the declaration. Files in such an encoding open (they failed with
-  "Input length = …") and are saved in it.
+  "Input length = …") and are saved in it. A character that the declared encoding cannot hold (`€` in
+  ISO-8859-1) is an error, in a run and when saving, instead of a silent `?`.
 - **Test cases**: a case with a misspelt profile was skipped by every engine and never ran; it is an
   error now. `test <path>` fails when it finds no `case.json`, and with `--fail-if-none` when the
   engine ran no case. `errorContains` finds texts with quotes or backslashes.
@@ -52,7 +53,8 @@ Fixes from a review of the whole app (2026-11-10), and the Groovy tab keeps a sc
 - XSLT on Saxon 9.9: a `document()` outside the project fails the run, as on Saxon 12; before, the run
   went on with an empty result and a warning.
 - **Browser mode**: after a timed-out call the engine starts again by itself, as in the desktop app;
-  before, it stopped and had to be started by hand.
+  before, it stopped and had to be started by hand. `serve --http` keeps the JVM options it was started
+  with, and the engine ends with the command that started it.
 - **Init** writes valid JSON for a folder name with quotes.
 - CI runs the regression cases on Saxon-HE 12 too.
 

@@ -475,12 +475,12 @@ public final class XsltStep {
 
         @Override
         public void warning(TransformerException e) {
+            boolean thisRefused = false;
             for (Throwable t = e; t != null; t = t.getCause() == t ? null : t.getCause()) {
-                if (t instanceof ProjectResolver.AccessRefused) {
-                    refused = true;
-                }
+                thisRefused |= t instanceof ProjectResolver.AccessRefused;
             }
-            sink.add(toDiagnostic(e, refused ? Diagnostic.Severity.ERROR : Diagnostic.Severity.WARNING));
+            refused |= thisRefused;
+            sink.add(toDiagnostic(e, thisRefused ? Diagnostic.Severity.ERROR : Diagnostic.Severity.WARNING));
         }
 
         @Override

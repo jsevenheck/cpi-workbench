@@ -511,6 +511,7 @@ async function reopen(path: string) {
     if (groovy.script === groovy.savedScript && content !== groovy.savedScript) {
       groovy.script = content;
       groovy.savedScript = content;
+      disarmGroovy(path); // changed on disk: code the user has not started yet
     }
     app.tool = 'groovy';
     if (!groovy.result) rerunIfLive('groovy');
@@ -524,6 +525,7 @@ async function reopen(path: string) {
     if (xslt.mapping === xslt.savedMapping && content !== xslt.savedMapping) {
       xslt.mapping = content;
       xslt.savedMapping = content;
+      disarmXslt(path); // changed on disk: java: calls the user has not started yet
     }
     app.tool = 'xslt';
     if (!xslt.result) rerunIfLive('xslt');

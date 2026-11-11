@@ -218,6 +218,30 @@ if ((await page.getByLabel('Function name').inputValue()) !== 'countPerContext')
 await page.locator('.tree .file', { hasText: 'route-by-partner.groovy' }).click();
 await page.locator('section.input').getByRole('tab', { name: 'Body' }).waitFor({ timeout: 10000 })
   .catch(() => fail('no Body tab after opening a script'));
+// A script with mapping functions only, opened from the tree, runs its first one on its first run; it keeps its
+// function and arguments when the tree opens it again, from another tab or after another script.
+await openAndRun('mapping-functions.groovy', 'mapping-functions.groovy. A script runs with your rights');
+await page.locator('section.input').getByRole('tab', { name: /Arguments/ }).waitFor({ timeout: 20000 })
+  .catch(() => fail('a script with only mapping functions did not open with its arguments'));
+const fnOpened = await page.getByLabel('Function name').inputValue();
+await page.getByLabel('Argument 1').fill('["kept"]');
+await page.getByRole('tab', { name: 'XSLT Mapping' }).click();
+await page.locator('.tree .file', { hasText: 'mapping-functions.groovy' }).click();
+await page.locator('section.script').waitFor({ timeout: 10000 });
+if ((await page.getByLabel('Argument 1').inputValue()) !== '["kept"]') fail('arguments lost when the open script was clicked again');
+await page.locator('.tree .file', { hasText: 'route-by-partner.groovy' }).click();
+await page.locator('section.input').getByRole('tab', { name: 'Body' }).waitFor({ timeout: 10000 });
+// Opened after another script, it has not run yet: its function is back at once, its arguments with the run.
+await page.locator('.tree .file', { hasText: 'mapping-functions.groovy' }).click();
+await page.locator('.status', { hasText: 'mapping-functions.groovy. A script runs with your rights' }).waitFor({ timeout: 10000 });
+if ((await page.getByLabel('Function name').inputValue()) !== fnOpened) fail('function not back before the run');
+await runIt();
+await page.getByLabel('Argument 1').waitFor({ timeout: 20000 })
+  .catch(() => fail('arguments tab not back after reopening the script'));
+if ((await page.getByLabel('Argument 1').inputValue()) !== '["kept"]') fail('arguments lost after another script');
+if ((await page.getByLabel('Function name').inputValue()) !== fnOpened) fail('function lost after another script');
+await page.locator('.tree .file', { hasText: 'route-by-partner.groovy' }).click();
+await page.locator('section.input').getByRole('tab', { name: 'Body' }).waitFor({ timeout: 10000 });
 
 // 5) A file from inputs/ opens as the Groovy input body.
 fs.mkdirSync(path.join(project, 'inputs'), { recursive: true });

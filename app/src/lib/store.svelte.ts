@@ -373,6 +373,7 @@ function safeSet(key: string, v: string | null) {
 export async function open(dir: string, initProject = false) {
   app.error = '';
   const r = await openProject(dir, initProject);
+  if (app.project?.root !== r.root) scriptMemory.clear(); // its paths belong to the other project
   app.project = { root: r.root, files: r.files };
   safeSet('cpiwb.project', r.root);
   await loadIflowSteps();
@@ -385,6 +386,7 @@ export async function closeProject() {
   if (!(await mayDiscard('file'))) return;
   await closeEngineProject();
   app.project = null;
+  scriptMemory.clear();
   safeSet('cpiwb.project', null);
   xslt.mappingPath = null;
   xslt.casePath = null;
@@ -482,11 +484,60 @@ export interface OpenOptions {
   profile?: Profile;
 }
 
+/**
+ * The function and arguments each Groovy script had when another one was opened, so that opening it again
+ * (e.g. from the file tree) brings them back. Kept for the session only.
+ */
+const scriptMemory = new Map<string, { functionName: string; args: (string | null)[] }>();
+
+function rememberScript() {
+  if (groovy.scriptPath && !groovy.casePath) {
+    scriptMemory.set(groovy.scriptPath, { functionName: groovy.functionName, args: [...groovy.args] });
+  }
+}
+
+function isOpenInItsTab(path: string): boolean {
+  const lower = path.toLowerCase();
+  if (lower.endsWith('.groovy') || lower.endsWith('.gsh')) return groovy.scriptPath === path && !groovy.casePath;
+  if (lower.endsWith('.xsl') || lower.endsWith('.xslt')) return xslt.mappingPath === path && !xslt.casePath;
+  if (lower.endsWith('.xsd')) return xsd.schemaPath === path && !xsd.casePath;
+  return false;
+}
+
+async function reopen(path: string) {
+  const lower = path.toLowerCase();
+  const content = await readFile(path);
+  if (lower.endsWith('.groovy') || lower.endsWith('.gsh')) {
+    if (groovy.script === groovy.savedScript && content !== groovy.savedScript) {
+      groovy.script = content;
+      groovy.savedScript = content;
+    }
+    app.tool = 'groovy';
+    if (!groovy.result) rerunIfLive('groovy');
+  } else if (lower.endsWith('.xsd')) {
+    if (xsd.schema === xsd.savedSchema && content !== xsd.savedSchema) {
+      xsd.schema = content;
+      xsd.savedSchema = content;
+    }
+    app.tool = 'xsd';
+  } else {
+    if (xslt.mapping === xslt.savedMapping && content !== xslt.savedMapping) {
+      xslt.mapping = content;
+      xslt.savedMapping = content;
+    }
+    app.tool = 'xslt';
+    if (!xslt.result) rerunIfLive('xslt');
+  }
+}
+
 export async function openFile(path: string, opts: OpenOptions = {}) {
   try {
     app.error = '';
     const lower = path.toLowerCase();
     if (lower.endsWith('case.json')) return await loadCase(path);
+    // The file that is open in its tab (not as part of a test case): go back to it with its settings, and
+    // take the file's content if it changed on disk while the editor has no unsaved changes.
+    if (!opts.functionName && !opts.profile && isOpenInItsTab(path)) return await reopen(path);
     if (!opts.discardChecked && !(await mayDiscard(editorFor(path)))) return;
     const content = await readFile(path);
     if (lower.endsWith('.xsl') || lower.endsWith('.xslt')) {
@@ -498,16 +549,20 @@ export async function openFile(path: string, opts: OpenOptions = {}) {
       disarmXslt(path);
       rerunIfLive('xslt');
     } else if (lower.endsWith('.groovy') || lower.endsWith('.gsh')) {
+      rememberScript(); // the script that was open, before its path changes
       groovy.scriptPath = path;
       groovy.script = content;
       groovy.savedScript = content;
       groovy.casePath = null;
       groovy.caseExtras = null;
-      groovy.functionName = opts.functionName ?? 'processData';
+      const last = opts.functionName ? undefined : scriptMemory.get(path);
+      groovy.functionName = opts.functionName ?? last?.functionName ?? 'processData';
       groovy.mapping = null;
       groovy.functions = [];
-      groovy.args = [];
+      groovy.args = last ? [...last.args] : [];
       forgetGroovyRun();
+      // A script with only mapping functions: the first run picks one instead of failing on processData.
+      if (!opts.functionName && !last) pickMappingFunction = true;
       if (opts.profile && hasProfile(opts.profile)) app.groovyProfile = opts.profile;
       else if (content.includes('com.sap.it.script.v2.api') && hasProfile('groovy-2.x')) app.groovyProfile = 'groovy-2.x';
       else if (content.includes('com.sap.gateway.ip.core.customdev.util') && hasProfile('groovy-1.x')) app.groovyProfile = 'groovy-1.x';
@@ -1195,6 +1250,7 @@ function joinPath(dir: string, rel: string): string {
 }
 
 async function loadGroovyCase(path: string, dir: string, tc: any) {
+  rememberScript();
   const scriptPath = joinPath(dir, tc.script);
   groovy.scriptPath = scriptPath;
   groovy.script = await readFile(scriptPath);

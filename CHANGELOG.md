@@ -6,7 +6,7 @@ of its version.
 
 ## [Unreleased]
 
-Fixes from a review of the whole app (2026-11-10).
+Fixes from a review of the whole app (2026-11-10), and the Groovy tab keeps a script's settings.
 
 ### Security
 
@@ -24,6 +24,10 @@ Fixes from a review of the whole app (2026-11-10).
 
 ### Fixed
 
+- Groovy: clicking the open script in the file tree again (e.g. after a visit to another tab) no longer
+  resets it to `processData` and drops the arguments of its mapping function. Each script keeps its
+  function and arguments for the session, so they are back when you return to it from another script.
+  A script with only mapping functions runs its first one on its first run instead of failing on `processData`.
 - **Messages that name an encoding**: a body starting with `<?xml version="1.0" encoding="ISO-8859-1"?>`
   came out as `MÃ¼ller` in XSLT, XPath, XSD, the converters and a script's `InputStream`, and **Format**
   wrote that back into the editor. The body now reaches the parser in the declared encoding;

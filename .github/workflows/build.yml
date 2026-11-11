@@ -61,9 +61,9 @@ jobs:
       fail-fast: false
       matrix:
         # macos-26 is Apple Silicon (Intel runners are no longer reliably available).
-        # ubuntu-22.04 on purpose: Linux binaries need at least the glibc they were built
-        # against, so the oldest supported runner keeps the packages usable on more distributions.
-        os: [windows-latest, macos-26, ubuntu-22.04]
+        # No Linux installers since 2026-11-11: the desktop app is built for Windows and macOS only.
+        # The engine jars, which run on Linux too, come from the engine-tests job.
+        os: [windows-latest, macos-26]
     runs-on: ${{ matrix.os }}
     env:
       # Without it, clang targets the runner's macOS version and the app would not start on older
@@ -114,14 +114,6 @@ jobs:
         with: { node-version: "22", cache: npm, cache-dependency-path: app/package-lock.json }
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-11-11
         with: { toolchain: stable }
-      # apt retries a failed download and gives up on a stalled one; the step stops after 20 minutes instead of
-      # holding the runner for hours (on 2026-11-11 the Ubuntu mirrors were unreachable and the step hung 90 minutes).
-      - name: Linux build dependencies
-        if: runner.os == 'Linux'
-        timeout-minutes: 20
-        run: |
-          printf 'Acquire::Retries "5";\nAcquire::http::Timeout "30";\nAcquire::https::Timeout "30";\n' | sudo tee /etc/apt/apt.conf.d/80-retries
-          sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
       - name: Install UI dependencies
         working-directory: app
         run: npm ci
@@ -151,7 +143,7 @@ jobs:
         env:
           CPIWB_JRE_DIR: ${{ runner.temp }}/jre
         run: |
-          npx tauri build ${{ runner.os == 'Linux' && '--bundles deb,rpm' || '' }}
+          npx tauri build
       # The release executable as an MCP client starts it (piped stdio; a GUI-subsystem program on Windows).
       - name: MCP server from the release build
         working-directory: app
@@ -163,8 +155,6 @@ jobs:
             app/src-tauri/target/release/bundle/**/*.msi
             app/src-tauri/target/release/bundle/**/*.exe
             app/src-tauri/target/release/bundle/**/*.dmg
-            app/src-tauri/target/release/bundle/**/*.rpm
-            app/src-tauri/target/release/bundle/**/*.deb
           if-no-files-found: warn
           # Branch builds are for a quick test; a release keeps its installers as release assets too.
           retention-days: ${{ startsWith(github.ref, 'refs/tags/v') && 90 || 3 }}
@@ -174,7 +164,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        # Windows only: on Linux, Playwright needs the browser's system libraries from the Ubuntu mirrors.
+        os: [windows-latest]
     runs-on: ${{ matrix.os }}
     defaults:
       run: { shell: bash }
@@ -186,13 +177,7 @@ jobs:
         with: { node-version: "22", cache: npm, cache-dependency-path: app/package-lock.json }
       - run: mvn -B -f engine/pom.xml -DskipTests package
       - working-directory: app
-        timeout-minutes: 20
-        run: |
-          # Playwright installs the browser's system libraries with apt (Linux): retry, as for the desktop job.
-          if [ "$RUNNER_OS" = "Linux" ]; then
-            printf 'Acquire::Retries "5";\nAcquire::http::Timeout "30";\nAcquire::https::Timeout "30";\n' | sudo tee /etc/apt/apt.conf.d/80-retries
-          fi
-          npm ci && npm run build && npm install --no-save playwright && npx playwright install --with-deps chromium
+        run: npm ci && npm run build && npm install --no-save playwright && npx playwright install --with-deps chromium
       - name: Browser tests (web mode, XSLT + Groovy engines)
         run: |
           java -jar engine/xml-he99/target/cpiwb-xml-he99.jar serve --http 7777 --ui app/dist &
@@ -244,7 +229,7 @@ jobs:
         run: |
           mkdir assets
           # Spaces become dashes: "CPI Workbench_0.1.0_x64-setup.exe" -> "CPI-Workbench_0.1.0_x64-setup.exe".
-          find downloaded/cpi-workbench-* -type f \( -name '*.msi' -o -name '*.exe' -o -name '*.dmg' -o -name '*.deb' -o -name '*.rpm' \) \
+          find downloaded/cpi-workbench-* -type f \( -name '*.msi' -o -name '*.exe' -o -name '*.dmg' \) \
             -exec sh -c 'cp "$1" "assets/$(basename "$1" | tr " " "-")"' _ {} \;
           for jar in downloaded/engine-jars/*/target/*.jar; do
             name="$(basename "$jar" .jar)"
@@ -252,7 +237,7 @@ jobs:
           done
           (cd assets && sha256sum * > SHA256SUMS.txt)
           ls -la assets
-          for kind in msi exe dmg deb rpm jar; do
+          for kind in msi exe dmg jar; do
             ls assets/*."$kind" >/dev/null 2>&1 || { echo "::error::no .$kind file to release"; exit 1; }
           done
       - name: Release notes
@@ -272,7 +257,6 @@ jobs:
             echo "|---|---|"
             echo "| Windows 10/11 (x64) | \`CPI-Workbench_${VERSION}_x64-setup.exe\` (per user, no admin rights) or the \`.msi\` |"
             echo "| macOS 11+ (Apple Silicon) | \`CPI-Workbench_${VERSION}_aarch64.dmg\` |"
-            echo "| Linux x64 | \`.deb\` (Ubuntu 22.04+, Debian 12+) or \`.rpm\` (Fedora) |"
             echo "| Command line, any OS with Java 17+ | \`cpiwb-*-${VERSION}.jar\` |"
             echo
             echo "The installers are not code-signed yet, so Windows and macOS warn on the first start."

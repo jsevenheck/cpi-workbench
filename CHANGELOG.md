@@ -8,6 +8,12 @@ of its version.
 
 Fixes from a review of the whole app (2026-11-10), and the Groovy tab keeps a script's settings.
 
+### Removed
+
+- **Linux installers** (`.deb`, `.rpm`): releases bring installers for Windows and macOS only. On Linux,
+  use the engine jars or the browser mode, or build the desktop app from source (docs/building.md).
+  CI no longer builds the desktop app or runs the browser e2e tests on Linux; the engine tests still run there.
+
 ### Security
 
 - **Browser mode**: an engine served over HTTP answers only requests that name this machine in the

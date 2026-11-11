@@ -61,7 +61,7 @@ network request is *Check for updates* in the ⚙ menu, to github.com, when you 
 
 ## Install
 
-Download the installer for Windows, macOS (Apple Silicon) or Linux from the
+Download the installer for Windows or macOS (Apple Silicon) from the
 **[latest release](https://github.com/jsevenheck/cpi-workbench/releases/latest)**. It brings its own
 engines and Java runtime. The installers are not code-signed yet; [Installing](docs/install.md)
 shows how to get past the first-start warning.
@@ -82,7 +82,7 @@ java -jar engine/groovy-v1/target/cpiwb-groovy-v1.jar test testdata/regression-p
 
 ### With a coding agent
 
-Add a `.mcp.json` to the project folder (Windows; on macOS and Linux use the path from
+Add a `.mcp.json` to the project folder (Windows; on macOS use the path from
 [MCP server](docs/mcp.md)) and start Claude Code there:
 
 ```json

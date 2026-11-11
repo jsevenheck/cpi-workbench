@@ -3,7 +3,7 @@
 CI covers the engine tests, the browser e2e, the installer builds and the release executable as an
 MCP server (`app/scripts/mcp-smoke.mjs`). It does not cover installing the app, using the real
 desktop window or a real MCP client. This page is the hand check for that, written for Windows; on
-macOS and Linux the steps are the same apart from section 1 and the paths.
+macOS the steps are the same apart from section 1 and the paths.
 
 Sections 1–3 and 5 are required, 4 and 6 optional; about 1 to 1.5 hours. For each failure, note the
 step number, what you expected, what happened and the error text or a screenshot. Do not release

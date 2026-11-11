@@ -6,7 +6,8 @@
 * GraalVM 21+ for the native engines.
 * A JDK 21 with jmods for the Groovy runtime (`engine/groovy/build-jre.sh`).
 * Node 22.18+ and Rust (stable).
-* On Linux, the WebKitGTK development packages (see `.github/workflows/build.yml`).
+* On Linux, the WebKitGTK 4.1 development packages (`libwebkit2gtk-4.1-dev`, `libgtk-3-dev`,
+  `libayatana-appindicator3-dev`, `librsvg2-dev` on Ubuntu). CI no longer builds the desktop app on Linux.
 
 ## Commands
 
@@ -79,11 +80,11 @@ that iFlow and opens its Groovy, Content Modifier, Filter, Gather and Message Ma
 * starts the release executable as an MCP server (`app/scripts/mcp-smoke.mjs`), as a client would.
 
 Pushes to `main`, tags `v*`, pull requests to `main` and manual runs (*Run workflow*,
-`workflow_dispatch`) run everything on Linux, Windows (e2e, .msi/.exe) and macOS (Apple Silicon, .dmg).
+`workflow_dispatch`) run the engine tests on Linux, Windows and macOS, the browser e2e on Windows, and the
+desktop builds on Windows (.msi/.exe) and macOS (Apple Silicon, .dmg). There are no Linux installers.
 The macOS runner is `macos-26`; `MACOSX_DEPLOYMENT_TARGET=11.0` (for native-image as the linker option
 `-mmacosx-version-min`) keeps the app and the native engines starting on
-macOS 11 (the app's `minimumSystemVersion`), and a CI step checks that. The Linux bundles are built on
-`ubuntu-22.04` on purpose, so they need only that release's glibc.
+macOS 11 (the app's `minimumSystemVersion`), and a CI step checks that.
 
 The workflow artifacts (engine jars, installers) expire after 3 days; a tag's installers stay 90 days,
 and the release keeps its own copies.

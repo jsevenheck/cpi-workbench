@@ -17,7 +17,6 @@ need to be open, and runs by the agent do not appear in it. The two share only t
 | Windows, `setup.exe` | `%LOCALAPPDATA%\CPI Workbench\cpi-workbench.exe` |
 | Windows, `.msi` | `C:\Program Files\CPI Workbench\cpi-workbench.exe` |
 | macOS | `/Applications/CPI Workbench.app/Contents/MacOS/cpi-workbench` |
-| Linux (`.deb`, `.rpm`) | `/usr/bin/cpi-workbench` |
 
 **Claude Code:** a `.mcp.json` in the project folder (Windows, `setup.exe`):
 
@@ -33,7 +32,7 @@ need to be open, and runs by the agent do not appear in it. The two share only t
 ```
 
 Claude Code expands `${LOCALAPPDATA}` and tells the server its project folder (`CLAUDE_PROJECT_DIR`),
-so the file can be committed with the project. On macOS or Linux, use the path from the table. Claude
+so the file can be committed with the project. On macOS, use the path from the table. Claude
 Code asks once before it starts the servers of a project's `.mcp.json`. Instead of the file, one
 command adds the server for you alone: `claude mcp add cpi-workbench -- <executable> mcp`.
 
@@ -127,7 +126,7 @@ lists what is verified against CPI.
   30-second timeout restarts with the project open again. The server stops when its stdin closes.
 * Tested with the official TypeScript SDK 1.32.2 and Python SDK 2.3.0 clients (both negotiate
   2025-11-25) and, for 2026-07-28, with the repository's own tests (`app/src-tauri/src/mcp/tests.rs`,
-  `app/scripts/mcp-smoke.mjs`, which CI runs on the release build on Windows, macOS and Linux).
+  `app/scripts/mcp-smoke.mjs`, which CI runs on the release build on Windows and macOS).
 
 The code is in `app/src-tauri/src/mcp/`. `flow.rs` follows the Flow Steps tab
 (`app/src/lib/store.svelte.ts`) call for call; change the two together.

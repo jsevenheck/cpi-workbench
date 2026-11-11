@@ -6,6 +6,8 @@ of its version.
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-11-11
+
 Fixes from a review of the whole app (2026-11-10), and the Groovy tab keeps a script's settings.
 
 ### Removed
@@ -233,7 +235,8 @@ First public release.
   supported.
 - The installers and engine jars include the licence texts and notices of the bundled components.
 
-[Unreleased]: https://github.com/jsevenheck/cpi-workbench/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/jsevenheck/cpi-workbench/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/jsevenheck/cpi-workbench/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/jsevenheck/cpi-workbench/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/jsevenheck/cpi-workbench/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/jsevenheck/cpi-workbench/compare/v0.1.0...v0.1.1

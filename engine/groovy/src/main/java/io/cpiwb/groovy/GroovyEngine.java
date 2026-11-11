@@ -23,7 +23,7 @@ public final class GroovyEngine implements RpcHandler {
     }
 
 
-    public static final String VERSION = "0.3.0";
+    public static final String VERSION = "0.3.1";
 
     private final ScriptRunner runner;
     private final SimpleStep simple = new SimpleStep();

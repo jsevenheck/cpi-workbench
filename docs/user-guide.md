@@ -117,7 +117,8 @@ Download the installer for your platform from the
 * XSLT, XSD and XPath runs read files inside the open project only: includes, `doc()`,
   `document()`, `unparsed-text()`, external entities and DTDs. The network is blocked. A symbolic
   link inside the project that leads outside it counts as outside; links within the project work.
-  `xsl:result-document` and `collection()` are not supported. XPath runs (the XPath tab and flow
+  `xsl:result-document` and `collection()` are not supported. A run fails when it asks for a file
+  outside the project, on both Saxon versions (Saxon 9.9 alone would go on with an empty `document()`). XPath runs (the XPath tab and flow
   steps) also refuse `fn:transform()`, and on Saxon 12 `fn:function-lookup()`: with a configuration of
   its own, a nested transformation would not be bound to the project. In XSLT, reflexive `java:` calls
   and `fn:transform()` are the exception: they are not restricted.
@@ -167,7 +168,8 @@ cpiwb-xml-he99 serve --http 7777 --ui app/dist    # then open http://127.0.0.1:7
 Web mode listens on localhost only and answers only requests that name this machine (`localhost`,
 `127.0.0.1` or `[::1]` in the Host header, and a local origin), so a foreign web page cannot drive an
 engine, not even one whose name is re-pointed to 127.0.0.1 (DNS rebinding). The engine that serves the
-page also handles the project's files. After a timed-out call an engine stops; start it again.
+page also handles the project's files. After a timed-out call an engine starts again by itself, as in the desktop app (the command you start
+only watches over a second process that serves); it then has no project open until the page's next call.
 To add more engines, pass them in a URL parameter (engines on this machine only):
 
 ```sh

@@ -47,7 +47,7 @@ public final class Main {
                 System.out.println(Json.write(engine.describe()));
                 break;
             case "serve":
-                serve(engine, a);
+                serve(engine, a, args);
                 break;
             case "xslt":
                 System.exit(xslt(engine, a));
@@ -67,9 +67,17 @@ public final class Main {
         }
     }
 
-    private static void serve(XmlEngine engine, Args a) throws Exception {
+    private static void serve(XmlEngine engine, Args a, String[] args) throws Exception {
         RpcServer server = new RpcServer(engine, a.num("--timeout", 30_000));
         if (a.has("--http")) {
+            if (!a.has(RpcServer.WORKER)) {
+                // This process only starts the engine again after a timed-out call.
+                int code = RpcServer.supervise(args);
+                if (code >= 0) {
+                    System.exit(code);
+                }
+            }
+            server.supervised(a.has(RpcServer.WORKER));
             int port = (int) a.num("--http", 7777);
             Path ui = a.get("--ui") == null ? null : Path.of(a.get("--ui"));
             server.serveHttp(port, ui);

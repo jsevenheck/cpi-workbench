@@ -233,4 +233,14 @@ class CoreTest {
         assertEquals(0, Cli.printTestResults(skipped, true, false));
         assertEquals(1, Cli.printTestResults(skipped, true, true));
     }
+
+    /** Browser mode: the supervising process starts the same engine again, marked as the one that serves. */
+    @Test
+    void relaunchCommandIsThisCommandLineAsWorker() {
+        List<String> c = RpcServer.relaunchCommand(new String[] {"serve", "--http", "7777"});
+        assertTrue(c != null && c.size() > 5, String.valueOf(c));
+        assertEquals(List.of("serve", "--http", "7777", RpcServer.WORKER), c.subList(c.size() - 4, c.size()));
+        assertTrue(Files.isRegularFile(Path.of(c.get(0))), c.get(0));
+        assertEquals("7777", new Cli.Args(c.subList(c.size() - 4, c.size()).toArray(new String[0])).get("--http"));
+    }
 }

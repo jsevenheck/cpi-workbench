@@ -21,6 +21,8 @@ Fixes from a review of the whole app (2026-11-10), and the Groovy tab keeps a sc
   `engine/…/target` of every folder above it (debug builds still do).
 - A script or attachment path that is a symbolic link out of the project is refused by the Groovy
   engines too. XPath runs see no environment variables.
+- CI: the GitHub Actions are pinned to commits instead of tags, and jobs get read-only access to the
+  repository (the release job alone may write).
 
 ### Fixed
 
@@ -41,9 +43,12 @@ Fixes from a review of the whole app (2026-11-10), and the Groovy tab keeps a sc
 - XSD: a problem in the input's external entities or DTD is reported for the input, not as "Schema
   cannot be loaded". Saxon 9.9 reports why `doc()` was refused instead of "Exception thrown by URIResolver".
 - A test case's attachment file is found when the project path is written with `..`.
-- **Init** writes valid JSON for a folder name with quotes. In browser mode the timeout message no
-  longer promises a restart.
-- CI runs the regression cases on Saxon-HE 12 too and gives its jobs read-only access to the repository.
+- XSLT on Saxon 9.9: a `document()` outside the project fails the run, as on Saxon 12; before, the run
+  went on with an empty result and a warning.
+- **Browser mode**: after a timed-out call the engine starts again by itself, as in the desktop app;
+  before, it stopped and had to be started by hand.
+- **Init** writes valid JSON for a folder name with quotes.
+- CI runs the regression cases on Saxon-HE 12 too.
 
 ## [0.3.0] - 2026-11-08
 

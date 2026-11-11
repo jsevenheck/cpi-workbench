@@ -13,6 +13,9 @@ on:
 permissions:
   contents: read
 
+# Actions are pinned to a commit: a tag can be moved to other code, a commit cannot. The comment names the
+# release the commit belongs to; to update, look the new release's commit up (git ls-remote --tags <repo>).
+
 jobs:
   engine-tests:
     strategy:
@@ -23,8 +26,8 @@ jobs:
     defaults:
       run: { shell: bash }
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-java@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with: { distribution: temurin, java-version: "21", cache: maven }
       - name: Unit tests (both Saxon and both Groovy engines)
         run: mvn -B -f engine/pom.xml verify
@@ -40,7 +43,7 @@ jobs:
           java -jar engine/groovy-v2/target/cpiwb-groovy-v2.jar test testdata/regression-project/tests --fail-if-none
       # The engine jars run on any Java 17+ (command line, CI pipelines); a release attaches them.
       - if: matrix.os == 'ubuntu-latest'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: engine-jars
           path: |
@@ -68,14 +71,14 @@ jobs:
       # pass it on to its linker, so the native engines get it as a linker option below.
       MACOSX_DEPLOYMENT_TARGET: "11.0"
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-java@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         id: jdk21
         with: { distribution: temurin, java-version: "21" }
       - name: Java runtime for the Groovy engines (jlink, Java 21 like a tenant)
         shell: bash
         run: JAVA_HOME="${{ steps.jdk21.outputs.path }}" engine/groovy/build-jre.sh "$RUNNER_TEMP/jre"
-      - uses: graalvm/setup-graalvm@v1
+      - uses: graalvm/setup-graalvm@f70bc8032f90a104502824a54bcb94b6f01715bc # v1.6.8
         with:
           java-version: "21"
           distribution: graalvm-community
@@ -107,9 +110,10 @@ jobs:
             echo "cpiwb-xml-$id: minos $minos"
             [ "${minos%%.*}" -le 11 ] || { echo "::error::cpiwb-xml-$id needs macOS $minos, the app promises 11.0"; exit 1; }
           done
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with: { node-version: "22", cache: npm, cache-dependency-path: app/package-lock.json }
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-11-11
+        with: { toolchain: stable }
       - name: Linux build dependencies
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
@@ -147,7 +151,7 @@ jobs:
       - name: MCP server from the release build
         working-directory: app
         run: node scripts/mcp-smoke.mjs src-tauri/target/release/cpi-workbench${{ runner.os == 'Windows' && '.exe' || '' }} ../testdata/regression-project
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: cpi-workbench-${{ matrix.os }}
           path: |
@@ -170,10 +174,10 @@ jobs:
     defaults:
       run: { shell: bash }
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-java@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with: { distribution: temurin, java-version: "21", cache: maven }
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with: { node-version: "22", cache: npm, cache-dependency-path: app/package-lock.json }
       - run: mvn -B -f engine/pom.xml -DskipTests package
       - working-directory: app
@@ -206,7 +210,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Tag matches the app and engine versions
         run: |
           version="${GITHUB_REF_NAME#v}"
@@ -222,7 +226,7 @@ jobs:
             fi
           done
           echo "VERSION=$version" >> "$GITHUB_ENV"
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           path: downloaded
       - name: Collect assets

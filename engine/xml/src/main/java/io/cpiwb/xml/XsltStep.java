@@ -234,7 +234,8 @@ public final class XsltStep {
                         });
             }
             List<Diagnostic> runtimeDiags = new ArrayList<>();
-            tr.setErrorListener(new CollectingListener(runtimeDiags));
+            CollectingListener runtimeListener = new CollectingListener(runtimeDiags);
+            tr.setErrorListener(runtimeListener);
             SaxonCompat.captureMessages(tr, messages::add);
 
             Map<String, Object> first = "header".equals(precedence) ? input.getProperties() : input.getHeaders();
@@ -277,6 +278,12 @@ public final class XsltStep {
                 throw new TransformerException(e.getMessage(), e);
             } finally {
                 diags.addAll(runtimeDiags);
+            }
+            if (runtimeListener.refused) {
+                // Saxon 9.9 goes on without the document (a recoverable error); the result would lack what the
+                // stylesheet read, without a failure. Saxon 12 stops by itself.
+                result.with("transformMs", (System.nanoTime() - t1) / 1_000_000.0);
+                return finish(result, false, "runtime", diags, messages, input, null, t0, compileNanos, cached, bindings, handle);
             }
             String enc = tr.getOutputProperty(OutputKeys.ENCODING);
             Charset cs = charset(enc);
@@ -459,6 +466,8 @@ public final class XsltStep {
 
     static final class CollectingListener implements ErrorListener {
         private final List<Diagnostic> sink;
+        /** A warning was about a file or address the project resolver refused. */
+        boolean refused;
 
         CollectingListener(List<Diagnostic> sink) {
             this.sink = sink;
@@ -466,7 +475,12 @@ public final class XsltStep {
 
         @Override
         public void warning(TransformerException e) {
-            sink.add(toDiagnostic(e, Diagnostic.Severity.WARNING));
+            for (Throwable t = e; t != null; t = t.getCause() == t ? null : t.getCause()) {
+                if (t instanceof ProjectResolver.AccessRefused) {
+                    refused = true;
+                }
+            }
+            sink.add(toDiagnostic(e, refused ? Diagnostic.Severity.ERROR : Diagnostic.Severity.WARNING));
         }
 
         @Override

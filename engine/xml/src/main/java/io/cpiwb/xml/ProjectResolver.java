@@ -83,6 +83,16 @@ public final class ProjectResolver implements URIResolver, LSResourceResolver, E
         return filesRead;
     }
 
+    /**
+     * The resolver refused a file or address (outside the project, no project, the network). A file that is
+     * merely missing is not one of these: what Saxon makes of that is Saxon's own behaviour.
+     */
+    public static final class AccessRefused extends TransformerException {
+        AccessRefused(String message) {
+            super(message);
+        }
+    }
+
     /** Returns the content for an absolute system id, or throws if it is outside the project. */
     public String load(String systemId) throws TransformerException {
         return load(systemId, null);
@@ -102,10 +112,10 @@ public final class ProjectResolver implements URIResolver, LSResourceResolver, E
         if ("file".equals(uri.getScheme()) && baseDir != null) {
             Path p = Paths.get(uri).normalize();
             if (!p.startsWith(baseDir)) {
-                throw new TransformerException("Access outside the project folder is blocked: " + p);
+                throw new AccessRefused("Access outside the project folder is blocked: " + p);
             }
             if (!io.cpiwb.core.ProjectPaths.inside(baseDir, p)) {
-                throw new TransformerException("Access outside the project folder is blocked: " + p
+                throw new AccessRefused("Access outside the project folder is blocked: " + p
                         + " (a symbolic link leads outside)");
             }
             try {
@@ -116,13 +126,13 @@ public final class ProjectResolver implements URIResolver, LSResourceResolver, E
             }
         }
         if ("file".equals(uri.getScheme())) {
-            throw new TransformerException("No project folder: cannot load " + normalized
+            throw new AccessRefused("No project folder: cannot load " + normalized
                     + ". Open a project or add the file as a resource.");
         }
         if (normalized.startsWith(MEMORY_BASE)) {
             throw new TransformerException("Resource not found: " + normalized.substring(MEMORY_BASE.length()));
         }
-        throw new TransformerException("Access to '" + normalized + "' is blocked (the simulator works offline)");
+        throw new AccessRefused("Access to '" + normalized + "' is blocked (the simulator works offline)");
     }
 
     private static String normalize(String systemId) {

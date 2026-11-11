@@ -293,4 +293,18 @@ class XmlBoundaryTest {
         assertEquals(false, r.get("valid"));
         assertFalse(Json.write(r).contains("Schema cannot be loaded"), Json.write(r));
     }
+
+    /**
+     * Saxon 9.9 treats a document() it cannot load as a recoverable error and goes on with an empty result. A
+     * document the project resolver refused must fail the run on both versions, with the reason.
+     */
+    @Test
+    void xsltFailsWhenDocumentIsRefused() {
+        Map<String, Object> r = xslt("<xsl:stylesheet version='2.0' xmlns:xsl='http://www.w3.org/1999/XSL/Transform'>"
+                + "<xsl:template match='/'><o><xsl:copy-of select=\"document('" + secretUri.replace("secret.txt", "s.xml") + "')\"/></o></xsl:template>"
+                + "</xsl:stylesheet>", "<a/>");
+        assertEquals(false, r.get("ok"), Json.write(r));
+        assertTrue(Json.write(r.get("diagnostics")).contains("outside the project"), Json.write(r));
+        assertTrue(Json.write(r.get("diagnostics")).contains("\"severity\":\"error\""), Json.write(r));
+    }
 }

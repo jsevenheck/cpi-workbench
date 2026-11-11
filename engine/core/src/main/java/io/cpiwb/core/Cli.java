@@ -12,7 +12,7 @@ public final class Cli {
 
     /** Tiny argument parser: --key value, repeated keys, flags, positionals. */
     public static final class Args {
-        private static final List<String> FLAGS = List.of("--json", "--stdio", "--fail-if-none");
+        private static final List<String> FLAGS = List.of("--json", "--stdio", "--fail-if-none", RpcServer.WORKER);
         private final String[] args;
 
         public Args(String[] args) {

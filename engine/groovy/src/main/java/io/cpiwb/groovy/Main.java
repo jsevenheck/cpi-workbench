@@ -39,6 +39,14 @@ public final class Main {
             case "serve":
                 RpcServer server = new RpcServer(engine, a.num("--timeout", 30_000));
                 if (a.has("--http")) {
+                    if (!a.has(RpcServer.WORKER)) {
+                        // This process only starts the engine again after a timed-out call.
+                        int code = RpcServer.supervise(args);
+                        if (code >= 0) {
+                            System.exit(code);
+                        }
+                    }
+                    server.supervised(a.has(RpcServer.WORKER));
                     server.serveHttp((int) a.num("--http", 7778), a.get("--ui") == null ? null : Path.of(a.get("--ui")));
                     System.err.println(name + " listening on http://127.0.0.1:" + a.num("--http", 7778));
                     Thread.currentThread().join();

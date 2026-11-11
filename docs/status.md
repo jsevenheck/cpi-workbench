@@ -13,7 +13,7 @@
 
 Automated checks:
 
-* Engine tests (`mvn -f engine/pom.xml verify`): core 19, XSLT/XSD/XPath/Splitter/Filter/Gather/Converter 78 per Saxon version (19 of them on project boundaries, 8 splitter cases from SAP's examples, 5 Filter, 3 Gather and 18 converter tests, most with SAP's examples), Groovy 46 per script version (4 Camel Simple, 4 Content Modifier, 11 Message Mapping functions, 2 on what a tenant probe showed).
+* Engine tests (`mvn -f engine/pom.xml verify`): core 20, XSLT/XSD/XPath/Splitter/Filter/Gather/Converter 79 per Saxon version (20 of them on project boundaries, 8 splitter cases from SAP's examples, 5 Filter, 3 Gather and 18 converter tests, most with SAP's examples), Groovy 46 per script version (4 Camel Simple, 4 Content Modifier, 11 Message Mapping functions, 2 on what a tenant probe showed).
 * Regression test cases (`testdata/regression-project`): 9.
 * Browser end-to-end tests: `app/e2e/smoke.mjs` (XML tools) and `groovy.mjs` (Groovy, Flow Steps and the iFlow import, which CI runs with the iFlow fixture as a zip).
 * UI unit tests (`npm --prefix app test`): the JSON, XSLT and Groovy formatters, test-case rows, path comparison, the Script API completions (checked against the clean-room Java classes), the Filter's `function:simple(...)` substitution, Message Mapping arguments and the update check's SemVer comparison.
@@ -37,7 +37,7 @@ Automated checks:
 | Lint (1.x → 2.x) | ≈ 80 % | Covers the known breaks (F26, v1-only methods, imports). Others appear only as compile or runtime errors. On the 1.x runtime, the compile error for a Script API v2 or `groovy.xml.XmlSlurper` import says that it needs 2.x. |
 | iFlow-zip import | ≈ 80 % | Groovy, XSLT, XML Validator, Content Modifier, Filter, Router, General / Iterating Splitter, Gather and converter steps (`{{parameters}}` from `parameters.prop`); Message Mapping steps with the scripts their `.mmap` uses (F45; the mapping is not simulated); other steps are not listed. Header-driven mappings are flagged, not resolved. The format is undocumented (best effort; checked against 389 exported iFlows from SAP's samples and 50 public iFlows with converters, F36, F38, F39, F46). A failed import leaves the files it already wrote. |
 | MCP server (`cpi-workbench mcp`) | ≈ 90 % | One tool per tab of the app (XSLT, Groovy, XSD, XPath, Flow Steps) plus the project view; the app leads, the server adds no function. Tested with the official TypeScript and Python SDK clients (2025-11-25) and the repository's own tests (2026-07-28); by hand with Claude Code and Claude Desktop on the demo project for the 0.2.0 release ([Manual test](manual-test.md), section 5). Groovy runs without a sandbox (docs/mcp.md). |
-| Desktop app and browser mode | ≈ 90 % | Engines, shell and browser mode are tested on Windows and macOS in CI. On Windows, the `setup.exe` of 0.2.0 passed the [manual test](manual-test.md) on 2026-11-06. Not yet tried by hand: the `.msi` outside a managed laptop, macOS (WKWebView). |
+| Desktop app and browser mode | ≈ 90 % | Engines, shell and browser mode are tested on Windows and macOS in CI. On Windows, the `setup.exe` of 0.2.0 passed the [manual test](manual-test.md) on 2026-11-06, and 0.3.0 passed it in November 2026. Not yet tried by hand: the `.msi` outside a managed laptop, macOS (WKWebView). |
 | Distribution | ≈ 45 % | *Check for updates* (0.3.0) links to a newer release; the release page opens through the shell's own command, not yet tried in the desktop window on Windows or macOS. No code signing, no auto-update. On a managed Windows laptop, the unsigned MSI is refused as untrusted, so it could not be tried there. One all-in-one installer instead of a base app plus a separate Groovy pack (plan §5.3). |
 | Large messages | ≈ 70 % | Messages go through JSON-RPC, not temp files (plan §5.3). 7.4 MB worked (XSLT 1.3 s, Groovy 0.45 s); larger ones are untested. |
 | Performance budgets | measured on Linux | Windows and macOS not measured. |
@@ -45,8 +45,7 @@ Automated checks:
 
 ## Next steps
 
-1. Manual test of 0.3.0 on Windows ([Manual test](manual-test.md)), then the release.
-2. Install and open the installer on macOS once by hand.
-3. Code signing and auto-update (Phase 5, plan §10.2).
+1. Install and open the installer on macOS once by hand.
+2. Code signing and auto-update (Phase 5, plan §10.2).
 
 Fixes from reviews and earlier rounds are listed in the [changelog](../CHANGELOG.md).

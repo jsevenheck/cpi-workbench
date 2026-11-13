@@ -256,6 +256,26 @@ await page.getByRole('dialog').filter({ hasText: 'Discard the unsaved changes' }
 await page.getByRole('tab', { name: 'value-mappings.json' }).waitFor({ state: 'detached', timeout: 5000 })
   .catch(() => fail('the × on the File tab did not close it'));
 
+// 12) A link from CPI Helper's xsltDebugX plugin that points at the app: the traced message and the mapping
+// arrive in the XSLT tab, the mapping runs (no java: calls), and the data leaves the address.
+/** A link's data as CPI Helper's plugins write it: JSON, raw DEFLATE, URL-safe Base64 without padding. */
+async function shareData(data) {
+  const stream = new Blob([JSON.stringify(data)]).stream().pipeThrough(new CompressionStream('deflate-raw'));
+  return Buffer.from(await new Response(stream).arrayBuffer()).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+const shared = await shareData({ xml: '<Order id="from-trace"/>',
+  xslt: '<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform"><xsl:param name="Sender"/>'
+    + '<xsl:template match="/"><Traced by="{$Sender}" id="{Order/@id}"/></xsl:template></xsl:stylesheet>',
+  headers: [{ name: 'Sender', value: 'TENANT_TRACE' }], properties: [] });
+await page.evaluate((hash) => { location.hash = hash; }, '#share/' + shared);
+await page.locator('.status', { hasText: 'Imported from CPI Helper: body, 1 header, mapping' }).waitFor({ timeout: 10000 })
+  .catch(async () => fail('the shared link was not imported: ' + (await page.locator('.status').innerText()) + ' ' + (await page.locator('.banner.error').allInnerTexts())));
+await page.locator('section.mapping h2', { hasText: 'mapping.xsl (unsaved)' }).waitFor({ timeout: 5000 })
+  .catch(() => fail('the imported mapping is not an unsaved mapping'));
+await page.locator('section.output .view-lines', { hasText: 'TENANT_TRACE' }).waitFor({ timeout: 15000 })
+  .catch(async () => fail('the imported mapping did not run on the imported message: ' + (await page.locator('section.output').innerText()).slice(0, 300)));
+if ((await page.evaluate(() => location.hash)) !== '') fail('the shared data stayed in the address');
+
 if (errors.length) fail('browser errors: ' + errors.join(' | '));
 await browser.close();
 console.log(process.exitCode ? 'smoke test FAILED' : 'smoke test passed');

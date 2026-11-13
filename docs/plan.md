@@ -330,7 +330,7 @@ Plain, git-friendly files. The engines' `test` command (`cpiwb-xml test tests/`,
 | **3 — Groovy MVP** | Groovy 1.x and 2.x, typed headers/properties, MPL, API call log, console, diff | Done (0.1.0) |
 | **4 — Productivity** | Platform API mocks, lint, runtime comparison, iFlow-zip import, flow steps, MCP server | Done (0.1.0–0.3.0) |
 | **5 — Distribution** | Installers for Windows, macOS, Linux; code signing, auto-update (§10.2) | Unsigned installers and a manual update check; signing and auto-update open |
-| **6 — Workflow** | What a review of other tools showed (§10.5): platform data in the Groovy tab, a traced message from CPI Helper, XPath comfort, Encoder / Decoder and Message Digest steps, JUnit output and compare rules for test cases, Value Mapping import, run history, examples, debugging | Planned (2026-11-13); W1 built |
+| **6 — Workflow** | What a review of other tools showed (§10.5): platform data in the Groovy tab, a traced message from CPI Helper, XPath comfort, Encoder / Decoder and Message Digest steps, JUnit output and compare rules for test cases, Value Mapping import, run history, examples, debugging | Planned (2026-11-13); W1 and W2 built (W2 without the desktop link) |
 
 ### 10.1 MCP server for coding agents (built, 2026-11-01)
 
@@ -500,7 +500,15 @@ below; a table's unsaved rows go with each run as the `platform` override, **Sav
 * Done when a script that uses `ValueMappingApi` and `SecureStoreService` can be set up and run without
   editing JSON, and the Groovy e2e covers one table.
 
-**W2. Take a traced message over from CPI Helper (spike S, then M).** *Seen in CPI Helper's plugins.*
+**W2. Take a traced message over from CPI Helper (built on 2026-11-13, except the desktop link).** *Seen in CPI Helper's plugins.*
+Built: the spike answered Q-T2 (S47): both plugins have a *Custom URL* setting and append the data to it, so
+the browser mode takes a link that points at it (`#share/<data>`, which the browser sends to no server), and
+**Import…** in the Groovy and XSLT tabs takes a pasted link or a message as JSON (`app/src/lib/share.ts`). An
+imported script is not run until the user starts it. Not tried with the extension on a tenant: the reading
+was tested against links built as the plugins' sources build them. Open: one click into the **desktop app**,
+a `cpi-workbench://` link the installers register (Tauri's deep-link and single-instance plugins); it needs
+the installers and a check of how long such a link may be on Windows and macOS (a Windows command line ends at
+32,767 characters, and a link carried 296,000 characters of body in 70,000 here). The plan as written before:
 The largest gain in daily work: a real message from a tenant's trace as local input. The app still
 connects to nothing; the user's browser has the data and hands it over. It also answers part of Q-T1 by
 another route.
@@ -638,7 +646,7 @@ writes, SUPPRESS in a mapping function's input).
 | Q-X6 | Source/target from header/property in newer step versions | Open | SAP docs + probe |
 | Q-V1 | XSD engine and version behind the XML Validator step | Open | Probe iFlow (error message format) |
 | Q-T1 | Format of exported MPL trace content | Open (F18) | Export one sample |
-| Q-T2 | How CPI Helper's GroovyDebugX and xsltDebugX plugins hand a traced step's payload, headers and properties to an external IDE (URL, clipboard, file; the encoding) | Open (§10.5 W2) | Read the plugins' documentation and try one hand-over |
+| Q-T2 | How CPI Helper's GroovyDebugX and xsltDebugX plugins hand a traced step's payload, headers and properties to an external IDE (URL, clipboard, file; the encoding) | Answered from the plugins' sources (S47): a link, `<url><data>` or `<url>#share/<data>`, the data being JSON, raw DEFLATE, URL-safe Base64; a *Custom URL* can be set. Not tried on a tenant. | Send one step from a tenant and import it |
 | Q-M1 | Message Mapping scripts: Groovy and Java version, whether the signature alone picks the execution type (single value or context, F44), how the per-context results are joined, the marker value of SUPPRESS, whether a single-value function is called once per value | Partial: versions, one call per context, the join by context changes, single-value calls once per value and the marker texts answered (F59–F61, an empty context is called with an empty array); open: SUPPRESS in a function's input, identity or equals for the markers | `probe-mapping-v1.groovy` with the `Call` target (probes/README.md, step 6) |
 | Q-C1 | Converters: compact or indented output, the XML declaration, CSV line ends and quoting, an unmapped JSON prefix without namespace mapping (F47), the XML to JSON namespace table's cell order | Answered for the probes' cases (F54–F57); open: the XML to JSON namespace table's cell order, `\r\n` or `\n` in CSV | Save a response with `curl --output` |
 | Q-F1 | Gather's Combine with a body that is not XML (JSON or plain text after a script): failure, the text as it is (the result not well-formed XML), or another form. SAP documents XML only and shows no such case | Open; the simulator keeps the text and warns | `probes/gather/` (probes/README.md, step 8) |
@@ -695,3 +703,4 @@ writes, SUPPRESS in a mapping function's input).
 - S44 cpi-saper-dev-mcp: https://github.com/devstylator/cpi-saper-dev-mcp ; https://community.sap.com/t5/technology-blog-posts-by-members/sap-cloud-integration-an-mcp-server-that-lets-ai-agents-build-and-test/ba-p/14516391
 - S45 sap-cpi-mocks (Equalise IT), from search results: https://equaliseit.com/test-value-mapping-in-cpi-groovy-scripts/
 - S46 CPILint: https://github.com/mwittrock/cpilint
+- S47 CPI Helper's plugins `plugins/groovyDebugger.js` and `plugins/xsltDebugX.js` (GPL-3.0), read on 2026-11-13 for the format of the link they open and its settings; no code taken: https://github.com/dbeck121/CPI-Helper-Chrome-Extension/tree/master/plugins

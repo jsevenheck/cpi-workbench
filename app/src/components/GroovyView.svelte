@@ -8,7 +8,7 @@
   import QueueEditor from './QueueEditor.svelte';
   import RowTable from './RowTable.svelte';
   import PlatformPanel from './PlatformPanel.svelte';
-  import { app, groovy, runGroovy, autoRunGroovy, saveScript, saveScriptAs, formatXml, otherProfile, saveInput, closeInput, closeEditorFile, selectedMapping, platformDirty } from '../lib/store.svelte';
+  import { app, groovy, runGroovy, autoRunGroovy, saveScript, saveScriptAs, formatXml, otherProfile, saveInput, askImportMessage, closeInput, closeEditorFile, selectedMapping, platformDirty } from '../lib/store.svelte';
   import { reindentGroovy } from '../lib/indent';
   import { formatQueue, type QueueEntry } from '../lib/queue';
   import { scriptFunctions, kindLabel, type ParamKind } from '../lib/functions';
@@ -169,6 +169,7 @@
         </label>
         <button class="small" onclick={prettyInput}>Format</button>
         <button class="small" onclick={saveInput} disabled={!app.project} title={app.project ? 'Save the input body under inputs/' : 'Open a project to save'}>Save…</button>
+        <button class="small" onclick={askImportMessage} title="Take a traced message over from CPI Helper (paste its link), or a message as JSON">Import…</button>
       {/if}
     </header>
     <div class="body">

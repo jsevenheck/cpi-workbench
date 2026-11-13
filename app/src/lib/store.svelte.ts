@@ -2,6 +2,7 @@ import { call, openProject, closeProject as closeEngineProject, availableProfile
 import type { Diagnostic, FileEntry, GroovyResult, Row, XsltResult } from './types';
 import { argText, mappingArgs } from './queue';
 import { scriptFunctions } from './functions';
+import { readShared, sharedSummary, type SharedMessage } from './share';
 import { attachmentInput, attachmentRows, parsePlatformFile, platformDoc, platformFileText, platformRows, platformRunData, PLATFORM_FILES, PLATFORM_KEYS,
   soapHeaderInput, soapHeaderRows, type AttachmentRow, type PlatformKey, type PlatformRows, type SoapHeaderRow } from './platform';
 import { toRows } from './rows';
@@ -367,6 +368,118 @@ function safeGet(key: string): string | null {
 }
 function safeSet(key: string, v: string | null) {
   try { v === null ? localStorage.removeItem(key) : localStorage.setItem(key, v); } catch { /* ignore */ }
+}
+
+// ------------------------------------------------------------------ a message handed over
+// From CPI Helper's GroovyDebugX and xsltDebugX plugins (share.ts): a traced step's message, with the step's
+// script or mapping if the user sent it along. The app connects to nothing for this; the text comes in pasted,
+// or in the address the browser mode was opened with.
+
+/** Takes the message of a pasted link or JSON into its tab. Code that comes along is not run: it is someone's script. */
+export async function importMessage(pasted: string): Promise<boolean> {
+  try {
+    app.error = '';
+    const m = await readShared(pasted);
+    const what = sharedSummary(m);
+    if (what === '') throw new Error('The link holds no body, headers, properties or script: nothing was sent along.');
+    const tool: StepTool = m.kind === 'message' ? app.stepTool : m.kind;
+    if (m.kind !== 'message' && !app.profiles.some((p) => p.kind === m.kind && p.available) && app.profiles.length > 0) {
+      throw new Error(`The link is for a ${m.kind === 'groovy' ? 'Groovy script' : 'XSLT mapping'}, and no engine for it is installed or running.`);
+    }
+    if (m.source !== '' && !(await mayDiscard(tool === 'groovy' ? 'groovy' : 'xslt'))) return false;
+    if (tool === 'groovy') importGroovy(m);
+    else if (tool === 'xslt') importXslt(m);
+    else {
+      // XSD, XPath and Flow Steps take a message typed as JSON: the body, and for Flow Steps the rows.
+      if (m.body !== '') {
+        if (tool === 'xsd') xsd.body = m.body;
+        else if (tool === 'xpath') xpath.body = m.body;
+        else flow.body = m.body;
+        delete app.inputPaths[tool];
+      }
+      if (tool === 'flow') {
+        if (m.headers.length) flow.headers = m.headers;
+        if (m.properties.length) flow.properties = m.properties;
+      }
+      app.tool = tool;
+      app.status = `Imported: ${what}.`;
+    }
+    return true;
+  } catch (e) {
+    fail(e);
+    return false;
+  }
+}
+
+function importGroovy(m: SharedMessage) {
+  if (m.source !== '') {
+    rememberScript();
+    groovy.scriptPath = groovy.casePath = null;
+    groovy.casePlatform = null;
+    groovy.script = m.source;
+    groovy.savedScript = ''; // not a file of the project yet: Save asks for a path
+    groovy.functionName = m.function || 'processData';
+    groovy.mapping = null;
+    groovy.functions = [];
+    groovy.stepFunction = null;
+    groovy.args = [];
+    forgetGroovyRun();
+    if (m.source.includes('com.sap.it.script.v2.api') && hasProfile('groovy-2.x')) app.groovyProfile = 'groovy-2.x';
+    else if (m.source.includes('com.sap.gateway.ip.core.customdev.util') && hasProfile('groovy-1.x')) app.groovyProfile = 'groovy-1.x';
+  }
+  if (m.body !== '') {
+    groovy.body = m.body;
+    delete app.inputPaths.groovy;
+  }
+  if (m.headers.length) groovy.headers = m.headers;
+  if (m.properties.length) groovy.properties = m.properties;
+  app.tool = 'groovy';
+  if (m.source !== '') {
+    disarmGroovy('the imported script');
+    app.status = `Imported from CPI Helper: ${sharedSummary(m)}. A script runs with your rights, so it has not run: press Ctrl+Enter to run it.`;
+  } else {
+    app.status = `Imported: ${sharedSummary(m)}.`;
+    rerunIfLive('groovy');
+  }
+}
+
+function importXslt(m: SharedMessage) {
+  if (m.source !== '') {
+    xslt.mappingPath = xslt.casePath = null;
+    xslt.mapping = m.source;
+    xslt.savedMapping = '';
+  }
+  if (m.body !== '') {
+    xslt.body = m.body;
+    delete app.inputPaths.xslt;
+  }
+  if (m.headers.length) xslt.headers = m.headers;
+  if (m.properties.length) xslt.properties = m.properties;
+  app.tool = 'xslt';
+  app.status = `Imported${m.source !== '' ? ' from CPI Helper' : ''}: ${sharedSummary(m)}.`;
+  if (m.source !== '') {
+    const status = app.status;
+    disarmXslt('the imported mapping'); // a mapping with java: calls waits for a run by hand, and says so
+    if (xslt.armed) app.status = status;
+  }
+  rerunIfLive('xslt');
+}
+
+/** Asks for the link or text to import, for the Import… buttons. */
+export async function askImportMessage() {
+  const r = await ask('Import a message: paste the link CPI Helper opened (GroovyDebugX, xsltDebugX), or a message as JSON', '');
+  if (r && r.value.trim() !== '') await importMessage(r.value);
+}
+
+/**
+ * Browser mode: a link from CPI Helper that points at this app (`…/#share/<data>`). The data leaves the
+ * address at once, so a reload does not import it again and it is not kept in the history.
+ */
+export async function importFromAddress() {
+  if (typeof location === 'undefined' || !location.hash.startsWith('#share/')) return;
+  const link = location.href;
+  history.replaceState(null, '', location.pathname + location.search);
+  await importMessage(link);
 }
 
 // ------------------------------------------------------------------ platform data

@@ -4,7 +4,7 @@
   import Editor from './Editor.svelte';
   import KeyValueTable from './KeyValueTable.svelte';
   import CompareView from './CompareView.svelte';
-  import { app, xslt, runXslt, autoRunXslt, saveMapping, saveMappingAs, formatXml, otherProfile, saveInput, closeInput, closeEditorFile } from '../lib/store.svelte';
+  import { app, xslt, runXslt, autoRunXslt, saveMapping, saveMappingAs, formatXml, otherProfile, saveInput, askImportMessage, closeInput, closeEditorFile } from '../lib/store.svelte';
   import { reindentXml } from '../lib/indent';
   import { languageFor } from '../lib/monaco';
   import type { Diagnostic } from '../lib/types';
@@ -77,7 +77,8 @@
         <button role="tab" class:active={inputTab === 'properties'} onclick={() => (inputTab = 'properties')}>Properties <span class="count">{xslt.properties.length}</span></button>
       </div>
       {#if inputTab === 'body'}<button class="small" onclick={prettyInput} title="Pretty-print">Format</button>
-        <button class="small" onclick={saveInput} disabled={!app.project} title={app.project ? 'Save the input body under inputs/' : 'Open a project to save'}>Save…</button>{/if}
+        <button class="small" onclick={saveInput} disabled={!app.project} title={app.project ? 'Save the input body under inputs/' : 'Open a project to save'}>Save…</button>
+        <button class="small" onclick={askImportMessage} title="Take a traced message over from CPI Helper (paste its link), or a message as JSON">Import…</button>{/if}
     </header>
     <div class="body">
       {#if inputTab === 'body'}

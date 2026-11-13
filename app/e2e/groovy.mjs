@@ -308,6 +308,41 @@ if ((await fnName()) !== fnOpened) fail('function lost after another script');
 await page.locator('.tree .file', { hasText: 'route-by-partner.groovy' }).click();
 await page.locator('section.input').getByRole('tab', { name: 'Body' }).waitFor({ timeout: 10000 });
 
+// 4e) Import…: a link from CPI Helper's GroovyDebugX plugin brings a traced step's message and script.
+// The script is someone's code: it does not run until Run.
+/** A link's data as CPI Helper's plugins write it: JSON, raw DEFLATE, URL-safe Base64 without padding. */
+async function shareData(data) {
+  const stream = new Blob([JSON.stringify(data)]).stream().pipeThrough(new CompressionStream('deflate-raw'));
+  return Buffer.from(await new Response(stream).arrayBuffer()).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+const sharedLink = 'https://groovyide.com/cpi/share/v1/' + await shareData({
+  input: { body: '<Order id="traced-1"/>', headers: { TraceHeader: 'from-tenant' }, properties: { TraceProp: 'p1' } },
+  script: { code: 'import com.sap.gateway.ip.core.customdev.util.Message\ndef Message enrichTraced(Message message) {\n  message.setHeader("Seen", message.getHeader("TraceHeader", String) + "!")\n  return message\n}\n', function: 'enrichTraced' } });
+await page.locator('section.input').getByRole('tab', { name: 'Body' }).click();
+await page.locator('section.input').getByRole('button', { name: 'Import…' }).click();
+await page.getByRole('dialog').getByRole('textbox').fill(sharedLink);
+await page.getByRole('dialog').getByRole('button', { name: 'OK' }).click();
+await page.locator('.status', { hasText: 'Imported from CPI Helper: body, 1 header, 1 property, script' }).waitFor({ timeout: 10000 })
+  .catch(async () => fail('import of a GroovyDebugX link: ' + (await page.locator('.status').innerText()) + ' ' + (await page.locator('.banner.error').allInnerTexts())));
+if (!(await page.locator('.status').innerText()).includes('it has not run')) fail('the imported script is not announced as not run');
+if (await page.locator('section.output .badge.ok, section.output .badge.bad').count()) fail('an imported script ran without Run');
+if ((await fnName()) !== 'enrichTraced') fail('function of the imported script: ' + await fnName());
+await page.locator('section.input .view-lines', { hasText: 'traced-1' }).waitFor({ timeout: 5000 }).catch(() => fail('imported body missing'));
+await runIt();
+await page.locator('section.output').getByRole('tab', { name: /^Headers/ }).click();
+await page.locator('section.output tr', { hasText: 'from-tenant!' }).waitFor({ timeout: 20000 })
+  .catch(async () => fail('the imported script on the imported message: ' + (await page.locator('section.output').innerText()).slice(0, 300)));
+// What cannot be read says why.
+await page.locator('section.input').getByRole('button', { name: 'Import…' }).click();
+await page.getByRole('dialog').getByRole('textbox').fill('https://ide.contiva.com/cpi/script/debug?data=H4sIAAAA');
+await page.getByRole('dialog').getByRole('button', { name: 'OK' }).click();
+await page.locator('.banner.error', { hasText: 'Contiva IDE' }).waitFor({ timeout: 5000 }).catch(() => fail('no reason for a link that cannot be read'));
+await page.locator('.banner.error').getByRole('button', { name: 'Dismiss' }).click();
+await page.locator('.tree .file', { hasText: 'route-by-partner.groovy' }).click();
+await page.getByRole('dialog').filter({ hasText: 'Discard the unsaved changes' }).getByRole('button', { name: 'OK' }).click()
+  .catch(() => fail('the imported script does not count as unsaved'));
+await page.locator('section.script h2', { hasText: 'route-by-partner.groovy' }).waitFor({ timeout: 10000 });
+
 // 5) A file from inputs/ opens as the Groovy input body.
 fs.mkdirSync(path.join(project, 'inputs'), { recursive: true });
 fs.writeFileSync(path.join(project, 'inputs/g-input.xml'), '<Order id="g-input-1"/>\n');

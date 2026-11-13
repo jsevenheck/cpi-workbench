@@ -16,7 +16,7 @@ Automated checks:
 * Engine tests (`mvn -f engine/pom.xml verify`): core 20, XSLT/XSD/XPath/Splitter/Filter/Gather/Converter 82 per Saxon version (20 of them on project boundaries, 9 splitter cases, 8 of them from SAP's examples, 5 Filter, 5 Gather and 18 converter tests, most with SAP's examples), Groovy 47 per script version (4 Camel Simple, 4 Content Modifier, 11 Message Mapping functions, 2 on what a tenant probe showed).
 * Regression test cases (`testdata/regression-project`): 9.
 * Browser end-to-end tests: `app/e2e/smoke.mjs` (XML tools) and `groovy.mjs` (Groovy, Flow Steps and the iFlow import, which CI runs with the iFlow fixture as a zip).
-* UI unit tests (`npm --prefix app test`): the JSON, XSLT and Groovy formatters, test-case rows, path comparison, the Script API completions (checked against the clean-room Java classes), the Filter's `function:simple(...)` substitution, Message Mapping arguments, the Groovy functions read from a script's text, the platform data tables (rows to file and back, with the regression project's files) and the update check's SemVer comparison.
+* UI unit tests (`npm --prefix app test`): the JSON, XSLT and Groovy formatters, test-case rows, path comparison, the Script API completions (checked against the clean-room Java classes), the Filter's `function:simple(...)` substitution, Message Mapping arguments, the Groovy functions read from a script's text, the platform data tables (rows to file and back, with the regression project's files), the links CPI Helper's plugins write and the update check's SemVer comparison.
 * CI runs the engine tests on Linux, Windows and macOS, the browser e2e tests on Windows, and the shell tests on Windows and macOS before it builds the installers. Releases after 0.3.0 have no Linux installers. All of them passed on Windows and macOS runners for the first time on 2026-10-25 (`d237e25`). macOS runs on `macos-26` (GitHub deprecated `macos-14`); the native engines are built for macOS 11 and CI checks that.
 
 ## By area
@@ -48,6 +48,8 @@ Automated checks:
 1. Install and open the installer on macOS once by hand.
 2. Code signing and auto-update (Phase 5, plan §10.2).
 3. The features planned after a review of other tools ([plan](plan.md) §10.5, Phase 6). Built: platform data,
-   attachments and SOAP headers in the Groovy tab (W1). Next: taking a traced message over from CPI Helper (W2).
+   attachments and SOAP headers in the Groovy tab (W1); a traced message from CPI Helper by a pasted link, or
+   directly in the browser mode (W2). Open in W2: trying it with the extension on a tenant, and one click into
+   the desktop app. Next: the XPath tab's comfort (W3).
 
 Fixes from reviews and earlier rounds are listed in the [changelog](../CHANGELOG.md).

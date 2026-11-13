@@ -137,6 +137,36 @@ Download the installer for your platform from the
 
 **✕** closes the project in the engines too, so runs no longer see its files or `platform/` data.
 
+### A message from a tenant's trace (CPI Helper)
+
+The [CPI Helper](https://github.com/dbeck121/CPI-Helper-Chrome-Extension) browser extension can hand a traced
+step's message to an external IDE: its **GroovyDebugX** plugin for a Groovy Script step, **xsltDebugX** for an
+XSLT Mapping step, each with the body, headers and properties before the step and, if you tick it, the step's
+script or mapping. CPI Workbench takes that hand-over. The app itself still connects to nothing: the extension,
+in your browser, has the data and puts it into a link.
+
+* **Desktop app:** send the step from CPI Helper; it opens a browser tab. Copy that tab's address, then
+  **Import…** above the input body of the Groovy or XSLT tab, and paste it.
+* **Browser mode:** let the plugins open CPI Workbench directly. In CPI Helper's plugin settings choose
+  *Custom URL*: for GroovyDebugX `http://127.0.0.1:7777/#share/`, for xsltDebugX `http://127.0.0.1:7777/`
+  (with the port, and the `?engines=…` part before `#`, that you start the browser mode with). Each
+  hand-over opens a new tab with the message in it.
+* The message lands in its tab: body, headers and properties replace what is there, parts you did not send
+  stay. A script or mapping that comes along is unsaved text (**Save** asks for a path). An imported script
+  does not run until you press **Run**, as for any script you open; a mapping runs unless it calls Java.
+* A trace's values are text, so all headers and properties arrive as *String*; set another type in the table
+  where the script needs it (`getHeader(name, Integer)`).
+* **Import…** also takes a message as JSON: `{ "body": "…", "headers": { "Name": "value" }, "properties": { … } }`.
+* Keep the data on your computer: with *Custom URL* set to an address that has `#share/` in it, the message is
+  in the part of the link after `#`, which a browser never sends to a server. CPI Helper's default targets
+  receive the message on their own sites. A trace can hold business data; treat the link like the message.
+* Not read: GroovyDebugX's *Contiva IDE* format; choose *Custom URL* or *GroovyIDE* in the plugin. On macOS
+  before 13.3 the desktop app cannot unpack a link (its web view lacks the function); use the browser mode
+  there or paste JSON.
+
+The link formats are the plugins' own, read from their source code in November 2026 and not tried with a
+tenant yet; they are not documented and may change.
+
 ### What a run can access
 
 * XSLT, XSD and XPath runs read files inside the open project only: includes, `doc()`,

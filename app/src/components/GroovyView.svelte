@@ -6,16 +6,18 @@
   import KeyValueTable from './KeyValueTable.svelte';
   import CompareView from './CompareView.svelte';
   import QueueEditor from './QueueEditor.svelte';
-  import { app, groovy, runGroovy, autoRunGroovy, saveScript, saveScriptAs, formatXml, otherProfile, saveInput, closeInput, closeEditorFile, selectedMapping } from '../lib/store.svelte';
+  import RowTable from './RowTable.svelte';
+  import PlatformPanel from './PlatformPanel.svelte';
+  import { app, groovy, runGroovy, autoRunGroovy, saveScript, saveScriptAs, formatXml, otherProfile, saveInput, closeInput, closeEditorFile, selectedMapping, platformDirty } from '../lib/store.svelte';
   import { reindentGroovy } from '../lib/indent';
   import { formatQueue, type QueueEntry } from '../lib/queue';
   import { scriptFunctions, kindLabel, type ParamKind } from '../lib/functions';
-  import type { CaseExtras } from '../lib/store.svelte';
+  import { PLATFORM_KEYS, type AttachmentRow, type SoapHeaderRow } from '../lib/platform';
   import type { Diagnostic } from '../lib/types';
 
   const panes = paneSizes('groovy', [1, 1.3, 1.1]);
 
-  let inputTab = $state<'body' | 'args' | 'headers' | 'properties'>('body');
+  let inputTab = $state<'body' | 'args' | 'headers' | 'properties' | 'attachments' | 'soap' | 'platform'>('body');
   let outputTab = $state<'body' | 'headers' | 'properties' | 'mpl' | 'console' | 'api' | 'compare'>('body');
   let showDiff = $state(false);
   let scriptEditor: Editor | undefined = $state();
@@ -80,9 +82,13 @@
     else useFunction(v);
   }
   $effect(() => {
-    if (mapping && inputTab === 'body') inputTab = 'args';
+    // A mapping function takes arguments, and no message: no body, attachments or SOAP headers.
+    if (mapping && (inputTab === 'body' || inputTab === 'attachments' || inputTab === 'soap')) inputTab = 'args';
     else if (!mapping && inputTab === 'args') inputTab = 'body';
   });
+  let attachmentCount = $derived(groovy.attachments.filter((a) => a.name.trim() || a.text || a.file.trim() || a.base64).length);
+  let soapCount = $derived(groovy.soapHeaders.filter((h) => h.name.trim()).length);
+  let platformUnsaved = $derived(PLATFORM_KEYS.some(platformDirty));
   let errors = $derived(result?.diagnostics.filter((d) => d.severity === 'error') ?? []);
   let others = $derived(result?.diagnostics.filter((d) => d.severity !== 'error') ?? []);
   let markers = $derived<Diagnostic[]>((result?.diagnostics ?? []).filter((d) => d.line));
@@ -107,15 +113,6 @@
 
   let other = $derived(otherProfile(app.groovyProfile));
 
-  function extrasSummary(x: CaseExtras) {
-    const n = (k: number, one: string) => `${k} ${one}${k === 1 ? '' : 's'}`;
-    const parts: string[] = [];
-    if (x.attachments?.length) parts.push(n(x.attachments.length, 'attachment'));
-    if (x.soapHeaders?.length) parts.push(n(x.soapHeaders.length, 'SOAP header'));
-    if (x.platform) parts.push('platform overrides');
-    return parts.join(', ');
-  }
-
   function toggleCompare() {
     groovy.compareOn = !groovy.compareOn;
     groovy.compare = null;
@@ -126,6 +123,10 @@
       outputTab = 'body';
     }
   }
+
+  const attachmentKinds = [{ value: 'text', label: 'text' }, { value: 'file', label: 'file' }, { value: 'base64', label: 'Base64' }];
+  const newAttachment = (): AttachmentRow => ({ name: '', contentType: '', kind: 'text', text: '', file: '', base64: '' });
+  const newSoapHeader = (): SoapHeaderRow => ({ name: '', value: '', mustUnderstand: false, actor: '' });
 
   /** An output queue entry as the table shows it. */
   function showEntry(e: QueueEntry): string {
@@ -149,6 +150,14 @@
         {/if}
         <button role="tab" class:active={inputTab === 'headers'} onclick={() => (inputTab = 'headers')}>Headers <span class="count">{groovy.headers.length}</span></button>
         <button role="tab" class:active={inputTab === 'properties'} onclick={() => (inputTab = 'properties')}>Properties <span class="count">{groovy.properties.length}</span></button>
+        {#if !mapping}
+          <button role="tab" class:active={inputTab === 'attachments'} onclick={() => (inputTab = 'attachments')}
+            title="Message attachments the script reads with getAttachments()">Attachments <span class="count">{attachmentCount}</span></button>
+          <button role="tab" class:active={inputTab === 'soap'} onclick={() => (inputTab = 'soap')}
+            title="SOAP headers the script reads with getSoapHeaders() (Script API v1)">SOAP <span class="count">{soapCount}</span></button>
+        {/if}
+        <button role="tab" class:active={inputTab === 'platform'} onclick={() => (inputTab = 'platform')}
+          title="Mocked platform data: value mappings, secure store, Partner Directory, number ranges, keystore">Platform{#if platformUnsaved}<span class="dirty" title="Unsaved changes">●</span>{/if}</button>
       </div>
       {#if inputTab === 'body'}
         <label class="bt" title="Java type of the body when the script starts. Adapters often deliver an InputStream.">as
@@ -194,13 +203,35 @@
         <Editor bind:value={groovy.body} language={inLanguage} onchange={changed} onrun={runGroovy} label="Input body" />
       {:else if inputTab === 'headers'}
         <KeyValueTable bind:rows={groovy.headers} onchange={changed} emptyText="No headers. Types matter: getHeader(name, Integer) converts like Camel." />
-      {:else}
+      {:else if inputTab === 'properties'}
         <KeyValueTable bind:rows={groovy.properties} onchange={changed} emptyText="No exchange properties." />
+      {:else if inputTab === 'attachments'}
+        <div class="pad extra">
+          <p class="hint">What <code>message.getAttachments()</code> returns. The content is text typed here or a file of the project.</p>
+          <RowTable bind:rows={groovy.attachments} newRow={newAttachment} perLine={3} addLabel="+ Attachment" emptyText="No attachments." onchange={changed}
+            columns={[
+              { field: 'name', label: 'Name', placeholder: (r) => (r.kind === 'file' ? 'the file\'s name' : 'attachment name') },
+              { field: 'contentType', label: 'Content type', placeholder: 'application/octet-stream' },
+              { field: 'kind', label: 'Content from', type: 'select', options: attachmentKinds },
+              { field: (r) => r.kind, label: 'Content', span: 3,
+                placeholder: (r) => (r.kind === 'file' ? 'project path, e.g. inputs/note.pdf' : r.kind === 'base64' ? 'Base64 text' : '') },
+            ]} />
+        </div>
+      {:else if inputTab === 'soap'}
+        <div class="pad extra">
+          <p class="hint">What <code>message.getSoapHeaders()</code> returns. Script API v1 only, as in SAP's interface.</p>
+          <RowTable bind:rows={groovy.soapHeaders} newRow={newSoapHeader} perLine={2} addLabel="+ SOAP header" emptyText="No SOAP headers." onchange={changed}
+            columns={[
+              { field: 'name', label: 'Name', placeholder: '{urn:namespace}Local', span: 2 },
+              { field: 'value', label: 'Header element (XML)', placeholder: '<Local xmlns="urn:namespace">…</Local>', span: 2 },
+              { field: 'actor', label: 'Actor' },
+              { field: 'mustUnderstand', label: 'mustUnderstand', type: 'checkbox' },
+            ]} />
+        </div>
+      {:else}
+        <PlatformPanel onchange={changed} />
       {/if}
     </div>
-    {#if groovy.caseExtras}
-      <p class="hint extras">From the test case (edit in <code>case.json</code>): {extrasSummary(groovy.caseExtras)}</p>
-    {/if}
   </section>
 
   <Gutter {panes} i={0} />
@@ -391,7 +422,9 @@
   .badge.run { color: var(--muted); }
   .hint { color: var(--muted); font-size: 12px; padding: 4px 0; margin: 0; }
   .body > .hint { padding: 12px; }
-  .extras { padding: 4px 8px; border-top: 1px solid var(--border-soft); }
+  .extra-unused { padding: 4px 8px; border-top: 1px solid var(--border-soft); }
+  .pad.extra { display: flex; flex-direction: column; gap: 8px; }
+  .pad.extra .hint { margin: 0; }
   .errors, .pad { padding: 8px; overflow: auto; height: 100%; box-sizing: border-box; font-size: 12px; }
   .diag { display: block; width: 100%; text-align: left; border: 1px solid var(--border); border-left: 3px solid var(--err); border-radius: 4px; padding: 6px 8px; margin-bottom: 6px; background: var(--err-bg); color: var(--fg); font: inherit; cursor: pointer; }
   .diag div, .diag pre { white-space: pre-wrap; margin: 2px 0 0; font-family: var(--mono); }

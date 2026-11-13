@@ -106,6 +106,9 @@ or `def void f(String[] a, Output output, MappingContext c)`, runs with `args` i
 | `keystore.json` | `KeystoreService` | `{ "file": "keystore.p12", "password": "…", "type": "PKCS12", "keyPasswords": { "alias": "…" } }`. The keystore file lies next to it; `type` is optional. Key and trust managers use the same file. |
 | `number-ranges.json` | `NumberRangeConfigurationService` | `{ "NAME": { "next": 1, "min": 1, "max": 999999, "fieldLength": 6, "rotate": false } }`. Values count up within one run only and are not written back. The same correlation ID returns the same value. Zero padding to `fieldLength` is an assumption. |
 
+In the app, the Groovy tab's **Platform** tab edits these files as tables (the keystore as a file); see the
+[user guide](user-guide.md).
+
 A test case can override any of these with a `platform` object (`credentials`, `valueMappings`,
 `partnerDirectory`, `keystore`, `numberRanges`). Keys it leaves out still come from the folder.
 

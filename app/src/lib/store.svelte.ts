@@ -2,6 +2,8 @@ import { call, openProject, closeProject as closeEngineProject, availableProfile
 import type { Diagnostic, FileEntry, GroovyResult, Row, XsltResult } from './types';
 import { argText, mappingArgs } from './queue';
 import { scriptFunctions } from './functions';
+import { attachmentInput, attachmentRows, platformDoc, platformFileText, platformRows, PLATFORM_FILES, PLATFORM_KEYS,
+  soapHeaderInput, soapHeaderRows, type AttachmentRow, type PlatformKey, type PlatformRows, type SoapHeaderRow } from './platform';
 import { toRows } from './rows';
 import { pathKey } from './paths';
 import { resolveSimpleFunctions } from './simple';
@@ -185,8 +187,11 @@ export const groovy = $state({
   /** False for a script that was opened and not yet run by hand (see autoRunGroovy). */
   armed: true,
   casePath: null as string | null,
-  /** Inputs only a test case can hold (attachments, SOAP headers, platform overrides); kept while it is open. */
-  caseExtras: null as CaseExtras | null,
+  /** Message attachments and SOAP headers the script step gets (a mapping function gets none). */
+  attachments: [] as AttachmentRow[],
+  soapHeaders: [] as SoapHeaderRow[],
+  /** The open test case's `platform` object: it replaces the project's platform data key by key while the case is open. */
+  casePlatform: null as Record<string, unknown> | null,
   compareOn: false,
   compare: null as CompareRun<GroovyResult> | null,
   /** A Message Mapping function, known from the last run of this function; null for processData(message). */
@@ -198,14 +203,6 @@ export const groovy = $state({
   /** Text of each String / String[] argument of the mapping function (queues: one context per line). */
   args: [] as (string | null)[],
 });
-
-export interface CaseExtras {
-  /** Project-relative folder of the case; attachment files are relative to it. */
-  dir: string;
-  attachments?: any[];
-  soapHeaders?: any[];
-  platform?: any;
-}
 
 export const xsd = $state({
   schemaPath: null as string | null,
@@ -372,13 +369,148 @@ function safeSet(key: string, v: string | null) {
   try { v === null ? localStorage.removeItem(key) : localStorage.setItem(key, v); } catch { /* ignore */ }
 }
 
+// ------------------------------------------------------------------ platform data
+// The mocked platform data of the project (platform/*.json) as tables in the Groovy tab. The files stay the
+// source of truth: a table is read from its file and saved into it; until it is saved, its rows go with each
+// run as the `platform` override a test case uses too, so a run always sees what the table shows.
+
+interface PlatformSection<K extends PlatformKey> {
+  rows: PlatformRows[K];
+  /** The file's document as last read or saved; undefined without a file. */
+  doc: unknown;
+  /** JSON of the document the rows gave when they were read or saved: what "unsaved changes" compares with. */
+  saved: string;
+  /** Why the file could not be read as a table (not JSON, another shape); the table is off then. */
+  loadError: string;
+  exists: boolean;
+}
+
+function emptySection<K extends PlatformKey>(key: K): PlatformSection<K> {
+  return { rows: [] as unknown as PlatformRows[K], doc: undefined, saved: JSON.stringify(platformDoc(key, [] as unknown as PlatformRows[K], undefined)), loadError: '', exists: false };
+}
+
+export const platform = $state({
+  valueMappings: emptySection('valueMappings'),
+  credentials: emptySection('credentials'),
+  partnerDirectory: emptySection('partnerDirectory'),
+  numberRanges: emptySection('numberRanges'),
+  /** The keystore is a file next to keystore.json: shown, not edited as a table. */
+  keystoreExists: false,
+});
+
+/** The document a section's rows give, or what is wrong with them (a number range's "next" that is no number). */
+export function platformSectionDoc(key: PlatformKey): { doc: unknown; error: string } {
+  const sec = platform[key] as PlatformSection<PlatformKey>;
+  try {
+    return { doc: platformDoc(key, sec.rows, sec.doc), error: '' };
+  } catch (e) {
+    return { doc: undefined, error: (e as Error).message };
+  }
+}
+
+export function platformDirty(key: PlatformKey): boolean {
+  const sec = platform[key];
+  if (sec.loadError) return false;
+  const { doc, error } = platformSectionDoc(key);
+  return error !== '' || JSON.stringify(doc) !== sec.saved;
+}
+
+function dirtyPlatformFiles(): string[] {
+  return PLATFORM_KEYS.filter(platformDirty).map((k) => PLATFORM_FILES[k]);
+}
+
+/**
+ * Reads the project's platform files into the tables. Tables with unsaved changes are left alone unless
+ * `force` (a project that opens). Without a project there is nothing to read: the rows are in memory only.
+ */
+export async function loadPlatform(force = false) {
+  if (!app.project) return;
+  platform.keystoreExists = fileExists(PLATFORM_FILES.keystore);
+  for (const key of PLATFORM_KEYS) {
+    if (!force && platformDirty(key)) continue;
+    const sec = platform[key] as PlatformSection<PlatformKey>;
+    const before = JSON.stringify(sec.rows);
+    const next = emptySection(key) as PlatformSection<PlatformKey>;
+    next.exists = fileExists(PLATFORM_FILES[key]);
+    if (next.exists) {
+      try {
+        next.doc = JSON.parse(await readFile(PLATFORM_FILES[key]));
+        next.rows = platformRows(key, next.doc);
+        next.saved = JSON.stringify(platformDoc(key, next.rows, next.doc));
+      } catch (e) {
+        next.doc = undefined;
+        next.rows = [];
+        next.loadError = (e as Error).message;
+      }
+    }
+    // Rows typed while the file was read stay.
+    if (force || JSON.stringify(sec.rows) === before) Object.assign(sec, next);
+  }
+}
+
+function resetPlatform() {
+  for (const key of PLATFORM_KEYS) Object.assign(platform[key], emptySection(key));
+  platform.keystoreExists = false;
+}
+
+export async function savePlatform(key: PlatformKey): Promise<boolean> {
+  if (!app.project) {
+    app.error = 'Open a project folder to save platform data.';
+    return false;
+  }
+  const sec = platform[key] as PlatformSection<PlatformKey>;
+  const { doc, error } = platformSectionDoc(key);
+  if (error) {
+    app.error = error;
+    return false;
+  }
+  const path = PLATFORM_FILES[key];
+  try {
+    const content = platformFileText(doc);
+    await writeFile(path, content);
+    sec.doc = doc;
+    sec.saved = JSON.stringify(doc);
+    sec.exists = true;
+    // The same file open in the File tab follows, unless it has changes of its own.
+    if (fileView.path === path && fileView.content === fileView.saved) fileView.content = fileView.saved = content;
+    app.status = 'Saved ' + path;
+    await refreshFiles();
+    return true;
+  } catch (e) {
+    fail(e);
+    return false;
+  }
+}
+
+/**
+ * The run's `platform` object: every table with unsaved changes (without a project: every table with rows),
+ * then the open test case's own override, which wins key by key as in the test runner.
+ */
+function platformOverride(): Record<string, unknown> | undefined {
+  const out: Record<string, unknown> = {};
+  for (const key of PLATFORM_KEYS) {
+    if (!platformDirty(key)) continue;
+    const { doc, error } = platformSectionDoc(key);
+    if (error) throw new Error(error);
+    out[key] = doc;
+  }
+  Object.assign(out, groovy.casePlatform ?? {});
+  return Object.keys(out).length ? out : undefined;
+}
+
 // ------------------------------------------------------------------ project
 
 export async function open(dir: string, initProject = false) {
   app.error = '';
+  // The project's platform files take the tables' place; rows typed without a project would otherwise look
+  // like unsaved changes of files they never came from.
+  const fresh = !app.project;
+  if (fresh && dirtyPlatformFiles().length
+    && !(await confirm('The project\'s platform files replace the platform data entered without a project. Open it?'))) return;
   const r = await openProject(dir, initProject);
   if (app.project?.root !== r.root) scriptMemory.clear(); // its paths belong to the other project
   app.project = { root: r.root, files: r.files };
+  await loadPlatform(fresh);
   safeSet('cpiwb.project', r.root);
   await loadIflowSteps();
   if (!r.isProject && !initProject) app.status = 'Folder has no cpi-workbench.json – it still works; use "Init" to add the standard folders.';
@@ -386,8 +518,11 @@ export async function open(dir: string, initProject = false) {
 }
 
 export async function closeProject() {
-  // Mappings and scripts stay in their editors as unsaved text; the File tab closes with the project.
+  // Mappings and scripts stay in their editors as unsaved text; the File tab and the platform tables close
+  // with the project.
   if (!(await mayDiscard('file'))) return;
+  const unsaved = dirtyPlatformFiles();
+  if (unsaved.length && !(await confirm(`Discard the unsaved platform data (${unsaved.join(', ')})?`))) return;
   await closeEngineProject();
   app.project = null;
   scriptMemory.clear();
@@ -396,10 +531,11 @@ export async function closeProject() {
   xslt.casePath = null;
   groovy.scriptPath = null;
   groovy.casePath = null;
-  groovy.caseExtras = null;
+  groovy.casePlatform = null;
   xsd.schemaPath = null;
   xsd.casePath = null;
   closeFileView();
+  resetPlatform();
   app.inputPaths = {};
   app.iflowSteps = [];
 }
@@ -408,6 +544,7 @@ export async function refreshFiles() {
   if (!app.project) return;
   const r = await call('project.list');
   app.project.files = r.files;
+  await loadPlatform(); // a platform file may have been saved, renamed or deleted
 }
 
 export async function loadIflowSteps() {
@@ -560,7 +697,7 @@ export async function openFile(path: string, opts: OpenOptions = {}) {
       groovy.script = content;
       groovy.savedScript = content;
       groovy.casePath = null;
-      groovy.caseExtras = null;
+      groovy.casePlatform = null;
       const last = opts.functionName ? undefined : scriptMemory.get(path);
       groovy.functionName = opts.functionName ?? last?.functionName ?? 'processData';
       groovy.mapping = null;
@@ -655,12 +792,14 @@ export async function closeEditorFile(editor: 'xslt' | 'groovy' | 'xsd'): Promis
       groovy.body = '';
       groovy.headers = [];
       groovy.properties = [];
+      groovy.attachments = [];
+      groovy.soapHeaders = [];
     } else {
       rememberScript(); // opening it again brings back its function and arguments
     }
     forgetGroovyRun();
     groovy.scriptPath = groovy.casePath = null;
-    groovy.caseExtras = null;
+    groovy.casePlatform = null;
     groovy.script = groovy.savedScript = '';
     groovy.functionName = 'processData';
     groovy.mapping = null;
@@ -722,6 +861,7 @@ export async function saveFileView(): Promise<boolean> {
   await writeFile(fileView.path, fileView.content);
   fileView.saved = fileView.content;
   app.status = 'Saved ' + fileView.path;
+  if (fileView.path.startsWith('platform/')) await loadPlatform(); // the Groovy tab's tables follow the file
   return true;
 }
 
@@ -992,6 +1132,10 @@ function mappingArgsFor(m: SelectedMapping | null): unknown[] {
   return m ? mappingArgs(m.parameters, groovy.args) : [];
 }
 
+function orNone<T>(list: T[]): T[] | undefined {
+  return list.length ? list : undefined;
+}
+
 function groovyRequest() {
   const fn = groovy.functionName || 'processData';
   return {
@@ -1000,11 +1144,11 @@ function groovyRequest() {
     args: mappingArgsFor(selectedMapping()),
     input: {
       body: groovy.body, headers: clean(groovy.headers), properties: clean(groovy.properties),
-      attachments: groovy.caseExtras?.attachments, soapHeaders: groovy.caseExtras?.soapHeaders,
+      // Files of attachments are project-relative here; the engine reads them (inside the project only).
+      attachments: orNone(attachmentInput(groovy.attachments)), soapHeaders: orNone(soapHeaderInput(groovy.soapHeaders)),
     },
     options: { bodyType: groovy.bodyType },
-    platform: groovy.caseExtras?.platform,
-    caseDir: groovy.caseExtras?.dir,
+    platform: platformOverride(),
   };
 }
 
@@ -1410,8 +1554,10 @@ async function loadGroovyCase(path: string, dir: string, tc: any) {
   groovy.stepFunction = null;
   forgetGroovyRun();
   if (tc.profile && hasProfile(tc.profile)) app.groovyProfile = tc.profile;
-  const extras: CaseExtras = { dir, attachments: tc.input?.attachments, soapHeaders: tc.input?.soapHeaders, platform: tc.platform };
-  groovy.caseExtras = extras.attachments || extras.soapHeaders || extras.platform ? extras : null;
+  // A case names attachment files relative to its folder.
+  groovy.attachments = attachmentRows(tc.input?.attachments, (file) => joinPath(dir, file));
+  groovy.soapHeaders = soapHeaderRows(tc.input?.soapHeaders);
+  groovy.casePlatform = tc.platform && typeof tc.platform === 'object' ? tc.platform : null;
   groovy.casePath = path;
   app.tool = 'groovy';
   disarmGroovy('test case ' + (tc.name ?? path));

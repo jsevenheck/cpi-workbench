@@ -110,16 +110,48 @@ if (!cmp.includes('Groovy Script 2.x') || !cmp.includes('XmlParser')) fail('comp
 if (shots) await page.screenshot({ path: path.join(shots, 'g3b-compare.png') });
 await page.getByRole('button', { name: 'Comparing' }).click();
 
-// 4a2) A case with an attachment file: the app keeps it while the case is open.
+// 4a1) Platform data as tables: a change applies to the next run before it is saved; Save writes the file.
+const inputTab = (name) => page.locator('section.input').getByRole('tab', { name });
+const vmFile = path.join(project, 'platform/value-mappings.json');
+await inputTab(/^Platform/).click();
+const target = page.getByLabel('Target value 1');
+const soldTo = await target.inputValue();
+if (soldTo !== '0010000077') fail('value mapping table does not show the project file: ' + soldTo);
+await target.fill('SOLD-TO-EDITED');
+await page.locator('section[aria-label="Value mappings"] .dirty').waitFor({ timeout: 5000 })
+  .catch(() => fail('a changed value mapping is not marked as unsaved'));
+await page.locator('section.output').getByRole('tab', { name: /^Properties/ }).click();
+await page.locator('section.output tr', { hasText: 'SOLD-TO-EDITED' }).waitFor({ timeout: 20000 })
+  .catch(() => fail('an unsaved value mapping did not reach the run'));
+if (fs.readFileSync(vmFile, 'utf8').includes('SOLD-TO-EDITED')) fail('the value mapping file changed before Save');
+await page.getByRole('button', { name: 'Save Value mappings' }).click();
+await page.locator('.status', { hasText: 'Saved platform/value-mappings.json' }).waitFor({ timeout: 10000 });
+const savedVm = JSON.parse(fs.readFileSync(vmFile, 'utf8'));
+if (savedVm[0].targetValue !== 'SOLD-TO-EDITED' || savedVm.length !== 2) fail('saved value mappings: ' + JSON.stringify(savedVm));
+// The Secure Store's password is kept when another field changes, and the Partner Directory's alternative partners stay.
+if (!(await page.locator('section[aria-label="Partner Directory"]').innerText()).includes('alternative partner')) fail('no note on the partners\' other data');
+await target.fill(soldTo);
+await page.getByRole('button', { name: 'Save Value mappings' }).click();
+await page.locator('section[aria-label="Value mappings"] .dirty').waitFor({ state: 'detached', timeout: 10000 })
+  .catch(() => fail('the value mappings still count as unsaved after Save'));
+
+// 4a2) A case with an attachment file: it shows as a row of the Attachments tab, with the file's project path.
 await page.locator('.tree .file', { hasText: 'groovy-attachment/case.json' }).click();
 // The previous case's result stays visible until this run ends, so wait for content, not the badge.
-await page.locator('.extras', { hasText: '1 attachment' }).waitFor({ timeout: 20000 })
-  .catch(() => fail('case extras missing'));
+await inputTab(/^Attachments\s*1/).waitFor({ timeout: 20000 }).catch(() => fail('the case\'s attachment is not counted on the Attachments tab'));
+await inputTab(/^Attachments/).click();
+if ((await page.getByLabel('Content 1').inputValue()) !== 'tests/groovy-attachment/delivery-note.txt') fail('attachment file path: ' + await page.getByLabel('Content 1').inputValue());
 await page.locator('.status', { hasText: 'read a message attachment' }).waitFor({ timeout: 10000 });
 await runIt();
 await page.locator('section.output').getByRole('tab', { name: /^Headers/ }).click();
 await page.locator('section.output tr', { hasText: 'DN-4711' }).waitFor({ timeout: 20000 })
   .catch(async () => fail('attachment header: ' + (await page.locator('section.output').innerText()).slice(0, 400)));
+// The same attachment as text typed in the tab.
+await page.getByLabel('Content from 1').selectOption('text');
+await page.getByLabel('Name 1').fill('delivery-note.txt');
+await page.getByLabel('Content 1').fill('Delivery DN-TYPED');
+await page.locator('section.output tr', { hasText: 'DN-TYPED' }).waitFor({ timeout: 20000 })
+  .catch(async () => fail('attachment typed as text: ' + (await page.locator('section.output').innerText()).slice(0, 400)));
 
 // 4a3) The × closes the case with its script: the editor, the case's input and its extras go; the file stays.
 const caseScript = (await page.locator('section.script h2').getAttribute('title')) ?? '';
@@ -127,7 +159,7 @@ await page.locator('section.script').getByRole('button', { name: 'Close file' })
 await page.locator('section.script h2', { hasText: 'No script open' }).waitFor({ timeout: 5000 })
   .catch(() => fail('the script pane does not say that no script is open'));
 await page.locator('section.script .empty-hint').waitFor({ timeout: 5000 }).catch(() => fail('no hint in the empty script editor'));
-if (await page.locator('.extras').count()) fail('the closed case kept its attachments');
+if (!(await inputTab(/^Attachments\s*0/).count())) fail('the closed case kept its attachments');
 if (!caseScript.startsWith('From test case ')) fail('the script header does not name the test case: ' + caseScript);
 
 // 4b) Import an exported iFlow (zip) and open its Groovy step.

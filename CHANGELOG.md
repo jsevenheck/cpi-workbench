@@ -8,6 +8,10 @@ of its version.
 
 ### Added
 
+- **Groovy tab: platform data, attachments and SOAP headers as tables.** The new **Platform** tab edits value
+  mappings, Secure Store credentials, Partner Directory parameters and number ranges from the project's
+  `platform/*.json` files; a change applies to the next run at once and **Save** writes the file. **Attachments**
+  and **SOAP** hold what the script reads from the message; before, only a test case could bring them.
 - **Close an open file** with the × next to its name in the mapping, script, schema, input and File panes,
   and on the File tab in the tool bar.
   The file on disk stays as it is; unsaved changes are asked about first. A closed mapping, script or schema

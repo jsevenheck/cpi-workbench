@@ -16,7 +16,7 @@ Automated checks:
 * Engine tests (`mvn -f engine/pom.xml verify`): core 20, XSLT/XSD/XPath/Splitter/Filter/Gather/Converter 82 per Saxon version (20 of them on project boundaries, 9 splitter cases, 8 of them from SAP's examples, 5 Filter, 5 Gather and 18 converter tests, most with SAP's examples), Groovy 46 per script version (4 Camel Simple, 4 Content Modifier, 11 Message Mapping functions, 2 on what a tenant probe showed).
 * Regression test cases (`testdata/regression-project`): 9.
 * Browser end-to-end tests: `app/e2e/smoke.mjs` (XML tools) and `groovy.mjs` (Groovy, Flow Steps and the iFlow import, which CI runs with the iFlow fixture as a zip).
-* UI unit tests (`npm --prefix app test`): the JSON, XSLT and Groovy formatters, test-case rows, path comparison, the Script API completions (checked against the clean-room Java classes), the Filter's `function:simple(...)` substitution, Message Mapping arguments, the Groovy functions read from a script's text and the update check's SemVer comparison.
+* UI unit tests (`npm --prefix app test`): the JSON, XSLT and Groovy formatters, test-case rows, path comparison, the Script API completions (checked against the clean-room Java classes), the Filter's `function:simple(...)` substitution, Message Mapping arguments, the Groovy functions read from a script's text, the platform data tables (rows to file and back, with the regression project's files) and the update check's SemVer comparison.
 * CI runs the engine tests on Linux, Windows and macOS, the browser e2e tests on Windows, and the shell tests on Windows and macOS before it builds the installers. Releases after 0.3.0 have no Linux installers. All of them passed on Windows and macOS runners for the first time on 2026-10-25 (`d237e25`). macOS runs on `macos-26` (GitHub deprecated `macos-14`); the native engines are built for macOS 11 and CI checks that.
 
 ## By area
@@ -31,7 +31,7 @@ Automated checks:
 | Groovy Script 2.x (Groovy 4.0.29, Camel 3.14.7, Java 21, Script API v2) | ≈ 90 % | ProcessDirect raises `UnsupportedInSimulator`. Not simulated: `setProxyHandler` and the SAP classes `Exchange` / `SimpleBuilder` a tenant's scripts can load (behaviour not published). |
 | Message Mapping functions (`MappingContext`, `Output`) | ≈ 80 % | The function runs on its own; `.mmap` is out of scope. A tenant confirmed Groovy 2.4.21 / Java 21, one call per context for a `String[]` function joined by context changes, and the marker texts (F59, F60). A tenant also calls a `String[]` function for an empty context (F61), as the simulator does. A single-value function runs once with the values given (a tenant calls it per value); identity vs. equals for markers is open (Q-M1). |
 | MPL, console, API call log | ≈ 95 % | — |
-| Platform API mocks | ≈ 85 % | Messages and results for unknown names match a tenant (F52). Data Store (no public API). Number ranges count per run only. OAuth2 tokens are fixed values. Services outside `generic.api` other than Value Mapping. |
+| Platform API mocks | ≈ 85 % | The Groovy tab edits the data as tables (keystore, a credential's OAuth2 fields and binary parameters as files). Messages and results for unknown names match a tenant (F52). Data Store (no public API). Number ranges count per run only. OAuth2 tokens are fixed values. Services outside `generic.api` other than Value Mapping. |
 | Test cases, runner, CLI | ≈ 90 % | No test case from an exported MPL trace (format unknown, F18). Cases are written by hand and run from the CLI; the app only opens them. |
 | Runtime comparison (9.9 ↔ 12, 1.x ↔ 2.x) | ≈ 95 % | — |
 | Lint (1.x → 2.x) | ≈ 80 % | Covers the known breaks (F26, v1-only methods, imports). Others appear only as compile or runtime errors. On the 1.x runtime, the compile error for a Script API v2 or `groovy.xml.XmlSlurper` import says that it needs 2.x. |
@@ -47,7 +47,7 @@ Automated checks:
 
 1. Install and open the installer on macOS once by hand.
 2. Code signing and auto-update (Phase 5, plan §10.2).
-3. The features planned after a review of other tools ([plan](plan.md) §10.5, Phase 6): first platform data,
-   attachments and SOAP headers in the Groovy tab (W1) and taking a traced message over from CPI Helper (W2).
+3. The features planned after a review of other tools ([plan](plan.md) §10.5, Phase 6). Built: platform data,
+   attachments and SOAP headers in the Groovy tab (W1). Next: taking a traced message over from CPI Helper (W2).
 
 Fixes from reviews and earlier rounds are listed in the [changelog](../CHANGELOG.md).

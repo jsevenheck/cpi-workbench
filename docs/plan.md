@@ -330,7 +330,7 @@ Plain, git-friendly files. The engines' `test` command (`cpiwb-xml test tests/`,
 | **3 — Groovy MVP** | Groovy 1.x and 2.x, typed headers/properties, MPL, API call log, console, diff | Done (0.1.0) |
 | **4 — Productivity** | Platform API mocks, lint, runtime comparison, iFlow-zip import, flow steps, MCP server | Done (0.1.0–0.3.0) |
 | **5 — Distribution** | Installers for Windows, macOS, Linux; code signing, auto-update (§10.2) | Unsigned installers and a manual update check; signing and auto-update open |
-| **6 — Workflow** | What a review of other tools showed (§10.5): platform data in the Groovy tab, a traced message from CPI Helper, XPath comfort, Encoder / Decoder and Message Digest steps, JUnit output and compare rules for test cases, Value Mapping import, run history, examples, debugging | Planned (2026-11-13) |
+| **6 — Workflow** | What a review of other tools showed (§10.5): platform data in the Groovy tab, a traced message from CPI Helper, XPath comfort, Encoder / Decoder and Message Digest steps, JUnit output and compare rules for test cases, Value Mapping import, run history, examples, debugging | Planned (2026-11-13); W1 built |
 
 ### 10.1 MCP server for coding agents (built, 2026-11-01)
 
@@ -487,9 +487,10 @@ Apache-2.0 repository.
 Sizes are estimates: S is a day or two, M about a week, L more. Each item follows the rules in `AGENTS.md`
 (tests, `fidelity.md` and `status.md` where behaviour changes, a changelog line).
 
-**W1. Platform data, attachments and SOAP headers in the Groovy tab (M).** *Seen in GrooveBox.*
-Today the mocks read `platform/*.json` ([test cases](test-cases.md)); the files open as JSON in the File tab,
-and a test case's attachments and SOAP headers show only as a note ("edit in `case.json`").
+**W1. Platform data, attachments and SOAP headers in the Groovy tab (M; built on 2026-11-13).** *Seen in GrooveBox.*
+Before, the mocks' `platform/*.json` files ([test cases](test-cases.md)) opened only as JSON in the File tab,
+and a test case's attachments and SOAP headers showed only as a note ("edit in `case.json`"). Built as planned
+below; a table's unsaved rows go with each run as the `platform` override, **Save** writes the file.
 * Input tabs for attachments and SOAP headers, and a *Platform* tab with tables for value mappings,
   credentials, partner directory parameters and number ranges. The keystore stays a file reference.
 * The JSON files stay the source of truth, as the queue editor keeps its text form: the tables read and write

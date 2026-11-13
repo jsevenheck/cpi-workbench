@@ -146,6 +146,9 @@ public final class GatherStep {
         try {
             DocumentBuilderFactory f = DocumentBuilderFactory.newDefaultInstance();
             f.setNamespaceAware(true);
+            // This parse only checks the text and reads nothing else: no DTD, so no external entity, even if a
+            // DOCTYPE got past the pattern above (XML runs read files only through ProjectResolver).
+            f.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
             DocumentBuilder b = f.newDocumentBuilder();
             b.setErrorHandler(new org.xml.sax.helpers.DefaultHandler() {
                 @Override

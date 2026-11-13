@@ -1,6 +1,8 @@
 //! The MCP tools: one per tab of the app (XSLT, Groovy, XSD, XPath, Flow Steps) plus the project view,
-//! making the same engine calls with the same inputs. The app's features lead: the tools add none of
-//! their own. A wrong argument is an error message the model can act on.
+//! making the same engine calls with the same inputs; the app's features lead and the run tools add no
+//! simulation of their own. For agents without file access, read_file, save_file, import_iflow, results by
+//! runId and the reference come on top (`files.rs`, `runs.rs`, `reference.rs`). A wrong argument is an
+//! error message the model can act on.
 
 use super::{files, flow, reference, runs, Server};
 use serde_json::{json, Map, Value};
@@ -394,7 +396,6 @@ fn value_rows(args: &Args, key: &str) -> Result<Value, String> {
     Ok(Value::Array(rows))
 }
 
-/// The incoming message: {body, headers, properties}.
 /// The incoming message: {body, headers, properties}. With messageFrom (or, for a Gather, the first message of
 /// messagesFrom) an earlier run's output is the base; what the call gives replaces its body or rows.
 pub fn message(server: &Server, args: &Args) -> Result<Value, String> {

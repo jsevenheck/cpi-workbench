@@ -13,6 +13,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Runs on both engines (groovy-v1 and groovy-v2 modules share this source). */
@@ -380,6 +381,16 @@ class ScriptRunnerTest {
         assertEquals("{urn:x}Out", out.get("name"));
         assertEquals("<Out xmlns=\"urn:x\">1</Out>", out.get("value"));
         assertEquals(true, out.get("mustUnderstand"));
+    }
+
+    /** A {"file"} attachment is resolved by the engine inside the open project; without one it must not be empty. */
+    @Test
+    void anAttachmentFileWithoutAProjectIsAnError() {
+        Map<String, Object> input = new java.util.LinkedHashMap<>(in("", List.of(), List.of()));
+        input.put("attachments", List.of(Json.o().with("file", "note.txt")));
+        String s = IMPORT + "def Message processData(Message message) { message }";
+        Exception e = assertThrows(IllegalArgumentException.class, () -> run(s, input, null));
+        assertTrue(e.getMessage().contains("note.txt") && e.getMessage().contains("project open"), e.getMessage());
     }
 
     @Test

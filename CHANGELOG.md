@@ -42,6 +42,8 @@ of its version.
 
 - **Splitter and Gather on Windows**: split messages, a Gather's Combine at XPath, an XPath's element results and
   a script's SOAP headers in the result use LF line breaks, as on macOS and Linux; they had CRLF from the Java XML writer.
+- **Groovy: an attachment given as a file while no project is open** is an error that says so; it ran as an
+  empty attachment before.
 
 ## [0.3.1] - 2026-11-11
 

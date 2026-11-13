@@ -235,6 +235,12 @@ public final class ScriptRunner {
         for (Object o : Json.arr(input, "attachments")) {
             if (o instanceof Map) {
                 Map<String, Object> m = (Map<String, Object>) o;
+                if (m.get("file") != null) {
+                    // The engine replaces {"file"} by the file's content while a project is open; left here, the
+                    // attachment would be empty without a word.
+                    throw new IllegalArgumentException("The attachment file " + m.get("file")
+                            + " can only be read with a project open: attachment files lie inside the project.");
+                }
                 String name = Json.str(m, "name", "attachment" + (out.size() + 1));
                 String type = Json.str(m, "contentType", "application/octet-stream");
                 byte[] data = m.get("base64") != null

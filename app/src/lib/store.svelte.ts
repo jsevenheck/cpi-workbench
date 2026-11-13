@@ -427,8 +427,11 @@ export async function loadPlatform(force = false) {
   if (!app.project) return;
   platform.keystoreExists = fileExists(PLATFORM_FILES.keystore);
   for (const key of PLATFORM_KEYS) {
-    if (!force && platformDirty(key)) continue;
     const sec = platform[key] as PlatformSection<PlatformKey>;
+    if (!force && platformDirty(key)) {
+      sec.exists = fileExists(PLATFORM_FILES[key]); // the file may be gone while the table has changes
+      continue;
+    }
     const before = JSON.stringify(sec.rows);
     const next = emptySection(key) as PlatformSection<PlatformKey>;
     next.exists = fileExists(PLATFORM_FILES[key]);
@@ -1140,6 +1143,8 @@ function orNone<T>(list: T[]): T[] | undefined {
 
 function groovyRequest() {
   const fn = groovy.functionName || 'processData';
+  const fileRow = app.project ? undefined : groovy.attachments.find((a) => a.kind === 'file' && a.file.trim() !== '');
+  if (fileRow) throw new Error(`The attachment file ${fileRow.file} can only be read with a project open; open the project, or give the content as text.`);
   return {
     script: { content: groovy.script, path: groovy.scriptPath ?? 'script.groovy' },
     function: fn,

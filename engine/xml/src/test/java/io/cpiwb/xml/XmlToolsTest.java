@@ -123,4 +123,29 @@ class XmlToolsTest {
         List<Object> results = Json.arr(r, "results");
         assertTrue(Json.write(results.get(1)).contains("expected 'wrong' but was 'v'"));
     }
+
+    /**
+     * A body typed with an XML declaration that names ISO-8859-1 reaches the parser in that encoding; sent as UTF-8 bytes it came out as "MÃ¼ller" (review 2026-11-10).
+     */
+    @Test
+    void bodyWithADeclaredEncodingKeepsItsCharacters() {
+        String body = "<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?><a>Müller</a>";
+        Map<String, Object> in = Json.o().with("body", body);
+        Map<String, Object> x = new XsltStep().run(Json.o().with("xslt", Json.o().with("content",
+                "<xsl:stylesheet version='2.0' xmlns:xsl='http://www.w3.org/1999/XSL/Transform'><xsl:output method='text'/>"
+                + "<xsl:template match='/'><xsl:value-of select='/a'/></xsl:template></xsl:stylesheet>")).with("input", in));
+        assertEquals("Müller", ((Map<?, ?>) x.get("output")).get("body"), Json.write(x));
+        for (String version : List.of("1.0", "3.1")) {
+            Map<String, Object> p = new XPathStep().run(Json.o().with("expression", "string(/a)").with("version", version).with("input", in));
+            assertEquals("Müller", ((Map<?, ?>) ((List<?>) p.get("items")).get(0)).get("value"), Json.write(p));
+        }
+        Map<String, Object> j = new ConverterStep().run(Json.o().with("conversion", "xmlToJson").with("input", in));
+        assertEquals("{\"a\":\"Müller\"}", j.get("body"), Json.write(j));
+        Map<String, Object> g = new GatherStep().run(Json.o().with("messageType", "sameXml").with("algorithm", "combineAtXPath")
+                .with("sourceXPath", "/a/b").with("targetXPath", "/a").with("messages", List.of(body.replace("Müller", "<b>Müller</b>"))));
+        assertTrue(String.valueOf(g.get("body")).contains("<b>Müller</b>"), Json.write(g));
+        // Format keeps the text and the encoding its declaration names.
+        Map<String, Object> f = new XPathStep().format(Json.o().with("text", body));
+        assertEquals("<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?>\n<a>Müller</a>\n", f.get("text"), Json.write(f));
+    }
 }

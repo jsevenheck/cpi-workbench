@@ -37,13 +37,13 @@ public final class SimExchange {
         if (input == null) {
             input = Map.of();
         }
-        Charset cs = Charset.forName(Json.str(input, "encoding", "UTF-8"));
-        byte[] body;
-        if (input.get("bodyBase64") != null) {
-            body = Base64.getDecoder().decode(Json.str(input, "bodyBase64", ""));
-        } else {
-            body = Json.str(input, "body", "").getBytes(cs);
-        }
+        String text = input.get("bodyBase64") != null ? null : Json.str(input, "body", "");
+        // A body given as text takes the encoding its XML declaration names: a parser reads the bytes in that
+        // encoding (XML 1.0, 4.3.3). That such a message arrives on a tenant in it is an assumption.
+        Charset declared = input.get("encoding") == null ? TextFiles.declaredCharset(text) : null;
+        Charset cs = declared != null ? declared : Charset.forName(Json.str(input, "encoding", "UTF-8"));
+        TextFiles.requireEncodable(text, declared, "The body");
+        byte[] body = text == null ? Base64.getDecoder().decode(Json.str(input, "bodyBase64", "")) : text.getBytes(cs);
         return new SimExchange(body, cs,
                 TypedValue.readMap(input.get("headers")),
                 TypedValue.readMap(input.get("properties")));

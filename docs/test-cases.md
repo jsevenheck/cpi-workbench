@@ -40,7 +40,11 @@ my-project/
   * `groovy` (`script` names the script; optional `function`; `options.bodyType` is `String`, `InputStream` or `byte[]`;
     for a Message Mapping function see below),
   * `xsd` (`schema` names the schema; expect `valid` and `errorContains`).
-* Profiles: `saxon-he-9.9`, `saxon-he-12`, `groovy-1.x`, `groovy-2.x`.
+* Profiles: `saxon-he-9.9`, `saxon-he-12`, `groovy-1.x`, `groovy-2.x`. Each engine runs the cases of its
+  profile and skips the others; any other profile name is an error, on every engine.
+* `test <path>` exits with 1 when a case failed or when `<path>` holds no `case.json`. With
+  `--fail-if-none` it also exits with 1 when this engine ran none of the cases (all were for other engines).
+* Files (bodies, mappings, expected output) are read as UTF-8, or in the encoding their XML declaration names.
 * Header and property types: `String`, `Integer`, `Long`, `Boolean`, `Double`, `Float`,
   `BigDecimal`, `Date` (ISO-8601), `byte[]` (Base64), `null`.
 * `body` is a string, `{ "file": "…" }` or `{ "text": "…" }`. Paths are relative to the case folder.

@@ -6,6 +6,60 @@ of its version.
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-11-11
+
+Fixes from a review of the whole app (2026-11-10), and the Groovy tab keeps a script's settings.
+
+### Removed
+
+- **Linux installers** (`.deb`, `.rpm`): releases bring installers for Windows and macOS only. On Linux,
+  use the engine jars or the browser mode, or build the desktop app from source (docs/building.md).
+  CI no longer builds the desktop app or runs the browser e2e tests on Linux; the engine tests still run there.
+
+### Security
+
+- **Browser mode**: an engine served over HTTP answers only requests that name this machine in the
+  `Host` header and come from a local origin. Before, a web page whose name was re-pointed to
+  127.0.0.1 (DNS rebinding) could open any folder, read and write files and run Groovy. `?engines=`
+  takes engines on this machine only. The desktop app was not affected.
+- **Opening a file no longer runs its code**: a Groovy script, a Groovy test case and a stylesheet with
+  reflexive `java:` calls run for the first time when you press Run or Ctrl+Enter; live runs follow
+  after that. Before, a click on a script of an imported iFlow ran it with your rights.
+- The installed app looks for engines only next to itself and in `CPIWB_ENGINE_DIR`, no longer in
+  `engine/…/target` of every folder above it (debug builds still do).
+- A script or attachment path that is a symbolic link out of the project is refused by the Groovy
+  engines too. XPath runs see no environment variables.
+- CI: the GitHub Actions are pinned to commits instead of tags, and jobs get read-only access to the
+  repository (the release job alone may write).
+
+### Fixed
+
+- Groovy: clicking the open script in the file tree again (e.g. after a visit to another tab) no longer
+  resets it to `processData` and drops the arguments of its mapping function. Each script keeps its
+  function and arguments for the session, so they are back when you return to it from another script.
+  A script with only mapping functions runs its first one on its first run instead of failing on `processData`.
+- **Messages that name an encoding**: a body starting with `<?xml version="1.0" encoding="ISO-8859-1"?>`
+  came out as `MÃ¼ller` in XSLT, XPath, XSD, the converters and a script's `InputStream`, and **Format**
+  wrote that back into the editor. The body now reaches the parser in the declared encoding;
+  Format keeps the declaration. Files in such an encoding open (they failed with
+  "Input length = …") and are saved in it. A character that the declared encoding cannot hold (`€` in
+  ISO-8859-1) is an error, in a run and when saving, instead of a silent `?`.
+- **Test cases**: a case with a misspelt profile was skipped by every engine and never ran; it is an
+  error now. `test <path>` fails when it finds no `case.json`, and with `--fail-if-none` when the
+  engine ran no case. `errorContains` finds texts with quotes or backslashes.
+- **Rename / Copy** to the file's own name in another spelling (`./a.xsl`, or another case where the
+  file system ignores case) deleted the file; it is refused now.
+- XSD: a problem in the input's external entities or DTD is reported for the input, not as "Schema
+  cannot be loaded". Saxon 9.9 reports why `doc()` was refused instead of "Exception thrown by URIResolver".
+- A test case's attachment file is found when the project path is written with `..`.
+- XSLT on Saxon 9.9: a `document()` outside the project fails the run, as on Saxon 12; before, the run
+  went on with an empty result and a warning.
+- **Browser mode**: after a timed-out call the engine starts again by itself, as in the desktop app;
+  before, it stopped and had to be started by hand. `serve --http` keeps the JVM options it was started
+  with, and the engine ends with the command that started it.
+- **Init** writes valid JSON for a folder name with quotes.
+- CI runs the regression cases on Saxon-HE 12 too.
+
 ## [0.3.0] - 2026-11-08
 
 ### Changed
@@ -181,7 +235,8 @@ First public release.
   supported.
 - The installers and engine jars include the licence texts and notices of the bundled components.
 
-[Unreleased]: https://github.com/jsevenheck/cpi-workbench/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/jsevenheck/cpi-workbench/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/jsevenheck/cpi-workbench/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/jsevenheck/cpi-workbench/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/jsevenheck/cpi-workbench/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/jsevenheck/cpi-workbench/compare/v0.1.0...v0.1.1

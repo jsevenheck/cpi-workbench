@@ -73,7 +73,7 @@ public final class ProjectFiles {
         }
         Path cfg = dir.resolve("cpi-workbench.json");
         if (!Files.exists(cfg)) {
-            Files.writeString(cfg, "{\n  \"name\": \"" + dir.getFileName() + "\"\n}\n", StandardCharsets.UTF_8);
+            Files.writeString(cfg, "{\n  \"name\": " + Json.write(String.valueOf(dir.getFileName())) + "\n}\n", StandardCharsets.UTF_8);
         }
     }
 
@@ -108,13 +108,14 @@ public final class ProjectFiles {
         if (Files.size(f) > MAX_READ) {
             throw new IllegalArgumentException("File too large for the editor: " + f);
         }
-        return Json.o().with("path", Json.str(p, "path", "")).with("content", Files.readString(f, StandardCharsets.UTF_8));
+        return Json.o().with("path", Json.str(p, "path", "")).with("content", TextFiles.read(f));
     }
 
     public synchronized Map<String, Object> write(Map<String, Object> p) throws IOException {
         Path f = resolve(Json.str(p, "path", ""));
         Files.createDirectories(f.getParent());
-        Files.writeString(f, Json.str(p, "content", ""), StandardCharsets.UTF_8);
+        // XML that names its encoding is written in it, so the file stays what its declaration says.
+        Files.write(f, TextFiles.encode(Json.str(p, "content", "")));
         return Json.o().with("path", Json.str(p, "path", "")).with("saved", true);
     }
 

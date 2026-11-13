@@ -38,6 +38,15 @@ public final class RpcServer {
 
     private final RpcHandler handler;
     private final long defaultTimeoutMs;
+    /** Over HTTP the engine is started again after a timeout only by {@link #supervise}; over stdio the desktop shell does it. */
+    private volatile boolean http;
+    private volatile boolean supervised = true;
+
+    /** Whether something starts this engine again after it exits with {@link #EXIT_TIMEOUT}. */
+    public RpcServer supervised(boolean value) {
+        supervised = value;
+        return this;
+    }
     private final ExecutorService worker = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "cpiwb-worker");
         t.setDaemon(true);
@@ -64,7 +73,8 @@ public final class RpcServer {
             // A running transformation cannot be stopped safely; tell the caller and restart.
             scheduleExit();
             return Json.o().with("id", id).with("error", Json.o()
-                    .with("message", "Timeout: the call did not finish within " + timeout + " ms. The engine restarts.")
+                    .with("message", "Timeout: the call did not finish within " + timeout + " ms. "
+                            + (http && !supervised ? "The engine stops; start it again." : "The engine restarts."))
                     .with("timeout", true));
         } catch (ExecutionException e) {
             Throwable cause = e.getCause() == null ? e : e.getCause();
@@ -116,10 +126,112 @@ public final class RpcServer {
 
     // ---------------------------------------------------------------- http
 
+    /** Marks the process that serves HTTP for {@link #supervise}; a command line without it supervises. */
+    public static final String WORKER = "--worker";
+
+    /**
+     * Browser mode: runs the engine's HTTP server in a child process and starts it again when it exits after a
+     * timed-out call (a running transformation or script cannot be stopped inside the process). Over stdio the
+     * desktop shell does this. Returns the child's exit code, or -1 when no child can be started here; the
+     * caller then serves by itself, and a timeout ends the engine.
+     */
+    public static int supervise(String[] args) throws InterruptedException {
+        java.util.List<String> command = relaunchCommand(args);
+        if (command == null) {
+            return -1;
+        }
+        boolean first = true;
+        while (true) {
+            Process child;
+            try {
+                child = new ProcessBuilder(command).inheritIO().start();
+            } catch (IOException e) {
+                if (first) {
+                    return -1;
+                }
+                System.err.println("Cannot start the engine again: " + e.getMessage());
+                return 1;
+            }
+            first = false;
+            // Ctrl+C or a kill of this process also ends the engine.
+            Thread stop = new Thread(child::destroy);
+            Runtime.getRuntime().addShutdownHook(stop);
+            int code = child.waitFor();
+            try {
+                Runtime.getRuntime().removeShutdownHook(stop);
+            } catch (IllegalStateException e) {
+                return code; // shutting down
+            }
+            if (code != EXIT_TIMEOUT) {
+                return code;
+            }
+            System.err.println("The engine stopped after a timed-out call; starting it again.");
+        }
+    }
+
+    /**
+     * In the process that serves ({@link #WORKER}): exit when the supervising process is gone, so a supervisor
+     * killed without its shutdown hooks (kill -9, Task Manager) leaves no engine holding the port.
+     */
+    public static void exitWithParent() {
+        ProcessHandle.current().parent().ifPresent(p -> p.onExit().thenRun(() -> System.exit(0)));
+    }
+
+    /** This process's command line with {@link #WORKER} added, or null when it cannot be told. */
+    static java.util.List<String> relaunchCommand(String[] args) {
+        java.util.List<String> command = new java.util.ArrayList<>();
+        // The command line as the system reports it, with the JVM options (e.g. -Xmx) the user gave; where the
+        // system does not report it (Windows), it is rebuilt below without them.
+        ProcessHandle.Info info = ProcessHandle.current().info();
+        String[] own = info.arguments().orElse(new String[0]);
+        if (info.command().isPresent() && own.length >= args.length
+                && java.util.Arrays.equals(java.util.Arrays.copyOfRange(own, own.length - args.length, own.length), args)) {
+            command.add(info.command().get());
+            command.addAll(java.util.List.of(own));
+            command.add(WORKER);
+            return command;
+        }
+        if (System.getProperty("org.graalvm.nativeimage.imagecode") != null) {
+            String exe = ProcessHandle.current().info().command().orElse(null);
+            if (exe == null) {
+                return null;
+            }
+            command.add(exe);
+        } else {
+            String classPath = System.getProperty("java.class.path", "");
+            String started = System.getProperty("sun.java.command", "");
+            Path launcher = Path.of(System.getProperty("java.home", ""), "bin",
+                    System.getProperty("os.name", "").toLowerCase(java.util.Locale.ROOT).contains("win") ? "java.exe" : "java");
+            if (classPath.isEmpty() || started.isEmpty() || !Files.isRegularFile(launcher)) {
+                return null;
+            }
+            command.add(launcher.toString());
+            if (classPath.toLowerCase(java.util.Locale.ROOT).endsWith(".jar") && started.startsWith(classPath)) {
+                command.add("-jar"); // started with java -jar: the class path is the jar
+                command.add(classPath);
+            } else {
+                command.add("-cp");
+                command.add(classPath);
+                command.add(started.split(" ")[0]);
+            }
+        }
+        command.addAll(java.util.List.of(args));
+        command.add(WORKER);
+        return command;
+    }
+
     public HttpServer serveHttp(int port, Path uiDir) throws IOException {
         HttpServer server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), port), 0);
+        http = true;
         server.createContext("/rpc", ex -> {
             try {
+                // DNS rebinding: a foreign page whose name now resolves to 127.0.0.1 is same-origin for the
+                // browser, so no preflight protects the engine. Such a request still names the foreign host.
+                String origin = ex.getRequestHeaders().getFirst("Origin");
+                if (!isLocalHost(ex.getRequestHeaders().getFirst("Host")) || origin != null && !isLocalOrigin(origin)) {
+                    send(ex, 403, "text/plain", "Requests from this machine only".getBytes(StandardCharsets.UTF_8));
+                    return;
+                }
                 cors(ex);
                 if ("OPTIONS".equals(ex.getRequestMethod())) {
                     send(ex, 204, "text/plain", new byte[0]);
@@ -149,6 +261,10 @@ public final class RpcServer {
         });
         server.createContext("/", ex -> {
             try {
+                if (!isLocalHost(ex.getRequestHeaders().getFirst("Host"))) {
+                    send(ex, 403, "text/plain", "Requests from this machine only".getBytes(StandardCharsets.UTF_8));
+                    return;
+                }
                 serveStatic(ex, uiDir);
             } finally {
                 ex.close();
@@ -194,6 +310,19 @@ public final class RpcServer {
         } catch (URISyntaxException e) {
             return false;
         }
+    }
+
+    /** A Host header that names this machine: localhost, 127.0.0.1 or [::1], with or without a port. */
+    static boolean isLocalHost(String host) {
+        if (host == null) {
+            return false;
+        }
+        String h = host.trim().toLowerCase(java.util.Locale.ROOT);
+        String name = h.startsWith("[") ? (h.contains("]") ? h.substring(0, h.indexOf(']') + 1) : h)
+                : (h.contains(":") ? h.substring(0, h.indexOf(':')) : h);
+        String port = h.substring(name.length());
+        return (name.equals("localhost") || name.equals("127.0.0.1") || name.equals("[::1]"))
+                && (port.isEmpty() || port.matches(":\\d{1,5}"));
     }
 
     private static void serveStatic(HttpExchange ex, Path uiDir) throws IOException {

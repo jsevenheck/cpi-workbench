@@ -9,10 +9,11 @@ need Java, Groovy or Saxon on your machine.
 |---|---|
 | Windows 10/11 (x64) | `CPI-Workbench_<version>_x64-setup.exe`, or the `.msi` |
 | macOS 11 or later, Apple Silicon | `CPI-Workbench_<version>_aarch64.dmg` |
-| Linux x64 | `.deb` (Ubuntu 22.04+, Debian 12+) or `.rpm` (Fedora, RHEL) |
 | Command line, any OS with Java 17+ | `cpiwb-xml-he99-<version>.jar` and the other `cpiwb-*.jar` files |
 
-There is no build for Intel Macs yet. `SHA256SUMS.txt` in the release lists the checksums of all
+There is no build for Intel Macs yet, and no installer for Linux (0.3.0 was the last release with one): on Linux, use the
+command-line jars or the browser mode ([User guide](user-guide.md#browser-mode-no-desktop-shell-needed)),
+or build the desktop app yourself ([Building](building.md)). `SHA256SUMS.txt` in the release lists the checksums of all
 files.
 
 The installers are **not code-signed** yet, so Windows and macOS warn on the first start.
@@ -103,22 +104,6 @@ is not the macOS procedure. Prefer **Open Anyway** as described in
 [Apple's guidance](https://support.apple.com/en-us/102445). On a managed Mac, these settings may be
 unavailable: ask IT rather than using the terminal command to work around a restriction. Do not
 disable Gatekeeper globally or override a warning that the app contains malware.
-
-## Linux
-
-```sh
-sudo apt install ./CPI-Workbench_<version>_amd64.deb      # Ubuntu, Debian
-sudo dnf install ./CPI-Workbench-<version>-1.x86_64.rpm   # Fedora, RHEL
-```
-
-The app needs WebKitGTK 4.1, which the package manager installs with it.
-
-For these `.deb` and `.rpm` packages there is no equivalent `Unblock-File` step: install them with
-the package manager, which needs administrator (`sudo`) permission. Do not use `chmod +x` on these
-packages or run them as executables. Verify the download against `SHA256SUMS.txt` first, for example
-with `sha256sum ./CPI-Workbench_<version>_amd64.deb`, and compare the result with its release entry.
-If your company restricts package installation, ask IT; do not disable package-signature checks or
-other security controls. See also [Ubuntu's package-management guide](https://documentation.ubuntu.com/server/how-to/software/package-management/).
 
 ## Command line
 

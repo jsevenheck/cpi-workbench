@@ -9,6 +9,13 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Jobs read the repository; only the release job below may write (it publishes the release).
+permissions:
+  contents: read
+
+# Actions are pinned to a commit: a tag can be moved to other code, a commit cannot. The comment names the
+# release the commit belongs to; to update, look the new release's commit up (git ls-remote --tags <repo>).
+
 jobs:
   engine-tests:
     strategy:
@@ -19,8 +26,8 @@ jobs:
     defaults:
       run: { shell: bash }
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-java@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with: { distribution: temurin, java-version: "21", cache: maven }
       - name: Unit tests (both Saxon and both Groovy engines)
         run: mvn -B -f engine/pom.xml verify
@@ -30,12 +37,13 @@ jobs:
           python3 engine/native/workload.py java -jar engine/xml-he12/target/cpiwb-xml-he12.jar serve --stdio
       - name: Regression test cases
         run: |
-          java -jar engine/xml-he99/target/cpiwb-xml-he99.jar test testdata/regression-project/tests
-          java -jar engine/groovy-v1/target/cpiwb-groovy-v1.jar test testdata/regression-project/tests
-          java -jar engine/groovy-v2/target/cpiwb-groovy-v2.jar test testdata/regression-project/tests
+          java -jar engine/xml-he99/target/cpiwb-xml-he99.jar test testdata/regression-project/tests --fail-if-none
+          java -jar engine/xml-he12/target/cpiwb-xml-he12.jar test testdata/regression-project/tests --fail-if-none
+          java -jar engine/groovy-v1/target/cpiwb-groovy-v1.jar test testdata/regression-project/tests --fail-if-none
+          java -jar engine/groovy-v2/target/cpiwb-groovy-v2.jar test testdata/regression-project/tests --fail-if-none
       # The engine jars run on any Java 17+ (command line, CI pipelines); a release attaches them.
       - if: matrix.os == 'ubuntu-latest'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: engine-jars
           path: |
@@ -53,9 +61,9 @@ jobs:
       fail-fast: false
       matrix:
         # macos-26 is Apple Silicon (Intel runners are no longer reliably available).
-        # ubuntu-22.04 on purpose: Linux binaries need at least the glibc they were built
-        # against, so the oldest supported runner keeps the packages usable on more distributions.
-        os: [windows-latest, macos-26, ubuntu-22.04]
+        # No Linux installers since 2026-11-11: the desktop app is built for Windows and macOS only.
+        # The engine jars, which run on Linux too, come from the engine-tests job.
+        os: [windows-latest, macos-26]
     runs-on: ${{ matrix.os }}
     env:
       # Without it, clang targets the runner's macOS version and the app would not start on older
@@ -63,14 +71,14 @@ jobs:
       # pass it on to its linker, so the native engines get it as a linker option below.
       MACOSX_DEPLOYMENT_TARGET: "11.0"
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-java@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         id: jdk21
         with: { distribution: temurin, java-version: "21" }
       - name: Java runtime for the Groovy engines (jlink, Java 21 like a tenant)
         shell: bash
         run: JAVA_HOME="${{ steps.jdk21.outputs.path }}" engine/groovy/build-jre.sh "$RUNNER_TEMP/jre"
-      - uses: graalvm/setup-graalvm@v1
+      - uses: graalvm/setup-graalvm@f70bc8032f90a104502824a54bcb94b6f01715bc # v1.6.8
         with:
           java-version: "21"
           distribution: graalvm-community
@@ -102,12 +110,10 @@ jobs:
             echo "cpiwb-xml-$id: minos $minos"
             [ "${minos%%.*}" -le 11 ] || { echo "::error::cpiwb-xml-$id needs macOS $minos, the app promises 11.0"; exit 1; }
           done
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with: { node-version: "22", cache: npm, cache-dependency-path: app/package-lock.json }
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Linux build dependencies
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-11-11
+        with: { toolchain: stable }
       - name: Install UI dependencies
         working-directory: app
         run: npm ci
@@ -137,20 +143,18 @@ jobs:
         env:
           CPIWB_JRE_DIR: ${{ runner.temp }}/jre
         run: |
-          npx tauri build ${{ runner.os == 'Linux' && '--bundles deb,rpm' || '' }}
+          npx tauri build
       # The release executable as an MCP client starts it (piped stdio; a GUI-subsystem program on Windows).
       - name: MCP server from the release build
         working-directory: app
         run: node scripts/mcp-smoke.mjs src-tauri/target/release/cpi-workbench${{ runner.os == 'Windows' && '.exe' || '' }} ../testdata/regression-project
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: cpi-workbench-${{ matrix.os }}
           path: |
             app/src-tauri/target/release/bundle/**/*.msi
             app/src-tauri/target/release/bundle/**/*.exe
             app/src-tauri/target/release/bundle/**/*.dmg
-            app/src-tauri/target/release/bundle/**/*.rpm
-            app/src-tauri/target/release/bundle/**/*.deb
           if-no-files-found: warn
           # Branch builds are for a quick test; a release keeps its installers as release assets too.
           retention-days: ${{ startsWith(github.ref, 'refs/tags/v') && 90 || 3 }}
@@ -160,15 +164,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        # Windows only: on Linux, Playwright needs the browser's system libraries from the Ubuntu mirrors.
+        os: [windows-latest]
     runs-on: ${{ matrix.os }}
     defaults:
       run: { shell: bash }
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-java@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with: { distribution: temurin, java-version: "21", cache: maven }
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with: { node-version: "22", cache: npm, cache-dependency-path: app/package-lock.json }
       - run: mvn -B -f engine/pom.xml -DskipTests package
       - working-directory: app
@@ -201,7 +206,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Tag matches the app and engine versions
         run: |
           version="${GITHUB_REF_NAME#v}"
@@ -217,14 +222,14 @@ jobs:
             fi
           done
           echo "VERSION=$version" >> "$GITHUB_ENV"
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           path: downloaded
       - name: Collect assets
         run: |
           mkdir assets
           # Spaces become dashes: "CPI Workbench_0.1.0_x64-setup.exe" -> "CPI-Workbench_0.1.0_x64-setup.exe".
-          find downloaded/cpi-workbench-* -type f \( -name '*.msi' -o -name '*.exe' -o -name '*.dmg' -o -name '*.deb' -o -name '*.rpm' \) \
+          find downloaded/cpi-workbench-* -type f \( -name '*.msi' -o -name '*.exe' -o -name '*.dmg' \) \
             -exec sh -c 'cp "$1" "assets/$(basename "$1" | tr " " "-")"' _ {} \;
           for jar in downloaded/engine-jars/*/target/*.jar; do
             name="$(basename "$jar" .jar)"
@@ -232,7 +237,7 @@ jobs:
           done
           (cd assets && sha256sum * > SHA256SUMS.txt)
           ls -la assets
-          for kind in msi exe dmg deb rpm jar; do
+          for kind in msi exe dmg jar; do
             ls assets/*."$kind" >/dev/null 2>&1 || { echo "::error::no .$kind file to release"; exit 1; }
           done
       - name: Release notes
@@ -252,7 +257,6 @@ jobs:
             echo "|---|---|"
             echo "| Windows 10/11 (x64) | \`CPI-Workbench_${VERSION}_x64-setup.exe\` (per user, no admin rights) or the \`.msi\` |"
             echo "| macOS 11+ (Apple Silicon) | \`CPI-Workbench_${VERSION}_aarch64.dmg\` |"
-            echo "| Linux x64 | \`.deb\` (Ubuntu 22.04+, Debian 12+) or \`.rpm\` (Fedora) |"
             echo "| Command line, any OS with Java 17+ | \`cpiwb-*-${VERSION}.jar\` |"
             echo
             echo "The installers are not code-signed yet, so Windows and macOS warn on the first start."

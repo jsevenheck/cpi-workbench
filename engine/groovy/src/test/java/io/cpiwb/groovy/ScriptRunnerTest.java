@@ -531,4 +531,28 @@ class ScriptRunnerTest {
         assertEquals("image/png", entry(r, "properties", "type").get("value"));
         assertEquals("8", entry(r, "properties", "size").get("value"));
     }
+
+    /** A body with a declared encoding reaches a script's stream in that encoding (review 2026-11-10). */
+    @Test
+    void bodyWithADeclaredEncodingAsStream() throws Exception {
+        String body = "<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?><a>Müller</a>";
+        Map<String, Object> r = run("def processData(m) { m.setBody(new " + (V2 ? "groovy.xml" : "groovy.util") + ".XmlSlurper().parse(m.getBody(java.io.InputStream)).text()); m }",
+                Json.o().with("body", body), Json.o().with("options", Json.o().with("bodyType", "InputStream")));
+        assertEquals("Müller", ((Map<?, ?>) r.get("output")).get("body"), Json.write(r));
+    }
+
+    /** A script or attachment path that is a link out of the project is refused, as file.read refuses it. */
+    @Test
+    void scriptPathThroughALinkOutOfTheProjectIsRefused(@org.junit.jupiter.api.io.TempDir java.nio.file.Path tmp) throws Exception {
+        java.nio.file.Path project = java.nio.file.Files.createDirectories(tmp.resolve("project"));
+        java.nio.file.Path outside = java.nio.file.Files.writeString(tmp.resolve("outside.groovy"), "def processData(m) { m }");
+        try {
+            java.nio.file.Files.createSymbolicLink(project.resolve("link.groovy"), outside);
+        } catch (java.io.IOException | UnsupportedOperationException e) {
+            org.junit.jupiter.api.Assumptions.assumeTrue(false, "no symbolic links here");
+        }
+        Exception e = org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class, () -> ENGINE.call("groovy.run",
+                Json.o().with("script", Json.o().with("path", "link.groovy")).with("baseDir", project.toString()).with("input", Json.o())));
+        assertTrue(e.getMessage().contains("symbolic link"), e.getMessage());
+    }
 }

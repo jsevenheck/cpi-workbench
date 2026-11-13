@@ -284,9 +284,16 @@ fn exe_name(base: &str) -> String {
     if cfg!(windows) { format!("{base}.exe") } else { base.to_string() }
 }
 
+/// Folders above the executable that may hold a repository build (`engine/.../target`): only for a debug
+/// build, which runs from `app/src-tauri/target/debug`. An installed app must not look there: if a bundled
+/// engine is missing (e.g. removed by a virus scanner), `C:\engine\...` could be another user's program.
+fn repository_dirs(app_dir: &Path) -> Vec<PathBuf> {
+    if cfg!(debug_assertions) { app_dir.ancestors().map(Path::to_path_buf).collect() } else { Vec::new() }
+}
+
 /// Finds the engine for a profile.
-/// Native: CPIWB_ENGINE_DIR, next to the app executable (bundled sidecar), repository build.
-/// Jar: CPIWB_ENGINE_DIR, bundled resources, repository build — plus a Java runtime.
+/// Native: CPIWB_ENGINE_DIR, next to the app executable (bundled sidecar), repository build (debug builds).
+/// Jar: CPIWB_ENGINE_DIR, bundled resources, repository build (debug builds) — plus a Java runtime.
 pub fn locate(name: &str, resource_dir: Option<&Path>) -> Option<Launch> {
     let (_, base, kind) = profile(name)?;
     let app_dir = std::env::current_exe().ok()?.parent()?.to_path_buf();
@@ -301,7 +308,7 @@ pub fn locate(name: &str, resource_dir: Option<&Path>) -> Option<Launch> {
                 }
             }
             let id = base.trim_start_matches("cpiwb-xml-");
-            for dir in app_dir.ancestors() {
+            for dir in repository_dirs(&app_dir) {
                 let native = dir.join("engine").join("native").join("out").join(&exe);
                 if native.is_file() {
                     return Some(Launch::Native(native));
@@ -323,7 +330,7 @@ pub fn locate(name: &str, resource_dir: Option<&Path>) -> Option<Launch> {
             }
             candidates.push(app_dir.join(&file));
             let id = base.trim_start_matches("cpiwb-groovy-");
-            for dir in app_dir.ancestors() {
+            for dir in repository_dirs(&app_dir) {
                 candidates.push(dir.join("engine").join(format!("groovy-{id}")).join("target").join(&file));
             }
             let jar = candidates.into_iter().find(|p| p.is_file())?;

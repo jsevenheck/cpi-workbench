@@ -24,7 +24,7 @@ public final class Main {
                 "Usage:",
                 "  " + name + " run --script <file> [--in <body file>] [--function processData]",
                 "                 [-H name=value[:Type]]... [-P name=value[:Type]]... [--project <dir>] [--json]",
-                "  " + name + " test <path> [--json]",
+                "  " + name + " test <path> [--json] [--fail-if-none]",
                 "  " + name + " serve --stdio | --http <port> [--ui <dir>]",
                 "  " + name + " info");
         if (args.length == 0 || args[0].equals("-h") || args[0].equals("--help")) {
@@ -39,6 +39,17 @@ public final class Main {
             case "serve":
                 RpcServer server = new RpcServer(engine, a.num("--timeout", 30_000));
                 if (a.has("--http")) {
+                    if (!a.has(RpcServer.WORKER)) {
+                        // This process only starts the engine again after a timed-out call.
+                        int code = RpcServer.supervise(args);
+                        if (code >= 0) {
+                            System.exit(code);
+                        }
+                    }
+                    server.supervised(a.has(RpcServer.WORKER));
+                    if (a.has(RpcServer.WORKER)) {
+                        RpcServer.exitWithParent();
+                    }
                     server.serveHttp((int) a.num("--http", 7778), a.get("--ui") == null ? null : Path.of(a.get("--ui")));
                     System.err.println(name + " listening on http://127.0.0.1:" + a.num("--http", 7778));
                     Thread.currentThread().join();
@@ -53,7 +64,7 @@ public final class Main {
                 break;
             case "test":
                 String p = a.positional(1);
-                System.exit(Cli.printTestResults(engine.runTests(Path.of(p == null ? "tests" : p)), a.has("--json")));
+                System.exit(Cli.printTestResults(engine.runTests(Path.of(p == null ? "tests" : p)), a.has("--json"), a.has("--fail-if-none")));
                 break;
             default:
                 System.err.println("Unknown command '" + args[0] + "'\n\n" + help);
@@ -71,7 +82,7 @@ public final class Main {
                 .with("baseDir", root.toString())
                 .with("function", a.get("--function") == null ? "processData" : a.get("--function"))
                 .with("input", Json.o()
-                        .with("body", a.get("--in") == null ? "" : Files.readString(Path.of(a.get("--in")), StandardCharsets.UTF_8))
+                        .with("body", a.get("--in") == null ? "" : io.cpiwb.core.TextFiles.read(Path.of(a.get("--in"))))
                         .with("headers", Cli.typed(a.all("-H")))
                         .with("properties", Cli.typed(a.all("-P"))));
         Map<String, Object> r = (Map<String, Object>) engine.call("groovy.run", req);

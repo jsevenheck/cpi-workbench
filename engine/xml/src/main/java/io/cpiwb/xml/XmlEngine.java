@@ -19,7 +19,7 @@ import java.util.Map;
 /** RPC dispatcher of the native XML engine (XSLT, XSD, XPath, project files, test runner). */
 public final class XmlEngine implements RpcHandler {
 
-    public static final String VERSION = "0.3.0";
+    public static final String VERSION = "0.3.1";
 
     static {
         io.cpiwb.core.TenantDefaults.apply();
@@ -164,6 +164,6 @@ public final class XmlEngine implements RpcHandler {
         }
         Path file = dir.resolve(value.toString()).normalize();
         String rel = root.relativize(file).toString().replace('\\', '/');
-        return Json.o().with("path", rel).with("content", Files.readString(file, StandardCharsets.UTF_8));
+        return Json.o().with("path", rel).with("content", io.cpiwb.core.TextFiles.read(file));
     }
 }

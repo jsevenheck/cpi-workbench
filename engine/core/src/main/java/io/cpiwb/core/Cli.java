@@ -12,7 +12,7 @@ public final class Cli {
 
     /** Tiny argument parser: --key value, repeated keys, flags, positionals. */
     public static final class Args {
-        private static final List<String> FLAGS = List.of("--json", "--stdio");
+        private static final List<String> FLAGS = List.of("--json", "--stdio", "--fail-if-none", RpcServer.WORKER);
         private final String[] args;
 
         public Args(String[] args) {
@@ -118,6 +118,30 @@ public final class Cli {
 
     @SuppressWarnings("unchecked")
     public static int printTestResults(Map<String, Object> r, boolean json) {
+        return printTestResults(r, json, false);
+    }
+
+    /**
+     * Exit code 0 when no case failed. No case file at all is a failure (a wrong path would pass otherwise);
+     * with {@code failIfNone}, so is a run in which this engine ran no case (all were for other engines).
+     */
+    @SuppressWarnings("unchecked")
+    public static int printTestResults(Map<String, Object> r, boolean json, boolean failIfNone) {
+        int ran = ((Number) r.get("passed")).intValue() + ((Number) r.get("failed")).intValue();
+        int code = printResults(r, json);
+        if (code == 0 && Json.arr(r, "results").isEmpty()) {
+            System.err.println("No test case (case.json) found.");
+            return 1;
+        }
+        if (code == 0 && failIfNone && ran == 0) {
+            System.err.println("No test case ran on this engine (--fail-if-none).");
+            return 1;
+        }
+        return code;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static int printResults(Map<String, Object> r, boolean json) {
         if (json) {
             System.out.println(Json.write(r));
         } else {

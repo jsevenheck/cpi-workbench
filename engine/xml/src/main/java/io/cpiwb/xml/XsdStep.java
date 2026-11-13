@@ -63,6 +63,11 @@ public final class XsdStep {
                 v.validate(doc);
             } catch (SAXParseException e) {
                 // already collected by the error handler
+            } catch (SAXException | IllegalStateException e) {
+                // e.g. an external entity or DTD of the input that the project resolver refused
+                if (docDiags.stream().noneMatch(d -> d.getSeverity() == Diagnostic.Severity.ERROR)) {
+                    docDiags.add(Diagnostic.error("Input: " + e.getMessage()));
+                }
             }
             boolean valid = docDiags.stream().noneMatch(d -> d.getSeverity() == Diagnostic.Severity.ERROR);
             result.with("ok", true).with("valid", valid);

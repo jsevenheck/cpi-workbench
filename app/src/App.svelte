@@ -10,12 +10,12 @@
   import FileView from './components/FileView.svelte';
   import SettingsMenu from './components/SettingsMenu.svelte';
   import { isDesktop } from './lib/engine';
-  import { app, xslt, xpath, groovy, fileView, init, runXslt, runXsd, runXpath, runFlowStep, runGroovy, onGroovyProfileChange } from './lib/store.svelte';
+  import { app, xslt, xpath, groovy, fileView, init, runXslt, runXsd, runXpath, runFlowStep, runGroovy, autoRunXslt, autoRunGroovy, onGroovyProfileChange } from './lib/store.svelte';
 
   onMount(async () => {
     await init();
-    if (app.tool === 'xslt' && !xslt.result && hasKind('xslt')) runXslt();
-    if (app.tool === 'groovy' && !groovy.result && hasKind('groovy')) runGroovy();
+    if (app.tool === 'xslt' && !xslt.result && hasKind('xslt')) autoRunXslt();
+    if (app.tool === 'groovy' && !groovy.result && hasKind('groovy')) autoRunGroovy();
   });
 
   function hasKind(kind: 'xslt' | 'groovy') {
@@ -40,17 +40,17 @@
   }
 
   function onProfile() {
-    if (app.tool === 'xslt') runXslt();
+    if (app.tool === 'xslt') autoRunXslt();
     if (app.tool === 'groovy') {
       onGroovyProfileChange();
-      runGroovy();
+      autoRunGroovy();
     }
   }
 
   function selectTool(id: typeof app.tool) {
     app.tool = id;
-    if (id === 'groovy' && !groovy.result && hasKind('groovy')) runGroovy();
-    if (id === 'xslt' && !xslt.result && hasKind('xslt')) runXslt();
+    if (id === 'groovy' && !groovy.result && hasKind('groovy')) autoRunGroovy();
+    if (id === 'xslt' && !xslt.result && hasKind('xslt')) autoRunXslt();
   }
 
   /** The webview's own menu (Back, Reload, Print) has nothing to offer in the desktop app; text fields keep theirs. */

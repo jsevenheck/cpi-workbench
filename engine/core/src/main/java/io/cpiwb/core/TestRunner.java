@@ -52,6 +52,9 @@ public final class TestRunner {
         }
     }
 
+    /** The runtime profiles of the four engines; a case names one of them or none. */
+    public static final List<String> PROFILES = List.of("saxon-he-9.9", "saxon-he-12", "groovy-1.x", "groovy-2.x");
+
     private final RpcHandler handler;
     private final Map<String, StepAdapter> adapters = new LinkedHashMap<>();
     private final String engineProfile;
@@ -98,6 +101,11 @@ public final class TestRunner {
             Map<String, Object> tc = Json.parseObject(Files.readString(caseFile, StandardCharsets.UTF_8));
             name = Json.str(tc, "name", name);
             String profile = Json.str(tc, "profile", null);
+            if (profile != null && !PROFILES.contains(profile)) {
+                // A misspelt profile would be skipped by every engine, and the case would never run.
+                msgs.add("Unknown profile '" + profile + "'. Profiles: " + String.join(", ", PROFILES));
+                return new CaseResult(name, dir, "error", msgs, elapsed(start));
+            }
             if (profile != null && engineProfile != null && !profile.equals(engineProfile)) {
                 msgs.add("Profile '" + profile + "' is handled by another engine (this engine: " + engineProfile + ")");
                 return new CaseResult(name, dir, "skipped", msgs, elapsed(start));
@@ -145,7 +153,12 @@ public final class TestRunner {
         }
         if (expect.containsKey("errorContains")) {
             String needle = Json.str(expect, "errorContains", "");
-            if (!Json.write(result.get("diagnostics")).contains(needle)) {
+            boolean found = Json.write(result.get("diagnostics")).contains(needle);
+            for (Object d : Json.arr(result, "diagnostics")) {
+                // The message itself: in the JSON text, quotes and backslashes are escaped.
+                found |= d instanceof Map && String.valueOf(((Map<?, ?>) d).get("message")).contains(needle);
+            }
+            if (!found) {
                 msgs.add("Expected an error containing '" + needle + "'");
             }
         }
@@ -235,7 +248,7 @@ public final class TestRunner {
         if (ref instanceof Map) {
             Map<String, Object> m = (Map<String, Object>) ref;
             if (m.get("file") != null) {
-                return Files.readString(dir.resolve(m.get("file").toString()), StandardCharsets.UTF_8);
+                return TextFiles.read(dir.resolve(m.get("file").toString()));
             }
             return Json.str(m, "text", "");
         }

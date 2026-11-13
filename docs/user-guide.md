@@ -25,6 +25,16 @@ Download the installer for your platform from the
 * Other files, such as `platform/*.json` or `cpi-workbench.json`, open in a **File** tab with their own
   editor. They no longer replace the input body.
 * The output updates live, or press **Ctrl+Enter**. Compile and runtime errors are marked in the editor.
+* Opening a file does not run its code. A Groovy script, a Groovy test case, and a stylesheet with
+  reflexive `java:` calls run for the first time when you press **Run** or **Ctrl+Enter**; from then
+  on live runs follow your edits. Such code runs with your rights, and a file may come from someone
+  else (an imported iFlow, a shared project). Other stylesheets run when opened, as before.
+* A message or file whose XML declaration names an encoding (`<?xml version="1.0" encoding="ISO-8859-1"?>`)
+  is handled in that encoding: the body reaches the parser, or a script's `InputStream` / `byte[]`,
+  in it, and the file is read and saved in it. A character the
+  declared encoding lacks (`€` in ISO-8859-1) is an error, in a run and when saving. Text without such a declaration is UTF-8.
+* A file cannot be renamed or copied to its own name in another spelling (`./a.xsl`, or `A.xsl` where
+  the file system ignores case).
 * **Parameters** (XSLT) shows how each `xsl:param` was bound: header, property or default.
 * **MPL**, **Console** and **API calls** (Groovy) show message processing log entries, `println`
   output and the calls to SAP APIs with their arguments.
@@ -88,7 +98,9 @@ Download the installer for your platform from the
   `String` (**null** passes null), and per `String[]` one context per line as a JSON array
   (`["A", "B"]`; `{"suppress": true}` and `{"xsiNil": true}` stand for SUPPRESS and xsi:nil). A
   `String[]` function runs once per context, a `String` function once (a tenant calls it once per
-  value). **Result** shows the returned
+  value). A script opened from the file tree with only mapping functions runs the first one on its first run;
+  each script keeps its function and arguments while the app is open, also when you switch to
+  another script or tab and back. **Result** shows the returned
   value or the output queue; `MappingContext` reads and sets the Headers and Properties tabs. The
   mapping itself (`.mmap`) is not simulated. SAP does not support Groovy Script 2.x in Message
   Mappings, and a tenant ran mapping scripts on Groovy 2.4.21 and Java 21, so use 1.x
@@ -105,12 +117,16 @@ Download the installer for your platform from the
 * XSLT, XSD and XPath runs read files inside the open project only: includes, `doc()`,
   `document()`, `unparsed-text()`, external entities and DTDs. The network is blocked. A symbolic
   link inside the project that leads outside it counts as outside; links within the project work.
-  `xsl:result-document` and `collection()` are not supported. XPath runs (the XPath tab and flow
+  `xsl:result-document` and `collection()` are not supported. A run fails when it asks for a file
+  outside the project, on both Saxon versions (Saxon 9.9 alone would go on with an empty `document()`). XPath runs (the XPath tab and flow
   steps) also refuse `fn:transform()`, and on Saxon 12 `fn:function-lookup()`: with a configuration of
   its own, a nested transformation would not be bound to the project. In XSLT, reflexive `java:` calls
   and `fn:transform()` are the exception: they are not restricted.
+* XPath runs see no environment variables: `environment-variable()` returns nothing.
 * Groovy scripts run as ordinary Java code with your user's rights; there is no sandbox. Run only
   scripts you trust.
+* Camel Simple (Router conditions, Content Modifier expressions, `${...}` in other flow steps) can call
+  Java methods on its values, so it is not restricted either. Flow steps run only when you press **Run step**.
 
 The installers are not code-signed yet; [Installing](install.md) shows how to start them the
 first time. The Windows `setup.exe` installs per user and needs no admin rights; the `.msi` installs
@@ -149,8 +165,12 @@ cpiwb-xml test testdata/regression-project/tests        # exit code 1 if a case 
 cpiwb-xml-he99 serve --http 7777 --ui app/dist    # then open http://127.0.0.1:7777
 ```
 
-Web mode listens on localhost only. The engine that serves the page also handles the project's
-files. To add more engines, pass them in a URL parameter:
+Web mode listens on localhost only and answers only requests that name this machine (`localhost`,
+`127.0.0.1` or `[::1]` in the Host header, and a local origin), so a foreign web page cannot drive an
+engine, not even one whose name is re-pointed to 127.0.0.1 (DNS rebinding). The engine that serves the
+page also handles the project's files. After a timed-out call an engine starts again by itself, as in the desktop app (the command you start
+only watches over a second process that serves); it then has no project open until the page's next call.
+To add more engines, pass them in a URL parameter (engines on this machine only):
 
 ```sh
 java -jar cpiwb-groovy-v1.jar serve --http 7778 &

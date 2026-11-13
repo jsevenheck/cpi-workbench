@@ -4,6 +4,7 @@ import { argText, mappingArgs } from './queue';
 import { toRows } from './rows';
 import { pathKey } from './paths';
 import { resolveSimpleFunctions } from './simple';
+import { callsJava } from './trust';
 
 export const SAMPLE_XSL = `<?xml version="1.0" encoding="UTF-8"?>
 <!-- Headers and exchange properties arrive as xsl:param with the same name, like in Cloud Integration.
@@ -84,10 +85,42 @@ export const xslt = $state({
   result: null as XsltResult | null,
   running: false,
   live: true,
+  /** False for a mapping with java: calls that was opened and not yet run by hand (see autoRunXslt). */
+  armed: true,
   casePath: null as string | null,
   compareOn: false,
   compare: null as CompareRun<XsltResult> | null,
 });
+
+/**
+ * Opening a file must not run its code: a Groovy script, and a stylesheet's reflexive java: calls, run with the
+ * user's rights, and a file may come from someone else (an imported iFlow, a shared project). Such a file runs
+ * for the first time when the user starts it (Run or Ctrl+Enter); from then on live runs follow the edits.
+ */
+function disarmXslt(path: string) {
+  xslt.armed = !callsJava(xslt.mapping);
+  if (!xslt.armed) {
+    xslt.result = null;
+    xslt.compare = null;
+    app.status = `Opened ${path}. It calls Java (java: namespace), so it has not run: press Ctrl+Enter to run it.`;
+  }
+}
+
+function disarmGroovy(what: string) {
+  groovy.armed = false;
+  groovy.result = null;
+  groovy.compare = null;
+  app.status = `Opened ${what}. A script runs with your rights, so it has not run: press Ctrl+Enter to run it.`;
+}
+
+/** A live run or a run on showing a tab: only for code the user has started once. */
+export function autoRunXslt() {
+  if (xslt.armed) void runXslt();
+}
+
+export function autoRunGroovy() {
+  if (groovy.armed) void runGroovy();
+}
 
 /** The same run on the other runtime of the same kind (Saxon 9.9 vs 12, Groovy 1.x vs 2.x). */
 export interface CompareRun<R> {
@@ -147,6 +180,8 @@ export const groovy = $state({
   result: null as GroovyResult | null,
   running: false,
   live: true,
+  /** False for a script that was opened and not yet run by hand (see autoRunGroovy). */
+  armed: true,
   casePath: null as string | null,
   /** Inputs only a test case can hold (attachments, SOAP headers, platform overrides); kept while it is open. */
   caseExtras: null as CaseExtras | null,
@@ -338,6 +373,7 @@ function safeSet(key: string, v: string | null) {
 export async function open(dir: string, initProject = false) {
   app.error = '';
   const r = await openProject(dir, initProject);
+  if (app.project?.root !== r.root) scriptMemory.clear(); // its paths belong to the other project
   app.project = { root: r.root, files: r.files };
   safeSet('cpiwb.project', r.root);
   await loadIflowSteps();
@@ -350,6 +386,7 @@ export async function closeProject() {
   if (!(await mayDiscard('file'))) return;
   await closeEngineProject();
   app.project = null;
+  scriptMemory.clear();
   safeSet('cpiwb.project', null);
   xslt.mappingPath = null;
   xslt.casePath = null;
@@ -398,7 +435,7 @@ export async function openIflowStep(step: IflowStep) {
     pickMappingFunction = true;
     await openFile(first, { profile: step.profile });
     app.status = `Message Mapping "${step.name}" is not simulated; opened its script ${first.split('/').pop()}`
-      + (rest.length ? ` (also: ${rest.map((p) => p.split('/').pop()).join(', ')})` : '') + '.';
+      + (rest.length ? ` (also: ${rest.map((p) => p.split('/').pop()).join(', ')})` : '') + '. Press Ctrl+Enter to run it.';
     return;
   }
   if (!step.file || !step.fileFound) {
@@ -447,11 +484,62 @@ export interface OpenOptions {
   profile?: Profile;
 }
 
+/**
+ * The function and arguments each Groovy script had when another one was opened, so that opening it again
+ * (e.g. from the file tree) brings them back. Kept for the session only.
+ */
+const scriptMemory = new Map<string, { functionName: string; args: (string | null)[] }>();
+
+function rememberScript() {
+  if (groovy.scriptPath && !groovy.casePath) {
+    scriptMemory.set(groovy.scriptPath, { functionName: groovy.functionName, args: [...groovy.args] });
+  }
+}
+
+function isOpenInItsTab(path: string): boolean {
+  const lower = path.toLowerCase();
+  if (lower.endsWith('.groovy') || lower.endsWith('.gsh')) return groovy.scriptPath === path && !groovy.casePath;
+  if (lower.endsWith('.xsl') || lower.endsWith('.xslt')) return xslt.mappingPath === path && !xslt.casePath;
+  if (lower.endsWith('.xsd')) return xsd.schemaPath === path && !xsd.casePath;
+  return false;
+}
+
+async function reopen(path: string) {
+  const lower = path.toLowerCase();
+  const content = await readFile(path);
+  if (lower.endsWith('.groovy') || lower.endsWith('.gsh')) {
+    if (groovy.script === groovy.savedScript && content !== groovy.savedScript) {
+      groovy.script = content;
+      groovy.savedScript = content;
+      disarmGroovy(path); // changed on disk: code the user has not started yet
+    }
+    app.tool = 'groovy';
+    if (!groovy.result) rerunIfLive('groovy');
+  } else if (lower.endsWith('.xsd')) {
+    if (xsd.schema === xsd.savedSchema && content !== xsd.savedSchema) {
+      xsd.schema = content;
+      xsd.savedSchema = content;
+    }
+    app.tool = 'xsd';
+  } else {
+    if (xslt.mapping === xslt.savedMapping && content !== xslt.savedMapping) {
+      xslt.mapping = content;
+      xslt.savedMapping = content;
+      disarmXslt(path); // changed on disk: java: calls the user has not started yet
+    }
+    app.tool = 'xslt';
+    if (!xslt.result) rerunIfLive('xslt');
+  }
+}
+
 export async function openFile(path: string, opts: OpenOptions = {}) {
   try {
     app.error = '';
     const lower = path.toLowerCase();
     if (lower.endsWith('case.json')) return await loadCase(path);
+    // The file that is open in its tab (not as part of a test case): go back to it with its settings, and
+    // take the file's content if it changed on disk while the editor has no unsaved changes.
+    if (!opts.functionName && !opts.profile && isOpenInItsTab(path)) return await reopen(path);
     if (!opts.discardChecked && !(await mayDiscard(editorFor(path)))) return;
     const content = await readFile(path);
     if (lower.endsWith('.xsl') || lower.endsWith('.xslt')) {
@@ -460,23 +548,28 @@ export async function openFile(path: string, opts: OpenOptions = {}) {
       xslt.savedMapping = content;
       xslt.casePath = null;
       app.tool = 'xslt';
+      disarmXslt(path);
       rerunIfLive('xslt');
     } else if (lower.endsWith('.groovy') || lower.endsWith('.gsh')) {
+      rememberScript(); // the script that was open, before its path changes
       groovy.scriptPath = path;
       groovy.script = content;
       groovy.savedScript = content;
       groovy.casePath = null;
       groovy.caseExtras = null;
-      groovy.functionName = opts.functionName ?? 'processData';
+      const last = opts.functionName ? undefined : scriptMemory.get(path);
+      groovy.functionName = opts.functionName ?? last?.functionName ?? 'processData';
       groovy.mapping = null;
       groovy.functions = [];
-      groovy.args = [];
+      groovy.args = last ? [...last.args] : [];
       forgetGroovyRun();
+      // A script with only mapping functions: the first run picks one instead of failing on processData.
+      if (!opts.functionName && !last) pickMappingFunction = true;
       if (opts.profile && hasProfile(opts.profile)) app.groovyProfile = opts.profile;
       else if (content.includes('com.sap.it.script.v2.api') && hasProfile('groovy-2.x')) app.groovyProfile = 'groovy-2.x';
       else if (content.includes('com.sap.gateway.ip.core.customdev.util') && hasProfile('groovy-1.x')) app.groovyProfile = 'groovy-1.x';
       app.tool = 'groovy';
-      rerunIfLive('groovy');
+      disarmGroovy(path);
     } else if (lower.endsWith('.xsd')) {
       xsd.schemaPath = path;
       xsd.schema = content;
@@ -621,6 +714,12 @@ export async function deleteFile(path: string) {
 export async function copyFile(path: string, move: boolean) {
   const r = await ask(move ? `Rename ${path} to` : `Copy ${path} to`, path);
   if (!r || r.value === path) return;
+  // The same file under another spelling (./a.xsl, or A.xsl where the file system ignores case): writing it and
+  // then deleting the "old" name would delete the file itself.
+  if (pathKey(r.value) === pathKey(path)) {
+    app.error = `${r.value} is the same file as ${path} (names that differ only in upper and lower case or in ./ are not ${move ? 'renamed' : 'copied'} here).`;
+    return;
+  }
   try {
     if (!(await mayOverwrite(r.value))) return;
     await writeFile(r.value, await readFile(path));
@@ -791,12 +890,13 @@ async function compareRun<R>(method: string, params: any, current: Profile): Pro
 
 /** A mapping, script or input loaded from a file re-runs like a change typed in the editor. */
 function rerunIfLive(tool: StepTool) {
-  if (tool === 'xslt' && xslt.live) void runXslt();
-  else if (tool === 'groovy' && groovy.live) void runGroovy();
+  if (tool === 'xslt' && xslt.live) autoRunXslt();
+  else if (tool === 'groovy' && groovy.live) autoRunGroovy();
 }
 
 export async function runXslt() {
   const seq = ++runSeq;
+  xslt.armed = true;
   xslt.running = true;
   app.error = '';
   try {
@@ -828,6 +928,7 @@ let pickMappingFunction = false;
 
 export async function runGroovy() {
   const seq = ++groovySeq;
+  groovy.armed = true;
   groovy.running = true;
   app.error = '';
   try {
@@ -1151,6 +1252,7 @@ function joinPath(dir: string, rel: string): string {
 }
 
 async function loadGroovyCase(path: string, dir: string, tc: any) {
+  rememberScript();
   const scriptPath = joinPath(dir, tc.script);
   groovy.scriptPath = scriptPath;
   groovy.script = await readFile(scriptPath);
@@ -1170,8 +1272,7 @@ async function loadGroovyCase(path: string, dir: string, tc: any) {
   groovy.caseExtras = extras.attachments || extras.soapHeaders || extras.platform ? extras : null;
   groovy.casePath = path;
   app.tool = 'groovy';
-  app.status = 'Loaded test case ' + (tc.name ?? path);
-  await runGroovy();
+  disarmGroovy('test case ' + (tc.name ?? path));
 }
 
 async function loadXsdCase(path: string, dir: string, tc: any) {
@@ -1211,5 +1312,6 @@ export async function loadCase(path: string) {
   xslt.casePath = path;
   app.tool = 'xslt';
   app.status = 'Loaded test case ' + (tc.name ?? path);
-  await runXslt();
+  disarmXslt('test case ' + (tc.name ?? path));
+  if (xslt.armed) await runXslt();
 }

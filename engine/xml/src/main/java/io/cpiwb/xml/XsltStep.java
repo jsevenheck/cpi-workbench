@@ -234,7 +234,8 @@ public final class XsltStep {
                         });
             }
             List<Diagnostic> runtimeDiags = new ArrayList<>();
-            tr.setErrorListener(new CollectingListener(runtimeDiags));
+            CollectingListener runtimeListener = new CollectingListener(runtimeDiags);
+            tr.setErrorListener(runtimeListener);
             SaxonCompat.captureMessages(tr, messages::add);
 
             Map<String, Object> first = "header".equals(precedence) ? input.getProperties() : input.getHeaders();
@@ -277,6 +278,12 @@ public final class XsltStep {
                 throw new TransformerException(e.getMessage(), e);
             } finally {
                 diags.addAll(runtimeDiags);
+            }
+            if (runtimeListener.refused) {
+                // Saxon 9.9 goes on without the document (a recoverable error); the result would lack what the
+                // stylesheet read, without a failure. Saxon 12 stops by itself.
+                result.with("transformMs", (System.nanoTime() - t1) / 1_000_000.0);
+                return finish(result, false, "runtime", diags, messages, input, null, t0, compileNanos, cached, bindings, handle);
             }
             String enc = tr.getOutputProperty(OutputKeys.ENCODING);
             Charset cs = charset(enc);
@@ -409,15 +416,27 @@ public final class XsltStep {
             }
             t = t.getCause();
         }
-        String msg = e.getMessage();
-        if (msg == null && e.getCause() != null) {
-            msg = e.getCause().getMessage();
-        }
-        msg = editionHint(msg);
+        String msg = editionHint(message(e));
         return new Diagnostic(severity, msg, code,
                 loc == null ? null : displayId(loc.getSystemId()),
                 loc == null ? -1 : loc.getLineNumber(),
                 loc == null ? -1 : loc.getColumnNumber());
+    }
+
+    /**
+     * The exception's message. Saxon 9.9 wraps what the project resolver refused in "Exception thrown by
+     * URIResolver"; the reason (e.g. access outside the project) is in the cause.
+     */
+    static String message(Throwable e) {
+        String msg = e.getMessage();
+        Throwable c = e.getCause();
+        if (c != null && c != e && (msg == null || msg.startsWith("Exception thrown by URIResolver"))) {
+            String inner = message(c);
+            if (inner != null) {
+                return inner;
+            }
+        }
+        return msg == null ? e.toString() : msg;
     }
 
     /** Explains Saxon's "needs PE/EE" errors: CPI runs Saxon-EE, the simulator Saxon-HE. */
@@ -447,6 +466,8 @@ public final class XsltStep {
 
     static final class CollectingListener implements ErrorListener {
         private final List<Diagnostic> sink;
+        /** A warning was about a file or address the project resolver refused. */
+        boolean refused;
 
         CollectingListener(List<Diagnostic> sink) {
             this.sink = sink;
@@ -454,7 +475,12 @@ public final class XsltStep {
 
         @Override
         public void warning(TransformerException e) {
-            sink.add(toDiagnostic(e, Diagnostic.Severity.WARNING));
+            boolean thisRefused = false;
+            for (Throwable t = e; t != null; t = t.getCause() == t ? null : t.getCause()) {
+                thisRefused |= t instanceof ProjectResolver.AccessRefused;
+            }
+            refused |= thisRefused;
+            sink.add(toDiagnostic(e, thisRefused ? Diagnostic.Severity.ERROR : Diagnostic.Severity.WARNING));
         }
 
         @Override

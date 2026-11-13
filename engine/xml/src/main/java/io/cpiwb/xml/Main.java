@@ -24,7 +24,8 @@ public final class Main {
             "                 [--project <dir>] [--out <file>] [--json]",
             "  cpiwb-xml validate --xsd <file> --in <file> [--project <dir>] [--json]",
             "  cpiwb-xml xpath --expr <xpath> --in <file> [--version 1.0|3.1] [--ns prefix=uri]... [--json]",
-            "  cpiwb-xml test <path> [--json]          run test cases (case.json) below <path>",
+            "  cpiwb-xml test <path> [--json] [--fail-if-none]   run test cases (case.json) below <path>;",
+            "                 --fail-if-none: fail when this engine ran none of them",
             "  cpiwb-xml serve --stdio                 JSON-RPC over stdin/stdout (desktop app)",
             "  cpiwb-xml serve --http <port> [--ui <dir>]   JSON-RPC + UI on http://127.0.0.1:<port>",
             "  cpiwb-xml info",
@@ -46,7 +47,7 @@ public final class Main {
                 System.out.println(Json.write(engine.describe()));
                 break;
             case "serve":
-                serve(engine, a);
+                serve(engine, a, args);
                 break;
             case "xslt":
                 System.exit(xslt(engine, a));
@@ -66,9 +67,20 @@ public final class Main {
         }
     }
 
-    private static void serve(XmlEngine engine, Args a) throws Exception {
+    private static void serve(XmlEngine engine, Args a, String[] args) throws Exception {
         RpcServer server = new RpcServer(engine, a.num("--timeout", 30_000));
         if (a.has("--http")) {
+            if (!a.has(RpcServer.WORKER)) {
+                // This process only starts the engine again after a timed-out call.
+                int code = RpcServer.supervise(args);
+                if (code >= 0) {
+                    System.exit(code);
+                }
+            }
+            server.supervised(a.has(RpcServer.WORKER));
+            if (a.has(RpcServer.WORKER)) {
+                RpcServer.exitWithParent();
+            }
             int port = (int) a.num("--http", 7777);
             Path ui = a.get("--ui") == null ? null : Path.of(a.get("--ui"));
             server.serveHttp(port, ui);
@@ -83,7 +95,7 @@ public final class Main {
 
     private static Map<String, Object> input(Args a) throws Exception {
         Map<String, Object> in = new LinkedHashMap<>();
-        in.put("body", a.get("--in") == null ? "" : Files.readString(Path.of(a.get("--in")), StandardCharsets.UTF_8));
+        in.put("body", a.get("--in") == null ? "" : io.cpiwb.core.TextFiles.read(Path.of(a.get("--in"))));
         in.put("headers", Cli.typed(a.all("-H")));
         in.put("properties", Cli.typed(a.all("-P")));
         return in;
@@ -173,7 +185,7 @@ public final class Main {
     private static int test(XmlEngine engine, Args a) throws Exception {
         String path = a.positional(1);
         Map<String, Object> r = engine.runTests(Path.of(path == null ? "tests" : path));
-        return Cli.printTestResults(r, a.has("--json"));
+        return Cli.printTestResults(r, a.has("--json"), a.has("--fail-if-none"));
     }
 
 }

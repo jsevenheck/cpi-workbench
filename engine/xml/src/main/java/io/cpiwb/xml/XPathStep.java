@@ -20,12 +20,7 @@ import org.xml.sax.InputSource;
 
 import javax.xml.namespace.NamespaceContext;
 import javax.xml.parsers.DocumentBuilderFactory;
-import javax.xml.transform.OutputKeys;
-import javax.xml.transform.Transformer;
 import javax.xml.transform.TransformerException;
-import javax.xml.transform.TransformerFactory;
-import javax.xml.transform.dom.DOMSource;
-import javax.xml.transform.stream.StreamResult;
 import javax.xml.xpath.XPath;
 import javax.xml.xpath.XPathEvaluationResult;
 import javax.xml.xpath.XPathFactory;
@@ -165,11 +160,8 @@ public final class XPathStep {
 
     private static Map<String, Object> describeDom(Node n) throws Exception {
         if (n.getNodeType() == Node.ELEMENT_NODE || n.getNodeType() == Node.DOCUMENT_NODE) {
-            Transformer t = TransformerFactory.newDefaultInstance().newTransformer();
-            t.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "yes");
-            StringWriter w = new StringWriter();
-            t.transform(new DOMSource(n), new StreamResult(w));
-            return Json.o().with("kind", "element").with("name", n.getNodeName()).with("value", w.toString());
+            return Json.o().with("kind", "element").with("name", n.getNodeName())
+                    .with("value", io.cpiwb.core.DomXml.serialize(n));
         }
         return Json.o().with("kind", n.getNodeType() == Node.ATTRIBUTE_NODE ? "attribute" : "text")
                 .with("name", n.getNodeName()).with("value", n.getNodeValue());

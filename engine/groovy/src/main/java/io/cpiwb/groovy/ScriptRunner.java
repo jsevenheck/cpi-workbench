@@ -25,17 +25,12 @@ import org.w3c.dom.Element;
 
 import javax.xml.namespace.QName;
 import javax.xml.stream.XMLStreamException;
-import javax.xml.transform.OutputKeys;
-import javax.xml.transform.Transformer;
 import javax.xml.transform.TransformerFactory;
-import javax.xml.transform.dom.DOMSource;
-import javax.xml.transform.stream.StreamResult;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.io.PrintStream;
 import java.io.Reader;
-import java.io.StringWriter;
 import java.lang.reflect.Method;
 import java.net.URL;
 import java.net.URLClassLoader;
@@ -266,11 +261,7 @@ public final class ScriptRunner {
             return null;
         }
         try {
-            Transformer t = TransformerFactory.newInstance().newTransformer();
-            t.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "yes");
-            StringWriter w = new StringWriter();
-            t.transform(new DOMSource(element), new StreamResult(w));
-            return w.toString();
+            return io.cpiwb.core.DomXml.serialize(element, TransformerFactory.newInstance());
         } catch (Exception e) {
             return element.toString();
         }

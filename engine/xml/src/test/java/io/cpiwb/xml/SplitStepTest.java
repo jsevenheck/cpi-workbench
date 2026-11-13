@@ -137,4 +137,19 @@ class SplitStepTest {
         assertFalse(Json.bool(split("general", "xpath", "/r/i[1]", null, "<r><i/></r>", null), "ok", true));
         assertFalse(Json.bool(split("general", "xpath", "/r/i", "0", "<r><i/></r>", null), "ok", true));
     }
+
+    /** The JDK serializer writes the computer's line separator; the parts keep the input's LF on Windows too. */
+    @Test
+    void partsUseLfOnEveryComputer() {
+        for (String splitter : List.of("general", "iterating")) {
+            Map<String, Object> r = split(splitter, "xpath", "/n1:customer/n1:order", null, CUSTOMER,
+                    Json.o().with("n1", "http://myCustomer.com"));
+            assertTrue(Json.bool(r, "ok", false), () -> String.valueOf(r.get("diagnostics")));
+            for (Object m : Json.arr(r, "messages")) {
+                String body = (String) ((Map<String, Object>) m).get("body");
+                assertFalse(body.contains("\r"), splitter + ": " + body);
+                assertTrue(body.contains("\n            <item>"), splitter + ": " + body);
+            }
+        }
+    }
 }

@@ -86,4 +86,12 @@ class GatherStepTest {
         // A byte order mark alone is dropped like the declaration.
         assertTrue(body(gather("sameXml", "combine", "", "", List.of("\uFEFF<?xml version='1.0'?><r/>"))).contains("<multimap:Message1><r/>"));
     }
+
+    @Test
+    void combineAtXPathUsesLfOnEveryComputer() {
+        String body = body(gather("sameXml", "combineAtXPath", "/note/to", "/note",
+                List.of(note("Jack"), note("Chris"))));
+        assertFalse(body.contains("\r"), body);
+        assertTrue(body.contains("\n<from>Jill</from>"), body);
+    }
 }

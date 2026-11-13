@@ -31,6 +31,10 @@ of its version.
   script; a `String[]` argument is edited as the source field's values grouped by context (**+ Value**,
   **+ Context**, per value text, SUPPRESS, xsi:nil or null), with **Text** for the JSON form of `case.json`.
   **Result** lists the output queue as one row per context.
+### Fixed
+
+- **Splitter and Gather on Windows**: split messages, a Gather's Combine at XPath, an XPath's element results and
+  a script's SOAP headers in the result use LF line breaks, as on macOS and Linux; they had CRLF from the Java XML writer.
 
 ## [0.3.1] - 2026-11-11
 

@@ -10,15 +10,9 @@ import org.xml.sax.InputSource;
 
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
-import javax.xml.transform.OutputKeys;
-import javax.xml.transform.Transformer;
-import javax.xml.transform.TransformerFactory;
-import javax.xml.transform.dom.DOMSource;
-import javax.xml.transform.stream.StreamResult;
 import javax.xml.xpath.XPath;
 import javax.xml.xpath.XPathConstants;
 import javax.xml.xpath.XPathFactory;
-import java.io.StringWriter;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -208,10 +202,6 @@ public final class GatherStep {
         for (Node n : nodes) {
             at.appendChild(result.importNode(n, true));
         }
-        Transformer t = TransformerFactory.newDefaultInstance().newTransformer();
-        t.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "yes");
-        StringWriter w = new StringWriter();
-        t.transform(new DOMSource(result), new StreamResult(w));
-        return XML_DECLARATION + w;
+        return XML_DECLARATION + io.cpiwb.core.DomXml.serialize(result);
     }
 }

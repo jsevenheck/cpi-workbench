@@ -5,7 +5,7 @@
   import Editor from './Editor.svelte';
   import KeyValueTable from './KeyValueTable.svelte';
   import CompareView from './CompareView.svelte';
-  import { app, groovy, runGroovy, autoRunGroovy, saveScript, saveScriptAs, formatXml, otherProfile, saveInput } from '../lib/store.svelte';
+  import { app, groovy, runGroovy, autoRunGroovy, saveScript, saveScriptAs, formatXml, otherProfile, saveInput, closeInput, closeEditorFile } from '../lib/store.svelte';
   import { reindentGroovy } from '../lib/indent';
   import { formatQueue } from '../lib/queue';
   import type { CaseExtras } from '../lib/store.svelte';
@@ -98,7 +98,7 @@
 <div class="groovy" style:grid-template-columns={paneColumns(panes.sizes)}>
   <section class="pane input" aria-label="Input message">
     <header>
-      <h2 title={app.inputPaths.groovy ?? ''}>Input message{#if app.inputPaths.groovy} <span class="from">· {app.inputPaths.groovy.split('/').pop()}</span>{/if}</h2>
+      <h2 title={app.inputPaths.groovy ?? ''}>Input message{#if app.inputPaths.groovy} <span class="from">· {app.inputPaths.groovy.split('/').pop()}</span><button class="close-file" onclick={() => closeInput('groovy')} title="Close the input file (it stays on disk)" aria-label="Close input file">×</button>{/if}</h2>
       <div class="tabs" role="tablist">
         {#if mapping}
           <button role="tab" class:active={inputTab === 'args'} onclick={() => (inputTab = 'args')}>Arguments <span class="count">{valueParams.length}</span></button>
@@ -161,7 +161,9 @@
 
   <section class="pane script" aria-label="Groovy script">
     <header>
-      <h2 title={groovy.scriptPath ?? 'Unsaved script'}>{groovy.scriptPath ?? 'script.groovy (unsaved)'}{#if dirty}<span class="dirty">●</span>{/if}</h2>
+      <h2 title={groovy.casePath ? 'From test case ' + groovy.casePath : groovy.scriptPath ?? 'Unsaved script'}>{groovy.scriptPath ?? (groovy.script ? 'script.groovy (unsaved)' : 'No script open')}{#if dirty}<span class="dirty">●</span>{/if}</h2>
+      {#if groovy.scriptPath || groovy.casePath || groovy.script}<button class="close-file" onclick={() => closeEditorFile('groovy')}
+        title="Close this file (it stays on disk)" aria-label="Close file">×</button>{/if}
       <label class="fn" title="Function the Groovy Script step calls">fn
         <input class="mono" list="groovy-functions" bind:value={groovy.functionName} onchange={changed} aria-label="Function name" />
         <datalist id="groovy-functions">{#each functionNames as f}<option value={f}></option>{/each}</datalist>
@@ -190,6 +192,7 @@
       </div>
     {/if}
     <div class="body">
+      {#if !groovy.script}<p class="empty-hint">Open a script from the project, or type or paste one here.</p>{/if}
       <Editor bind:this={scriptEditor} bind:value={groovy.script} language="java" markers={markers}
         onchange={changed} onrun={runGroovy} onsave={saveScript} label="Groovy script" />
     </div>

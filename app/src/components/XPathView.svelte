@@ -3,7 +3,7 @@
   import { paneSizes, paneColumns } from '../lib/split.svelte';
   import Editor from './Editor.svelte';
   import KeyValueTable from './KeyValueTable.svelte';
-  import { app, xpath, xslt, runXpath, saveInput } from '../lib/store.svelte';
+  import { app, xpath, xslt, runXpath, saveInput, closeInput } from '../lib/store.svelte';
 
   const panes = paneSizes('xpath', [1.3, 1]);
 
@@ -37,7 +37,7 @@
   </div>
   <div class="grid" style:grid-template-columns={paneColumns(panes.sizes)}>
     <section class="pane">
-      <header><h2 title={app.inputPaths.xpath ?? ''}>XML document{#if app.inputPaths.xpath} <span class="from">· {app.inputPaths.xpath.split('/').pop()}</span>{/if}</h2><div class="spacer"></div>
+      <header><h2 title={app.inputPaths.xpath ?? ''}>XML document{#if app.inputPaths.xpath} <span class="from">· {app.inputPaths.xpath.split('/').pop()}</span><button class="close-file" onclick={() => closeInput('xpath')} title="Close the input file (it stays on disk)" aria-label="Close input file">×</button>{/if}</h2><div class="spacer"></div>
         <button class="small" onclick={useXsltInput}>Use XSLT input</button>
         <button class="small" onclick={useXsltOutput} disabled={!xslt.result?.output}>Use XSLT output</button>
         <button class="small" onclick={saveInput} disabled={!app.project} title={app.project ? 'Save the input body under inputs/' : 'Open a project to save'}>Save…</button>

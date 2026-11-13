@@ -115,11 +115,12 @@ function disarmGroovy(what: string) {
 
 /** A live run or a run on showing a tab: only for code the user has started once. */
 export function autoRunXslt() {
-  if (xslt.armed) void runXslt();
+  // An empty editor (a closed mapping) has nothing to run.
+  if (xslt.armed && xslt.mapping.trim()) void runXslt();
 }
 
 export function autoRunGroovy() {
-  if (groovy.armed) void runGroovy();
+  if (groovy.armed && groovy.script.trim()) void runGroovy();
 }
 
 /** The same run on the other runtime of the same kind (Saxon 9.9 vs 12, Groovy 1.x vs 2.x). */
@@ -611,6 +612,87 @@ export function closeFileView() {
   fileView.path = null;
   fileView.content = fileView.saved = '';
   if (app.tool === 'file') app.tool = app.stepTool;
+}
+
+/**
+ * Closes the file open in a step editor, and the test case it came from: the editor is left empty and without a
+ * path, so Save asks for a new one. The file on disk stays as it is. Asks first when there are unsaved changes.
+ */
+export async function closeEditorFile(editor: 'xslt' | 'groovy' | 'xsd'): Promise<boolean> {
+  if (!(await mayDiscard(editor))) return false;
+  if (editor === 'xslt') {
+    const path = xslt.casePath ?? xslt.mappingPath;
+    if (xslt.casePath) {
+      // The input came with the case: it goes with it.
+      xslt.body = '';
+      xslt.headers = [];
+      xslt.properties = [];
+    }
+    runSeq++; // a run still under way belongs to the closed file
+    xslt.running = false;
+    xslt.mappingPath = xslt.casePath = null;
+    xslt.mapping = xslt.savedMapping = '';
+    xslt.result = xslt.compare = null;
+    xslt.armed = true;
+    app.status = path ? 'Closed ' + path : 'Closed the unsaved mapping';
+  } else if (editor === 'groovy') {
+    const path = groovy.casePath ?? groovy.scriptPath;
+    if (groovy.casePath) {
+      groovy.body = '';
+      groovy.headers = [];
+      groovy.properties = [];
+    } else {
+      rememberScript(); // opening it again brings back its function and arguments
+    }
+    forgetGroovyRun();
+    groovy.scriptPath = groovy.casePath = null;
+    groovy.caseExtras = null;
+    groovy.script = groovy.savedScript = '';
+    groovy.functionName = 'processData';
+    groovy.mapping = null;
+    groovy.functions = [];
+    groovy.args = [];
+    groovy.result = groovy.compare = null;
+    groovy.armed = true;
+    app.status = path ? 'Closed ' + path : 'Closed the unsaved script';
+  } else {
+    const path = xsd.casePath ?? xsd.schemaPath;
+    if (xsd.casePath) xsd.body = '';
+    xsd.schemaPath = xsd.casePath = null;
+    xsd.schema = xsd.savedSchema = '';
+    xsd.result = null;
+    app.status = path ? 'Closed ' + path : 'Closed the unsaved schema';
+  }
+  return true;
+}
+
+/**
+ * Closes the file a step tool's input body was loaded from: the body is emptied and no longer names the file.
+ * The body is a copy, so the file on disk stays as it is; headers and properties do not come from the file and stay.
+ */
+export function closeInput(tool: StepTool) {
+  const path = app.inputPaths[tool];
+  if (tool === 'xsd') {
+    xsd.body = '';
+    xsd.result = null;
+  } else if (tool === 'xpath') {
+    xpath.body = '';
+    xpath.result = null;
+  } else if (tool === 'flow') {
+    flow.body = '';
+    flow.cmResult = flow.routerResult = flow.splitResult = flow.filterResult = flow.gatherResult = flow.converterResult = null;
+  } else if (tool === 'groovy') {
+    forgetGroovyRun();
+    groovy.body = '';
+    groovy.result = groovy.compare = null;
+  } else {
+    runSeq++;
+    xslt.running = false;
+    xslt.body = '';
+    xslt.result = xslt.compare = null;
+  }
+  delete app.inputPaths[tool];
+  if (path) app.status = 'Closed input ' + path;
 }
 
 export async function saveFileView(): Promise<boolean> {

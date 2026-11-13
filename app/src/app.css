@@ -61,3 +61,8 @@ code, kbd { font-family: var(--mono); font-size: 0.95em; background: var(--surfa
 .count { display: inline-block; min-width: 14px; padding: 0 4px; margin-left: 4px; border-radius: 7px; background: var(--surface); border: 1px solid var(--border); font-size: 10px; text-align: center; }
 .count.hl { background: var(--changed-bg); }
 .count.err { background: var(--err-bg); color: var(--err); }
+/* The × that closes the file open in a pane (the file on disk stays). */
+button.close-file { border: none; background: none; padding: 0 5px; margin-left: 2px; color: var(--muted); font-size: 14px; line-height: 1; border-radius: 4px; }
+button.close-file:hover:not(:disabled) { color: var(--fg); }
+/* Shown over an empty editor; clicks reach the editor below. */
+.empty-hint { position: absolute; top: 48px; left: 0; right: 0; margin: 0; text-align: center; color: var(--muted); pointer-events: none; z-index: 1; padding: 0 16px; }

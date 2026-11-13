@@ -18,6 +18,10 @@ Download the installer for your platform from the
   name that exists asks before it overwrites the file, and opening another file asks before it
   drops unsaved changes (the dot after the file name).
 * Right-click a file in the tree to open, rename, copy or delete it, or to copy its path.
+* The **×** next to a file name closes that file; the file on disk stays as it is. It asks first when there
+  are unsaved changes. In the mapping, script and schema panes it leaves an empty editor without a path, so
+  **Save** asks for a new name; for a test case it also drops the case's input and its attachments. Next to
+  the input file it empties the input body; headers and properties stay. The **File** tab closes the same way.
 * Drag the bars between input, mapping or script and output to resize them; double-click a bar to reset.
 * **Save…** above the input body stores it under `inputs/`. Clicking a file there, or **Use as input**
   in a file's context menu, loads it as the input body of the current tool. A JSON file goes to the

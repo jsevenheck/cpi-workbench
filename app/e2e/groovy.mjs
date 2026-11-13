@@ -106,6 +106,15 @@ await page.locator('section.output').getByRole('tab', { name: /^Headers/ }).clic
 await page.locator('section.output tr', { hasText: 'DN-4711' }).waitFor({ timeout: 20000 })
   .catch(async () => fail('attachment header: ' + (await page.locator('section.output').innerText()).slice(0, 400)));
 
+// 4a3) The × closes the case with its script: the editor, the case's input and its extras go; the file stays.
+const caseScript = (await page.locator('section.script h2').getAttribute('title')) ?? '';
+await page.locator('section.script').getByRole('button', { name: 'Close file' }).click();
+await page.locator('section.script h2', { hasText: 'No script open' }).waitFor({ timeout: 5000 })
+  .catch(() => fail('the script pane does not say that no script is open'));
+await page.locator('section.script .empty-hint').waitFor({ timeout: 5000 }).catch(() => fail('no hint in the empty script editor'));
+if (await page.locator('.extras').count()) fail('the closed case kept its attachments');
+if (!caseScript.startsWith('From test case ')) fail('the script header does not name the test case: ' + caseScript);
+
 // 4b) Import an exported iFlow (zip) and open its Groovy step.
 if (process.env.CPIWB_IFLOW_ZIP) {
   await page.getByRole('button', { name: 'Import iFlow' }).click();

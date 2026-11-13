@@ -179,8 +179,39 @@ await page.locator('section h2', { hasText: '· order.xml' }).waitFor({ state: '
   .catch(() => fail('XSD header still names order.xml after Use XSLT output'));
 await page.getByRole('tab', { name: 'XSLT Mapping' }).click();
 await page.getByRole('tab', { name: 'value-mappings.json' }).click();
-await page.locator('section[aria-label="File"]').getByRole('button', { name: 'Close' }).click();
+await page.locator('section[aria-label="File"]').getByRole('button', { name: 'Close file' }).click();
 await page.getByRole('tab', { name: 'value-mappings.json' }).waitFor({ state: 'detached', timeout: 5000 });
+
+// 8b) The × in a pane closes the open file and leaves it on disk: first the input, then the test case's mapping.
+await page.getByRole('tab', { name: 'XSLT Mapping' }).click();
+const orderXml = fs.readFileSync(path.join(project, 'inputs/order.xml'), 'utf8');
+await page.locator('section.input').getByRole('button', { name: 'Close input file' }).click();
+await page.locator('section.input h2', { hasText: '· order.xml' }).waitFor({ state: 'detached', timeout: 5000 })
+  .catch(() => fail('the input header still names order.xml after closing it'));
+// Monaco renders on the next frame.
+await page.waitForFunction(() => !document.querySelector('section.input .view-lines')?.textContent?.trim(), null, { timeout: 5000 })
+  .catch(() => fail('closing the input left its body in the editor'));
+if (fs.readFileSync(path.join(project, 'inputs/order.xml'), 'utf8') !== orderXml) fail('closing the input changed inputs/order.xml');
+// Unsaved changes: Cancel keeps the file open, OK closes it without writing the changes.
+const caseXsl = fs.readFileSync(path.join(project, 'mappings/order-to-salesorder.xsl'), 'utf8');
+await page.locator('section.mapping .view-lines').click({ position: { x: 40, y: 10 } });
+await page.keyboard.press('Control+End');
+await page.keyboard.type('<!-- edit -->');
+const closeMapping = page.locator('section.mapping').getByRole('button', { name: 'Close file' });
+await closeMapping.click();
+await discard.getByRole('button', { name: 'Cancel' }).click().catch(() => fail('no question before closing a changed mapping'));
+await page.locator('section.mapping h2[title="From test case tests/standard-order/case.json"]').waitFor({ timeout: 5000 })
+  .catch(() => fail('Cancel closed the mapping anyway'));
+await closeMapping.click();
+await discard.getByRole('button', { name: 'OK' }).click();
+await page.locator('section.mapping h2', { hasText: 'No mapping open' }).waitFor({ timeout: 5000 })
+  .catch(() => fail('the mapping pane does not say that no mapping is open'));
+await page.locator('section.mapping .empty-hint').waitFor({ timeout: 5000 }).catch(() => fail('no hint in the empty mapping editor'));
+if (fs.readFileSync(path.join(project, 'mappings/order-to-salesorder.xsl'), 'utf8') !== caseXsl) fail('closing the mapping changed the file');
+if ((await mappingFile.getAttribute('class')).includes('active')) fail('the closed mapping is still marked in the tree');
+// Opening it again from the tree works as before.
+await mappingFile.click();
+await page.locator('section.mapping h2[title="mappings/order-to-salesorder.xsl"]').waitFor({ timeout: 5000 });
 
 // 9) The gutter between input and mapping resizes the panes.
 const inputPane = page.locator('section.input');
@@ -197,6 +228,8 @@ if (shots) await page.screenshot({ path: path.join(shots, '7-resized.png') });
 // 10) "+ Script" suggests a free name and asks before it overwrites an existing file.
 fs.writeFileSync(path.join(project, 'scripts/new-script.groovy'), '// keep me\n');
 await page.getByTitle('Reload file list').click();
+// The reload is asynchronous: "+ Script" must see the new file, or it suggests the taken name.
+await page.locator('.tree .file', { hasText: 'new-script.groovy' }).waitFor({ timeout: 10000 });
 await page.getByRole('button', { name: '+ Script' }).click();
 const newName = await page.getByRole('dialog').getByRole('textbox').inputValue();
 if (newName !== 'scripts/new-script-2.groovy') fail('+ Script suggestion: ' + newName);

@@ -6,6 +6,12 @@ of its version.
 
 ## [Unreleased]
 
+### Added
+
+- **Close an open file** with the × next to its name in the mapping, script, schema, input and File panes.
+  The file on disk stays as it is; unsaved changes are asked about first. A closed mapping, script or schema
+  leaves an empty editor whose **Save** asks for a new path, and a closed input empties the input body.
+
 ## [0.3.1] - 2026-11-11
 
 Fixes from a review of the whole app (2026-11-10), and the Groovy tab keeps a script's settings.

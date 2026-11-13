@@ -257,7 +257,7 @@ await page.getByRole('tab', { name: 'value-mappings.json' }).waitFor({ state: 'd
   .catch(() => fail('the × on the File tab did not close it'));
 
 // 12) A link from CPI Helper's xsltDebugX plugin that points at the app: the traced message and the mapping
-// arrive in the XSLT tab, the mapping runs (no java: calls), and the data leaves the address.
+// arrive in the XSLT tab and the data leaves the address. The mapping is someone's code: it runs on Run only.
 /** A link's data as CPI Helper's plugins write it: JSON, raw DEFLATE, URL-safe Base64 without padding. */
 async function shareData(data) {
   const stream = new Blob([JSON.stringify(data)]).stream().pipeThrough(new CompressionStream('deflate-raw'));
@@ -272,6 +272,10 @@ await page.locator('.status', { hasText: 'Imported from CPI Helper: body, 1 head
   .catch(async () => fail('the shared link was not imported: ' + (await page.locator('.status').innerText()) + ' ' + (await page.locator('.banner.error').allInnerTexts())));
 await page.locator('section.mapping h2', { hasText: 'mapping.xsl (unsaved)' }).waitFor({ timeout: 5000 })
   .catch(() => fail('the imported mapping is not an unsaved mapping'));
+if (!(await page.locator('.status').innerText()).includes('has not run')) fail('the imported mapping is not announced as not run');
+await page.waitForTimeout(1500);
+if (await page.locator('section.output .badge.ok, section.output .badge.bad').count()) fail('a mapping from a link ran without Run');
+await page.getByTitle('Run (Ctrl+Enter)').click();
 await page.locator('section.output .view-lines', { hasText: 'TENANT_TRACE' }).waitFor({ timeout: 15000 })
   .catch(async () => fail('the imported mapping did not run on the imported message: ' + (await page.locator('section.output').innerText()).slice(0, 300)));
 if ((await page.evaluate(() => location.hash)) !== '') fail('the shared data stayed in the address');

@@ -504,7 +504,7 @@ below; a table's unsaved rows go with each run as the `platform` override, **Sav
 Built: the spike answered Q-T2 (S47): both plugins have a *Custom URL* setting and append the data to it, so
 the browser mode takes a link that points at it (`#share/<data>`, which the browser sends to no server), and
 **Import…** in the Groovy and XSLT tabs takes a pasted link or a message as JSON (`app/src/lib/share.ts`). An
-imported script is not run until the user starts it. Not tried with the extension on a tenant: the reading
+imported script or mapping is not run until the user starts it, and the import goes one way (the app sends and calls nothing). Not tried with the extension on a tenant: the reading
 was tested against links built as the plugins' sources build them. Open: one click into the **desktop app**,
 a `cpi-workbench://` link the installers register (Tauri's deep-link and single-instance plugins); it needs
 the installers and a check of how long such a link may be on Windows and macOS (a Windows command line ends at

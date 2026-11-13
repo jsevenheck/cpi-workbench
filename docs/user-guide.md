@@ -142,24 +142,29 @@ Download the installer for your platform from the
 The [CPI Helper](https://github.com/dbeck121/CPI-Helper-Chrome-Extension) browser extension can hand a traced
 step's message to an external IDE: its **GroovyDebugX** plugin for a Groovy Script step, **xsltDebugX** for an
 XSLT Mapping step, each with the body, headers and properties before the step and, if you tick it, the step's
-script or mapping. CPI Workbench takes that hand-over. The app itself still connects to nothing: the extension,
-in your browser, has the data and puts it into a link.
+script or mapping. CPI Workbench takes that hand-over. It goes one way, into the app: CPI Workbench sends
+nothing and calls nothing for it, neither the tenant nor CPI Helper. The extension, in your browser, has the
+data and puts it into a link; the app only reads that link. CPI Helper is optional, too: **Import…** takes a
+message you write as JSON just as well.
 
 * **Desktop app:** send the step from CPI Helper; it opens a browser tab. Copy that tab's address, then
-  **Import…** above the input body of the Groovy or XSLT tab, and paste it.
+  **Import…** above the input body of the Groovy or XSLT tab, and paste it. Set the plugin's *Custom URL*
+  first (next point, last point): the tab need not show a page for its address to hold the link.
 * **Browser mode:** let the plugins open CPI Workbench directly. In CPI Helper's plugin settings choose
   *Custom URL*: for GroovyDebugX `http://127.0.0.1:7777/#share/`, for xsltDebugX `http://127.0.0.1:7777/`
   (with the port, and the `?engines=…` part before `#`, that you start the browser mode with). Each
   hand-over opens a new tab with the message in it.
 * The message lands in its tab: body, headers and properties replace what is there, parts you did not send
-  stay. A script or mapping that comes along is unsaved text (**Save** asks for a path). An imported script
-  does not run until you press **Run**, as for any script you open; a mapping runs unless it calls Java.
+  stay. A script or mapping that comes along is unsaved text (**Save** asks for a path) and does not run
+  until you press **Run**: a link can come from anywhere, so nothing in it starts by itself.
 * A trace's values are text, so all headers and properties arrive as *String*; set another type in the table
   where the script needs it (`getHeader(name, Integer)`).
 * **Import…** also takes a message as JSON: `{ "body": "…", "headers": { "Name": "value" }, "properties": { … } }`.
 * Keep the data on your computer: with *Custom URL* set to an address that has `#share/` in it, the message is
-  in the part of the link after `#`, which a browser never sends to a server. CPI Helper's default targets
-  receive the message on their own sites. A trace can hold business data; treat the link like the message.
+  in the part of the link after `#`, which a browser never sends to a server; `http://127.0.0.1/#share/`
+  does that even when nothing answers there. GroovyDebugX's default target, groovyide.com, and its Contiva
+  option get the message as part of the address their site is called with; xsltDebugX's default keeps it
+  after `#`. A trace can hold business data; treat the link like the message.
 * Not read: GroovyDebugX's *Contiva IDE* format; choose *Custom URL* or *GroovyIDE* in the plugin. On macOS
   before 13.3 the desktop app cannot unpack a link (its web view lacks the function); use the browser mode
   there or paste JSON.

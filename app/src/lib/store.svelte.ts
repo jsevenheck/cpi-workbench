@@ -375,7 +375,10 @@ function safeSet(key: string, v: string | null) {
 // script or mapping if the user sent it along. The app connects to nothing for this; the text comes in pasted,
 // or in the address the browser mode was opened with.
 
-/** Takes the message of a pasted link or JSON into its tab. Code that comes along is not run: it is someone's script. */
+/**
+ * Takes the message of a pasted link or JSON into its tab. One way only: nothing is sent or called for it.
+ * A script or mapping that comes along is not run: it is someone's code until the user starts it.
+ */
 export async function importMessage(pasted: string): Promise<boolean> {
   try {
     app.error = '';
@@ -456,13 +459,18 @@ function importXslt(m: SharedMessage) {
   if (m.headers.length) xslt.headers = m.headers;
   if (m.properties.length) xslt.properties = m.properties;
   app.tool = 'xslt';
-  app.status = `Imported${m.source !== '' ? ' from CPI Helper' : ''}: ${sharedSummary(m)}.`;
   if (m.source !== '') {
-    const status = app.status;
-    disarmXslt('the imported mapping'); // a mapping with java: calls waits for a run by hand, and says so
-    if (xslt.armed) app.status = status;
+    // Stricter than for a file opened from the project: a link can come from any web page, so its mapping
+    // waits for a run by hand whether or not it calls Java.
+    runSeq++;
+    xslt.running = false;
+    xslt.armed = false;
+    xslt.result = xslt.compare = null;
+    app.status = `Imported from CPI Helper: ${sharedSummary(m)}. A mapping from a link has not run: press Ctrl+Enter to run it.`;
+  } else {
+    app.status = `Imported: ${sharedSummary(m)}.`;
+    rerunIfLive('xslt');
   }
-  rerunIfLive('xslt');
 }
 
 /** Asks for the link or text to import, for the Import… buttons. */

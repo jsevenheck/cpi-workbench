@@ -11,8 +11,8 @@ of its version.
 - **A message from a tenant's trace, through CPI Helper.** The browser extension's GroovyDebugX and xsltDebugX
   plugins hand a traced step's body, headers and properties (and the script or mapping) to an external IDE;
   CPI Workbench takes that link: **Import…** in the Groovy and XSLT tabs (paste the link), or directly in the
-  browser mode with the plugins' *Custom URL* set to it. The app still connects to nothing, and an imported
-  script does not run until you start it. See the [user guide](docs/user-guide.md#a-message-from-a-tenants-trace-cpi-helper).
+  browser mode with the plugins' *Custom URL* set to it. It goes one way: the app only reads the link and still
+  connects to nothing, and an imported script or mapping does not run until you start it. See the [user guide](docs/user-guide.md#a-message-from-a-tenants-trace-cpi-helper).
 - **Groovy tab: platform data, attachments and SOAP headers as tables.** The new **Platform** tab edits value
   mappings, Secure Store credentials, Partner Directory parameters and number ranges from the project's
   `platform/*.json` files; a change applies to the next run at once and **Save** writes the file. **Attachments**

@@ -2,7 +2,7 @@ import { call, openProject, closeProject as closeEngineProject, availableProfile
 import type { Diagnostic, FileEntry, GroovyResult, Row, XsltResult } from './types';
 import { argText, mappingArgs } from './queue';
 import { scriptFunctions } from './functions';
-import { attachmentInput, attachmentRows, platformDoc, platformFileText, platformRows, PLATFORM_FILES, PLATFORM_KEYS,
+import { attachmentInput, attachmentRows, parsePlatformFile, platformDoc, platformFileText, platformRows, platformRunData, PLATFORM_FILES, PLATFORM_KEYS,
   soapHeaderInput, soapHeaderRows, type AttachmentRow, type PlatformKey, type PlatformRows, type SoapHeaderRow } from './platform';
 import { toRows } from './rows';
 import { pathKey } from './paths';
@@ -434,7 +434,7 @@ export async function loadPlatform(force = false) {
     next.exists = fileExists(PLATFORM_FILES[key]);
     if (next.exists) {
       try {
-        next.doc = JSON.parse(await readFile(PLATFORM_FILES[key]));
+        next.doc = parsePlatformFile(await readFile(PLATFORM_FILES[key])); // numbers keep their text
         next.rows = platformRows(key, next.doc);
         next.saved = JSON.stringify(platformDoc(key, next.rows, next.doc));
       } catch (e) {
@@ -492,7 +492,7 @@ function platformOverride(): Record<string, unknown> | undefined {
     if (!platformDirty(key)) continue;
     const { doc, error } = platformSectionDoc(key);
     if (error) throw new Error(error);
-    out[key] = doc;
+    out[key] = platformRunData(doc);
   }
   Object.assign(out, groovy.casePlatform ?? {});
   return Object.keys(out).length ? out : undefined;
@@ -510,11 +510,13 @@ export async function open(dir: string, initProject = false) {
   const r = await openProject(dir, initProject);
   if (app.project?.root !== r.root) scriptMemory.clear(); // its paths belong to the other project
   app.project = { root: r.root, files: r.files };
-  await loadPlatform(fresh);
+  if (fresh) resetPlatform(); // at once: no run of the opened project uses the rows typed before it
   safeSet('cpiwb.project', r.root);
   await loadIflowSteps();
   if (!r.isProject && !initProject) app.status = 'Folder has no cpi-workbench.json – it still works; use "Init" to add the standard folders.';
   else app.status = 'Project opened: ' + r.root;
+  // Last: the file tree is up by now, and a file opened from it sets the status line after this one.
+  await loadPlatform();
 }
 
 export async function closeProject() {

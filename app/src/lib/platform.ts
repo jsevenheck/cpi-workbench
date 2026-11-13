@@ -22,7 +22,48 @@ export const PLATFORM_KEYS: PlatformKey[] = ['valueMappings', 'credentials', 'pa
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
-const text = (v: unknown): string => (v === undefined || v === null ? '' : String(v));
+
+// ------------------------------------------------------------------ numbers as written
+// JSON.parse and JSON.stringify rewrite numbers (1.50 becomes 1.5, an integer beyond 2^53 loses digits), so a
+// saved table would change numbers it never showed. A platform document therefore holds each number as a
+// marked string with the number's text; the file gets that text back, a run gets the number.
+
+const NUM = '\u0001N';
+const NUMBER_AT = /-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/y;
+const isMarked = (v: unknown): v is string => typeof v === 'string' && v.startsWith(NUM);
+const text = (v: unknown): string => (v === undefined || v === null ? '' : isMarked(v) ? v.slice(NUM.length) : String(v));
+
+/** A platform file's document, with every number kept as its text. Throws JSON.parse's error for other text. */
+export function parsePlatformFile(json: string): unknown {
+  JSON.parse(json); // the error of the text as written, with its position
+  let out = '';
+  for (let i = 0; i < json.length; ) {
+    const c = json[i];
+    if (c === '"') {
+      let j = i + 1;
+      while (j < json.length && json[j] !== '"') j += json[j] === '\\' ? 2 : 1;
+      out += json.slice(i, j + 1);
+      i = j + 1;
+    } else if (c === '-' || (c >= '0' && c <= '9')) {
+      NUMBER_AT.lastIndex = i;
+      const n = NUMBER_AT.exec(json)![0];
+      out += JSON.stringify(NUM + n);
+      i += n.length;
+    } else {
+      out += c;
+      i++;
+    }
+  }
+  return JSON.parse(out);
+}
+
+/** The document as a run takes it: marked numbers as numbers. */
+export function platformRunData(doc: unknown): unknown {
+  if (isMarked(doc)) return Number(doc.slice(NUM.length));
+  if (Array.isArray(doc)) return doc.map(platformRunData);
+  if (isObj(doc)) return Object.fromEntries(Object.entries(doc).map(([k, v]) => [k, platformRunData(v)]));
+  return doc;
+}
 
 // ------------------------------------------------------------------ value mappings
 
@@ -180,8 +221,9 @@ function numberRangeDoc(rows: NumberRangeRow[]): unknown {
     for (const f of NR_NUMBERS) {
       const t = r[f].trim();
       if (t === '') continue;
-      if (!/^-?\d+$/.test(t)) throw new Error(`Number range ${name}: ${f} must be a whole number, not "${t}"`);
-      n[f] = Number(t);
+      if (/^-?\d+$/.test(t)) n[f] = NUM + BigInt(t).toString(); // as typed, whatever its length; without leading zeros
+      else if (/^-?(0|[1-9]\d*)(\.\d+)?([eE][+-]?\d+)?$/.test(t)) n[f] = NUM + t; // another spelling from the file (5e3) stays
+      else throw new Error(`Number range ${name}: ${f} must be a whole number, not "${t}"`);
     }
     doc[name] = { ...n, rotate: r.rotate, ...r.rest };
   }
@@ -220,9 +262,9 @@ export function newPlatformRow<K extends PlatformKey>(key: K): PlatformRows[K][n
   return row as PlatformRows[K][number];
 }
 
-/** The file's text for a document: indented JSON with a final line break. */
+/** The file's text for a document: indented JSON with a final line break, numbers as they were written. */
 export function platformFileText(doc: unknown): string {
-  return JSON.stringify(doc, null, 2) + '\n';
+  return JSON.stringify(doc, null, 2).replace(/"\\u0001N(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)"/g, '$1') + '\n';
 }
 
 // ------------------------------------------------------------------ attachments and SOAP headers

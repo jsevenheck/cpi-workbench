@@ -51,7 +51,7 @@ Download the installer for your platform from the
   value mappings, the Secure Store's credentials, Partner Directory parameters and number ranges, from
   the project's `platform/*.json` files ([format](test-cases.md#mocked-platform-data-platform)). A changed
   table applies to the next run at once and is marked with a dot until **Save** writes its file, as
-  indented JSON. What a table does not show stays in the file as it is: a credential's properties and
+  indented JSON (numbers keep their spelling). What a table does not show stays in the file as it is: a credential's properties and
   OAuth2 tokens, binary parameters, alternative partners and authorized users; **Open file** edits
   those. The keystore is edited as a file. Without a project the tables work in memory. A test case's own
   `platform` object wins over a table for its runs, and the tab says so. Use test-only values, never a

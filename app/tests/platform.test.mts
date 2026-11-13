@@ -2,8 +2,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { attachmentInput, attachmentRows, newPlatformRow, partnerExtras, platformDoc, platformFileText, platformRows,
-  PLATFORM_FILES, PLATFORM_KEYS, soapHeaderInput, soapHeaderRows } from '../src/lib/platform.ts';
+import { attachmentInput, attachmentRows, newPlatformRow, parsePlatformFile, partnerExtras, platformDoc, platformFileText, platformRows,
+  platformRunData, PLATFORM_FILES, PLATFORM_KEYS, soapHeaderInput, soapHeaderRows } from '../src/lib/platform.ts';
 
 const project = new URL('../../testdata/regression-project/', import.meta.url);
 
@@ -11,9 +11,25 @@ test('the regression project\'s platform files survive rows and back unchanged',
   for (const key of PLATFORM_KEYS) {
     const file = new URL(PLATFORM_FILES[key], project);
     if (!fs.existsSync(file)) continue;
-    const doc = JSON.parse(fs.readFileSync(file, 'utf8'));
-    assert.deepEqual(platformDoc(key, platformRows(key, doc), doc), doc, key);
+    const text = fs.readFileSync(file, 'utf8');
+    const doc = parsePlatformFile(text);
+    const saved = platformFileText(platformDoc(key, platformRows(key, doc), doc));
+    assert.deepEqual(JSON.parse(saved), JSON.parse(text), key);
   }
+});
+
+test('numbers keep their text in the file and are numbers in a run', () => {
+  const text = '{ "ORDER": { "next": 1, "max": 99999999999999999999, "step": 1.50, "note": "7 of 9, -1" },\n  "T": { "next": 5e3 } }';
+  const doc = parsePlatformFile(text);
+  const rows = platformRows('numberRanges', doc);
+  assert.equal(rows[0].max, '99999999999999999999');
+  rows[0].next = '0042';
+  const saved = platformFileText(platformDoc('numberRanges', rows, doc));
+  assert.ok(saved.includes('"max": 99999999999999999999') && saved.includes('"step": 1.50') && saved.includes('"next": 42'), saved);
+  assert.ok(saved.includes('"note": "7 of 9, -1"') && saved.includes('"next": 5e3'), saved);
+  assert.deepEqual(platformRunData(platformDoc('numberRanges', rows, doc)),
+    { ORDER: { next: 42, max: 1e20, rotate: false, step: 1.5, note: '7 of 9, -1' }, T: { next: 5000, rotate: false } });
+  assert.throws(() => parsePlatformFile('{ "a": 1, }'), SyntaxError);
 });
 
 test('value mappings: rows in order, unknown members kept, empty rows left out', () => {
@@ -59,10 +75,10 @@ test('number ranges: numbers are numbers in the file, a wrong one is an error', 
   const doc = { ORDER: { next: 1, min: 1, max: 999999, fieldLength: 6, rotate: false } };
   const rows = platformRows('numberRanges', doc);
   assert.equal(rows[0].max, '999999');
-  assert.deepEqual(platformDoc('numberRanges', rows, doc), doc);
+  assert.deepEqual(platformRunData(platformDoc('numberRanges', rows, doc)), doc);
   rows[0].fieldLength = '';
   rows[0].rotate = true;
-  assert.deepEqual(platformDoc('numberRanges', rows, doc), { ORDER: { next: 1, min: 1, max: 999999, rotate: true } });
+  assert.deepEqual(platformRunData(platformDoc('numberRanges', rows, doc)), { ORDER: { next: 1, min: 1, max: 999999, rotate: true } });
   rows[0].next = 'x';
   assert.throws(() => platformDoc('numberRanges', rows, doc), /ORDER: next must be a whole number/);
   assert.equal(platformFileText({ a: 1 }), '{\n  "a": 1\n}\n');

@@ -97,13 +97,18 @@ Download the installer for your platform from the
   other variable names get no suggestions. Ctrl+Space opens the list again.
 * **Message Mapping functions** (custom functions such as `def String getHeader(String name,
   MappingContext context)` or `def void f(String[] values, Output output, MappingContext context)`):
-  a script that has them lists them above the editor under **Run as**; a click runs one, or enter
-  its name under **fn**. The label next to **fn** says *Script step* (the function gets the message)
-  or *Mapping function*. A mapping function takes **Arguments** instead of the body: a text field per
-  `String` (**null** passes null), and per `String[]` one context per line as a JSON array
-  (`["A", "B"]`; `{"suppress": true}` and `{"xsiNil": true}` stand for SUPPRESS and xsi:nil). A
-  `String[]` function runs once per context, a `String` function once (a tenant calls it once per
-  value). A script opened from the file tree with only mapping functions runs the first one on its first run;
+  pick the function under **Function** above the editor. It lists the script's functions in two groups:
+  *Script step* (gets the message) and *Message Mapping function* (gets field values), each with its
+  parameter names; **Other name…** takes any other name, e.g. from an iFlow step. The list is read from
+  the script text when the script opens, so nothing runs for it; after a run, the engine's list wins where
+  they differ (the reading of the text is a heuristic and may miss unusual declarations). For a mapping
+  function the left pane shows **Function arguments** instead of the body: a field per `String` parameter,
+  named as in the script (**null** passes null), and per `String[]` parameter its contexts as rows, with
+  **+ Value**, **+ Context** and per value *value*, *SUPPRESS*, *xsi:nil* or *null*. **Text** shows the
+  same as one context per line in JSON (`["A", "B"]`; `{"suppress": true}` and `{"xsiNil": true}`), as
+  in `case.json`. `Output` and `MappingContext` come from the simulator. A `String[]` function runs once
+  per context, a `String` function once (a tenant calls it once per value). A script with only mapping
+  functions opens with its first one;
   each script keeps its function and arguments while the app is open, also when you switch to
   another script or tab and back. **Result** shows the returned
   value or the output queue; `MappingContext` reads and sets the Headers and Properties tabs. The

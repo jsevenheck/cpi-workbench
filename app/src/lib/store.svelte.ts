@@ -1,6 +1,7 @@
 import { call, openProject, closeProject as closeEngineProject, availableProfiles, DEFAULT_PROFILE, type Profile, type ProfileInfo } from './engine';
 import type { Diagnostic, FileEntry, GroovyResult, Row, XsltResult } from './types';
 import { argText, mappingArgs } from './queue';
+import { scriptFunctions } from './functions';
 import { toRows } from './rows';
 import { pathKey } from './paths';
 import { resolveSimpleFunctions } from './simple';
@@ -192,6 +193,8 @@ export const groovy = $state({
   mapping: null as { function: string; parameters: string[] } | null,
   /** The open script's Message Mapping functions (signatures), from its last run that compiled. */
   functions: [] as string[],
+  /** The function the last run called as a script step although the script text reads like a mapping function. */
+  stepFunction: null as string | null,
   /** Text of each String / String[] argument of the mapping function (queues: one context per line). */
   args: [] as (string | null)[],
 });
@@ -562,10 +565,21 @@ export async function openFile(path: string, opts: OpenOptions = {}) {
       groovy.functionName = opts.functionName ?? last?.functionName ?? 'processData';
       groovy.mapping = null;
       groovy.functions = [];
+      groovy.stepFunction = null;
       groovy.args = last ? [...last.args] : [];
       forgetGroovyRun();
-      // A script with only mapping functions: the first run picks one instead of failing on processData.
-      if (!opts.functionName && !last) pickMappingFunction = true;
+      // A script with only mapping functions opens with its first one (read from the text, nothing runs); if the
+      // text says nothing, the first run picks one instead of failing on processData.
+      if (!opts.functionName && !last) {
+        const fns = scriptFunctions(content);
+        const first = fns.find((f) => f.kind === 'mapping');
+        if (first && !fns.some((f) => f.name === 'processData')) {
+          groovy.functionName = first.name;
+          pickMappingFunction = false;
+        } else {
+          pickMappingFunction = true;
+        }
+      }
       if (opts.profile && hasProfile(opts.profile)) app.groovyProfile = opts.profile;
       else if (content.includes('com.sap.it.script.v2.api') && hasProfile('groovy-2.x')) app.groovyProfile = 'groovy-2.x';
       else if (content.includes('com.sap.gateway.ip.core.customdev.util') && hasProfile('groovy-1.x')) app.groovyProfile = 'groovy-1.x';
@@ -651,6 +665,7 @@ export async function closeEditorFile(editor: 'xslt' | 'groovy' | 'xsd'): Promis
     groovy.functionName = 'processData';
     groovy.mapping = null;
     groovy.functions = [];
+    groovy.stepFunction = null;
     groovy.args = [];
     groovy.result = groovy.compare = null;
     groovy.armed = true;
@@ -945,12 +960,44 @@ function xsltRequest() {
   };
 }
 
+/** The selected Groovy function if it is a Message Mapping function, else null (a script step). */
+export interface SelectedMapping {
+  function: string;
+  /** Engine spelling: String, String[], Output, MappingContext. */
+  parameters: string[];
+  /** Parameter names from the script text, '' where unknown. */
+  names: string[];
+  /** Known from a run (engine) or only from the text. */
+  source: 'engine' | 'text';
+}
+
+/**
+ * The function the Groovy tab runs, as a Message Mapping function: from the last run when that called it,
+ * otherwise from the script text (nothing has to run for that). The engine's answer wins where they differ.
+ */
+export function selectedMapping(): SelectedMapping | null {
+  const fn = groovy.functionName || 'processData';
+  const parsed = scriptFunctions(groovy.script).filter((f) => f.name === fn);
+  if (groovy.mapping?.function === fn) {
+    const parameters = groovy.mapping.parameters;
+    const match = parsed.find((f) => f.parameters.join() === parameters.join());
+    return { function: fn, parameters, names: match ? match.params.map((p) => p.name) : parameters.map(() => ''), source: 'engine' };
+  }
+  if (groovy.stepFunction === fn) return null;
+  const f = parsed.find((p) => p.kind === 'mapping');
+  return f ? { function: fn, parameters: f.parameters, names: f.params.map((p) => p.name), source: 'text' } : null;
+}
+
+function mappingArgsFor(m: SelectedMapping | null): unknown[] {
+  return m ? mappingArgs(m.parameters, groovy.args) : [];
+}
+
 function groovyRequest() {
   const fn = groovy.functionName || 'processData';
   return {
     script: { content: groovy.script, path: groovy.scriptPath ?? 'script.groovy' },
     function: fn,
-    args: groovy.mapping?.function === fn ? mappingArgs(groovy.mapping.parameters, groovy.args) : [],
+    args: mappingArgsFor(selectedMapping()),
     input: {
       body: groovy.body, headers: clean(groovy.headers), properties: clean(groovy.properties),
       attachments: groovy.caseExtras?.attachments, soapHeaders: groovy.caseExtras?.soapHeaders,
@@ -1021,8 +1068,9 @@ export async function runGroovy() {
   groovy.running = true;
   app.error = '';
   try {
-    // A mapping function's parameters are known only after a run; until then its arguments cannot be sent.
-    const known = groovy.mapping?.function === (groovy.functionName || 'processData');
+    // The arguments go with the parameters known before the run (the engine's or the text's); if the run finds
+    // others, it runs again with them.
+    const sent = selectedMapping();
     const params = groovyRequest();
     const [r, c] = await Promise.all([
       call<GroovyResult>('groovy.run', params, app.groovyProfile),
@@ -1043,10 +1091,14 @@ export async function runGroovy() {
         // Arguments typed for another function do not belong to this one (a test case's do: mapping is null then).
         if (groovy.mapping && groovy.mapping.function !== r.mapping.function) groovy.args = [];
         groovy.mapping = { function: r.mapping.function, parameters: r.mapping.parameters };
-        if (!known && groovy.args.some((a) => a === null || a.trim() !== '')) return void runGroovy();
+        groovy.stepFunction = null;
+        const same = sent?.parameters.join() === r.mapping.parameters.join();
+        if (!same && groovy.args.some((a) => a === null || a.trim() !== '')) return void runGroovy();
       } else if (r.failedPhase !== 'compile') {
         if (groovy.mapping) groovy.args = [];
         groovy.mapping = null;
+        // The engine called it as a script step: that wins over the reading of the text.
+        groovy.stepFunction = params.function;
       }
     }
   } catch (e) {
@@ -1355,6 +1407,7 @@ async function loadGroovyCase(path: string, dir: string, tc: any) {
   groovy.args = (tc.args ?? []).map(argText);
   groovy.mapping = null;
   groovy.functions = [];
+  groovy.stepFunction = null;
   forgetGroovyRun();
   if (tc.profile && hasProfile(tc.profile)) app.groovyProfile = tc.profile;
   const extras: CaseExtras = { dir, attachments: tc.input?.attachments, soapHeaders: tc.input?.soapHeaders, platform: tc.platform };

@@ -16,7 +16,7 @@ Automated checks:
 * Engine tests (`mvn -f engine/pom.xml verify`): core 20, XSLT/XSD/XPath/Splitter/Filter/Gather/Converter 79 per Saxon version (20 of them on project boundaries, 8 splitter cases from SAP's examples, 5 Filter, 3 Gather and 18 converter tests, most with SAP's examples), Groovy 46 per script version (4 Camel Simple, 4 Content Modifier, 11 Message Mapping functions, 2 on what a tenant probe showed).
 * Regression test cases (`testdata/regression-project`): 9.
 * Browser end-to-end tests: `app/e2e/smoke.mjs` (XML tools) and `groovy.mjs` (Groovy, Flow Steps and the iFlow import, which CI runs with the iFlow fixture as a zip).
-* UI unit tests (`npm --prefix app test`): the JSON, XSLT and Groovy formatters, test-case rows, path comparison, the Script API completions (checked against the clean-room Java classes), the Filter's `function:simple(...)` substitution, Message Mapping arguments and the update check's SemVer comparison.
+* UI unit tests (`npm --prefix app test`): the JSON, XSLT and Groovy formatters, test-case rows, path comparison, the Script API completions (checked against the clean-room Java classes), the Filter's `function:simple(...)` substitution, Message Mapping arguments, the Groovy functions read from a script's text and the update check's SemVer comparison.
 * CI runs the engine tests on Linux, Windows and macOS, the browser e2e tests on Windows, and the shell tests on Windows and macOS before it builds the installers. Releases after 0.3.0 have no Linux installers. All of them passed on Windows and macOS runners for the first time on 2026-10-25 (`d237e25`). macOS runs on `macos-26` (GitHub deprecated `macos-14`); the native engines are built for macOS 11 and CI checks that.
 
 ## By area

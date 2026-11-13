@@ -24,6 +24,18 @@ await page.reload();
 await page.locator('.status', { hasText: 'engine(s) available' }).waitFor({ timeout: 20000 });
 
 const runIt = () => page.getByRole('button', { name: /^\W*Run$/ }).click();
+// The function picker lists the script's functions; any other name goes in under "Other name…".
+const OTHER = '\u0000other';
+const fnSelect = () => page.getByLabel('Function', { exact: true });
+const fnName = async () => {
+  const v = await fnSelect().inputValue();
+  return v === OTHER ? page.getByLabel('Function name').inputValue() : v;
+};
+const setOtherFn = async (name) => {
+  await fnSelect().selectOption(OTHER);
+  await page.getByLabel('Function name').fill(name);
+};
+const inputTitle = () => page.locator('section.input h2').innerText();
 /** Opens a file from the tree and starts it once it is open: opening alone runs no script. */
 async function openAndRun(file, statusText) {
   await page.locator('.tree .file', { hasText: file }).click();
@@ -122,7 +134,7 @@ if (process.env.CPIWB_IFLOW_ZIP) {
   await page.locator('.dlg').getByRole('button', { name: 'OK' }).click();
   await page.locator('.steps .step', { hasText: 'Enrich order' }).click();
   await page.locator('section.script h2', { hasText: 'enrich.groovy' }).waitFor({ timeout: 10000 });
-  const fn = await page.getByLabel('Function name').inputValue();
+  const fn = await fnName();
   if (fn !== 'enrich') fail('function from iFlow step: ' + fn);
   const prof = await page.getByLabel('Runtime profile').inputValue();
   if (prof !== 'groovy-2.x') fail('profile from iFlow step: ' + prof);
@@ -143,23 +155,25 @@ if (process.env.CPIWB_IFLOW_ZIP) {
   await runIt();
   await page.locator('section.output .badge.ok').waitFor({ timeout: 20000 })
     .catch(() => fail('mapping script from the iFlow did not run'));
-  if ((await page.getByLabel('Function name').inputValue()) !== 'getHeader') fail('mapping function not picked');
+  if ((await fnName()) !== 'getHeader') fail('mapping function not picked');
   await page.getByRole('tab', { name: 'Groovy Script' }).click();
 }
 
 // 4c) Another script starts with processData again, not with the function set for the previous one.
-await page.getByLabel('Function name').fill('customFunction');
+await setOtherFn('customFunction');
 await page.locator('.tree .file', { hasText: 'route-by-partner.groovy' }).click();
 await page.locator('section.script h2', { hasText: 'route-by-partner.groovy' }).waitFor({ timeout: 10000 });
-if ((await page.getByLabel('Function name').inputValue()) !== 'processData') fail('function name kept from the previous script');
-if (await page.locator('.functions').count()) fail('function bar shown for a script without mapping functions');
-if ((await page.locator('section.script .mode').innerText()) !== 'Script step') fail('mode label for a script step');
+if ((await fnName()) !== 'processData') fail('function name kept from the previous script');
+if (await page.getByLabel('Function name').count()) fail('"Other name…" kept for a script whose function is listed');
+if (!(await inputTitle()).startsWith('Input message')) fail('input pane title for a script step');
 // 4c2) Live off: a run that answers after another script was opened does not land in that script.
 // The first run is held until the other script is open; any later run is held until the check is done.
 await page.getByLabel('Live').uncheck();
 await page.locator('.tree .file', { hasText: 'mapping-null.groovy' }).click();
 await page.locator('section.script h2', { hasText: 'mapping-null.groovy' }).waitFor({ timeout: 10000 });
-await page.getByLabel('Function name').fill('classify');
+// A script with mapping functions only opens with its first one, read from the text before any run.
+if ((await fnName()) !== 'classify') fail('mapping function not picked from the script text');
+if (!(await inputTitle()).startsWith('Function arguments')) fail('arguments not shown before the first run');
 await page.getByLabel('Runtime profile').selectOption('groovy-1.x');
 await page.locator('section.output .badge.run').waitFor({ state: 'detached', timeout: 20000 }).catch(() => {});
 let releaseFirst, releaseLater;
@@ -178,8 +192,7 @@ await page.locator('section.script h2', { hasText: 'enrich-order.groovy' }).wait
 releaseFirst();
 await page.waitForTimeout(1500);
 if (heldRuns === 0) fail('the late-run check held no run');
-if (await page.locator('.functions').count()) fail('a late run of the previous script showed its functions');
-if ((await page.locator('section.script .mode').innerText()) !== 'Script step') fail('a late run of the previous script set its mode');
+if (!(await inputTitle()).startsWith('Input message')) fail('a late run of the previous script turned this one into a mapping function');
 releaseLater();
 await page.unroute(groovyRpc);
 await page.getByLabel('Live').check();
@@ -191,16 +204,28 @@ await openAndRun('mapping-context/case.json', 'all values of a context');
 await page.locator('section.output').getByRole('tab', { name: 'Result' }).click();
 await page.locator('section.output pre', { hasText: '["2"]\n["1"]\n["0"]' }).waitFor({ timeout: 20000 })
   .catch(async () => fail('mapping queue: ' + (await page.locator('section.output').innerText()).slice(0, 400)));
-if (!(await page.getByLabel('Argument 1').inputValue()).includes('"Multi Print"')) fail('mapping argument from the case');
+// A String[] argument shows its contexts as rows; SUPPRESS is a kind of value.
+if ((await page.getByLabel('Argument 1, context 1, value 1').inputValue()) !== 'Multi Print') fail('mapping argument from the case');
+if ((await page.getByLabel('Kind of value 2 in context 2').inputValue()) !== 'suppress') fail('SUPPRESS from the case');
 if (shots) await page.screenshot({ path: path.join(shots, 'g3c-mapping-context.png') });
 // Compare runs the function on 2.x too and compares the function result, not only the body.
 await page.getByRole('button', { name: 'Compare', exact: true }).click();
 await page.locator('section.output .compare .same', { hasText: 'function result' }).waitFor({ timeout: 20000 })
   .catch(async () => fail('compare of a mapping function: ' + (await page.locator('section.output').innerText()).slice(0, 400)));
 await page.getByRole('button', { name: 'Comparing' }).click();
-await page.getByLabel('Argument 1').fill('["A", "B", "C"]');
+await page.locator('section.input').getByRole('button', { name: 'Text', exact: true }).click();
+await page.getByLabel('Argument 1', { exact: true }).fill('["A", "B", "C"]');
 await page.locator('section.output pre', { hasText: '["3"]' }).waitFor({ timeout: 20000 })
   .catch(() => fail('mapping argument typed in the tab'));
+// Back to rows: SUPPRESS on a value takes it out of the count; + Context adds a context change.
+await page.locator('section.input').getByRole('button', { name: 'Text', exact: true }).click();
+await page.getByLabel('Kind of value 3 in context 1').selectOption('suppress');
+await page.locator('section.output pre', { hasText: '["2"]' }).waitFor({ timeout: 20000 })
+  .catch(() => fail('SUPPRESS chosen in the context editor did not reach the run'));
+await page.locator('section.input').getByRole('button', { name: '+ Context' }).click();
+await page.getByLabel('Argument 1, context 2, value 1').fill('D');
+await page.locator('section.output pre', { hasText: '["2"]\n["1"]' }).waitFor({ timeout: 20000 })
+  .catch(async () => fail('a context added in the editor: ' + (await page.locator('section.output pre').first().innerText())));
 await openAndRun('mapping-get-header/case.json', 'getHeader through MappingContext');
 await page.locator('section.output pre', { hasText: '4711' }).waitFor({ timeout: 20000 })
   .catch(async () => fail('mapping returned value: ' + (await page.locator('section.output').innerText()).slice(0, 400)));
@@ -214,15 +239,14 @@ await page.locator('section.output .pad', { hasText: 'EMPTY' }).waitFor({ timeou
   .catch(() => fail('the null button did not switch to an empty string'));
 await openAndRun('mapping-get-header/case.json', 'getHeader through MappingContext');
 await page.locator('section.output pre', { hasText: '4711' }).waitFor({ timeout: 20000 });
-await page.getByLabel('Argument 1').fill('Missing');
+await page.getByLabel('Argument 1', { exact: true }).fill('Missing');
 await page.locator('section.output .pad .hint', { hasText: 'null' }).waitFor({ timeout: 20000 })
   .catch(() => fail('getHeader of a missing header is not null'));
-// The function bar shows the script's mapping functions; a click switches the function and the mode label.
-if ((await page.locator('section.script .mode').innerText()) !== 'Mapping function') fail('mode label for a mapping function');
-await page.locator('.functions .chip', { hasText: 'countPerContext' }).click();
-await page.locator('.functions .chip.active', { hasText: 'countPerContext' }).waitFor({ timeout: 10000 })
-  .catch(() => fail('function chip did not switch the function'));
-if ((await page.getByLabel('Function name').inputValue()) !== 'countPerContext') fail('function chip did not set fn');
+// The picker lists the script's functions; choosing one switches the arguments to its parameters.
+await fnSelect().selectOption('countPerContext');
+await page.locator('section.input .arg-head', { hasText: 'all values of a context' }).waitFor({ timeout: 10000 })
+  .catch(() => fail('choosing countPerContext did not show its String[] argument'));
+if ((await fnName()) !== 'countPerContext') fail('the picker did not set the function');
 // Opening a script starts with processData again, so the Body tab is back.
 await page.locator('.tree .file', { hasText: 'route-by-partner.groovy' }).click();
 await page.locator('section.input').getByRole('tab', { name: 'Body' }).waitFor({ timeout: 10000 })
@@ -232,23 +256,23 @@ await page.locator('section.input').getByRole('tab', { name: 'Body' }).waitFor({
 await openAndRun('mapping-functions.groovy', 'mapping-functions.groovy. A script runs with your rights');
 await page.locator('section.input').getByRole('tab', { name: /Arguments/ }).waitFor({ timeout: 20000 })
   .catch(() => fail('a script with only mapping functions did not open with its arguments'));
-const fnOpened = await page.getByLabel('Function name').inputValue();
-await page.getByLabel('Argument 1').fill('["kept"]');
+const fnOpened = await fnName();
+await page.getByLabel('Argument 1', { exact: true }).fill('["kept"]');
 await page.getByRole('tab', { name: 'XSLT Mapping' }).click();
 await page.locator('.tree .file', { hasText: 'mapping-functions.groovy' }).click();
 await page.locator('section.script').waitFor({ timeout: 10000 });
-if ((await page.getByLabel('Argument 1').inputValue()) !== '["kept"]') fail('arguments lost when the open script was clicked again');
+if ((await page.getByLabel('Argument 1', { exact: true }).inputValue()) !== '["kept"]') fail('arguments lost when the open script was clicked again');
 await page.locator('.tree .file', { hasText: 'route-by-partner.groovy' }).click();
 await page.locator('section.input').getByRole('tab', { name: 'Body' }).waitFor({ timeout: 10000 });
 // Opened after another script, it has not run yet: its function is back at once, its arguments with the run.
 await page.locator('.tree .file', { hasText: 'mapping-functions.groovy' }).click();
 await page.locator('.status', { hasText: 'mapping-functions.groovy. A script runs with your rights' }).waitFor({ timeout: 10000 });
-if ((await page.getByLabel('Function name').inputValue()) !== fnOpened) fail('function not back before the run');
+if ((await fnName()) !== fnOpened) fail('function not back before the run');
 await runIt();
-await page.getByLabel('Argument 1').waitFor({ timeout: 20000 })
+await page.getByLabel('Argument 1', { exact: true }).waitFor({ timeout: 20000 })
   .catch(() => fail('arguments tab not back after reopening the script'));
-if ((await page.getByLabel('Argument 1').inputValue()) !== '["kept"]') fail('arguments lost after another script');
-if ((await page.getByLabel('Function name').inputValue()) !== fnOpened) fail('function lost after another script');
+if ((await page.getByLabel('Argument 1', { exact: true }).inputValue()) !== '["kept"]') fail('arguments lost after another script');
+if ((await fnName()) !== fnOpened) fail('function lost after another script');
 await page.locator('.tree .file', { hasText: 'route-by-partner.groovy' }).click();
 await page.locator('section.input').getByRole('tab', { name: 'Body' }).waitFor({ timeout: 10000 });
 

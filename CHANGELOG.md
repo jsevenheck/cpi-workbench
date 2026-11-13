@@ -13,6 +13,15 @@ of its version.
   The file on disk stays as it is; unsaved changes are asked about first. A closed mapping, script or schema
   leaves an empty editor whose **Save** asks for a new path, and a closed input empties the input body.
 
+### Changed
+
+- **Groovy tab, Message Mapping functions**: a **Function** picker lists the script's functions as *Script step*
+  or *Message Mapping function*, with their parameter names, and replaces the **fn** field, the mode label and
+  the **Run as** bar. The functions are read from the script text when it opens, so a mapping script shows its
+  arguments before the first run (still without running it). The arguments carry the parameter names from the
+  script; a `String[]` argument is edited as contexts and values (**+ Value**, **+ Context**, SUPPRESS, xsi:nil),
+  with **Text** for the JSON form of `case.json`.
+
 ## [0.3.1] - 2026-11-11
 
 Fixes from a review of the whole app (2026-11-10), and the Groovy tab keeps a script's settings.

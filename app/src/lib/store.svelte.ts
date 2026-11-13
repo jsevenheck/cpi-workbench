@@ -695,6 +695,13 @@ export function closeInput(tool: StepTool) {
   if (path) app.status = 'Closed input ' + path;
 }
 
+/** Closes the File tab, asking first when it has unsaved changes; the file on disk stays as it is. */
+export async function closeFileTab(): Promise<boolean> {
+  if (!(await mayDiscard('file'))) return false;
+  closeFileView();
+  return true;
+}
+
 export async function saveFileView(): Promise<boolean> {
   if (!fileView.path) return false;
   await writeFile(fileView.path, fileView.content);

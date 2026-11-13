@@ -8,7 +8,8 @@ of its version.
 
 ### Added
 
-- **Close an open file** with the × next to its name in the mapping, script, schema, input and File panes.
+- **Close an open file** with the × next to its name in the mapping, script, schema, input and File panes,
+  and on the File tab in the tool bar.
   The file on disk stays as it is; unsaved changes are asked about first. A closed mapping, script or schema
   leaves an empty editor whose **Save** asks for a new path, and a closed input empties the input body.
 

@@ -249,6 +249,12 @@ await page.getByTitle('Close project').click();
 await page.getByRole('dialog').filter({ hasText: 'Discard the unsaved changes' }).getByRole('button', { name: 'Cancel' }).click()
   .catch(() => fail('no question before Close project drops File tab changes'));
 if (!(await page.locator('.tree .file', { hasText: 'value-mappings.json' }).isVisible())) fail('Cancel closed the project anyway');
+// The × on the File tab in the tool bar closes the file too, after the same question.
+await page.getByRole('button', { name: 'Close file tab' }).click();
+await page.getByRole('dialog').filter({ hasText: 'Discard the unsaved changes' }).getByRole('button', { name: 'OK' }).click()
+  .catch(() => fail('no question before the File tab closes with unsaved changes'));
+await page.getByRole('tab', { name: 'value-mappings.json' }).waitFor({ state: 'detached', timeout: 5000 })
+  .catch(() => fail('the × on the File tab did not close it'));
 
 if (errors.length) fail('browser errors: ' + errors.join(' | '));
 await browser.close();

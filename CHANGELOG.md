@@ -12,6 +12,11 @@ of its version.
   and on the File tab in the tool bar.
   The file on disk stays as it is; unsaved changes are asked about first. A closed mapping, script or schema
   leaves an empty editor whose **Save** asks for a new path, and a closed input empties the input body.
+- **MCP server for Claude Desktop and other agents without file access**: `read_file` reads a project file
+  (long files in parts), `save_file` writes one (an existing file only with `overwrite`), `import_iflow` imports an
+  exported iFlow, and `reference` explains the Script API, the `platform/` data formats and what is verified
+  against CPI, generated from the simulator's sources. The server's instructions say how to develop a step with the
+  tools, and the prompt **develop_step** starts it. See [docs/mcp.md](docs/mcp.md#working-from-claude-desktop).
 
 ### Changed
 

@@ -126,7 +126,7 @@ Use a copy of `examples/demo-project`. Setup details: [MCP server](mcp.md).
 |---|---|---|
 | 5.1 | Create `.mcp.json` in the project folder (below) | – |
 | 5.2 | Start `claude` in the project folder (terminal or the Code tab of the desktop app) | Claude Code asks once before it starts the project's server → allow. |
-| 5.3 | `/mcp` | `cpi-workbench` is connected with 6 tools: `project_info`, `run_xslt`, `run_groovy`, `validate_xsd`, `evaluate_xpath`, `run_flow_step`. |
+| 5.3 | `/mcp` | `cpi-workbench` is connected with 10 tools: `project_info`, `read_file`, `run_xslt`, `run_groovy`, `validate_xsd`, `evaluate_xpath`, `run_flow_step`, `save_file`, `import_iflow`, `reference`. |
 | 5.4 | *"Use project_info to show what is in the project."* | Files and installed runtimes. |
 | 5.5 | *"Run mappings/order-to-salesorder.xsl on inputs/order.xml with header SenderSystem=ERP and property CustomerGroup=02, then on both Saxon versions."* | Same result as 2.2 and 2.3. |
 | 5.6 | *"Run scripts/enrich-order.groovy on inputs/order.xml and show the message log."* | Same result as 2.6; the first run is slower while the engine starts. |
@@ -134,6 +134,10 @@ Use a copy of `examples/demo-project`. Setup details: [MCP server](mcp.md).
 | 5.8 | *"Split inputs/orders.xml per Order (namespace src = urn:demo:integration:orders:source:v1) and combine the result with Gather."* | Two `run_flow_step` calls and the combined message. |
 | 5.9 | *"Read C:\Windows\win.ini as bodyPath with evaluate_xpath."* | Refused with an error: the path is outside the project. |
 | 5.10 | Keep the app open and run something there meanwhile | Both work; the agent's runs do not appear in the app (by design). |
+| 5.11 | Claude Desktop with `--project` on the copy ([MCP server](mcp.md)), without a filesystem server: *"Look at inputs/order.xml and write an XSLT that maps it to the format of schemas/salesorder.xsd; try it and validate the result."* | The agent reads both files with `read_file`, runs `run_xslt` and `validate_xsd` until the output is valid, and shows the mapping; nothing is saved. |
+| 5.12 | *"Save it as mappings/agent-order.xsl."*, then the same again | Claude Desktop asks before `save_file`; the file appears in the app after **↻**. The second time the agent is told the file exists and asks whether to replace it. |
+| 5.13 | *"Import the iFlow from <path of an exported .zip> and tell me what its Content Modifier does with a sample message."* | `import_iflow`, then `run_flow_step` on its step; the app shows the iFlow after **↻**. |
+| 5.14 | **+** → **develop_step** with a task | The agent follows the steps of the prompt (project, input, write, run, report). |
 
 `.mcp.json` for the `setup.exe` install (for the `.msi`: `C:\\Program Files\\CPI Workbench\\cpi-workbench.exe`):
 

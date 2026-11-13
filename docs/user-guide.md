@@ -154,8 +154,10 @@ own scripts, this is the app's only network request, and it is made only when yo
 
 ## Coding agents (MCP)
 
-`cpi-workbench mcp` gives a coding agent such as Claude Code the app's tabs (XSLT, Groovy, XSD, XPath,
-Flow Steps) over the Model Context Protocol. Setup, tools and what the server can access: [MCP server](mcp.md).
+`cpi-workbench mcp` gives an agent such as Claude Code or Claude Desktop the app's tabs (XSLT, Groovy, XSD,
+XPath, Flow Steps) over the Model Context Protocol, plus reading and saving project files, importing an iFlow and
+a reference of the Script API, so it can write a step and try it on the simulator. Setup, tools and what the
+server can access: [MCP server](mcp.md).
 
 ## Command line (CI-friendly)
 

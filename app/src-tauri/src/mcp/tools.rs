@@ -2,7 +2,7 @@
 //! making the same engine calls with the same inputs. The app's features lead: the tools add none of
 //! their own. A wrong argument is an error message the model can act on.
 
-use super::{flow, Server};
+use super::{files, flow, reference, Server};
 use serde_json::{json, Map, Value};
 
 pub type Args = Map<String, Value>;
@@ -59,18 +59,31 @@ fn runtime(choices: &[&str], both: bool, default: Option<&str>, description: &st
     s
 }
 
-fn tool(name: &str, title: &str, description: &str, props: Map<String, Value>, required: &[&str], read_only: bool) -> Value {
+/// What a tool does to its environment, as MCP tool annotations (hints a client may use to ask first).
+#[derive(Clone, Copy, PartialEq)]
+enum Effect {
+    /// Reads project files only. XSLT is not among these: reflexive java: calls run any public JDK method
+    /// (JavaExtensions). Groovy and Camel Simple run code without a sandbox.
+    ReadOnly,
+    /// Writes into the project and may replace a file (only with `overwrite`); the same call twice has the
+    /// effect of one.
+    WritesProject,
+    /// Runs code: no hints, so clients take the protocol's defaults and assume the worst.
+    RunsCode,
+}
+
+fn tool(name: &str, title: &str, description: &str, props: Map<String, Value>, required: &[&str], effect: Effect) -> Value {
     let mut t = json!({
         "name": name,
         "title": title,
         "description": description,
         "inputSchema": { "type": "object", "properties": props, "required": required, "additionalProperties": false },
     });
-    // XSD and XPath read only project files and cannot write. XSLT is not among them: reflexive java: calls run
-    // any public JDK method (JavaExtensions). Groovy and Camel Simple run code without a sandbox. Tools without
-    // hints get the protocol's defaults, so clients assume the worst.
-    if read_only {
-        t["annotations"] = json!({ "readOnlyHint": true, "openWorldHint": false });
+    match effect {
+        Effect::ReadOnly => t["annotations"] = json!({ "readOnlyHint": true, "openWorldHint": false }),
+        Effect::WritesProject => t["annotations"] = json!({ "readOnlyHint": false, "destructiveHint": true,
+            "idempotentHint": true, "openWorldHint": false }),
+        Effect::RunsCode => {}
     }
     t
 }
@@ -114,7 +127,8 @@ holds the returned value or the output queue in the same form." })),
         ("schema", json!({ "type": "string", "description": "The XSD source, if it is not in a file." })),
     ]);
     message_properties(&mut xsd, false);
-    xsd.insert("runtime".into(), runtime(XSLT_RUNTIMES, false, Some("saxon-he-9.9"), "The XML engine."));
+    xsd.insert("runtime".into(), runtime(XSLT_RUNTIMES, false, Some("saxon-he-9.9"),
+        "The engine process that runs the check. Both validate with the JDK's XML Schema 1.0 validator, not with Saxon."));
 
     let mut xpath = obj(vec![
         ("expression", json!({ "type": "string", "description": "The XPath." })),
@@ -149,32 +163,75 @@ fieldSeparator, firstLineHeader, headerMapping: \"xsd\"|\"csv\"}." } },
     ]);
     message_properties(&mut step, true);
 
+    let path = |what: &str| json!({ "type": "string", "description": what });
+    let read = obj(vec![
+        ("path", path("Project-relative file, as project_info lists it (e.g. iflows/Order/src/main/resources/script/check.groovy).")),
+        ("startLine", json!({ "type": "integer", "minimum": 1, "default": 1, "description": "First line to return (1-based)." })),
+        ("maxLines", json!({ "type": "integer", "minimum": 1, "default": 2000, "description": "Lines to return at most; long files come in parts." })),
+    ]);
+    let save = obj(vec![
+        ("path", path("Project-relative file to write, in the folder of its kind: mappings/*.xsl, scripts/*.groovy, \
+schemas/*.xsd, inputs/*.xml|json|csv, platform/*.json. Folders are created.")),
+        ("content", json!({ "type": "string", "description": "The whole file content (text)." })),
+        ("overwrite", json!({ "type": "boolean", "default": false, "description": "Replace an existing file. Without it, an existing file is an error." })),
+    ]);
+    let import = obj(vec![
+        ("zip", path("The iFlow exported from the tenant (.zip): an absolute path, or a path inside the project.")),
+        ("name", path("Folder name under iflows/; default: the zip's file name.")),
+        ("overwrite", json!({ "type": "boolean", "default": false, "description": "Import into an existing iflows/ folder, replacing its files." })),
+    ]);
+    let reference = obj(vec![
+        ("topic", json!({ "type": "string", "enum": reference::TOPICS, "description": "script-api: the Script API, \
+Message Mapping and platform service methods the Groovy engines offer. platform: the formats of the mocked platform/ files \
+(value mappings, secure store, partner directory, keystore, number ranges). fidelity: what is simulated and verified against \
+CPI, per step type, and what is not." })),
+    ]);
+
     vec![
         tool("project_info", "Project, runtimes and iFlow steps",
-            "The open project: its files, the steps of the iFlows under iflows/ (with each flow step's configuration), \
-             and the installed runtimes. Call this first.",
-            Map::new(), &[], true),
+            "The open project: its files, the steps of the iFlows under iflows/ (with each flow step's configuration, and \
+             each script, XSLT and XML Validator step's file, function and runtime), and the installed runtimes. Call this first.",
+            Map::new(), &[], Effect::ReadOnly),
+        tool("read_file", "Read a project file",
+            "Reads a text file of the project: an input message, a mapping, a script, a schema, an iFlow's files or the \
+             platform/ data. Long files come in parts (startLine, maxLines).",
+            read, &["path"], Effect::ReadOnly),
         tool("run_xslt", "Run an XSLT mapping",
             "Runs an XSLT mapping like CPI's XSLT Mapping step: headers and properties are xsl:param values, the result \
              is the new body. Returns the output message, xsl:message output and diagnostics.",
-            xslt, &[], false),
+            xslt, &[], Effect::RunsCode),
         tool("run_groovy", "Run a Groovy script",
             "Runs a Groovy script like CPI's Groovy Script step with the clean-room Script API (Message, MessageLog, \
-             ITApiFactory with the project's platform/ files). Returns the output message, log entries and diagnostics. \
-             The script runs without a sandbox.",
-            groovy, &[], false),
+             ITApiFactory with the project's platform/ files), or one custom function of a Message Mapping's script \
+             (the graphical mapping itself is not simulated). Returns the output message, log entries and diagnostics. \
+             The script runs without a sandbox. reference script-api lists the API.",
+            groovy, &[], Effect::RunsCode),
         tool("validate_xsd", "Validate XML against an XSD",
-            "Validates the body against an XML schema like CPI's XML Validator. Returns valid and the errors with lines.",
-            xsd, &[], true),
+            "Validates the body against an XML schema (XSD 1.0, the JDK's validator), as a stand-in for CPI's XML Validator, whose validator is not verified (reference fidelity). Returns valid and the errors with lines.",
+            xsd, &[], Effect::ReadOnly),
         tool("evaluate_xpath", "Evaluate an XPath",
             "Evaluates an XPath on the body, like the XPath tab. Returns the value or the selected nodes.",
-            xpath, &["expression"], true),
+            xpath, &["expression"], Effect::ReadOnly),
         tool("run_flow_step", "Run a flow step",
             "Runs a Content Modifier, Filter, Router, General or Iterating Splitter, Gather or converter (JSON/XML/CSV) step on a message, like the \
              Flow Steps tab, from an iFlow of the project or from a config given here. Returns the output message(s), or \
              for a Router each route's result and the route taken. For an iFlow's script, XSLT or XML Validator step, \
              use run_groovy, run_xslt or validate_xsd with the step's file, function and profile from project_info.",
-            step, &[], false),
+            step, &[], Effect::RunsCode),
+        tool("save_file", "Save a file to the project",
+            "Writes a text file into the project, e.g. a mapping, script, schema, input message or platform/ data the user \
+             wants to keep; the app shows it after ↻ in its file tree. Save only what the user asked for. An existing file \
+             is replaced only with overwrite: true.",
+            save, &["path", "content"], Effect::WritesProject),
+        tool("import_iflow", "Import an iFlow",
+            "Imports an iFlow exported from the tenant (.zip) into iflows/<name>/, as the app's Import iFlow does. \
+             Returns its steps; their files open with read_file and run with the tools above.",
+            import, &["zip"], Effect::WritesProject),
+        tool("reference", "Simulator reference",
+            "What the simulator offers, generated from its sources: the Script API (script-api), the platform/ data formats \
+             (platform) and what is verified against CPI (fidelity). Read it before writing a script that uses \
+             services or mapping functions.",
+            reference, &["topic"], Effect::ReadOnly),
     ]
 }
 
@@ -193,6 +250,10 @@ pub fn call(server: &Server, name: &str, args: &Args) -> Result<Value, String> {
         "validate_xsd" => validate_xsd(server, args),
         "evaluate_xpath" => evaluate_xpath(server, args),
         "run_flow_step" => flow::run(server, args),
+        "read_file" => files::read_file(server, args),
+        "save_file" => files::save_file(server, args),
+        "import_iflow" => files::import_iflow(server, args),
+        "reference" => Ok(json!({ "topic": str_arg(args, "topic"), "text": reference::topic(str_arg(args, "topic").unwrap_or_default())? })),
         _ => Err(format!("Unknown tool: {name}")),
     }
 }
@@ -212,6 +273,8 @@ fn check_args(name: &str, args: &Args) -> Result<(), String> {
         let ok = match p["type"].as_str() {
             Some("string") => v.is_string(),
             Some("object") => v.is_object(),
+            Some("integer") => v.as_u64().is_some_and(|n| n >= p["minimum"].as_u64().unwrap_or(0)),
+            Some("boolean") => v.is_boolean(),
             Some("array") => v.as_array().is_some_and(|a| p["items"]["type"] != "string" || a.iter().all(Value::is_string)),
             _ => true,
         };
@@ -257,7 +320,7 @@ pub fn camel_runtime(server: &Server) -> &'static str {
 }
 
 /// Any installed engine that can read project files.
-fn file_runtime(server: &Server) -> Result<&'static str, String> {
+pub fn file_runtime(server: &Server) -> Result<&'static str, String> {
     ["saxon-he-9.9", "saxon-he-12", "groovy-1.x", "groovy-2.x"].into_iter()
         .find(|p| server.engines().locate(p).is_some())
         .ok_or_else(|| "No engine is installed.".to_string())
@@ -267,7 +330,7 @@ pub fn engine_call(server: &Server, runtime: &str, method: &str, params: Value) 
     server.engines().call(runtime, method, params)
 }
 
-fn require_project(server: &Server) -> Result<(), String> {
+pub fn require_project(server: &Server) -> Result<(), String> {
     match server.project() {
         Some(_) => Ok(()),
         None => Err("No project is open; start the server with --project <folder>.".into()),

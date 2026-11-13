@@ -349,8 +349,15 @@ Decisions:
 * **The app leads; the server adds no function.** One tool per tab: `project_info`, `run_xslt`,
   `run_groovy`, `validate_xsd`, `evaluate_xpath`, `run_flow_step`, with the tabs' inputs. Left out on
   purpose because the app has no such tab: running test cases (CLI only), Camel Simple on its own,
-  a lint tool (the lint comes with every `run_groovy` result). The agent reads and writes files with
-  its own tools; the server writes nothing into the project.
+  a lint tool (the lint comes with every `run_groovy` result).
+* **File access for agents without their own (2026-11-13).** Claude Desktop has no file tools, so without a
+  filesystem server it could run steps but not look at the input or the iFlow, nor keep a result. The server
+  adds what the app's file tree, **Save as…** and **Import iFlow** give a person: `read_file`, `save_file`
+  (an existing file only with `overwrite`), `import_iflow` (an existing folder only with `overwrite`), all
+  through the engines' `ProjectFiles` path checks, plus `reference` (Script API, `platform/` formats, fidelity,
+  generated from `completions.ts`, the clean-room classes and the docs, so it cannot drift), server
+  `instructions` with the way to work, and one prompt. Still left out: running test cases (they are the
+  repository's regression cases, not how a user tries a step).
 * **Flow steps** run like the Flow Steps tab, call for call (`mcp/flow.rs` follows
   `store.svelte.ts`), so no CLI command was needed first. A test-case step for flow steps stays open.
 * **Security:** the server is bound to one project folder, opens no port, and marks only the project,

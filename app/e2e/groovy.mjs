@@ -35,6 +35,9 @@ const setOtherFn = async (name) => {
   await fnSelect().selectOption(OTHER);
   await page.getByLabel('Function name').fill(name);
 };
+/** Waits until the output queue (one context per line, as in case.json) is exactly `text`. */
+const waitQueue = (text, message) => page.waitForFunction((t) => document.querySelector('section.output .queue-out')?.getAttribute('data-queue') === t,
+  text, { timeout: 20000 }).catch(async () => fail(`${message}: ${(await page.locator('section.output').innerText()).slice(0, 400)}`));
 const inputTitle = () => page.locator('section.input h2').innerText();
 /** Opens a file from the tree and starts it once it is open: opening alone runs no script. */
 async function openAndRun(file, statusText) {
@@ -202,8 +205,8 @@ await page.getByLabel('Live').check();
 await openAndRun('mapping-context/case.json', 'all values of a context');
 // The output keeps the tab chosen before (Headers in 4a2), so open the result.
 await page.locator('section.output').getByRole('tab', { name: 'Result' }).click();
-await page.locator('section.output pre', { hasText: '["2"]\n["1"]\n["0"]' }).waitFor({ timeout: 20000 })
-  .catch(async () => fail('mapping queue: ' + (await page.locator('section.output').innerText()).slice(0, 400)));
+await waitQueue('["2"]\n["1"]\n["0"]', 'mapping queue');
+if (!(await page.locator('section.output .queue-out tr').first().innerText()).match(/Context 1\s+2/)) fail('output queue rows are not named by context');
 // A String[] argument shows its contexts as rows; SUPPRESS is a kind of value.
 if ((await page.getByLabel('Argument 1, context 1, value 1').inputValue()) !== 'Multi Print') fail('mapping argument from the case');
 if ((await page.getByLabel('Kind of value 2 in context 2').inputValue()) !== 'suppress') fail('SUPPRESS from the case');
@@ -215,17 +218,14 @@ await page.locator('section.output .compare .same', { hasText: 'function result'
 await page.getByRole('button', { name: 'Comparing' }).click();
 await page.locator('section.input').getByRole('button', { name: 'Text', exact: true }).click();
 await page.getByLabel('Argument 1', { exact: true }).fill('["A", "B", "C"]');
-await page.locator('section.output pre', { hasText: '["3"]' }).waitFor({ timeout: 20000 })
-  .catch(() => fail('mapping argument typed in the tab'));
+await waitQueue('["3"]', 'mapping argument typed in the tab');
 // Back to rows: SUPPRESS on a value takes it out of the count; + Context adds a context change.
 await page.locator('section.input').getByRole('button', { name: 'Text', exact: true }).click();
 await page.getByLabel('Kind of value 3 in context 1').selectOption('suppress');
-await page.locator('section.output pre', { hasText: '["2"]' }).waitFor({ timeout: 20000 })
-  .catch(() => fail('SUPPRESS chosen in the context editor did not reach the run'));
+await waitQueue('["2"]', 'SUPPRESS chosen in the context editor did not reach the run');
 await page.locator('section.input').getByRole('button', { name: '+ Context' }).click();
 await page.getByLabel('Argument 1, context 2, value 1').fill('D');
-await page.locator('section.output pre', { hasText: '["2"]\n["1"]' }).waitFor({ timeout: 20000 })
-  .catch(async () => fail('a context added in the editor: ' + (await page.locator('section.output pre').first().innerText())));
+await waitQueue('["2"]\n["1"]', 'a context added in the editor');
 await openAndRun('mapping-get-header/case.json', 'getHeader through MappingContext');
 await page.locator('section.output pre', { hasText: '4711' }).waitFor({ timeout: 20000 })
   .catch(async () => fail('mapping returned value: ' + (await page.locator('section.output').innerText()).slice(0, 400)));

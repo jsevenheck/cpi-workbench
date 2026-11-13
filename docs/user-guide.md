@@ -103,15 +103,17 @@ Download the installer for your platform from the
   the script text when the script opens, so nothing runs for it; after a run, the engine's list wins where
   they differ (the reading of the text is a heuristic and may miss unusual declarations). For a mapping
   function the left pane shows **Function arguments** instead of the body: a field per `String` parameter,
-  named as in the script (**null** passes null), and per `String[]` parameter its contexts as rows, with
-  **+ Value**, **+ Context** and per value *value*, *SUPPRESS*, *xsi:nil* or *null*. **Text** shows the
+  named as in the script (**null** passes null), and per `String[]` parameter the values of the source
+  field as the mapping passes them in: one box per context (a context change starts the next one, e.g. per
+  parent element), with **+ Value**, **+ Context** and per value *text* (the field's value), *SUPPRESS*
+  (a suppressed value: no content, but still a place in the context), *xsi:nil* or *null*. **Text** shows the
   same as one context per line in JSON (`["A", "B"]`; `{"suppress": true}` and `{"xsiNil": true}`), as
   in `case.json`. `Output` and `MappingContext` come from the simulator. A `String[]` function runs once
   per context, a `String` function once (a tenant calls it once per value). A script with only mapping
   functions opens with its first one;
   each script keeps its function and arguments while the app is open, also when you switch to
   another script or tab and back. **Result** shows the returned
-  value or the output queue; `MappingContext` reads and sets the Headers and Properties tabs. The
+  value or the output queue, one row per result context (**Text** shows it as JSON); `MappingContext` reads and sets the Headers and Properties tabs. The
   mapping itself (`.mmap`) is not simulated. SAP does not support Groovy Script 2.x in Message
   Mappings, and a tenant ran mapping scripts on Groovy 2.4.21 and Java 21, so use 1.x
   ([Fidelity](fidelity.md)).

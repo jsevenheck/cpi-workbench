@@ -8,7 +8,7 @@
   import QueueEditor from './QueueEditor.svelte';
   import { app, groovy, runGroovy, autoRunGroovy, saveScript, saveScriptAs, formatXml, otherProfile, saveInput, closeInput, closeEditorFile, selectedMapping } from '../lib/store.svelte';
   import { reindentGroovy } from '../lib/indent';
-  import { formatQueue } from '../lib/queue';
+  import { formatQueue, type QueueEntry } from '../lib/queue';
   import { scriptFunctions, kindLabel, type ParamKind } from '../lib/functions';
   import type { CaseExtras } from '../lib/store.svelte';
   import type { Diagnostic } from '../lib/types';
@@ -125,6 +125,11 @@
     } else if (outputTab === 'compare') {
       outputTab = 'body';
     }
+  }
+
+  /** An output queue entry as the table shows it. */
+  function showEntry(e: QueueEntry): string {
+    return e === null ? 'null' : typeof e === 'string' ? e : 'suppress' in e ? 'SUPPRESS' : 'xsi:nil';
   }
 
   function jump(d: Diagnostic) {
@@ -273,8 +278,14 @@
             {/if}
             {#if result.mapping.queue}
               <h3>Output queue · {result.mapping.queue.length} context{result.mapping.queue.length === 1 ? '' : 's'}</h3>
-              <pre class="console">{formatQueue(result.mapping.queue)}</pre>
-              <p class="hint">One context per line; the same form works as a String[] argument.</p>
+              <p class="hint">What the function writes to the target field: one result context per call (per input context).</p>
+              <table class="queue-out" data-queue={formatQueue(result.mapping.queue)}><tbody>
+                {#each result.mapping.queue as ctx, c}
+                  <tr><th>Context {c + 1}</th><td>{#each ctx as e}<span class="qv" class:special={typeof e !== 'string'}>{showEntry(e)}</span>{:else}<span class="muted">empty</span>{/each}</td></tr>
+                {/each}
+              </tbody></table>
+              <details class="as-text"><summary>Text</summary><pre class="console">{formatQueue(result.mapping.queue)}</pre>
+                <p class="hint">One context per line; the same form works as a String[] argument.</p></details>
             {/if}
           </div>
         {:else if result.output}
@@ -387,6 +398,12 @@
   .diag.msg { border-left-color: var(--accent); background: var(--surface); cursor: default; }
   pre { font-family: var(--mono); font-size: 12px; white-space: pre-wrap; word-break: break-word; margin: 4px 0; }
   .stack { color: var(--muted); }
+  .queue-out { border-collapse: collapse; font-size: 12px; }
+  .queue-out th { text-align: left; font-weight: 400; color: var(--muted); padding: 2px 10px 2px 0; white-space: nowrap; }
+  .queue-out td { padding: 2px 0; }
+  .qv { display: inline-block; font-family: var(--mono); background: var(--surface); border: 1px solid var(--border-soft); border-radius: 3px; padding: 0 5px; margin: 1px 4px 1px 0; }
+  .qv.special { color: var(--muted); font-style: italic; }
+  .as-text { margin-top: 8px; font-size: 11px; color: var(--muted); }
   .console { background: var(--surface); border: 1px solid var(--border-soft); border-radius: 4px; padding: 6px; }
   .line { display: block; width: 100%; text-align: left; padding: 3px 4px; border: none; background: none; color: var(--fg); font: inherit; border-bottom: 1px solid var(--border-soft); cursor: pointer; }
   .diag-line.error b { color: var(--err); }

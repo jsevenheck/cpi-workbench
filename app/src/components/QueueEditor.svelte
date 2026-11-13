@@ -53,6 +53,8 @@
       placeholder={'One context per line, e.g.\n["A", "B"]\n["C", {"suppress": true}]'}></textarea>
     {#if parsed.error}<p class="err">{parsed.error}</p>{/if}
   {:else}
+    <p class="intro">The values of the source field, as the mapping passes them in: one box per context (a context
+      change starts the next one, e.g. per parent element).</p>
     {#each parsed.queue as ctx, c}
       <div class="ctx" role="group" aria-label="{label}, context {c + 1}">
         <div class="ctx-head">
@@ -67,9 +69,10 @@
               placeholder={kind === 'suppress' ? 'SUPPRESS' : kind === 'nil' ? 'xsi:nil' : kind === 'null' ? 'null' : ''}
               aria-label="{label}, context {c + 1}, value {v + 1}"
               oninput={(e) => edit((q) => { q[c][v] = (e.currentTarget as HTMLInputElement).value; })} />
-            <select value={kind} aria-label="Kind of value {v + 1} in context {c + 1}"
+            <select value={kind} class:plain={kind === 'value'} aria-label="Kind of value {v + 1} in context {c + 1}"
+              title="text: the field's value · SUPPRESS: a suppressed value (no content, still a place in the context) · xsi:nil: a field marked nil · null: no value"
               onchange={(e) => edit((q) => { q[c][v] = entryFor((e.currentTarget as HTMLSelectElement).value as EntryKind, ''); })}>
-              <option value="value">value</option>
+              <option value="value">text</option>
               <option value="suppress">SUPPRESS</option>
               <option value="nil">xsi:nil</option>
               <option value="null">null</option>
@@ -98,6 +101,9 @@
   .val { display: flex; gap: 4px; align-items: center; }
   .val input { flex: 1; min-width: 0; font-size: 12px; }
   .val select { font-size: 11px; }
+  /* The usual case stays quiet; a special value stands out. */
+  .val select.plain { color: var(--muted); border-color: transparent; background: transparent; }
+  .intro { margin: 0; font-size: 11px; color: var(--muted); }
   .add { align-self: flex-start; }
   .actions { display: flex; gap: 6px; }
   .on { border-color: var(--accent); color: var(--accent); }

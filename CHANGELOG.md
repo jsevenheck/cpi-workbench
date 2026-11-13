@@ -19,8 +19,9 @@ of its version.
   or *Message Mapping function*, with their parameter names, and replaces the **fn** field, the mode label and
   the **Run as** bar. The functions are read from the script text when it opens, so a mapping script shows its
   arguments before the first run (still without running it). The arguments carry the parameter names from the
-  script; a `String[]` argument is edited as contexts and values (**+ Value**, **+ Context**, SUPPRESS, xsi:nil),
-  with **Text** for the JSON form of `case.json`.
+  script; a `String[]` argument is edited as the source field's values grouped by context (**+ Value**,
+  **+ Context**, per value text, SUPPRESS, xsi:nil or null), with **Text** for the JSON form of `case.json`.
+  **Result** lists the output queue as one row per context.
 
 ## [0.3.1] - 2026-11-11
 

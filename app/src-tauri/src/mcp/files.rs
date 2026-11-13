@@ -30,15 +30,22 @@ fn relative(server: &Server, path: &str) -> Result<PathBuf, String> {
 }
 
 pub fn read_file(server: &Server, args: &Args) -> Result<Value, String> {
-    let path = str_arg(args, "path").unwrap_or_default();
-    let full = relative(server, path)?;
-    if full.is_dir() {
-        return Err(format!("{path} is a folder; project_info lists its files."));
-    }
-    let content = super::tools::read_file(server, path)?;
-    if content.contains('\0') {
-        return Err(format!("{path} is a binary file, not text."));
-    }
+    let (key, path, content) = match (str_arg(args, "path"), str_arg(args, "runId")) {
+        (Some(_), Some(_)) => return Err("Give path or runId, not both.".into()),
+        (None, None) => return Err("Give path (a project file) or runId (an earlier run's output body).".into()),
+        (None, Some(r)) => ("runId", r, server.runs().message(r)?.body),
+        (Some(path), None) => {
+            let full = relative(server, path)?;
+            if full.is_dir() {
+                return Err(format!("{path} is a folder; project_info lists its files."));
+            }
+            let content = super::tools::read_file(server, path)?;
+            if content.contains('\0') {
+                return Err(format!("{path} is a binary file, not text."));
+            }
+            ("path", path, content)
+        }
+    };
     let start = args.get("startLine").and_then(Value::as_u64).unwrap_or(1).max(1) as usize;
     let max = args.get("maxLines").and_then(Value::as_u64).map_or(DEFAULT_LINES, |n| n.max(1) as usize);
     let lines: Vec<&str> = content.split_inclusive('\n').collect();
@@ -63,7 +70,7 @@ pub fn read_file(server: &Server, args: &Args) -> Result<Value, String> {
         text.push_str(line);
         end += 1;
     }
-    let mut r = json!({ "path": path, "content": text, "totalLines": total });
+    let mut r = json!({ key: path, "content": text, "totalLines": total });
     if cut_line {
         r["lineCut"] = json!(format!("Line {end} is longer than {MAX_CHARS} characters; only its beginning is shown. \
             The run tools read the whole file with bodyPath, mappingPath or scriptPath."));
@@ -79,6 +86,12 @@ pub fn read_file(server: &Server, args: &Args) -> Result<Value, String> {
 }
 
 pub fn save_file(server: &Server, args: &Args) -> Result<Value, String> {
+    let content = match (str_arg(args, "content"), str_arg(args, "contentFrom")) {
+        (Some(_), Some(_)) => return Err("Give content or contentFrom, not both.".into()),
+        (None, None) => return Err("Give content, or contentFrom (an earlier run's runId).".into()),
+        (Some(c), None) => c.to_string(),
+        (None, Some(r)) => server.runs().message(r)?.body,
+    };
     let path = str_arg(args, "path").unwrap_or_default();
     let full = relative(server, path)?;
     let overwrite = args.get("overwrite").and_then(Value::as_bool).unwrap_or(false);
@@ -90,7 +103,6 @@ pub fn save_file(server: &Server, args: &Args) -> Result<Value, String> {
         return Err(format!("{path} exists already. Read it first; to replace it, call save_file again with \
             overwrite: true, or save under another name."));
     }
-    let content = str_arg(args, "content").unwrap_or_default();
     engine_call(server, file_runtime(server)?, "file.write", json!({ "path": path, "content": content }))?;
     Ok(json!({ "path": path, "saved": true, "replaced": exists }))
 }

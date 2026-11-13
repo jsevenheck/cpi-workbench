@@ -17,6 +17,10 @@ of its version.
   exported iFlow, and `reference` explains the Script API, the `platform/` data formats and what is verified
   against CPI, generated from the simulator's sources. The server's instructions say how to develop a step with the
   tools, and the prompt **develop_step** starts it. See [docs/mcp.md](docs/mcp.md#working-from-claude-desktop).
+- **MCP: pass results on by `runId`**: every run that produces a message returns a `runId`; `messageFrom` makes it
+  the next step's input (body, headers and properties), a Gather takes a Splitter's messages with `messagesFrom`.
+  A body the step did not change is left out of the result, and long bodies come back shortened; `read_file` with `runId` and `save_file` with `contentFrom`
+  take the whole body.
 
 ### Changed
 

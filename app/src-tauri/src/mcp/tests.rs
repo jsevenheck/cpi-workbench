@@ -166,7 +166,7 @@ fn wrong_arguments_are_tool_errors() {
     assert!(call(json!({ "expression": "/a", "bodyPath": "x.xml" })).contains("No project is open"));
     assert!(call_tool("read_file", json!({ "path": "a.xml", "startLine": 0 })).contains("startLine"));
     assert!(call_tool("save_file", json!({ "path": "a.xml", "content": "x", "overwrite": "yes" })).contains("type boolean"));
-    assert!(call_tool("save_file", json!({ "path": "a.xml" })).contains("Missing argument 'content'"));
+    assert!(call_tool("save_file", json!({ "path": "a.xml" })).contains("Give content, or contentFrom"));
     assert!(call_tool("reference", json!({ "topic": "groovy" })).contains("must be one of"));
     assert!(call_tool("read_file", json!({ "path": "a.xml" })).contains("No project is open"));
 }
@@ -545,5 +545,71 @@ fn files_are_read_saved_and_imported_inside_the_project() {
 
     engines.shutdown();
     let _ = std::fs::remove_file(&zip);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Steps chained by runId, as the message flows through an iFlow, without copying bodies.
+#[test]
+fn runs_chain_by_id() {
+    let Some(engines) = engines() else { return };
+    let dir = project("chain");
+    *engines.on_start.lock().unwrap() = Some(("project.open".into(), json!({ "dir": dir.to_string_lossy() })));
+    let server = Server::new(engines.clone(), Some(dir.clone()));
+    let c = Call(&server);
+    let id = |v: &Value| v["runId"].as_str().unwrap_or_else(|| panic!("no runId: {v}")).to_string();
+
+    // XSLT with a header; its output carries the header on.
+    let x = c.ok("run_xslt", json!({ "body": "<in/>", "headers": { "Sender": "ERP" },
+        "mapping": "<xsl:stylesheet version='2.0' xmlns:xsl='http://www.w3.org/1999/XSL/Transform'>\
+            <xsl:template match='/'><Order id='7'><Item>a</Item><Item>b</Item><Item>c</Item></Order></xsl:template></xsl:stylesheet>" }));
+    let r1 = id(&x);
+    // The XML Validator passes the message on.
+    let v = c.ok("validate_xsd", json!({ "messageFrom": r1, "schema": "<xs:schema xmlns:xs='http://www.w3.org/2001/XMLSchema'>\
+        <xs:element name='Order'><xs:complexType><xs:sequence><xs:element name='Item' type='xs:string' maxOccurs='unbounded'/>\
+        </xs:sequence><xs:attribute name='id'/></xs:complexType></xs:element></xs:schema>" }));
+    assert_eq!(v["valid"], true, "{v}");
+    let r2 = id(&v);
+    // Content Modifier on it: XPath from the body, the header from the XSLT run still there, one property given here.
+    let cm = c.ok("run_flow_step", json!({ "messageFrom": r2, "properties": { "Channel": "WEB" },
+        "step": { "type": "contentModifier", "config": { "headers": [{ "name": "OrderId", "type": "xpath", "value": "/Order/@id" }] } } }));
+    let headers = cm["output"]["headers"].as_array().unwrap();
+    assert!(headers.iter().any(|h| h["name"] == "OrderId" && h["value"] == "7"), "{cm}");
+    assert!(headers.iter().any(|h| h["name"] == "Sender" && h["value"] == "ERP"), "headers flow on: {cm}");
+    assert!(cm["output"]["properties"].as_array().unwrap().iter().any(|p| p["name"] == "Channel"), "{cm}");
+    // A header given with the call replaces the one of the same name.
+    let over = c.ok("run_groovy", json!({ "messageFrom": id(&cm), "headers": { "Sender": "Shop" },
+        "script": "def processData(m) { m.setBody(m.getHeaders()['Sender'] + '/' + m.getHeaders()['OrderId']); m }" }));
+    assert_eq!(over["output"]["body"], "Shop/7", "{over}");
+    // Splitter, then Gather all its messages; one part on its own.
+    let split = c.ok("run_flow_step", json!({ "messageFrom": id(&cm), "step": { "type": "splitter", "config": { "expression": "/Order/Item" } } }));
+    let rs = id(&split);
+    let part = c.ok("evaluate_xpath", json!({ "messageFrom": format!("{rs}/2"), "expression": "string(//Item)" }));
+    assert_eq!(part["items"][0]["value"], "b", "{part}");
+    assert!(part.get("runId").is_none(), "XPath produces no message");
+    assert!(c.err("run_flow_step", json!({ "messageFrom": rs, "step": { "type": "filter", "config": { "expression": "/Item" } } }))
+        .contains(&format!("{rs}/1, {rs}/2, {rs}/3")), "a split run names its parts");
+    let g = c.ok("run_flow_step", json!({ "messagesFrom": rs, "step": { "type": "gather", "config": {} } }));
+    assert_eq!(g["body"].as_str().unwrap().matches("<Item>").count(), 3, "{g}");
+    // runtime: both keeps each runtime's output.
+    let both = c.ok("run_xslt", json!({ "runtime": "both", "messageFrom": r1,
+        "mapping": "<xsl:stylesheet version='2.0' xmlns:xsl='http://www.w3.org/1999/XSL/Transform'><xsl:output method='text'/>\
+            <xsl:template match='/'><xsl:value-of select='system-property(\"xsl:product-version\")'/></xsl:template></xsl:stylesheet>" }));
+    let rb = id(&both);
+    assert_eq!(c.ok("read_file", json!({ "runId": format!("{rb}/saxon-he-12") }))["content"], "HE 12.9", "{both}");
+
+    // A long body comes back shortened; read_file and save_file take it whole by id.
+    let long = c.ok("run_groovy", json!({ "script": "def processData(m) { m.setBody('x' * 50000); m }" }));
+    assert_eq!(long["output"]["body"].as_str().unwrap().len(), runs::PREVIEW_CHARS, "{}", long["output"]["bodyShortened"]);
+    let rl = id(&long);
+    assert_eq!(c.ok("read_file", json!({ "runId": rl }))["content"].as_str().unwrap().len(), 50000);
+    c.ok("save_file", json!({ "path": "inputs/long.txt", "contentFrom": rl }));
+    assert_eq!(std::fs::read_to_string(dir.join("inputs/long.txt")).unwrap().len(), 50000);
+
+    // A failed run, an invalid message and an unknown id.
+    let bad = c.ok("run_groovy", json!({ "script": "def processData(m) { throw new RuntimeException('no') }" }));
+    assert!(bad["ok"] == false && bad.get("runId").is_none(), "{bad}");
+    assert!(c.err("run_xslt", json!({ "messageFrom": "run-0000-9", "mappingPath": "mappings/order-to-salesorder.xsl" })).contains("Unknown run"));
+
+    engines.shutdown();
     let _ = std::fs::remove_dir_all(&dir);
 }

@@ -82,6 +82,12 @@ const route = await tool('run_flow_step', { headers: { SenderId: 'ERP' }, step: 
   { name: 'Other', expressionType: 'nonxml', condition: '', default: true }] } } });
 check(route.taken === 'ERP', 'run_flow_step (Router, Camel Simple)', route);
 
+const first = await tool('run_groovy', { runtime: 'groovy-1.x', body: 'abc', headers: { h: 'x' },
+  script: 'def processData(m) { m.setBody(m.getBody(String).toUpperCase()); m }' });
+const next = await tool('run_groovy', { runtime: 'groovy-2.x', messageFrom: first.runId,
+  script: "def processData(m) { m.setBody(m.getBody(String) + m.getHeaders()['h']); m }" });
+check(next.output?.body === 'ABCx', 'messageFrom passes a run on by its runId', next);
+
 clearTimeout(timer);
 child.stdin.end();
 const code = await new Promise((resolve) => child.on('exit', resolve));

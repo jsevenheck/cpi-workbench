@@ -84,13 +84,13 @@ agent without file access of its own what the app's file tree and **Import iFlow
 | Tool | Tab in the app |
 |---|---|
 | `project_info` | The project: its files, the steps of the iFlows under `iflows/` (flow steps with their configuration; script, XSLT and XML Validator steps with file, function and runtime) and the installed runtimes. |
-| `read_file` | Opening a file: the text of a project file, long files in parts (`startLine`, `maxLines`). |
+| `read_file` | Opening a file: the text of a project file, long files in parts (`startLine`, `maxLines`); with `runId`, the whole output body of a run. |
 | `run_xslt` | XSLT (`mappingPath` or `mapping`). `runtime: "both"` runs Saxon-HE 9.9 and 12, as the runtime comparison does. |
 | `run_groovy` | Groovy, with the Script API and the project's `platform/` mocks, and the body type (`bodyType`). The runtime (1.x or 2.x) follows the script's imports unless given; `both` runs both. A custom function of a Message Mapping script takes `args` instead, as the Groovy tab's *Arguments*; the result's `mapping` holds the returned value or the output queue. |
 | `validate_xsd` | XSD. |
 | `evaluate_xpath` | XPath (1.0 or 3.1, with namespaces). |
 | `run_flow_step` | Flow Steps: a Content Modifier, Filter, Router, Splitter, Gather or converter (JSON ↔ XML, XML ↔ CSV) step from an iFlow (`iflowStep`: name or id, with `iflow` when several iFlows share it) or from a configuration (`step`). |
-| `save_file` | **Save as…**: writes a text file into the project, creating folders. An existing file is replaced only with `overwrite: true`. |
+| `save_file` | **Save as…**: writes a text file (`content`, or a run's output with `contentFrom`) into the project, creating folders. An existing file is replaced only with `overwrite: true`. |
 | `import_iflow` | **Import iFlow**: an iFlow exported from the tenant (`.zip`, any path) into `iflows/<name>/`; returns its steps. An existing folder is replaced only with `overwrite: true`. |
 | `reference` | No tab: what the simulator offers, generated from its sources. `script-api`: the Script API, Message Mapping and platform service methods; `platform`: the formats of the `platform/` files; `fidelity`: [Fidelity](fidelity.md). |
 
@@ -102,6 +102,20 @@ A message is `body` (or `bodyPath`, a project file) and, where the tab has them,
 property is a string, or `{"value": "…", "type": "Integer"}` for another type (the types of
 [test cases](test-cases.md)). Results are the engines' JSON, the same data the app shows: the output
 message, diagnostics with lines, `xsl:message` output, the message log, timings.
+
+### Passing results on (`runId`)
+
+A run that produces a message returns a `runId`: `run_xslt`, `run_groovy`, `validate_xsd` (the message
+passes on, as the XML Validator lets it), `run_flow_step` (the Router passes the message on; a Splitter's
+messages are `runId/1`, `runId/2`, …; with `runtime: both`, `runId/saxon-he-12` and so on). A failed run and an
+invalid message get none. `messageFrom: "<runId>"` makes that message (body, headers, properties) the input of
+the next call, as it flows to the next step in an iFlow; `body`, `headers` and `properties` given in the same call
+replace the body or the rows of the same name. A Gather takes `messagesFrom` (a Splitter's `runId`, or a list).
+
+To keep results small, a body the step left as it was (from 200 characters) is left out, with
+`bodyUnchanged` saying so; bodies longer than 20,000 characters, and a Splitter's messages longer than 2,000,
+come back shortened, with `bodyShortened`. The run keeps the whole body: `read_file` with `runId` reads it, `save_file` with `contentFrom` saves it. The server keeps the
+last 50 runs (at most 64 MB) of its process; an older or unknown `runId` is an error that says to run again.
 
 Wrong arguments, files outside the project and engine failures come back as tool results with
 `isError: true` and a message, so the agent can correct the call. A failing mapping or script is a

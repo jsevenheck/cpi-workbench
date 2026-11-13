@@ -358,6 +358,12 @@ Decisions:
   generated from `completions.ts`, the clean-room classes and the docs, so it cannot drift), server
   `instructions` with the way to work, and one prompt. Still left out: running test cases (they are the
   repository's regression cases, not how a user tries a step).
+* **Results by reference (2026-11-13).** A headless agent limited to the MCP tools copied each output body into
+  the next call. Runs now return a `runId`, and `messageFrom` / `messagesFrom` take the message on, as it flows
+  through an iFlow. Opaque handles of the server process, as the 2026-07-28 specification describes stateful
+  tools (validated on each call, an unknown one is a tool error); a per-process prefix makes an id from an
+  earlier process unknown rather than another run. Intermediate files in `inputs/` were ruled out: they stay
+  in the project and lose headers and properties.
 * **Flow steps** run like the Flow Steps tab, call for call (`mcp/flow.rs` follows
   `store.svelte.ts`), so no CLI command was needed first. A test-case step for flow steps stays open.
 * **Security:** the server is bound to one project folder, opens no port, and marks only the project,

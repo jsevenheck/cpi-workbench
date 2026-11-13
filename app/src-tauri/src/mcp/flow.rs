@@ -49,8 +49,8 @@ pub fn run(server: &Server, args: &Args) -> Result<Value, String> {
         namespaces: args.get("namespaces").cloned().unwrap_or(json!({})),
         input: tools::message(server, args)?,
     };
-    if kind != "gather" && args.contains_key("messages") {
-        return Err("messages is for a Gather step; the other steps take body (or bodyPath).".into());
+    if kind != "gather" && (args.contains_key("messages") || args.contains_key("messagesFrom")) {
+        return Err("messages and messagesFrom are for a Gather step; the other steps take body, bodyPath or messageFrom.".into());
     }
     let mut result = match kind.as_str() {
         "contentModifier" => content_modifier(&ctx, &config)?,
@@ -269,7 +269,12 @@ fn filter(ctx: &Ctx, config: &Value) -> Result<Value, String> {
 }
 
 fn gather(ctx: &Ctx, config: &Value, args: &Args) -> Result<Value, String> {
-    let messages = args.get("messages").cloned().ok_or("A Gather step needs messages (the bodies to gather).")?;
+    let messages = match (args.get("messages"), args.get("messagesFrom")) {
+        (Some(_), Some(_)) => return Err("Give messages or messagesFrom, not both.".into()),
+        (Some(m), None) => m.clone(),
+        (None, Some(refs)) => json!(tools::message_refs(ctx.server, refs)?.into_iter().map(|m| m.body).collect::<Vec<_>>()),
+        (None, None) => return Err("A Gather step needs messages (the bodies to gather) or messagesFrom (a Splitter's runId).".into()),
+    };
     engine_call(ctx.server, ctx.xml, "gather.run", json!({
         "messageType": or(config, "messageType", "sameXml"), "algorithm": or(config, "algorithm", "combine"),
         "sourceXPath": s(config, "sourceXPath"), "targetXPath": s(config, "targetXPath"),

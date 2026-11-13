@@ -7,7 +7,8 @@
 //!   under 2026-07-28 (`server/discover`, `resultType`, caching hints); a client that opens with
 //!   `initialize` gets the negotiated legacy revision (2025-11-25 back to 2024-11-05).
 //! * Features: tools, one per tab of the app (see `tools.rs`), plus reading and saving project files,
-//!   importing an iFlow and a reference generated from the sources (`files.rs`, `reference.rs`), so that an
+//!   importing an iFlow, results by runId (`runs.rs`) and a reference generated from the sources
+//!   (`files.rs`, `reference.rs`), so that an
 //!   agent without file access of its own (Claude Desktop) can work in the project; one prompt. No
 //!   resources, logging, sampling or roots.
 //! * Scope: one project folder (`--project`; default `CLAUDE_PROJECT_DIR`, else the working directory).
@@ -17,6 +18,7 @@
 mod files;
 mod flow;
 mod reference;
+mod runs;
 mod tools;
 
 use crate::engine::{self, Engines};
@@ -53,8 +55,10 @@ Modifier, Filter, Router, Splitter, Gather and Converter, as the tabs of the CPI
 How to work: call project_info first (files, iFlow steps with their configuration, runtimes); read the input \
 message, the iFlow's scripts and mappings with read_file; write the step and run it with run_xslt, run_groovy, \
 validate_xsd, evaluate_xpath or run_flow_step, passing the source inline (mapping, script, schema, step) until the \
-result is right; chain steps by passing one result's output body as the next body. Run on both runtimes (runtime: \
-both) when the version matters. Show the user the result and, for flow steps, the configuration as they would enter \
+result is right. A run that produces a message returns a runId: pass it as messageFrom to the next step instead \
+of copying the body (body, headers and properties flow on as in an iFlow; a Splitter's messages are runId/1, \
+runId/2, …; a Gather takes messagesFrom). Long bodies come back shortened; read_file with runId shows them whole, \
+save_file with contentFrom keeps one. Run on both runtimes (runtime: both) when the version matters. Show the user the result and, for flow steps, the configuration as they would enter \
 it in the iFlow. Save files with save_file only when the user wants them; the app shows them after a refresh. \
 reference explains the Script API, the platform/ data formats and what is verified against CPI.\n\
 Paths are relative to the project folder; the tools read and write inside it only. Groovy scripts, and reflexive \
@@ -94,7 +98,7 @@ fn get_prompt(params: &Value) -> Result<Value, (i64, String)> {
 2. read_file: the sample input and the files of the steps around the one to build.\n\
 3. Pick the step type CPI would use and write it. For scripts or mapping functions, check reference script-api.\n\
 4. Run it on the simulator with the sample input and fix it until the output is right; try an edge case too \
-(empty or missing fields, several records).\n\
+(empty or missing fields, several records). Pass a result to the next step with messageFrom and its runId.\n\
 5. Report the final source or configuration (as entered in the iFlow), the output it gave, and anything the \
 simulator does not cover (fidelity).\n\
 6. Ask before saving; then save_file into the project's folder for its kind.\n");
@@ -104,6 +108,7 @@ simulator does not cover (fidelity).\n\
 pub struct Server {
     engines: Arc<Engines>,
     project: Option<PathBuf>,
+    runs: runs::Runs,
 }
 
 /// Entry point for `cpi-workbench mcp [--project <folder>]`. Returns the process exit code.
@@ -279,11 +284,15 @@ fn supported_versions() -> Vec<&'static str> {
 
 impl Server {
     pub fn new(engines: Arc<Engines>, project: Option<PathBuf>) -> Self {
-        Server { engines, project }
+        Server { engines, project, runs: runs::Runs::default() }
     }
 
     pub fn engines(&self) -> &Engines {
         &self.engines
+    }
+
+    pub fn runs(&self) -> &runs::Runs {
+        &self.runs
     }
 
     pub fn project(&self) -> Option<&Path> {

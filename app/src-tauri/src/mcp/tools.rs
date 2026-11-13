@@ -2,7 +2,7 @@
 //! making the same engine calls with the same inputs. The app's features lead: the tools add none of
 //! their own. A wrong argument is an error message the model can act on.
 
-use super::{files, flow, reference, Server};
+use super::{files, flow, reference, runs, Server};
 use serde_json::{json, Map, Value};
 
 pub type Args = Map<String, Value>;
@@ -41,6 +41,7 @@ fn values_schema(what: &str) -> Value {
 fn message_properties(props: &mut Map<String, Value>, headers: bool) {
     props.insert("body".into(), json!({ "type": "string", "description": "The message body. Use body or bodyPath." }));
     props.insert("bodyPath".into(), json!({ "type": "string", "description": "Project-relative file whose content is the message body." }));
+    props.insert("messageFrom".into(), json!({ "type": "string", "description": "The runId of an earlier run (or runId/part, e.g. a Splitter's run-…/2): its output message is the input, as the message flows to the next step in an iFlow. body, bodyPath, headers and properties given here replace the body or the rows of the same name." }));
     if headers {
         props.insert("headers".into(), values_schema("Message headers"));
         props.insert("properties".into(), values_schema("Exchange properties"));
@@ -158,21 +159,25 @@ csvHeader: \"none\"|\"xml\", includeParent, parentPath, includeAttributes; CSV t
 fieldSeparator, firstLineHeader, headerMapping: \"xsd\"|\"csv\"}." } },
             "required": ["type", "config"], "additionalProperties": false })),
         ("messages", json!({ "type": "array", "items": { "type": "string" },
-            "description": "Gather only: the bodies to gather, e.g. the messages a splitter returned." })),
+            "description": "Gather only: the bodies to gather, e.g. the messages a splitter returned. Use messages or messagesFrom." })),
+        ("messagesFrom", json!({ "anyOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }],
+            "description": "Gather only: the runId of a Splitter run (all its messages, in order), or a list of runIds or runId/part." })),
         ("namespaces", ns),
     ]);
     message_properties(&mut step, true);
 
     let path = |what: &str| json!({ "type": "string", "description": what });
     let read = obj(vec![
-        ("path", path("Project-relative file, as project_info lists it (e.g. iflows/Order/src/main/resources/script/check.groovy).")),
+        ("path", path("Project-relative file, as project_info lists it (e.g. iflows/Order/src/main/resources/script/check.groovy). Use path or runId.")),
+        ("runId", path("The runId (or runId/part) of an earlier run: its whole output body, e.g. when the result showed it shortened.")),
         ("startLine", json!({ "type": "integer", "minimum": 1, "default": 1, "description": "First line to return (1-based)." })),
         ("maxLines", json!({ "type": "integer", "minimum": 1, "default": 2000, "description": "Lines to return at most; long files come in parts." })),
     ]);
     let save = obj(vec![
         ("path", path("Project-relative file to write, in the folder of its kind: mappings/*.xsl, scripts/*.groovy, \
 schemas/*.xsd, inputs/*.xml|json|csv, platform/*.json. Folders are created.")),
-        ("content", json!({ "type": "string", "description": "The whole file content (text)." })),
+        ("content", json!({ "type": "string", "description": "The whole file content (text). Use content or contentFrom." })),
+        ("contentFrom", path("The runId (or runId/part) of an earlier run: saves its output body, e.g. a mapping's result as a new input.")),
         ("overwrite", json!({ "type": "boolean", "default": false, "description": "Replace an existing file. Without it, an existing file is an error." })),
     ]);
     let import = obj(vec![
@@ -195,7 +200,7 @@ CPI, per step type, and what is not." })),
         tool("read_file", "Read a project file",
             "Reads a text file of the project: an input message, a mapping, a script, a schema, an iFlow's files or the \
              platform/ data. Long files come in parts (startLine, maxLines).",
-            read, &["path"], Effect::ReadOnly),
+            read, &[], Effect::ReadOnly),
         tool("run_xslt", "Run an XSLT mapping",
             "Runs an XSLT mapping like CPI's XSLT Mapping step: headers and properties are xsl:param values, the result \
              is the new body. Returns the output message, xsl:message output and diagnostics.",
@@ -222,7 +227,7 @@ CPI, per step type, and what is not." })),
             "Writes a text file into the project, e.g. a mapping, script, schema, input message or platform/ data the user \
              wants to keep; the app shows it after ↻ in its file tree. Save only what the user asked for. An existing file \
              is replaced only with overwrite: true.",
-            save, &["path", "content"], Effect::WritesProject),
+            save, &["path"], Effect::WritesProject),
         tool("import_iflow", "Import an iFlow",
             "Imports an iFlow exported from the tenant (.zip) into iflows/<name>/, as the app's Import iFlow does. \
              Returns its steps; their files open with read_file and run with the tools above.",
@@ -243,6 +248,20 @@ pub fn exists(name: &str) -> bool {
 
 pub fn call(server: &Server, name: &str, args: &Args) -> Result<Value, String> {
     check_args(name, args)?;
+    let mut result = dispatch(server, name, args)?;
+    // A run that produced a message keeps it under a runId; long bodies come back shortened.
+    if matches!(name, "run_xslt" | "run_groovy" | "validate_xsd" | "run_flow_step") && result["ok"] != false && result["valid"] != false {
+        let m = message(server, args)?;
+        let input = runs::Message::from_output(&m).unwrap_or_else(|| runs::Message { body: String::new(), headers: json!([]), properties: json!([]) });
+        if let Some(id) = server.runs().keep(runs::produced(name, &input, &result)) {
+            runs::shorten(&mut result, &id, &input.body);
+            result["runId"] = json!(id);
+        }
+    }
+    Ok(result)
+}
+
+fn dispatch(server: &Server, name: &str, args: &Args) -> Result<Value, String> {
     match name {
         "project_info" => project_info(server),
         "run_xslt" => run_xslt(server, args),
@@ -376,13 +395,39 @@ fn value_rows(args: &Args, key: &str) -> Result<Value, String> {
 }
 
 /// The incoming message: {body, headers, properties}.
+/// The incoming message: {body, headers, properties}. With messageFrom (or, for a Gather, the first message of
+/// messagesFrom) an earlier run's output is the base; what the call gives replaces its body or rows.
 pub fn message(server: &Server, args: &Args) -> Result<Value, String> {
+    let base = match (str_arg(args, "messageFrom"), args.get("messagesFrom")) {
+        (Some(r), _) => Some(server.runs().message(r)?),
+        (None, Some(refs)) => message_refs(server, refs)?.into_iter().next(),
+        _ => None,
+    };
     let body = match one_of(args, "body", "bodyPath", true)? {
         (Some(b), _) => b.to_string(),
         (_, Some(p)) => read_file(server, p)?,
-        _ => String::new(),
+        _ => base.as_ref().map(|m| m.body.clone()).unwrap_or_default(),
     };
-    Ok(json!({ "body": body, "headers": value_rows(args, "headers")?, "properties": value_rows(args, "properties")? }))
+    let (headers, properties) = (value_rows(args, "headers")?, value_rows(args, "properties")?);
+    let (headers, properties) = match &base {
+        Some(m) => (runs::merge_rows(&m.headers, &headers), runs::merge_rows(&m.properties, &properties)),
+        None => (headers, properties),
+    };
+    Ok(json!({ "body": body, "headers": headers, "properties": properties }))
+}
+
+/// The messages of `messagesFrom`: one run id or runId/part, or a list of them, in order.
+pub fn message_refs(server: &Server, refs: &Value) -> Result<Vec<runs::Message>, String> {
+    let list: Vec<&str> = match refs {
+        Value::String(s) => vec![s.as_str()],
+        Value::Array(a) if a.iter().all(Value::is_string) => a.iter().filter_map(Value::as_str).collect(),
+        _ => return Err("messagesFrom is a runId or a list of runIds.".into()),
+    };
+    let mut out = Vec::new();
+    for r in list {
+        out.extend(server.runs().messages(r)?);
+    }
+    Ok(out)
 }
 
 /// `{content, path}` for a mapping, script or schema: the engine loads a path itself (so includes and

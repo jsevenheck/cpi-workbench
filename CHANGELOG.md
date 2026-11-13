@@ -31,6 +31,9 @@ of its version.
   script; a `String[]` argument is edited as the source field's values grouped by context (**+ Value**,
   **+ Context**, per value text, SUPPRESS, xsi:nil or null), with **Text** for the JSON form of `case.json`.
   **Result** lists the output queue as one row per context.
+- **Gather**: Combine warns when a message is not well-formed XML (JSON or text from a script), since the result
+  is then not XML either; it still runs as before. What CPI does in that case is open; `probes/gather/` asks a tenant.
+
 ### Fixed
 
 - **Splitter and Gather on Windows**: split messages, a Gather's Combine at XPath, an XPath's element results and

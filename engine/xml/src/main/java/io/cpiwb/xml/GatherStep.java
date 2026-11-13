@@ -65,7 +65,7 @@ public final class GatherStep {
                 throw new IllegalArgumentException("There are no messages to gather; run a splitter or add messages.");
             }
             result.with("body", gather(format, algorithm, messages, Json.str(req, "sourceXPath", "").trim(),
-                    Json.str(req, "targetXPath", "").trim(), XsltStep.stringMap(Json.obj(req, "namespaces")), resolver));
+                    Json.str(req, "targetXPath", "").trim(), XsltStep.stringMap(Json.obj(req, "namespaces")), resolver, diags));
         } catch (Exception e) {
             ok = false;
             diags.add(Diagnostic.error(e.getMessage() == null ? e.toString() : e.getMessage()).toJson());
@@ -76,7 +76,7 @@ public final class GatherStep {
     }
 
     private static String gather(String format, String algorithm, List<String> messages, String source, String target,
-                                 Map<String, String> ns, ProjectResolver resolver) throws Exception {
+                                 Map<String, String> ns, ProjectResolver resolver, List<Object> diags) throws Exception {
         if (!List.of("sameXml", "differentXml", "plainText").contains(format)) {
             throw new IllegalArgumentException("UnsupportedInSimulator: the Incoming Format '" + format
                     + "' (simulated: sameXml, differentXml, plainText; Any, which combines into Zip or Tar archives, is not).");
@@ -92,7 +92,7 @@ public final class GatherStep {
                 if (!xml) {
                     throw new IllegalArgumentException("Combine is for XML messages (SAP); plain text is concatenated.");
                 }
-                return combine(messages, "differentXml".equals(format));
+                return combine(messages, "differentXml".equals(format), diags);
             case "combineAtXPath":
                 if (!"sameXml".equals(format)) {
                     throw new IllegalArgumentException("Combine at XPath is for Incoming Format XML (Same Format) (SAP).");
@@ -104,7 +104,7 @@ public final class GatherStep {
         }
     }
 
-    private static String combine(List<String> messages, boolean different) {
+    private static String combine(List<String> messages, boolean different, List<Object> diags) {
         StringBuilder sb = new StringBuilder(XML_DECLARATION).append("<multimap:Messages xmlns:multimap=\"")
                 .append(MULTIMAP).append("\">");
         if (!different) {
@@ -119,6 +119,14 @@ public final class GatherStep {
                 throw new IllegalArgumentException("UnsupportedInSimulator: message " + (i + 1) + " has a DOCTYPE; "
                         + "Combine cannot place it inside multimap:Messages.");
             }
+            String problem = notWellFormed(body);
+            if (problem != null) {
+                // SAP documents XML messages for Combine and shows no case of another body; the simulator
+                // puts the text in unchanged, so the result is not well-formed XML. What CPI does is open (Q-F1).
+                diags.add(Diagnostic.warning("Message " + (i + 1) + " is not well-formed XML (" + problem + "). Combine "
+                        + "puts it into the result as it is, so the result is not well-formed XML either. What CPI does "
+                        + "with such a message is not documented (an assumption; probe in probes/README.md, step 8).").toJson());
+            }
             if (different) {
                 sb.append("<multimap:Message").append(i + 1).append('>');
             }
@@ -131,6 +139,25 @@ public final class GatherStep {
             sb.append("</multimap:Message1>");
         }
         return sb.append("</multimap:Messages>").toString();
+    }
+
+    /** Why a body is not a well-formed XML document, or null. DOCTYPEs are refused before this is called. */
+    private static String notWellFormed(String body) {
+        try {
+            DocumentBuilderFactory f = DocumentBuilderFactory.newDefaultInstance();
+            f.setNamespaceAware(true);
+            DocumentBuilder b = f.newDocumentBuilder();
+            b.setErrorHandler(new org.xml.sax.helpers.DefaultHandler() {
+                @Override
+                public void fatalError(org.xml.sax.SAXParseException e) throws org.xml.sax.SAXException {
+                    throw e;
+                }
+            });
+            b.parse(new InputSource(new java.io.StringReader(body)));
+            return null;
+        } catch (Exception e) {
+            return e.getMessage() == null ? e.toString() : e.getMessage();
+        }
     }
 
     private static String combineAtXPath(List<String> messages, String source, String target, Map<String, String> ns,

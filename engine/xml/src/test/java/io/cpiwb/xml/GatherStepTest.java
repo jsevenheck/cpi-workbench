@@ -94,4 +94,15 @@ class GatherStepTest {
         assertFalse(body.contains("\r"), body);
         assertTrue(body.contains("\n<from>Jill</from>"), body);
     }
+
+    /** SAP shows no Combine of a body that is not XML; the result stays as before, with a warning (Q-F1). */
+    @Test
+    void combineWarnsAboutABodyThatIsNotXml() {
+        Map<String, Object> r = gather("sameXml", "combine", "", "", List.of("<a/>", "{\"sku\":\"M-200\"}"));
+        assertTrue(Json.bool(r, "ok", false));
+        assertTrue(body(r).contains("<multimap:Message1><a/>{\"sku\":\"M-200\"}</multimap:Message1>"), body(r));
+        assertEquals(1, Json.arr(r, "diagnostics").size(), String.valueOf(r.get("diagnostics")));
+        assertTrue(Json.arr(r, "diagnostics").toString().contains("Message 2 is not well-formed XML"));
+        assertTrue(Json.arr(gather("sameXml", "combine", "", "", List.of("<a/>", "<b/>")), "diagnostics").isEmpty());
+    }
 }

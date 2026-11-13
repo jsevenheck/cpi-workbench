@@ -1,0 +1,1 @@
+<?xml version='1.0' encoding='UTF-8'?><multimap:Messages xmlns:multimap="http://sap.com/xi/XI/SplitAndMerge"><multimap:Message1>{"sku":"M-100","qty":2}</multimap:Message1><multimap:Message2>{"sku":"M-200","qty":1}</multimap:Message2><multimap:Message3>{"sku":"M-300","qty":5}</multimap:Message3></multimap:Messages>

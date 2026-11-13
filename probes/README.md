@@ -14,6 +14,7 @@ Groovy engines follow it since 0.3.0.
 | `probe-platform-v1.groovy` | Groovy Script **1.x** | Partner Directory, Keystore, Secure Store and number range behaviour for entries that do not exist, plus the real method lists (Q-P1) | Ran 2026-11-09 |
 | `prepare-xslt-probe.groovy` + `probe-xslt-behaviour.xsl` | Groovy 1.x, then XSLT Mapping | Header vs. property precedence, Java→XDM types, missing params, `setHeader` return value (Q-X2 … Q-X5) | Ran 2026-11-09 |
 | `converters/` | **JSON to XML, XML to JSON, XML to CSV, CSV to XML** converters | Output formatting and XML declaration, JSON escaping, CSV line ends and quoting, an unmapped JSON prefix without namespace mapping (Q-C1) | All four ran; the simulator gives the same bytes |
+| `gather/` | General Splitter, **Groovy Script 1.x**, **Gather** (Combine) | What Combine does with a body that is not XML: JSON or plain text among XML parts, or only such parts (Q-F1) | Not run yet |
 | `probe-mapping-v1.groovy` | Custom function in a **Message Mapping** | Groovy and Java version of mapping scripts, the classes and methods behind `MappingContext` and `Output`, and how values reach a `String[]` function: one call per context, how the results are joined, single-value calls (Q-M1) | Ran 2026-11-09 with both targets and both requests |
 
 ## How to run
@@ -76,6 +77,16 @@ another error, note its text and line.
 
    Save each response body as a file, so line ends and whitespace stay as they are (below).
 
+8. iFlow **Probe_Gather** (Q-F1): `HTTPS sender (address /cpiwb/gather, allowed header ProbeMode)` →
+   `General Splitter` (Expression Type XPath, `/Order/Item`, grouping 1, no streaming, no parallel
+   processing) → `Groovy Script 1.x: gather/probe-gather-part.groovy` → `Gather` (Incoming Format *XML
+   (Same Format)*, Aggregation Algorithm *Combine*) → end. Post `gather/request.xml` three times with the
+   header `ProbeMode` set to `mixed` (the second part becomes JSON), `json` (every part JSON) and `text`
+   (every part plain text without markup). Then set the Gather to *XML (Different Format)* and post the
+   three again. For each run keep the response body, or, if the message fails, the error text from the
+   message processing log; a failure is as useful an answer as a body. The simulator's results are in
+   `baseline-simulator/gather/<mode>-<sameXml|differentXml>.xml`.
+
 **Sending the requests.** With the runtime URL of the tenant (`https://<runtime host>/http`) and the
 client ID and secret of a service key for the Process Integration Runtime, `curl` sends a file
 unchanged and saves the answer unchanged. In Windows PowerShell write `curl.exe`. The credentials are
@@ -87,6 +98,7 @@ curl -s -u "<clientid>:<clientsecret>" --data-binary @probes/mapping/request.xml
 curl -s -u "<clientid>:<clientsecret>" --data-binary @probes/converters/xml-to-json.xml -H "Content-Type: application/xml" "$U/cpiwb/xml-to-json" --output xml-to-json.json
 curl -s -u "<clientid>:<clientsecret>" --data-binary @probes/converters/json-to-xml.json -H "Content-Type: application/json" "$U/cpiwb/json-to-xml" --output json-to-xml.xml
 curl -s -u "<clientid>:<clientsecret>" --data-binary @probes/converters/xml-to-csv.xml -H "Content-Type: application/xml" "$U/cpiwb/xml-to-csv" --output xml-to-csv.csv
+curl -s -u "<clientid>:<clientsecret>" --data-binary @probes/gather/request.xml -H "Content-Type: application/xml" -H "ProbeMode: mixed" "$U/cpiwb/gather" --output gather-mixed-sameXml.xml
 curl -s -u "<clientid>:<clientsecret>" --data-binary @probes/converters/csv-to-xml.csv -H "Content-Type: text/plain" "$U/cpiwb/csv-to-xml" --output csv-to-xml.xml
 ```
 
@@ -115,6 +127,11 @@ plan). The differences that remain:
   `getResultList()`, `UnsupportedInSimulator`), the Java build, `CamelHttpMethod`, which is the
   request's, and the SUPPRESS entry, which only the simulator's baseline passes in.
 * Platform: the simulator's messages add where it looked (e.g. `platform/credentials.json`).
+
+The Gather baselines come from the MCP server: `run_flow_step` with the Splitter of step 8, `run_groovy`
+(groovy-1.x) on each part by its `runId` with the property `CamelSplitIndex` (0, 1, 2), and the Gather
+with `messagesFrom` those runs. Each run there gives `ok: true` and a warning for the first part that is
+not XML; the bodies are not well-formed XML.
 
 The converter baselines come from the Flow Steps tab's Converter (or `convert.run`) with the settings
 in step 7. In the baselines, IDs that change with each run are replaced by `x` (the random alias suffix

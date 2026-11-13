@@ -330,6 +330,7 @@ Plain, git-friendly files. The engines' `test` command (`cpiwb-xml test tests/`,
 | **3 — Groovy MVP** | Groovy 1.x and 2.x, typed headers/properties, MPL, API call log, console, diff | Done (0.1.0) |
 | **4 — Productivity** | Platform API mocks, lint, runtime comparison, iFlow-zip import, flow steps, MCP server | Done (0.1.0–0.3.0) |
 | **5 — Distribution** | Installers for Windows, macOS, Linux; code signing, auto-update (§10.2) | Unsigned installers and a manual update check; signing and auto-update open |
+| **6 — Workflow** | What a review of other tools showed (§10.5): platform data in the Groovy tab, a traced message from CPI Helper, XPath comfort, Encoder / Decoder and Message Digest steps, JUnit output and compare rules for test cases, Value Mapping import, run history, examples, debugging | Planned (2026-11-13) |
 
 ### 10.1 MCP server for coding agents (built, 2026-11-01)
 
@@ -449,7 +450,138 @@ and `run_flow_step` cover it. The engine class is `ConverterStep` in the XML eng
 its JSON reader keeps member order, duplicates and number text). Rules come from SAP's documentation (F47,
 S30), the iFlow keys from public iFlows (F46). Not built, from SAP's list of message transformers: EDI ↔ XML
 and the EDI Extractor (they need EDI schemas), Encoder / Decoder (Base64, GZIP, ZIP, MIME Multipart), XML
-Modifier and Message Digest; they can follow when needed.
+Modifier and Message Digest; they can follow when needed (Encoder / Decoder and Message Digest are
+planned, §10.5 W4).
+
+### 10.5 Next features, from a review of other tools (planned, 2026-11-13)
+
+On 2026-11-13 other tools for CPI development were read: their own pages and READMEs (S33–S46). Nothing
+was installed or measured. Three pages could not be opened and are known from search results only: SAP
+Help's pages on simulation, the blog on JDI debugging (S34) and IntegratedGroovy (not listed for that reason).
+No tool found combines Groovy, XSLT and flow steps offline; each covers a part. Most are small projects by
+what their pages showed that day (single-digit stars, one extension with about 150 installs); SAP CPI Groovy
+Script (about 1,900 installs) and CPI Helper (97 stars) are the exceptions. What they do better
+in their part is planned here, and what stays out is listed with the reason.
+
+Only ideas are taken. XSLTDebugX is AGPL-3.0 and CPI Helper GPL-3.0; none of their code goes into this
+Apache-2.0 repository.
+
+| Tool (source) | What it is, as its page says | Where code runs |
+|---|---|---|
+| Groovy CPI Studio (S33) | VS Code extension, 1.0.0, "MVP": Groovy 4.0.29 with mocks of `Message` and `MessageLog`; no attachments, SOAP, Camel or platform services | Locally |
+| SAP CPI Groovy Script (S34) | VS Code extension: local run, breakpoints through JDI, extra jars, a JKS keystore, value mappings from a ZIP; needs its own Groovy and JDK | Locally |
+| XSLTDebugX (S35) | Browser IDE on Saxon-JS 2 (XSLT 3.0 only): `cpi:setHeader` / `cpi:setProperty`, an XPath mode (matches highlighted, copy an element's XPath, expression history), an examples library, share links | Browser |
+| Contiva Groovy IDE (S36) | Web IDE: Groovy 2.4.21 / 4.0.29 with a mock message, an XSLT editor, a run history, MCP as a paid option | Their server |
+| GrooveBox (S37) | Web IDE: input tabs for value mapping, attachments, secure store and partner directory; output tabs for MPL and API calls | Their server |
+| All-in-one Tools for CPI (S38) | Browser toolkit: XSLT, XPath, XSD, Groovy, value mapping, JWT, certificate and encoding tools; no licence file | Browser |
+| SAP's integration flow simulation (S39) | Simulates a part of an iFlow in the web UI: at most 10 steps per run and an input below 100 KB (SAP Help, from search results) | Tenant |
+| Figaf (S40) | Commercial: regression tests from recorded messages against a tenant, with mocked services | Tenant |
+| CPI Developer Studio (S41) | Commercial, deployed to BTP: iFlow editor, XSLT test, "25+ lint rules", monitoring, AI functions | Tenant |
+| CPI Helper (S42) | Browser extension for the tenant's web UI: trace per step; its GroovyDebugX and xsltDebugX plugins hand a traced step's payload, headers and properties to an external IDE | Tenant's web UI |
+| cpictl (S43) | CLI and MCP server for tenant operations (deploy, logs, lint, snapshots); its mock tenant imitates the tenant's API, not the runtime | Tenant |
+| cpi-saper-dev-mcp (S44) | MCP server, beta: edits iFlows locally, runs XSLT locally and Groovy through a runner iFlow on a development tenant | Local and tenant |
+| sap-cpi-mocks (S45), CPILint (S46) | A Maven library of `Message` mocks for Spock tests; a governance lint for iFlows (MIT) | Locally |
+
+#### Planned work, in this order
+
+Sizes are estimates: S is a day or two, M about a week, L more. Each item follows the rules in `AGENTS.md`
+(tests, `fidelity.md` and `status.md` where behaviour changes, a changelog line).
+
+**W1. Platform data, attachments and SOAP headers in the Groovy tab (M).** *Seen in GrooveBox.*
+Today the mocks read `platform/*.json` ([test cases](test-cases.md)); the files open as JSON in the File tab,
+and a test case's attachments and SOAP headers show only as a note ("edit in `case.json`").
+* Input tabs for attachments and SOAP headers, and a *Platform* tab with tables for value mappings,
+  credentials, partner directory parameters and number ranges. The keystore stays a file reference.
+* The JSON files stay the source of truth, as the queue editor keeps its text form: the tables read and write
+  them, so the CLI, test cases and the MCP server are untouched. Without a project the rows go with the run
+  as the `platform` override a test case already uses.
+* No engine change and no fidelity change. The tab repeats the rule on test-only secrets.
+* Done when a script that uses `ValueMappingApi` and `SecureStoreService` can be set up and run without
+  editing JSON, and the Groovy e2e covers one table.
+
+**W2. Take a traced message over from CPI Helper (spike S, then M).** *Seen in CPI Helper's plugins.*
+The largest gain in daily work: a real message from a tenant's trace as local input. The app still
+connects to nothing; the user's browser has the data and hands it over. It also answers part of Q-T1 by
+another route.
+* Spike: how the plugins pass the data (a URL with the encoded message, as XSLTDebugX's share links are;
+  the clipboard; a file) is not known (Q-T2).
+* First step, whatever the spike finds: *Import message…* in the input pane takes the clipboard or a file
+  and fills body, headers and properties of the open tab. A link the browser mode accepts, or a
+  `cpi-workbench://` link for the desktop app, can follow.
+* Headers come as the trace has them, adapter headers included. A trace can hold business data: it stays on
+  the computer, and the user guide says so.
+* Done when a traced step's message is the input of a local run in two steps, and the user guide shows how.
+
+**W3. XPath tab: matches in the document, copy an element's XPath, history (S).** *Seen in XSLTDebugX.*
+* Matches marked in the document editor. `xpath.eval` returns the items without their position, so the engine
+  has to add line numbers: Saxon keeps them when asked; whether the JDK's XPath 1.0 path can is to check.
+* *Copy XPath* for the element at the cursor, written with the prefixes of the Namespace mapping.
+* The last expressions of the session with ↑ and ↓.
+
+**W4. Encoder, Decoder and Message Digest as flow steps (M).** *Prompted by the encoding tools in All-in-one;
+they are CPI steps, listed as not built in §10.4.*
+* First the sources, as for the converters: SAP's documentation of each step, the iFlow keys from public
+  iFlows (as F46), and a probe for what the documentation leaves open (Q-E1).
+* Base64 encode and decode, GZIP and ZIP compress and decompress, Message Digest. MIME Multipart, EDI and the
+  XML Modifier stay out.
+* Compressed bodies are bytes, and bodies travel as text through JSON-RPC; how a binary result is shown and
+  passed on is the design question of this item.
+* The Flow Steps tab and `mcp/flow.rs` together, the iFlow import, a row in `fidelity.md`, probe baselines.
+
+**W5. JUnit XML from the test command (S).** *Prompted by the CI focus of Figaf and cpictl.*
+`test --junit <file>` writes the report that GitHub Actions reporters, Jenkins and GitLab read: one test
+case per case, the cases of other engines as skipped. In `TestRunner` and `Cli`; documented in
+[test cases](test-cases.md).
+
+**W6. Test cases: leave out values that change per run (S to M).** *Our own idea; no tool's page describes how
+it compares.*
+`compare` knows `xml`, `text` and `trimmed`; headers and properties are checked only when named. New:
+`expect.ignore`, a list of XPaths whose nodes are removed from both sides before an `xml` comparison
+(timestamps, generated ids). JSON bodies can follow.
+
+**W7. Import a Value Mapping artifact (S to M).** *Seen in SAP CPI Groovy Script.*
+An exported Value Mapping artifact (zip) becomes rows of `platform/value-mappings.json`, next to the iFlow
+import in `IflowImport`, with its path checks. The export format is not documented (Q-V1); it is read from a
+sample first, best effort as the iFlow import is.
+
+**W8. Run history (S to M).** *Seen in Contiva.* The last runs of a tab in this session (time, status, output)
+and *Compare with the previous run* through the existing comparison view. In memory only.
+
+**W9. Examples without a project (S).** *Seen in XSLTDebugX and GrooveBox.* An *Examples* menu loads a mapping
+or script with its input into the editors. The installers do not ship `examples/demo-project` today, so the
+examples have to be bundled.
+
+**W10. Debugging Groovy with breakpoints (spike S; a debugger in the app: L, not planned).** *Seen in SAP CPI
+Groovy Script.*
+* Stage 1: a documented way to attach IntelliJ or VS Code to an engine jar started with the JDWP agent
+  (`java -agentlib:jdwp=… -jar cpiwb-groovy-v1.jar run --script …`). Whether breakpoints bind to the script
+  file is open (Q-D1). It needs a full JDK: the app's trimmed JRE (`engine/groovy/build-jre.sh`) has no
+  `jdk.jdwp.agent` module.
+* Stage 2, breakpoints in the app's editor, only if users ask for it.
+
+#### To decide before any work
+
+* **A chain of steps in the app.** SAP simulates up to 10 steps, and the MCP server chains runs by `runId`
+  (§10.1). Whole iFlows are out of scope (§1): what happens between steps (which headers stay, how a
+  Splitter iterates) would need evidence step by step. If it is built, then as a chain the user puts
+  together, with no claim to be the iFlow.
+* **A diagram or description of an imported iFlow** (as `iflow_render` in S44): helps to find a step, changes
+  nothing about the simulation. M.
+
+#### Not taken over
+
+| What | Seen in | Why not |
+|---|---|---|
+| Anything that connects to a tenant: deploy, monitoring, reading traces, running Groovy through a runner iFlow, several tenants | S40, S41, S43, S44 | The app stays offline (§1) and holds no credentials. S44 complements this project: its Groovy runs on the tenant, ours locally. |
+| Running code on a server | S36, S37 | Offline; scripts and payloads stay on the computer. |
+| AI functions inside the app (generate a script, explain a mapping, fix lint findings) | S41 | The MCP server is the way in for agents (§10.1); a model in the app needs a network and keys. |
+| A governance lint for iFlows | S41, S43, S46 | CPILint does it under MIT. Such rules are house rules, not CPI behaviour, which is what this project imitates. |
+| A mock tenant | S43 | It imitates the tenant's API, another product. |
+| JWT, certificate and general utility tools | S38 | Not CPI steps. |
+| Memory profiling of a simulation | S39 | Tenant limits are not reproduced (§8.4). |
+| Share links with the data in the URL | S35 | The project folder is the unit here, in Git if wanted; such links end at about 2,000 characters (S35). |
+| Saving a test case from the app | — | Removed on purpose (2026-10-25): test cases are written by hand and run from the CLI. |
+| A VS Code extension | S33, S34 | A second UI to maintain; the CLI and the MCP server connect editors. |
 
 ---
 
@@ -505,10 +637,14 @@ writes, SUPPRESS in a mapping function's input).
 | Q-X6 | Source/target from header/property in newer step versions | Open | SAP docs + probe |
 | Q-V1 | XSD engine and version behind the XML Validator step | Open | Probe iFlow (error message format) |
 | Q-T1 | Format of exported MPL trace content | Open (F18) | Export one sample |
+| Q-T2 | How CPI Helper's GroovyDebugX and xsltDebugX plugins hand a traced step's payload, headers and properties to an external IDE (URL, clipboard, file; the encoding) | Open (§10.5 W2) | Read the plugins' documentation and try one hand-over |
 | Q-M1 | Message Mapping scripts: Groovy and Java version, whether the signature alone picks the execution type (single value or context, F44), how the per-context results are joined, the marker value of SUPPRESS, whether a single-value function is called once per value | Partial: versions, one call per context, the join by context changes, single-value calls once per value and the marker texts answered (F59–F61, an empty context is called with an empty array); open: SUPPRESS in a function's input, identity or equals for the markers | `probe-mapping-v1.groovy` with the `Call` target (probes/README.md, step 6) |
 | Q-C1 | Converters: compact or indented output, the XML declaration, CSV line ends and quoting, an unmapped JSON prefix without namespace mapping (F47), the XML to JSON namespace table's cell order | Answered for the probes' cases (F54–F57); open: the XML to JSON namespace table's cell order, `\r\n` or `\n` in CSV | Save a response with `curl --output` |
 | Q-F1 | Gather's Combine with a body that is not XML (JSON or plain text after a script): failure, the text as it is (the result not well-formed XML), or another form. SAP documents XML only and shows no such case | Open; the simulator keeps the text and warns | `probes/gather/` (probes/README.md, step 8) |
 | Q-P1 | Partner Directory / Keystore / Secure Store edge cases: missing parameter, unknown partner, unknown keystore alias (null or exception, which message) | Answered (F52) | — |
+| Q-E1 | Encoder, Decoder and Message Digest: line breaks in Base64 output, the entry name in a ZIP, the digest's header name, encoding and canonicalization | Open (§10.5 W4) | SAP's step documentation, then a probe iFlow |
+| Q-V1 | Format of an exported Value Mapping artifact | Open (§10.5 W7) | Export one sample, or read one from SAP's public sample packages |
+| Q-D1 | Whether an IDE's breakpoints bind to a script that an engine jar runs under the JDWP agent | Open (§10.5 W10) | Try it with IntelliJ and VS Code on `cpiwb-groovy-v1.jar run` |
 
 ## Sources
 
@@ -544,3 +680,17 @@ writes, SUPPRESS in a mapping function's input).
 - S30 SAP-docs Integration Suite documentation (S25 mirror): *Define JSON to XML Converter*, *Define XML to JSON Converter*, *Conversion Rules* and *Limitations* for both directions, *Example: Transformations … with and without Namespace Mapping* (both directions), *Example: Transformation to a JSON Message without Root Element Tag*, *How Streaming in the XML-to-JSON Converter Works*, *Configure CSV to XML Converter*, *Configure XML to CSV Converter*, *Use the CSV to XML Converter*, *Use the XML to CSV Converter*
 - S31 Public iFlows on GitHub with converter steps (code search `JsonToXmlConverter`, `XmlToJsonConverter`, `CsvToXmlConverter`, `XmlToCsvConverter` in `.iflw` files, 2026-11-07), read for property names only
 - S32 The probes in `probes/` run on one Cloud Integration tenant on 2026-11-09; the responses are in `probes/results-tenant/2026-11-09/`. One tenant and one date: other tenants or later releases may differ.
+- S33 Groovy CPI Studio (VS Code Marketplace), read on 2026-11-13, as are S34–S46: https://marketplace.visualstudio.com/items?itemName=leopavanelli.groovy-cpi-studio
+- S34 SAP CPI Groovy Script (VS Code Marketplace): https://marketplace.visualstudio.com/items?itemName=JohanCalderon.sap-cpi-groovy-script ; its author on JDI debugging (page not reachable, from search results): https://community.sap.com/t5/technology-blog-posts-by-members/how-to-debug-sap-cpi-groovy-scripts-locally-using-visual-studio-code/ba-p/14173680
+- S35 XSLTDebugX (AGPL-3.0): https://github.com/linusdevx/XSLTDebugX
+- S36 Contiva Groovy IDE: https://ide.contiva.com/de
+- S37 GrooveBox: https://grooveboxide.com/
+- S38 All-in-one Tools for CPI: https://github.com/Pavan-29/All-in-one-tools-for-CPI
+- S39 SAP Help — Simulation of Integration Flow; Configure Simulation (pages not readable by the tool used, limits from search results): https://help.sap.com/docs/integration-suite/sap-integration-suite/simulation-of-integration-flow ; https://help.sap.com/docs/cloud-integration/sap-cloud-integration/configure-simulation
+- S40 Figaf Testing Tool: https://figaf.com/figaf-testing-tool/
+- S41 CPI Developer Studio: https://cpistudio.nxgenz.com/
+- S42 CPI Helper (GPL-3.0): https://github.com/dbeck121/CPI-Helper-Chrome-Extension
+- S43 cpictl: https://github.com/cpars-innovation/cpicli
+- S44 cpi-saper-dev-mcp: https://github.com/devstylator/cpi-saper-dev-mcp ; https://community.sap.com/t5/technology-blog-posts-by-members/sap-cloud-integration-an-mcp-server-that-lets-ai-agents-build-and-test/ba-p/14516391
+- S45 sap-cpi-mocks (Equalise IT), from search results: https://equaliseit.com/test-value-mapping-in-cpi-groovy-scripts/
+- S46 CPILint: https://github.com/mwittrock/cpilint

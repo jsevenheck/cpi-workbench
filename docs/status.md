@@ -47,5 +47,7 @@ Automated checks:
 
 1. Install and open the installer on macOS once by hand.
 2. Code signing and auto-update (Phase 5, plan §10.2).
+3. The features planned after a review of other tools ([plan](plan.md) §10.5, Phase 6): first platform data,
+   attachments and SOAP headers in the Groovy tab (W1) and taking a traced message over from CPI Helper (W2).
 
 Fixes from reviews and earlier rounds are listed in the [changelog](../CHANGELOG.md).

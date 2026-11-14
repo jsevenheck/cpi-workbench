@@ -66,10 +66,12 @@ The first run starts the Java engines and can take a few seconds.
 | 2.11 | Type `message.` in a script; also `messageLogFactory.` and Ctrl+Space | The Script API methods are listed. |
 | 2.11a | `scripts/mapping-functions.groovy`: open **Function**, choose `countPerContext(values)`; context 1 starts empty: **+ Value** `A`, **+ Value** `B`, then **+ Context** and `C` | Before any run, **Function** lists the functions under *Message Mapping function* and the left pane shows **Function arguments** with `values`; **Result** shows *Context 1* `2` and *Context 2* `1` (**Text**: `["2"]` and `["1"]`). |
 | 2.11b | **Function** `getHeader(headerName)`, `headerName` `SenderSystem` with that header set; then a name that is not set; then **null** | **Result** shows the header's value, then `null`. With **null** the run fails with a `NullPointerException` in line 7: once a header is set, Camel's case-insensitive header map takes no null name. Opening another script brings the **Body** tab back. |
-| 2.11c | **⚙** (bottom left) → **Check for updates** | The installed version is shown. Before the release: "This is the latest version (latest release: 0.2.0)"; with a newer release, **Open release page** opens it in the browser. If GitHub refuses (e.g. 403), the reason is shown and **Open releases page** opens the list. |
+| 2.11c | **⚙** (bottom left) → **Check for updates** | The installed version is shown. Before the release: "This is the latest version (latest release: 0.3.1)"; with a newer release, **Open release page** opens it in the browser. If GitHub refuses (e.g. 403), the reason is shown and **Open releases page** opens the list. |
 | 2.11e | `tests/groovy-enrich-order/case.json`, run it; **Platform** tab: change *Target value* of the first value mapping; then **Save** | The output's `SoldTo` property follows the change at once, with a dot next to *Value mappings*; after **Save** the dot is gone and `platform/value-mappings.json` has the value. |
 | 2.11f | `tests/groovy-attachment/case.json`: **Attachments** tab; set *Content from* to *text*, name `delivery-note.txt`, content `Delivery DN-1` | The tab shows the case's file with its project path; with the text, the `DeliveryNote` header is `Delivery DN-1`. |
 | 2.11g | With CPI Helper on a tenant's iFlow page, trace on: send a Groovy step from the **GroovyDebugX** plugin (body, headers, properties, script); copy the opened tab's address; Groovy tab → **Import…** → paste | Body, headers, properties and the script arrive; the status line says what came and that the script has not run; **Run** runs it. Not tried yet (2026-11-13). |
+| 2.11h | Without a tenant, the same path: XSLT tab → **Import…** → paste `http://localhost/#share/XYwxC8IwEIX_SrjZUlwlBhwcnBTbzTgc9sBikpZLIpXS_-6lm273vve-m2HyDnYK9Jk7YtV3ewtttbVg9CmRV_GVhRws1EbX68bARsEUXSpauZ-EgqPE2wwBPZWioSCw-UR5UkZvdHktjtcLLHchIw8jcerpz2wZH_SjeAwZXZUoJlGXLw` (a link in xsltDebugX's format with a body, one header and one property, no mapping) | The input body is `<Order id="T-1">…`, header `SenderSystem` = `ERP`, property `Trace` = `manual-test`; the mapping stays as it was. On macOS before 13.3 an error says the web view cannot unpack the link. |
+| 2.11i | `scripts/mapping-functions.groovy`, **Live** off: **Function** `getHeader`, run; then **Other name…**, type `setProperty`, fill both arguments, run | The result is the second argument, and the arguments stay filled after the run. |
 | 2.11d | New script in 1.x with `log.logInfo(TimeZone.default.ID + ' ' + org.apache.commons.lang3.StringUtils.reverse('abc'))` in `processData`; then change `logInfo` to `info` | **Console** shows `[log.logInfo] Etc/UTC cba` with a note; with `info` the run fails with `MissingMethodException … ScriptLogger.info()`, as on a tenant. |
 
 ### XSD and XPath
@@ -103,6 +105,7 @@ The first run starts the Java engines and can take a few seconds.
 | 2.24 | Change a file → **Save**, **Save as…** | Saved; an existing name asks before it is overwritten. |
 | 2.25 | Right-click in the tree: rename, copy, delete | Works. |
 | 2.26 | **✕**, then open another project | No error; the old files are gone. |
+| 2.26a | Change a mapping, then **×** next to its name; *Cancel*; again **×** and confirm | The first time the change stays; then the editor is empty and the file on disk is unchanged. **Save** in the empty editor asks for a path. |
 
 ## 3. iFlow import (required)
 
@@ -135,7 +138,7 @@ Use a copy of `examples/demo-project`. Setup details: [MCP server](mcp.md).
 | 5.5 | *"Run mappings/order-to-salesorder.xsl on inputs/order.xml with header SenderSystem=ERP and property CustomerGroup=02, then on both Saxon versions."* | Same result as 2.2 and 2.3. |
 | 5.6 | *"Run scripts/enrich-order.groovy on inputs/order.xml and show the message log."* | Same result as 2.6; the first run is slower while the engine starts. |
 | 5.7 | *"Validate the mapping's output against schemas/salesorder.xsd."* | Valid. |
-| 5.8 | *"Split inputs/orders.xml per Order (namespace src = urn:demo:integration:orders:source:v1) and combine the result with Gather."* | Two `run_flow_step` calls and the combined message. |
+| 5.8 | *"Split inputs/orders.xml per Order (namespace src = urn:demo:integration:orders:source:v1) and combine the result with Gather."* | Two `run_flow_step` calls and the combined message; the Gather takes the Splitter's messages by its `runId` (`messagesFrom`), not as copied text. |
 | 5.9 | *"Read C:\Windows\win.ini as bodyPath with evaluate_xpath."* | Refused with an error: the path is outside the project. |
 | 5.10 | Keep the app open and run something there meanwhile | Both work; the agent's runs do not appear in the app (by design). |
 | 5.11 | Claude Desktop with `--project` on the copy ([MCP server](mcp.md)), without a filesystem server: *"Look at inputs/order.xml and write an XSLT that maps it to the format of schemas/salesorder.xsd; try it and validate the result."* | The agent reads both files with `read_file`, runs `run_xslt` and `validate_xsd` until the output is valid, and shows the mapping; nothing is saved. |

@@ -5,15 +5,19 @@
   import Editor from './Editor.svelte';
   import KeyValueTable from './KeyValueTable.svelte';
   import CompareView from './CompareView.svelte';
-  import { app, groovy, runGroovy, autoRunGroovy, saveScript, saveScriptAs, formatXml, otherProfile, saveInput } from '../lib/store.svelte';
+  import QueueEditor from './QueueEditor.svelte';
+  import RowTable from './RowTable.svelte';
+  import PlatformPanel from './PlatformPanel.svelte';
+  import { app, groovy, runGroovy, autoRunGroovy, saveScript, saveScriptAs, formatXml, otherProfile, saveInput, askImportMessage, closeInput, closeEditorFile, selectedMapping, platformDirty } from '../lib/store.svelte';
   import { reindentGroovy } from '../lib/indent';
-  import { formatQueue } from '../lib/queue';
-  import type { CaseExtras } from '../lib/store.svelte';
+  import { formatQueue, type QueueEntry } from '../lib/queue';
+  import { scriptFunctions, kindLabel, type ParamKind } from '../lib/functions';
+  import { PLATFORM_KEYS, type AttachmentRow, type SoapHeaderRow } from '../lib/platform';
   import type { Diagnostic } from '../lib/types';
 
   const panes = paneSizes('groovy', [1, 1.3, 1.1]);
 
-  let inputTab = $state<'body' | 'args' | 'headers' | 'properties'>('body');
+  let inputTab = $state<'body' | 'args' | 'headers' | 'properties' | 'attachments' | 'soap' | 'platform'>('body');
   let outputTab = $state<'body' | 'headers' | 'properties' | 'mpl' | 'console' | 'api' | 'compare'>('body');
   let showDiff = $state(false);
   let scriptEditor: Editor | undefined = $state();
@@ -28,24 +32,66 @@
   }
 
   let result = $derived(groovy.result);
-  /** The function is a Message Mapping function: arguments instead of a body. */
-  let mapping = $derived(groovy.mapping?.function === groovy.functionName ? groovy.mapping : null);
-  let valueParams = $derived(mapping?.parameters.filter((p) => p === 'String' || p === 'String[]') ?? []);
-  let functionNames = $derived([...new Set(['processData', ...(result?.functions ?? []).map((f) => f.slice(0, f.indexOf('(')))])]);
-  /** The script's Message Mapping functions; with none the script view looks as for any script step. */
-  let mappingFunctions = $derived(groovy.functions);
-  /** Whether the script defines processData (text check: offered only when there is one to switch to). */
-  let hasProcessData = $derived(/\bprocessData\s*\(/.test(groovy.script));
+  /** The function is a Message Mapping function: arguments instead of a body (known from the text or a run). */
+  let mapping = $derived(selectedMapping());
+  const KIND: Record<string, ParamKind> = { 'String': 'value', 'String[]': 'queue', 'Output': 'output', 'MappingContext': 'context' };
+  /** All parameters of the mapping function, with names where the text has them. */
+  let params = $derived(mapping?.parameters.map((t, i) => ({ type: t, kind: KIND[t], name: mapping!.names[i] ?? '' })) ?? []);
+  /** The parameters that take an argument (String, String[]), in order: groovy.args holds one text each. */
+  let valueParams = $derived(params.filter((p) => p.kind === 'value' || p.kind === 'queue'));
+  let queueFunction = $derived(valueParams.some((p) => p.kind === 'queue'));
+
+  /** The functions the script declares (from its text), with the engine's mapping functions it did not see. */
+  let declared = $derived(scriptFunctions(groovy.script));
+  let stepOptions = $derived(declared.filter((f) => f.kind === 'step').map((f) => ({ name: f.name, label: `${f.name}(${f.params[0].name})` })));
+  let mappingOptions = $derived.by(() => {
+    const fromText = declared.filter((f) => f.kind === 'mapping' && groovy.stepFunction !== f.name);
+    const names = new Set(fromText.map((f) => f.name));
+    const label = (name: string, kinds: ParamKind[], names: string[]) => {
+      const args = kinds.map((k, i) => (k === 'value' || k === 'queue' ? names[i] || (k === 'queue' ? 'String[]' : 'String') : null)).filter((a) => a !== null);
+      return `${name}(${args.join(', ')})`;
+    };
+    return [
+      ...fromText.map((f) => ({ name: f.name, label: label(f.name, f.params.map((p) => p.kind!), f.params.map((p) => p.name)) })),
+      ...groovy.functions.map((sig) => ({ name: sig.slice(0, sig.indexOf('(')), types: sig.slice(sig.indexOf('(') + 1, -1).split(', ').filter((t) => t) }))
+        .filter((f) => !names.has(f.name))
+        .map((f) => ({ name: f.name, label: label(f.name, f.types.map((t) => KIND[t]), []) })),
+    ];
+  });
+  const OTHER = '\u0000other';
+  /** "Other name…" chosen, or a function the lists do not have (e.g. from an iFlow step). */
+  let otherChosen = $state(false);
+  let listed = $derived([...stepOptions, ...mappingOptions].some((o) => o.name === groovy.functionName));
+  let selectValue = $derived(otherChosen || !listed ? OTHER : groovy.functionName);
+  let hasProcessData = $derived(stepOptions.some((o) => o.name === 'processData'));
 
   function useFunction(name: string) {
+    otherChosen = false;
     if (groovy.functionName === name) return;
     groovy.functionName = name;
-    runGroovy();
+    // Arguments belong to one function; so do the parameters the last run reported. Kept, they would make the
+    // next run of this function drop the arguments typed for it now.
+    groovy.args = [];
+    groovy.mapping = null;
+    changed(); // runs only code the user has started (autoRunGroovy)
   }
   $effect(() => {
-    if (mapping && inputTab === 'body') inputTab = 'args';
+    void groovy.scriptPath; // another script: back to the list
+    otherChosen = false;
+  });
+  function onFunctionSelect(e: Event) {
+    const v = (e.currentTarget as HTMLSelectElement).value;
+    if (v === OTHER) otherChosen = true;
+    else useFunction(v);
+  }
+  $effect(() => {
+    // A mapping function takes arguments, and no message: no body, attachments or SOAP headers.
+    if (mapping && (inputTab === 'body' || inputTab === 'attachments' || inputTab === 'soap')) inputTab = 'args';
     else if (!mapping && inputTab === 'args') inputTab = 'body';
   });
+  let attachmentCount = $derived(groovy.attachments.filter((a) => a.name.trim() || a.text || a.file.trim() || a.base64).length);
+  let soapCount = $derived(groovy.soapHeaders.filter((h) => h.name.trim()).length);
+  let platformUnsaved = $derived(PLATFORM_KEYS.some(platformDirty));
   let errors = $derived(result?.diagnostics.filter((d) => d.severity === 'error') ?? []);
   let others = $derived(result?.diagnostics.filter((d) => d.severity !== 'error') ?? []);
   let markers = $derived<Diagnostic[]>((result?.diagnostics ?? []).filter((d) => d.line));
@@ -70,15 +116,6 @@
 
   let other = $derived(otherProfile(app.groovyProfile));
 
-  function extrasSummary(x: CaseExtras) {
-    const n = (k: number, one: string) => `${k} ${one}${k === 1 ? '' : 's'}`;
-    const parts: string[] = [];
-    if (x.attachments?.length) parts.push(n(x.attachments.length, 'attachment'));
-    if (x.soapHeaders?.length) parts.push(n(x.soapHeaders.length, 'SOAP header'));
-    if (x.platform) parts.push('platform overrides');
-    return parts.join(', ');
-  }
-
   function toggleCompare() {
     groovy.compareOn = !groovy.compareOn;
     groovy.compare = null;
@@ -90,6 +127,15 @@
     }
   }
 
+  const attachmentKinds = [{ value: 'text', label: 'text' }, { value: 'file', label: 'file' }, { value: 'base64', label: 'Base64' }];
+  const newAttachment = (): AttachmentRow => ({ name: '', contentType: '', kind: 'text', text: '', file: '', base64: '' });
+  const newSoapHeader = (): SoapHeaderRow => ({ name: '', value: '', mustUnderstand: false, actor: '' });
+
+  /** An output queue entry as the table shows it. */
+  function showEntry(e: QueueEntry): string {
+    return e === null ? 'null' : typeof e === 'string' ? e : 'suppress' in e ? 'SUPPRESS' : 'xsi:nil';
+  }
+
   function jump(d: Diagnostic) {
     if (d.line) scriptEditor?.revealLine(d.line);
   }
@@ -98,7 +144,7 @@
 <div class="groovy" style:grid-template-columns={paneColumns(panes.sizes)}>
   <section class="pane input" aria-label="Input message">
     <header>
-      <h2 title={app.inputPaths.groovy ?? ''}>Input message{#if app.inputPaths.groovy} <span class="from">· {app.inputPaths.groovy.split('/').pop()}</span>{/if}</h2>
+      <h2 title={app.inputPaths.groovy ?? ''}>{mapping ? 'Function arguments' : 'Input message'}{#if app.inputPaths.groovy} <span class="from">· {app.inputPaths.groovy.split('/').pop()}</span><button class="close-file" onclick={() => closeInput('groovy')} title="Close the input file (it stays on disk)" aria-label="Close input file">×</button>{/if}</h2>
       <div class="tabs" role="tablist">
         {#if mapping}
           <button role="tab" class:active={inputTab === 'args'} onclick={() => (inputTab = 'args')}>Arguments <span class="count">{valueParams.length}</span></button>
@@ -107,6 +153,14 @@
         {/if}
         <button role="tab" class:active={inputTab === 'headers'} onclick={() => (inputTab = 'headers')}>Headers <span class="count">{groovy.headers.length}</span></button>
         <button role="tab" class:active={inputTab === 'properties'} onclick={() => (inputTab = 'properties')}>Properties <span class="count">{groovy.properties.length}</span></button>
+        {#if !mapping}
+          <button role="tab" class:active={inputTab === 'attachments'} onclick={() => (inputTab = 'attachments')}
+            title="Message attachments the script reads with getAttachments()">Attachments <span class="count">{attachmentCount}</span></button>
+          <button role="tab" class:active={inputTab === 'soap'} onclick={() => (inputTab = 'soap')}
+            title="SOAP headers the script reads with getSoapHeaders() (Script API v1)">SOAP <span class="count">{soapCount}</span></button>
+        {/if}
+        <button role="tab" class:active={inputTab === 'platform'} onclick={() => (inputTab = 'platform')}
+          title="Mocked platform data: value mappings, secure store, Partner Directory, number ranges, keystore">Platform{#if platformUnsaved}<span class="dirty" title="Unsaved changes">●</span>{/if}</button>
       </div>
       {#if inputTab === 'body'}
         <label class="bt" title="Java type of the body when the script starts. Adapters often deliver an InputStream.">as
@@ -118,19 +172,19 @@
         </label>
         <button class="small" onclick={prettyInput}>Format</button>
         <button class="small" onclick={saveInput} disabled={!app.project} title={app.project ? 'Save the input body under inputs/' : 'Open a project to save'}>Save…</button>
+        <button class="small" onclick={askImportMessage} title="Take a traced message over from CPI Helper (paste its link), or a message as JSON">Import…</button>
       {/if}
     </header>
     <div class="body">
       {#if inputTab === 'args' && mapping}
         <div class="pad args">
-          <p class="hint">Message Mapping function <code>{mapping.function}({mapping.parameters.join(', ')})</code>, run on its own
-            {valueParams.includes('String[]') ? 'once per context (All values of a context)' : 'once (Single Values)'}.
-            Output and MappingContext come from the simulator; MappingContext reads and sets the Headers and Properties tabs.
-            The message body is not used: to run with a body, choose {#if hasProcessData}<button class="link"
-              onclick={() => useFunction('processData')}>processData</button> or another{:else}a{/if} script step function (one parameter: the message).</p>
+          <p class="hint" title="A Message Mapping function runs on its own here, without the mapping around it.">
+            {queueFunction ? 'Called once per context, like a function with “All values of a context”.'
+              : 'Called once with these values (in a mapping: once per value).'} The message body is not used.</p>
           {#each valueParams as p, i}
-            <label class="arg">Argument {i + 1} <span class="muted">{p}</span>
-              {#if p === 'String'}
+            <div class="arg">
+              <span class="arg-head"><b class="mono">{p.name || `Argument ${i + 1}`}</b> <span class="muted">{kindLabel(p.kind)} · {p.type}</span></span>
+              {#if p.kind === 'value'}
                 <span class="row">
                   <input class="mono" bind:value={groovy.args[i]} oninput={changed} aria-label="Argument {i + 1}"
                     placeholder={groovy.args[i] === null ? 'null' : ''} />
@@ -138,58 +192,85 @@
                     title="Pass null instead of a string" onclick={() => { groovy.args[i] = groovy.args[i] === null ? '' : null; changed(); }}>null</button>
                 </span>
               {:else}
-                <textarea class="mono" rows="4" bind:value={groovy.args[i]} oninput={changed} aria-label="Argument {i + 1}"
-                  placeholder={'One context per line, e.g.\n["A", "B"]\n["C", {"suppress": true}]'}></textarea>
+                <QueueEditor bind:value={groovy.args[i]} label="Argument {i + 1}" onchange={changed} />
               {/if}
-            </label>
+            </div>
           {/each}
+          {#each params.filter((p) => p.kind === 'output' || p.kind === 'context') as p}
+            <div class="arg given"><span class="arg-head"><b class="mono">{p.name || p.type}</b> <span class="muted">{p.type} · from the simulator</span></span>
+              <span class="muted">{p.kind === 'output' ? 'Collects the result queue, shown under Result.' : 'Reads and sets the Headers and Properties tabs.'}</span></div>
+          {/each}
+          {#if hasProcessData}<p class="hint">To run the script with the message body, choose <button class="link"
+            onclick={() => useFunction('processData')}>processData</button>.</p>{/if}
         </div>
       {:else if inputTab === 'body'}
         <Editor bind:value={groovy.body} language={inLanguage} onchange={changed} onrun={runGroovy} label="Input body" />
       {:else if inputTab === 'headers'}
         <KeyValueTable bind:rows={groovy.headers} onchange={changed} emptyText="No headers. Types matter: getHeader(name, Integer) converts like Camel." />
-      {:else}
+      {:else if inputTab === 'properties'}
         <KeyValueTable bind:rows={groovy.properties} onchange={changed} emptyText="No exchange properties." />
+      {:else if inputTab === 'attachments'}
+        <div class="pad extra">
+          <p class="hint">What <code>message.getAttachments()</code> returns. The content is text typed here or a file of the project.</p>
+          <RowTable bind:rows={groovy.attachments} newRow={newAttachment} perLine={3} addLabel="+ Attachment" emptyText="No attachments." onchange={changed}
+            columns={[
+              { field: 'name', label: 'Name', placeholder: (r) => (r.kind === 'file' ? 'the file\'s name' : 'attachment name') },
+              { field: 'contentType', label: 'Content type', placeholder: 'application/octet-stream' },
+              { field: 'kind', label: 'Content from', type: 'select', options: attachmentKinds },
+              { field: (r) => r.kind, label: 'Content', span: 3,
+                placeholder: (r) => (r.kind === 'file' ? 'project path, e.g. inputs/note.pdf' : r.kind === 'base64' ? 'Base64 text' : '') },
+            ]} />
+        </div>
+      {:else if inputTab === 'soap'}
+        <div class="pad extra">
+          <p class="hint">What <code>message.getSoapHeaders()</code> returns. Script API v1 only, as in SAP's interface.</p>
+          <RowTable bind:rows={groovy.soapHeaders} newRow={newSoapHeader} perLine={2} addLabel="+ SOAP header" emptyText="No SOAP headers." onchange={changed}
+            columns={[
+              { field: 'name', label: 'Name', placeholder: '{urn:namespace}Local', span: 2 },
+              { field: 'value', label: 'Header element (XML)', placeholder: '<Local xmlns="urn:namespace">…</Local>', span: 2 },
+              { field: 'actor', label: 'Actor' },
+              { field: 'mustUnderstand', label: 'mustUnderstand', type: 'checkbox' },
+            ]} />
+        </div>
+      {:else}
+        <PlatformPanel onchange={changed} />
       {/if}
     </div>
-    {#if groovy.caseExtras}
-      <p class="hint extras">From the test case (edit in <code>case.json</code>): {extrasSummary(groovy.caseExtras)}</p>
-    {/if}
   </section>
 
   <Gutter {panes} i={0} />
 
   <section class="pane script" aria-label="Groovy script">
     <header>
-      <h2 title={groovy.scriptPath ?? 'Unsaved script'}>{groovy.scriptPath ?? 'script.groovy (unsaved)'}{#if dirty}<span class="dirty">●</span>{/if}</h2>
-      <label class="fn" title="Function the Groovy Script step calls">fn
-        <input class="mono" list="groovy-functions" bind:value={groovy.functionName} onchange={changed} aria-label="Function name" />
-        <datalist id="groovy-functions">{#each functionNames as f}<option value={f}></option>{/each}</datalist>
+      <h2 title={groovy.casePath ? 'From test case ' + groovy.casePath : groovy.scriptPath ?? 'Unsaved script'}>{groovy.scriptPath ?? (groovy.script ? 'script.groovy (unsaved)' : 'No script open')}{#if dirty}<span class="dirty">●</span>{/if}</h2>
+      {#if groovy.scriptPath || groovy.casePath || groovy.script}<button class="close-file" onclick={() => closeEditorFile('groovy')}
+        title="Close this file (it stays on disk)" aria-label="Close file">×</button>{/if}
+      <label class="fn" title="The function to run: a script step gets the message, a Message Mapping function gets field values">Function
+        <select value={selectValue} onchange={onFunctionSelect} aria-label="Function">
+          {#if stepOptions.length}
+            <optgroup label="Script step (gets the message)">
+              {#each stepOptions as o}<option value={o.name}>{o.label}</option>{/each}
+            </optgroup>
+          {/if}
+          {#if mappingOptions.length}
+            <optgroup label="Message Mapping function (gets field values)">
+              {#each mappingOptions as o}<option value={o.name}>{o.label}</option>{/each}
+            </optgroup>
+          {/if}
+          <option value={OTHER}>Other name…</option>
+        </select>
       </label>
-      <span class="mode" class:mapping={!!mapping} title={mapping
-        ? 'A Message Mapping function: it takes field values (Arguments), not the message body'
-        : 'A script step: the function gets the message (Body, Headers, Properties)'}>{mapping ? 'Mapping function' : 'Script step'}</span>
+      {#if selectValue === OTHER}
+        <input class="mono fn-name" bind:value={groovy.functionName} onchange={changed} aria-label="Function name" placeholder="processData" />
+      {/if}
       <div class="spacer"></div>
       <button class="small" onclick={saveScript} disabled={!app.project} title={app.project ? 'Save (Ctrl+S)' : 'Open a project to save'}>Save</button>
       <button class="small" onclick={() => { groovy.script = reindentGroovy(groovy.script); changed(); }}
         title="Re-indent by bracket depth; strings and comments keep their text">Format</button>
       <button class="small" onclick={saveScriptAs} disabled={!app.project} title="Save under a new name; the open file stays as it is">Save as…</button>
     </header>
-    {#if mappingFunctions.length}
-      <div class="functions" role="toolbar" aria-label="Functions of the script">
-        <span class="muted">Run as</span>
-        {#if hasProcessData}
-          <button class="chip" class:active={!mapping && groovy.functionName === 'processData'} onclick={() => useFunction('processData')}
-            title="Script step: the message body is the input">processData <span class="muted">· body</span></button>
-        {/if}
-        {#each mappingFunctions as f}
-          {@const name = f.slice(0, f.indexOf('('))}
-          <button class="chip" class:active={mapping?.function === name} onclick={() => useFunction(name)} title={'Message Mapping function ' + f}>
-            {name} <span class="muted">· {f.includes('String[]') ? 'context' : 'single'}</span></button>
-        {/each}
-      </div>
-    {/if}
     <div class="body">
+      {#if !groovy.script}<p class="empty-hint">Open a script from the project, or type or paste one here.</p>{/if}
       <Editor bind:this={scriptEditor} bind:value={groovy.script} language="java" markers={markers}
         onchange={changed} onrun={runGroovy} onsave={saveScript} label="Groovy script" />
     </div>
@@ -232,8 +313,14 @@
             {/if}
             {#if result.mapping.queue}
               <h3>Output queue · {result.mapping.queue.length} context{result.mapping.queue.length === 1 ? '' : 's'}</h3>
-              <pre class="console">{formatQueue(result.mapping.queue)}</pre>
-              <p class="hint">One context per line; the same form works as a String[] argument.</p>
+              <p class="hint">What the function writes to the target field: one result context per call (per input context).</p>
+              <table class="queue-out" data-queue={formatQueue(result.mapping.queue)}><tbody>
+                {#each result.mapping.queue as ctx, c}
+                  <tr><th>Context {c + 1}</th><td>{#each ctx as e}<span class="qv" class:special={typeof e !== 'string'}>{showEntry(e)}</span>{:else}<span class="muted">empty</span>{/each}</td></tr>
+                {/each}
+              </tbody></table>
+              <details class="as-text"><summary>Text</summary><pre class="console">{formatQueue(result.mapping.queue)}</pre>
+                <p class="hint">One context per line; the same form works as a String[] argument.</p></details>
             {/if}
           </div>
         {:else if result.output}
@@ -322,18 +409,14 @@
   .spacer { flex: 1; }
   .dirty { color: var(--accent); margin-left: 4px; }
   .fn, .bt { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--muted); }
-  .fn input { width: 140px; }
-  .mode { font-size: 10px; padding: 1px 6px; border-radius: 8px; background: var(--surface); color: var(--muted); white-space: nowrap; }
-  .mode.mapping { background: var(--ok-bg); color: var(--ok); }
-  .functions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 5px 10px; border-bottom: 1px solid var(--border); font-size: 11px; }
-  .chip { font: 11px var(--mono); padding: 2px 8px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); color: var(--fg); cursor: pointer; }
-  .chip.active { border-color: var(--accent); background: var(--surface); color: var(--accent); }
-  .chip .muted, .functions .muted { color: var(--muted); }
+  .fn select { max-width: 220px; font-family: var(--mono); font-size: 11px; }
+  .fn-name { width: 130px; font-size: 11px; }
   .link { border: none; background: none; padding: 0; font: inherit; color: var(--accent); text-decoration: underline; cursor: pointer; }
   .args { display: flex; flex-direction: column; gap: 8px; }
   .arg { display: flex; flex-direction: column; gap: 3px; font-size: 11px; color: var(--muted); }
-  .arg input, .arg textarea { font-size: 12px; }
-  .arg textarea { resize: vertical; }
+  .arg-head b { color: var(--fg); font-weight: 600; }
+  .arg.given { opacity: 0.8; }
+  .arg input { font-size: 12px; }
   .arg .row { display: flex; gap: 4px; }
   .arg .row input { flex: 1; min-width: 0; }
   .arg .on { border-color: var(--accent); color: var(--accent); }
@@ -343,13 +426,20 @@
   .badge.run { color: var(--muted); }
   .hint { color: var(--muted); font-size: 12px; padding: 4px 0; margin: 0; }
   .body > .hint { padding: 12px; }
-  .extras { padding: 4px 8px; border-top: 1px solid var(--border-soft); }
+  .pad.extra { display: flex; flex-direction: column; gap: 8px; }
+  .pad.extra .hint { margin: 0; }
   .errors, .pad { padding: 8px; overflow: auto; height: 100%; box-sizing: border-box; font-size: 12px; }
   .diag { display: block; width: 100%; text-align: left; border: 1px solid var(--border); border-left: 3px solid var(--err); border-radius: 4px; padding: 6px 8px; margin-bottom: 6px; background: var(--err-bg); color: var(--fg); font: inherit; cursor: pointer; }
   .diag div, .diag pre { white-space: pre-wrap; margin: 2px 0 0; font-family: var(--mono); }
   .diag.msg { border-left-color: var(--accent); background: var(--surface); cursor: default; }
   pre { font-family: var(--mono); font-size: 12px; white-space: pre-wrap; word-break: break-word; margin: 4px 0; }
   .stack { color: var(--muted); }
+  .queue-out { border-collapse: collapse; font-size: 12px; }
+  .queue-out th { text-align: left; font-weight: 400; color: var(--muted); padding: 2px 10px 2px 0; white-space: nowrap; }
+  .queue-out td { padding: 2px 0; }
+  .qv { display: inline-block; font-family: var(--mono); background: var(--surface); border: 1px solid var(--border-soft); border-radius: 3px; padding: 0 5px; margin: 1px 4px 1px 0; }
+  .qv.special { color: var(--muted); font-style: italic; }
+  .as-text { margin-top: 8px; font-size: 11px; color: var(--muted); }
   .console { background: var(--surface); border: 1px solid var(--border-soft); border-radius: 4px; padding: 6px; }
   .line { display: block; width: 100%; text-align: left; padding: 3px 4px; border: none; background: none; color: var(--fg); font: inherit; border-bottom: 1px solid var(--border-soft); cursor: pointer; }
   .diag-line.error b { color: var(--err); }

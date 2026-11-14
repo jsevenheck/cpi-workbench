@@ -10,15 +10,9 @@ import org.xml.sax.InputSource;
 
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
-import javax.xml.transform.OutputKeys;
-import javax.xml.transform.Transformer;
-import javax.xml.transform.TransformerFactory;
-import javax.xml.transform.dom.DOMSource;
-import javax.xml.transform.stream.StreamResult;
 import javax.xml.xpath.XPath;
 import javax.xml.xpath.XPathConstants;
 import javax.xml.xpath.XPathFactory;
-import java.io.StringWriter;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -71,7 +65,7 @@ public final class GatherStep {
                 throw new IllegalArgumentException("There are no messages to gather; run a splitter or add messages.");
             }
             result.with("body", gather(format, algorithm, messages, Json.str(req, "sourceXPath", "").trim(),
-                    Json.str(req, "targetXPath", "").trim(), XsltStep.stringMap(Json.obj(req, "namespaces")), resolver));
+                    Json.str(req, "targetXPath", "").trim(), XsltStep.stringMap(Json.obj(req, "namespaces")), resolver, diags));
         } catch (Exception e) {
             ok = false;
             diags.add(Diagnostic.error(e.getMessage() == null ? e.toString() : e.getMessage()).toJson());
@@ -82,7 +76,7 @@ public final class GatherStep {
     }
 
     private static String gather(String format, String algorithm, List<String> messages, String source, String target,
-                                 Map<String, String> ns, ProjectResolver resolver) throws Exception {
+                                 Map<String, String> ns, ProjectResolver resolver, List<Object> diags) throws Exception {
         if (!List.of("sameXml", "differentXml", "plainText").contains(format)) {
             throw new IllegalArgumentException("UnsupportedInSimulator: the Incoming Format '" + format
                     + "' (simulated: sameXml, differentXml, plainText; Any, which combines into Zip or Tar archives, is not).");
@@ -98,7 +92,7 @@ public final class GatherStep {
                 if (!xml) {
                     throw new IllegalArgumentException("Combine is for XML messages (SAP); plain text is concatenated.");
                 }
-                return combine(messages, "differentXml".equals(format));
+                return combine(messages, "differentXml".equals(format), diags);
             case "combineAtXPath":
                 if (!"sameXml".equals(format)) {
                     throw new IllegalArgumentException("Combine at XPath is for Incoming Format XML (Same Format) (SAP).");
@@ -110,7 +104,7 @@ public final class GatherStep {
         }
     }
 
-    private static String combine(List<String> messages, boolean different) {
+    private static String combine(List<String> messages, boolean different, List<Object> diags) {
         StringBuilder sb = new StringBuilder(XML_DECLARATION).append("<multimap:Messages xmlns:multimap=\"")
                 .append(MULTIMAP).append("\">");
         if (!different) {
@@ -125,6 +119,15 @@ public final class GatherStep {
                 throw new IllegalArgumentException("UnsupportedInSimulator: message " + (i + 1) + " has a DOCTYPE; "
                         + "Combine cannot place it inside multimap:Messages.");
             }
+            String problem = notWellFormed(body);
+            if (problem != null) {
+                // SAP documents XML messages for Combine and shows no case of another body; the simulator puts the
+                // text in unchanged. What CPI does is open (Q-F1). Whether the result is still XML depends on the
+                // text (JSON is character data; "a & b" is not), so the result is checked on its own below.
+                diags.add(Diagnostic.warning("Message " + (i + 1) + " is not a well-formed XML document (" + problem + "). "
+                        + "Combine puts its text into the result as it is. What CPI does with such a message is not "
+                        + "documented (an assumption; probe in probes/README.md, step 8).").toJson());
+            }
             if (different) {
                 sb.append("<multimap:Message").append(i + 1).append('>');
             }
@@ -136,7 +139,34 @@ public final class GatherStep {
         if (!different) {
             sb.append("</multimap:Message1>");
         }
-        return sb.append("</multimap:Messages>").toString();
+        String result = sb.append("</multimap:Messages>").toString();
+        String problem = notWellFormed(result);
+        if (problem != null) {
+            diags.add(Diagnostic.warning("The combined result is not well-formed XML (" + problem + ").").toJson());
+        }
+        return result;
+    }
+
+    /** Why a body is not a well-formed XML document, or null. DOCTYPEs are refused before this is called. */
+    private static String notWellFormed(String body) {
+        try {
+            DocumentBuilderFactory f = DocumentBuilderFactory.newDefaultInstance();
+            f.setNamespaceAware(true);
+            // This parse only checks the text and reads nothing else: no DTD, so no external entity, even if a
+            // DOCTYPE got past the pattern above (XML runs read files only through ProjectResolver).
+            f.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+            DocumentBuilder b = f.newDocumentBuilder();
+            b.setErrorHandler(new org.xml.sax.helpers.DefaultHandler() {
+                @Override
+                public void fatalError(org.xml.sax.SAXParseException e) throws org.xml.sax.SAXException {
+                    throw e;
+                }
+            });
+            b.parse(new InputSource(new java.io.StringReader(body)));
+            return null;
+        } catch (Exception e) {
+            return e.getMessage() == null ? e.toString() : e.getMessage();
+        }
     }
 
     private static String combineAtXPath(List<String> messages, String source, String target, Map<String, String> ns,
@@ -208,10 +238,6 @@ public final class GatherStep {
         for (Node n : nodes) {
             at.appendChild(result.importNode(n, true));
         }
-        Transformer t = TransformerFactory.newDefaultInstance().newTransformer();
-        t.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "yes");
-        StringWriter w = new StringWriter();
-        t.transform(new DOMSource(result), new StreamResult(w));
-        return XML_DECLARATION + w;
+        return XML_DECLARATION + io.cpiwb.core.DomXml.serialize(result);
     }
 }

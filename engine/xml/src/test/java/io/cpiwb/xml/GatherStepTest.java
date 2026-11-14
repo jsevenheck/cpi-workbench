@@ -86,4 +86,37 @@ class GatherStepTest {
         // A byte order mark alone is dropped like the declaration.
         assertTrue(body(gather("sameXml", "combine", "", "", List.of("\uFEFF<?xml version='1.0'?><r/>"))).contains("<multimap:Message1><r/>"));
     }
+
+    @Test
+    void combineAtXPathUsesLfOnEveryComputer() {
+        String body = body(gather("sameXml", "combineAtXPath", "/note/to", "/note",
+                List.of(note("Jack"), note("Chris"))));
+        assertFalse(body.contains("\r"), body);
+        assertTrue(body.contains("\n<from>Jill</from>"), body);
+    }
+
+    /** An unnamespaced <html> root stays XML: the JDK's serializer would otherwise switch to its HTML method. */
+    @Test
+    void combineAtXPathWritesXmlForAnHtmlRoot() {
+        String html = "<html><head/><body><br/><item>1</item></body></html>";
+        String body = body(gather("sameXml", "combineAtXPath", "/html/body/item", "", List.of(html, html.replace(">1<", ">2<"))));
+        assertTrue(body.contains("<br/>") && !body.contains("<META"), body);
+        assertTrue(body.contains("<item>1</item><item>2</item>"), body);
+    }
+
+    /** SAP shows no Combine of a body that is not XML; the result stays as before, with a warning (Q-F1). */
+    @Test
+    void combineWarnsAboutABodyThatIsNotXml() {
+        Map<String, Object> r = gather("sameXml", "combine", "", "", List.of("<a/>", "{\"sku\":\"M-200\"}"));
+        assertTrue(Json.bool(r, "ok", false));
+        assertTrue(body(r).contains("<multimap:Message1><a/>{\"sku\":\"M-200\"}</multimap:Message1>"), body(r));
+        // JSON is character data: the message is no XML document, but the combined result is well-formed XML.
+        assertEquals(1, Json.arr(r, "diagnostics").size(), String.valueOf(r.get("diagnostics")));
+        assertTrue(Json.arr(r, "diagnostics").toString().contains("Message 2 is not a well-formed XML document"));
+        assertTrue(Json.arr(gather("sameXml", "combine", "", "", List.of("<a/>", "<b/>")), "diagnostics").isEmpty());
+        // A text with a bare & breaks the result too, and the warning says so.
+        Map<String, Object> amp = gather("sameXml", "combine", "", "", List.of("<a/>", "a & b"));
+        assertEquals(2, Json.arr(amp, "diagnostics").size(), String.valueOf(amp.get("diagnostics")));
+        assertTrue(Json.arr(amp, "diagnostics").toString().contains("The combined result is not well-formed XML"));
+    }
 }

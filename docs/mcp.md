@@ -1,9 +1,9 @@
 # MCP server for coding agents
 
 `cpi-workbench mcp` runs a [Model Context Protocol](https://modelcontextprotocol.io) server over
-stdio. A coding agent such as Claude Code can use it to run an XSLT mapping, a Groovy script or a
-flow step on the simulator while it writes the code. The server uses the same engines and the same
-calls as the desktop app, offline.
+stdio. An agent such as Claude Code or Claude Desktop can use it to run an XSLT mapping, a Groovy script or a
+flow step on the simulator while it writes the code, the way you press **Run** in the app. The server uses the
+same engines and the same calls as the desktop app, offline.
 
 ## Setup
 
@@ -65,19 +65,34 @@ The project folder is `--project`, else `CLAUDE_PROJECT_DIR`, else the server's 
 From a repository checkout, a debug build works too (`app/src-tauri/target/debug/cpi-workbench mcp`);
 it finds the checkout's engine jars.
 
+## Working from Claude Desktop
+
+Claude Desktop has no access to your files of its own; the server gives it the project. For example, with an
+iFlow and a sample message in the project: *"Here is the iFlow Order_Replication and inputs/order.xml. Write the
+mapping to the S/4 format and try it."* The agent lists the project (`project_info`), reads the input and the
+iFlow's files (`read_file`), writes the mapping and runs it (`run_xslt`) until the output is right, and shows
+you the result; for a Content Modifier or Router it shows the settings as you enter them in the iFlow. It saves
+a file (`save_file`) when you want to keep it; the app shows it after **↻** in its file tree.
+
+The prompt **develop_step** (in Claude Desktop under **+**) starts this with a task, an iFlow and an input.
+
 ## Tools
 
-The tools are the app's tabs, with the same inputs and the same engine calls. The app leads: the
-server adds no function of its own.
+The run tools are the app's tabs, with the same inputs and the same engine calls. The file tools give an
+agent without file access of its own what the app's file tree and **Import iFlow** give you.
 
 | Tool | Tab in the app |
 |---|---|
 | `project_info` | The project: its files, the steps of the iFlows under `iflows/` (flow steps with their configuration; script, XSLT and XML Validator steps with file, function and runtime) and the installed runtimes. |
+| `read_file` | Opening a file: the text of a project file, long files in parts (`startLine`, `maxLines`), text in one long line by characters (`startChar`); with `runId`, the whole output body of a run. |
 | `run_xslt` | XSLT (`mappingPath` or `mapping`). `runtime: "both"` runs Saxon-HE 9.9 and 12, as the runtime comparison does. |
 | `run_groovy` | Groovy, with the Script API and the project's `platform/` mocks, and the body type (`bodyType`). The runtime (1.x or 2.x) follows the script's imports unless given; `both` runs both. A custom function of a Message Mapping script takes `args` instead, as the Groovy tab's *Arguments*; the result's `mapping` holds the returned value or the output queue. |
 | `validate_xsd` | XSD. |
-| `evaluate_xpath` | XPath (1.0 or 3.1, with namespaces). |
+| `evaluate_xpath` | XPath (1.0 or 3.1, with namespaces). A node of the body also says where it is (`at`: the element positions from the root, its name, an attribute's name). |
 | `run_flow_step` | Flow Steps: a Content Modifier, Filter, Router, Splitter, Gather or converter (JSON ↔ XML, XML ↔ CSV) step from an iFlow (`iflowStep`: name or id, with `iflow` when several iFlows share it) or from a configuration (`step`). |
+| `save_file` | **Save as…**: writes a text file (`content`, or a run's output with `contentFrom`) into the project, creating folders. An existing file is replaced only with `overwrite: true`. |
+| `import_iflow` | **Import iFlow**: an iFlow exported from the tenant (`.zip`, any path) into `iflows/<name>/`; returns its steps. An existing folder is replaced only with `overwrite: true`. |
+| `reference` | No tab: what the simulator offers, generated from its sources. `script-api`: the Script API, Message Mapping and platform service methods; `platform`: the formats of the `platform/` files; `fidelity`: [Fidelity](fidelity.md). |
 
 Without `runtime`, a tool uses the app's default (Saxon-HE 9.9; Groovy from the script's imports), or the
 other runtime of that kind when the default is not installed, as the app does. Flow steps run Camel Simple
@@ -87,6 +102,22 @@ A message is `body` (or `bodyPath`, a project file) and, where the tab has them,
 property is a string, or `{"value": "…", "type": "Integer"}` for another type (the types of
 [test cases](test-cases.md)). Results are the engines' JSON, the same data the app shows: the output
 message, diagnostics with lines, `xsl:message` output, the message log, timings.
+
+### Passing results on (`runId`)
+
+A run that produces a message returns a `runId`: `run_xslt`, `run_groovy`, `validate_xsd` (the message
+passes on, as the XML Validator lets it), `run_flow_step` (the Router passes the message on, unless it raises an
+exception: then `ok` is false; a Splitter's
+messages are `runId/1`, `runId/2`, …; with `runtime: both`, `runId/saxon-he-12` and so on). A failed run and an
+invalid message get none. The input is read once, before the step runs, so the kept message is the one the step got.
+Calls run in parallel; `save_file` and `import_iflow` check "exists already" and write under one lock. `messageFrom: "<runId>"` makes that message (body, headers, properties) the input of
+the next call, as it flows to the next step in an iFlow; `body`, `headers` and `properties` given in the same call
+replace the body or the rows of the same name. A Gather takes `messagesFrom` (a Splitter's `runId`, or a list).
+
+To keep results small, a body the step left as it was (from 200 characters) is left out, with
+`bodyUnchanged` saying so; bodies longer than 20,000 characters, and a Splitter's messages longer than 2,000,
+come back shortened, with `bodyShortened`. The run keeps the whole body: `read_file` with `runId` reads it, `save_file` with `contentFrom` saves it. The server keeps the
+last 50 runs (at most 64 MB) of its process; an older or unknown `runId` is an error that says to run again.
 
 Wrong arguments, files outside the project and engine failures come back as tool results with
 `isError: true` and a message, so the agent can correct the call. A failing mapping or script is a
@@ -99,13 +130,17 @@ lists what is verified against CPI.
 * **Files:** only the project folder. Bodies, mappings, scripts and schemas are read through the
   engines, which refuse paths outside the project, as in the app ([What a run can access](user-guide.md#what-a-run-can-access)).
   The check follows symbolic links: a link inside the project that leads outside it is refused.
-  The tools write nothing into the project; the engines keep caches in the temp folder and the
-  user's cache folder, as in the app. Groovy scripts can write files (next point).
+  Paths that are absolute or contain `..` are refused before the engine sees them.
+  Only `save_file` and `import_iflow` write into the project, and they replace nothing without
+  `overwrite: true`; `import_iflow` reads the zip from the path it is given, also outside the project.
+  The engines keep caches in the temp folder and the user's cache folder, as in the app. Groovy
+  scripts can write files (next point).
 * **Code:** Groovy scripts execute as ordinary Java code with your user's rights, without a sandbox;
   Camel Simple in flow steps and reflexive `java:` calls in XSLT can call methods too. An agent that can
   call `run_groovy` or `run_xslt` can run any code. The MCP annotations say so: only `project_info`,
-  `validate_xsd` and `evaluate_xpath` are marked read-only and closed-world; a client that uses these
-  hints can ask before the others run.
+  `read_file`, `validate_xsd`, `evaluate_xpath` and `reference` are marked read-only and closed-world;
+  `save_file` and `import_iflow` are marked as writing (destructive, idempotent, closed-world). A client that
+  uses these hints can ask before the others run.
 * **Network:** the server opens no port and connects nowhere. XML runs resolve includes, documents
   and entities in the project only, so they fetch nothing from the network; XPath refuses
   `fn:transform()`, which could escape that. Reflexive `java:` calls and `fn:transform()` in XSLT,
@@ -120,8 +155,8 @@ lists what is verified against CPI.
   describes it. Requests that carry `_meta["io.modelcontextprotocol/protocolVersion"]` are served
   statelessly under 2026-07-28 (`server/discover`, `resultType`, caching hints on lists). A client
   that opens with `initialize` gets 2025-11-25, 2025-06-18, 2025-03-26 or 2024-11-05.
-* Features: tools only, with `structuredContent` and the same JSON as text. No resources, prompts,
-  logging, sampling or roots. `notifications/cancelled` drops the answer; the engine finishes the run.
+* Features: tools, with `structuredContent` and the same JSON as text; one prompt (`develop_step`);
+  `instructions` that tell the agent how to work with the tools. No resources, logging, sampling or roots. `notifications/cancelled` drops the answer; the engine finishes the run.
 * Engines start on first use and stop after 10 idle minutes (Groovy); an engine that hits the
   30-second timeout restarts with the project open again. The server stops when its stdin closes.
 * Tested with the official TypeScript SDK 1.32.2 and Python SDK 2.3.0 clients (both negotiate

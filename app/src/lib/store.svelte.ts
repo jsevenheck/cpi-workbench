@@ -1,8 +1,12 @@
 import { call, openProject, closeProject as closeEngineProject, availableProfiles, DEFAULT_PROFILE, type Profile, type ProfileInfo } from './engine';
 import type { Diagnostic, FileEntry, GroovyResult, Row, XsltResult } from './types';
 import { argText, mappingArgs } from './queue';
+import { scriptFunctions } from './functions';
+import { readShared, sharedSummary, type SharedMessage } from './share';
+import { attachmentInput, attachmentRows, parsePlatformFile, platformDoc, platformFileText, platformRows, platformRunData, PLATFORM_FILES, PLATFORM_KEYS,
+  soapHeaderInput, soapHeaderRows, type AttachmentRow, type PlatformKey, type PlatformRows, type SoapHeaderRow } from './platform';
 import { toRows } from './rows';
-import { pathKey } from './paths';
+import { pathKey, projectPath } from './paths';
 import { resolveSimpleFunctions } from './simple';
 import { callsJava } from './trust';
 
@@ -115,11 +119,12 @@ function disarmGroovy(what: string) {
 
 /** A live run or a run on showing a tab: only for code the user has started once. */
 export function autoRunXslt() {
-  if (xslt.armed) void runXslt();
+  // An empty editor (a closed mapping) has nothing to run.
+  if (xslt.armed && xslt.mapping.trim()) void runXslt();
 }
 
 export function autoRunGroovy() {
-  if (groovy.armed) void runGroovy();
+  if (groovy.armed && groovy.script.trim()) void runGroovy();
 }
 
 /** The same run on the other runtime of the same kind (Saxon 9.9 vs 12, Groovy 1.x vs 2.x). */
@@ -183,25 +188,22 @@ export const groovy = $state({
   /** False for a script that was opened and not yet run by hand (see autoRunGroovy). */
   armed: true,
   casePath: null as string | null,
-  /** Inputs only a test case can hold (attachments, SOAP headers, platform overrides); kept while it is open. */
-  caseExtras: null as CaseExtras | null,
+  /** Message attachments and SOAP headers the script step gets (a mapping function gets none). */
+  attachments: [] as AttachmentRow[],
+  soapHeaders: [] as SoapHeaderRow[],
+  /** The open test case's `platform` object: it replaces the project's platform data key by key while the case is open. */
+  casePlatform: null as Record<string, unknown> | null,
   compareOn: false,
   compare: null as CompareRun<GroovyResult> | null,
   /** A Message Mapping function, known from the last run of this function; null for processData(message). */
   mapping: null as { function: string; parameters: string[] } | null,
   /** The open script's Message Mapping functions (signatures), from its last run that compiled. */
   functions: [] as string[],
+  /** The function the last run called as a script step although the script text reads like a mapping function. */
+  stepFunction: null as string | null,
   /** Text of each String / String[] argument of the mapping function (queues: one context per line). */
   args: [] as (string | null)[],
 });
-
-export interface CaseExtras {
-  /** Project-relative folder of the case; attachment files are relative to it. */
-  dir: string;
-  attachments?: any[];
-  soapHeaders?: any[];
-  platform?: any;
-}
 
 export const xsd = $state({
   schemaPath: null as string | null,
@@ -219,6 +221,10 @@ export const xpath = $state({
   namespaces: [] as Row[],
   body: SAMPLE_INPUT,
   result: null as null | { ok: boolean; items: any[]; count: number; diagnostics: Diagnostic[]; engine: string },
+  /** The document the result is for: its places are marked only while the text is still this. */
+  resultBody: '',
+  /** Expressions run in this session, newest last (↑ and ↓ in the expression field). */
+  history: [] as string[],
   running: false,
 });
 
@@ -368,22 +374,304 @@ function safeSet(key: string, v: string | null) {
   try { v === null ? localStorage.removeItem(key) : localStorage.setItem(key, v); } catch { /* ignore */ }
 }
 
+// ------------------------------------------------------------------ a message handed over
+// From CPI Helper's GroovyDebugX and xsltDebugX plugins (share.ts): a traced step's message, with the step's
+// script or mapping if the user sent it along. The app connects to nothing for this; the text comes in pasted,
+// or in the address the browser mode was opened with.
+
+/**
+ * Takes the message of a pasted link or JSON into its tab. One way only: nothing is sent or called for it.
+ * A script or mapping that comes along is not run: it is someone's code until the user starts it.
+ */
+export async function importMessage(pasted: string): Promise<boolean> {
+  try {
+    app.error = '';
+    const m = await readShared(pasted);
+    const what = sharedSummary(m);
+    if (what === '') throw new Error('The link holds no body, headers, properties or script: nothing was sent along.');
+    const tool: StepTool = m.kind === 'message' ? app.stepTool : m.kind;
+    if (m.kind !== 'message' && !app.profiles.some((p) => p.kind === m.kind && p.available) && app.profiles.length > 0) {
+      throw new Error(`The link is for a ${m.kind === 'groovy' ? 'Groovy script' : 'XSLT mapping'}, and no engine for it is installed or running.`);
+    }
+    if (m.source !== '' && !(await mayDiscard(tool === 'groovy' ? 'groovy' : 'xslt'))) return false;
+    if (tool === 'groovy') importGroovy(m);
+    else if (tool === 'xslt') importXslt(m);
+    else {
+      // XSD, XPath and Flow Steps take a message typed as JSON: the body, and for Flow Steps the rows.
+      if (m.body !== '') {
+        if (tool === 'xsd') xsd.body = m.body;
+        else if (tool === 'xpath') xpath.body = m.body;
+        else flow.body = m.body;
+        delete app.inputPaths[tool];
+      }
+      if (tool === 'flow') {
+        if (m.headers.length) flow.headers = m.headers;
+        if (m.properties.length) flow.properties = m.properties;
+      }
+      app.tool = tool;
+      app.status = `Imported: ${what}.`;
+    }
+    return true;
+  } catch (e) {
+    fail(e);
+    return false;
+  }
+}
+
+function importGroovy(m: SharedMessage) {
+  if (m.source !== '') {
+    rememberScript();
+    groovy.scriptPath = groovy.casePath = null;
+    groovy.casePlatform = null;
+    groovy.script = m.source;
+    groovy.savedScript = ''; // not a file of the project yet: Save asks for a path
+    groovy.functionName = m.function || 'processData';
+    groovy.mapping = null;
+    groovy.functions = [];
+    groovy.stepFunction = null;
+    groovy.args = [];
+    forgetGroovyRun();
+    if (m.source.includes('com.sap.it.script.v2.api') && hasProfile('groovy-2.x')) app.groovyProfile = 'groovy-2.x';
+    else if (m.source.includes('com.sap.gateway.ip.core.customdev.util') && hasProfile('groovy-1.x')) app.groovyProfile = 'groovy-1.x';
+  }
+  if (m.body !== '') {
+    groovy.body = m.body;
+    delete app.inputPaths.groovy;
+  }
+  if (m.headers.length) groovy.headers = m.headers;
+  if (m.properties.length) groovy.properties = m.properties;
+  app.tool = 'groovy';
+  if (m.source !== '') {
+    disarmGroovy('the imported script');
+    app.status = `Imported from CPI Helper: ${sharedSummary(m)}. A script runs with your rights, so it has not run: press Ctrl+Enter to run it.`;
+  } else {
+    app.status = `Imported: ${sharedSummary(m)}.`;
+    rerunIfLive('groovy');
+  }
+}
+
+function importXslt(m: SharedMessage) {
+  if (m.source !== '') {
+    xslt.mappingPath = xslt.casePath = null;
+    xslt.mapping = m.source;
+    xslt.savedMapping = '';
+  }
+  if (m.body !== '') {
+    xslt.body = m.body;
+    delete app.inputPaths.xslt;
+  }
+  if (m.headers.length) xslt.headers = m.headers;
+  if (m.properties.length) xslt.properties = m.properties;
+  app.tool = 'xslt';
+  if (m.source !== '') {
+    // Stricter than for a file opened from the project: a link can come from any web page, so its mapping
+    // waits for a run by hand whether or not it calls Java.
+    runSeq++;
+    xslt.running = false;
+    xslt.armed = false;
+    xslt.result = xslt.compare = null;
+    app.status = `Imported from CPI Helper: ${sharedSummary(m)}. A mapping from a link has not run: press Ctrl+Enter to run it.`;
+  } else {
+    app.status = `Imported: ${sharedSummary(m)}.`;
+    rerunIfLive('xslt');
+  }
+}
+
+/** Asks for the link or text to import, for the Import… buttons. */
+export async function askImportMessage() {
+  const r = await ask('Import a message: paste the link CPI Helper opened (GroovyDebugX, xsltDebugX), or a message as JSON', '');
+  if (r && r.value.trim() !== '') await importMessage(r.value);
+}
+
+/**
+ * Browser mode: a link from CPI Helper that points at this app (`…/#share/<data>`). The data leaves the
+ * address at once, so a reload does not import it again and it is not kept in the history.
+ */
+export async function importFromAddress() {
+  if (typeof location === 'undefined' || !location.hash.startsWith('#share/')) return;
+  const link = location.href;
+  history.replaceState(null, '', location.pathname + location.search);
+  await importMessage(link);
+}
+
+// ------------------------------------------------------------------ platform data
+// The mocked platform data of the project (platform/*.json) as tables in the Groovy tab. The files stay the
+// source of truth: a table is read from its file and saved into it; until it is saved, its rows go with each
+// run as the `platform` override a test case uses too, so a run always sees what the table shows.
+
+interface PlatformSection<K extends PlatformKey> {
+  rows: PlatformRows[K];
+  /** The file's document as last read or saved; undefined without a file. */
+  doc: unknown;
+  /** JSON of the document the rows gave when they were read or saved: what "unsaved changes" compares with. */
+  saved: string;
+  /** Why the file could not be read as a table (not JSON, another shape); the table is off then. */
+  loadError: string;
+  exists: boolean;
+}
+
+function emptySection<K extends PlatformKey>(key: K): PlatformSection<K> {
+  return { rows: [] as unknown as PlatformRows[K], doc: undefined, saved: JSON.stringify(platformDoc(key, [] as unknown as PlatformRows[K], undefined)), loadError: '', exists: false };
+}
+
+export const platform = $state({
+  valueMappings: emptySection('valueMappings'),
+  credentials: emptySection('credentials'),
+  partnerDirectory: emptySection('partnerDirectory'),
+  numberRanges: emptySection('numberRanges'),
+  /** The keystore is a file next to keystore.json: shown, not edited as a table. */
+  keystoreExists: false,
+});
+
+/** The document a section's rows give, or what is wrong with them (a number range's "next" that is no number). */
+export function platformSectionDoc(key: PlatformKey): { doc: unknown; error: string } {
+  const sec = platform[key] as PlatformSection<PlatformKey>;
+  try {
+    return { doc: platformDoc(key, sec.rows, sec.doc), error: '' };
+  } catch (e) {
+    return { doc: undefined, error: (e as Error).message };
+  }
+}
+
+export function platformDirty(key: PlatformKey): boolean {
+  const sec = platform[key];
+  if (sec.loadError) return false;
+  const { doc, error } = platformSectionDoc(key);
+  return error !== '' || JSON.stringify(doc) !== sec.saved;
+}
+
+function dirtyPlatformFiles(): string[] {
+  return PLATFORM_KEYS.filter(platformDirty).map((k) => PLATFORM_FILES[k]);
+}
+
+/**
+ * Reads the project's platform files into the tables. Tables with unsaved changes are left alone unless
+ * `force` (a project that opens). Without a project there is nothing to read: the rows are in memory only.
+ */
+export async function loadPlatform(force = false) {
+  if (!app.project) return;
+  // A newer load, or a closed or other project, makes this one stale: it reads files one by one, and what it
+  // read late must not land in the tables of the project open by then.
+  const gen = ++platformGen;
+  const root = app.project.root;
+  const stale = () => gen !== platformGen || app.project?.root !== root;
+  platform.keystoreExists = fileExists(PLATFORM_FILES.keystore);
+  for (const key of PLATFORM_KEYS) {
+    const sec = platform[key] as PlatformSection<PlatformKey>;
+    if (!force && platformDirty(key)) {
+      sec.exists = fileExists(PLATFORM_FILES[key]); // the file may be gone while the table has changes
+      continue;
+    }
+    const before = JSON.stringify(sec.rows);
+    const next = emptySection(key) as PlatformSection<PlatformKey>;
+    next.exists = fileExists(PLATFORM_FILES[key]);
+    if (next.exists) {
+      try {
+        const text = await readFile(PLATFORM_FILES[key]);
+        if (stale()) return;
+        next.doc = parsePlatformFile(text); // numbers keep their text
+        next.rows = platformRows(key, next.doc);
+        next.saved = JSON.stringify(platformDoc(key, next.rows, next.doc));
+      } catch (e) {
+        if (stale()) return;
+        next.doc = undefined;
+        next.rows = [];
+        next.loadError = (e as Error).message;
+      }
+    }
+    // Rows typed while the file was read stay.
+    if (force || JSON.stringify(sec.rows) === before) Object.assign(sec, next);
+  }
+}
+
+/** Counts loads and resets: a load that started before the latest one of either stops. */
+let platformGen = 0;
+
+function resetPlatform() {
+  platformGen++;
+  for (const key of PLATFORM_KEYS) Object.assign(platform[key], emptySection(key));
+  platform.keystoreExists = false;
+}
+
+export async function savePlatform(key: PlatformKey): Promise<boolean> {
+  if (!app.project) {
+    app.error = 'Open a project folder to save platform data.';
+    return false;
+  }
+  const sec = platform[key] as PlatformSection<PlatformKey>;
+  const { doc, error } = platformSectionDoc(key);
+  if (error) {
+    app.error = error;
+    return false;
+  }
+  const path = PLATFORM_FILES[key];
+  const gen = platformGen;
+  const root = app.project.root;
+  try {
+    const content = platformFileText(doc);
+    await writeFile(path, content);
+    // The file is written; if the project closed (or another one opened) meanwhile, its tables are not this one's.
+    if (gen !== platformGen || app.project?.root !== root) return true;
+    sec.doc = doc;
+    sec.saved = JSON.stringify(doc);
+    sec.exists = true;
+    // The same file open in the File tab follows, unless it has changes of its own.
+    if (fileView.path === path && fileView.content === fileView.saved) fileView.content = fileView.saved = content;
+    app.status = 'Saved ' + path;
+    await refreshFiles();
+    return true;
+  } catch (e) {
+    fail(e);
+    return false;
+  }
+}
+
+/**
+ * The run's `platform` object: every table with unsaved changes (without a project: every table with rows),
+ * then the open test case's own override, which wins key by key as in the test runner.
+ */
+function platformOverride(): Record<string, unknown> | undefined {
+  const out: Record<string, unknown> = {};
+  for (const key of PLATFORM_KEYS) {
+    if (!platformDirty(key)) continue;
+    const { doc, error } = platformSectionDoc(key);
+    if (error) throw new Error(error);
+    out[key] = platformRunData(doc);
+  }
+  Object.assign(out, groovy.casePlatform ?? {});
+  return Object.keys(out).length ? out : undefined;
+}
+
 // ------------------------------------------------------------------ project
 
 export async function open(dir: string, initProject = false) {
   app.error = '';
+  // The opened project's platform files take the tables' place. Unsaved rows typed without a project, or for
+  // another project, would otherwise go into this project's runs and, on Save, into its files.
+  const before = app.project?.root ?? null;
+  const unsaved = dirtyPlatformFiles();
+  if (unsaved.length && before !== dir && !(await confirm(before === null
+    ? 'The project\'s platform files replace the platform data entered without a project. Open it?'
+    : `Discard the unsaved platform data of the open project (${unsaved.join(', ')})?`))) return;
   const r = await openProject(dir, initProject);
-  if (app.project?.root !== r.root) scriptMemory.clear(); // its paths belong to the other project
+  const other = before !== r.root;
+  if (other) scriptMemory.clear(); // its paths belong to the other project
   app.project = { root: r.root, files: r.files };
+  if (other) resetPlatform(); // at once: no run of the opened project uses rows typed before it
   safeSet('cpiwb.project', r.root);
   await loadIflowSteps();
   if (!r.isProject && !initProject) app.status = 'Folder has no cpi-workbench.json – it still works; use "Init" to add the standard folders.';
   else app.status = 'Project opened: ' + r.root;
+  // Last: the file tree is up by now, and a file opened from it sets the status line after this one.
+  await loadPlatform();
 }
 
 export async function closeProject() {
-  // Mappings and scripts stay in their editors as unsaved text; the File tab closes with the project.
+  // Mappings and scripts stay in their editors as unsaved text; the File tab and the platform tables close
+  // with the project.
   if (!(await mayDiscard('file'))) return;
+  const unsaved = dirtyPlatformFiles();
+  if (unsaved.length && !(await confirm(`Discard the unsaved platform data (${unsaved.join(', ')})?`))) return;
   await closeEngineProject();
   app.project = null;
   scriptMemory.clear();
@@ -392,10 +680,11 @@ export async function closeProject() {
   xslt.casePath = null;
   groovy.scriptPath = null;
   groovy.casePath = null;
-  groovy.caseExtras = null;
+  groovy.casePlatform = null;
   xsd.schemaPath = null;
   xsd.casePath = null;
   closeFileView();
+  resetPlatform();
   app.inputPaths = {};
   app.iflowSteps = [];
 }
@@ -404,6 +693,7 @@ export async function refreshFiles() {
   if (!app.project) return;
   const r = await call('project.list');
   app.project.files = r.files;
+  await loadPlatform(); // a platform file may have been saved, renamed or deleted
 }
 
 export async function loadIflowSteps() {
@@ -556,15 +846,26 @@ export async function openFile(path: string, opts: OpenOptions = {}) {
       groovy.script = content;
       groovy.savedScript = content;
       groovy.casePath = null;
-      groovy.caseExtras = null;
+      groovy.casePlatform = null;
       const last = opts.functionName ? undefined : scriptMemory.get(path);
       groovy.functionName = opts.functionName ?? last?.functionName ?? 'processData';
       groovy.mapping = null;
       groovy.functions = [];
+      groovy.stepFunction = null;
       groovy.args = last ? [...last.args] : [];
       forgetGroovyRun();
-      // A script with only mapping functions: the first run picks one instead of failing on processData.
-      if (!opts.functionName && !last) pickMappingFunction = true;
+      // A script with only mapping functions opens with its first one (read from the text, nothing runs); if the
+      // text says nothing, the first run picks one instead of failing on processData.
+      if (!opts.functionName && !last) {
+        const fns = scriptFunctions(content);
+        const first = fns.find((f) => f.kind === 'mapping');
+        if (first && !fns.some((f) => f.name === 'processData')) {
+          groovy.functionName = first.name;
+          pickMappingFunction = false;
+        } else {
+          pickMappingFunction = true;
+        }
+      }
       if (opts.profile && hasProfile(opts.profile)) app.groovyProfile = opts.profile;
       else if (content.includes('com.sap.it.script.v2.api') && hasProfile('groovy-2.x')) app.groovyProfile = 'groovy-2.x';
       else if (content.includes('com.sap.gateway.ip.core.customdev.util') && hasProfile('groovy-1.x')) app.groovyProfile = 'groovy-1.x';
@@ -613,11 +914,119 @@ export function closeFileView() {
   if (app.tool === 'file') app.tool = app.stepTool;
 }
 
+/**
+ * Closes the file open in a step editor, and the test case it came from: the editor is left empty and without a
+ * path, so Save asks for a new one. The file on disk stays as it is. Asks first when there are unsaved changes.
+ */
+export async function closeEditorFile(editor: 'xslt' | 'groovy' | 'xsd'): Promise<boolean> {
+  if (!(await mayDiscard(editor))) return false;
+  if (editor === 'xslt') {
+    const path = xslt.casePath ?? xslt.mappingPath;
+    if (xslt.casePath) {
+      // The input came with the case: it goes with it.
+      xslt.body = '';
+      xslt.headers = [];
+      xslt.properties = [];
+    }
+    runSeq++; // a run still under way belongs to the closed file
+    xslt.running = false;
+    xslt.mappingPath = xslt.casePath = null;
+    xslt.mapping = xslt.savedMapping = '';
+    xslt.result = xslt.compare = null;
+    xslt.armed = true;
+    app.status = path ? 'Closed ' + path : 'Closed the unsaved mapping';
+  } else if (editor === 'groovy') {
+    const path = groovy.casePath ?? groovy.scriptPath;
+    if (groovy.casePath) {
+      groovy.body = '';
+      groovy.headers = [];
+      groovy.properties = [];
+      groovy.attachments = [];
+      groovy.soapHeaders = [];
+    } else {
+      rememberScript(); // opening it again brings back its function and arguments
+    }
+    forgetGroovyRun();
+    groovy.scriptPath = groovy.casePath = null;
+    groovy.casePlatform = null;
+    groovy.script = groovy.savedScript = '';
+    groovy.functionName = 'processData';
+    groovy.mapping = null;
+    groovy.functions = [];
+    groovy.stepFunction = null;
+    groovy.args = [];
+    groovy.result = groovy.compare = null;
+    groovy.armed = true;
+    app.status = path ? 'Closed ' + path : 'Closed the unsaved script';
+  } else {
+    const path = xsd.casePath ?? xsd.schemaPath;
+    xsdSeq++; // a validation still under way belongs to the closed schema
+    xsd.running = false;
+    if (xsd.casePath) xsd.body = '';
+    xsd.schemaPath = xsd.casePath = null;
+    xsd.schema = xsd.savedSchema = '';
+    xsd.result = null;
+    app.status = path ? 'Closed ' + path : 'Closed the unsaved schema';
+  }
+  return true;
+}
+
+/**
+ * Closes the file a step tool's input body was loaded from: the body is emptied and no longer names the file.
+ * The body is a copy, so the file on disk stays as it is; headers and properties do not come from the file and stay.
+ */
+export function closeInput(tool: StepTool) {
+  const path = app.inputPaths[tool];
+  // A run still under way belongs to the closed input: its answer must not come back.
+  if (tool === 'xsd') {
+    xsdSeq++;
+    xsd.running = false;
+    xsd.body = '';
+    xsd.result = null;
+  } else if (tool === 'xpath') {
+    xpathSeq++;
+    xpath.running = false;
+    xpath.body = '';
+    xpath.result = null;
+  } else if (tool === 'flow') {
+    flowSeq++;
+    flow.running = false;
+    flow.body = '';
+    flow.cmResult = flow.routerResult = flow.splitResult = flow.filterResult = flow.gatherResult = flow.converterResult = null;
+  } else if (tool === 'groovy') {
+    forgetGroovyRun();
+    groovy.body = '';
+    groovy.result = groovy.compare = null;
+  } else {
+    runSeq++;
+    xslt.running = false;
+    xslt.body = '';
+    xslt.result = xslt.compare = null;
+  }
+  delete app.inputPaths[tool];
+  if (path) app.status = 'Closed input ' + path;
+}
+
+/** Closes the File tab, asking first when it has unsaved changes; the file on disk stays as it is. */
+export async function closeFileTab(): Promise<boolean> {
+  if (!(await mayDiscard('file'))) return false;
+  closeFileView();
+  return true;
+}
+
 export async function saveFileView(): Promise<boolean> {
   if (!fileView.path) return false;
   await writeFile(fileView.path, fileView.content);
   fileView.saved = fileView.content;
   app.status = 'Saved ' + fileView.path;
+  if (fileView.path.startsWith('platform/')) {
+    // The Groovy tab's table follows the file, unless it has unsaved changes of its own: then both exist.
+    const key = PLATFORM_KEYS.find((k) => PLATFORM_FILES[k] === fileView.path);
+    if (key && platformDirty(key)) {
+      app.status = `Saved ${fileView.path}. The Groovy tab's Platform table for it still has unsaved changes; its Save would replace this file, ↻ Reload files there takes the file.`;
+    }
+    await loadPlatform();
+  }
   return true;
 }
 
@@ -856,19 +1265,57 @@ function xsltRequest() {
   };
 }
 
+/** The selected Groovy function if it is a Message Mapping function, else null (a script step). */
+export interface SelectedMapping {
+  function: string;
+  /** Engine spelling: String, String[], Output, MappingContext. */
+  parameters: string[];
+  /** Parameter names from the script text, '' where unknown. */
+  names: string[];
+  /** Known from a run (engine) or only from the text. */
+  source: 'engine' | 'text';
+}
+
+/**
+ * The function the Groovy tab runs, as a Message Mapping function: from the last run when that called it,
+ * otherwise from the script text (nothing has to run for that). The engine's answer wins where they differ.
+ */
+export function selectedMapping(): SelectedMapping | null {
+  const fn = groovy.functionName || 'processData';
+  const parsed = scriptFunctions(groovy.script).filter((f) => f.name === fn);
+  if (groovy.mapping?.function === fn) {
+    const parameters = groovy.mapping.parameters;
+    const match = parsed.find((f) => f.parameters.join() === parameters.join());
+    return { function: fn, parameters, names: match ? match.params.map((p) => p.name) : parameters.map(() => ''), source: 'engine' };
+  }
+  if (groovy.stepFunction === fn) return null;
+  const f = parsed.find((p) => p.kind === 'mapping');
+  return f ? { function: fn, parameters: f.parameters, names: f.params.map((p) => p.name), source: 'text' } : null;
+}
+
+function mappingArgsFor(m: SelectedMapping | null): unknown[] {
+  return m ? mappingArgs(m.parameters, groovy.args) : [];
+}
+
+function orNone<T>(list: T[]): T[] | undefined {
+  return list.length ? list : undefined;
+}
+
 function groovyRequest() {
   const fn = groovy.functionName || 'processData';
+  const fileRow = app.project ? undefined : groovy.attachments.find((a) => a.kind === 'file' && a.file.trim() !== '');
+  if (fileRow) throw new Error(`The attachment file ${fileRow.file} can only be read with a project open; open the project, or give the content as text.`);
   return {
     script: { content: groovy.script, path: groovy.scriptPath ?? 'script.groovy' },
     function: fn,
-    args: groovy.mapping?.function === fn ? mappingArgs(groovy.mapping.parameters, groovy.args) : [],
+    args: mappingArgsFor(selectedMapping()),
     input: {
       body: groovy.body, headers: clean(groovy.headers), properties: clean(groovy.properties),
-      attachments: groovy.caseExtras?.attachments, soapHeaders: groovy.caseExtras?.soapHeaders,
+      // Files of attachments are project-relative here; the engine reads them (inside the project only).
+      attachments: orNone(attachmentInput(groovy.attachments)), soapHeaders: orNone(soapHeaderInput(groovy.soapHeaders)),
     },
     options: { bodyType: groovy.bodyType },
-    platform: groovy.caseExtras?.platform,
-    caseDir: groovy.caseExtras?.dir,
+    platform: platformOverride(),
   };
 }
 
@@ -932,8 +1379,9 @@ export async function runGroovy() {
   groovy.running = true;
   app.error = '';
   try {
-    // A mapping function's parameters are known only after a run; until then its arguments cannot be sent.
-    const known = groovy.mapping?.function === (groovy.functionName || 'processData');
+    // The arguments go with the parameters known before the run (the engine's or the text's); if the run finds
+    // others, it runs again with them.
+    const sent = selectedMapping();
     const params = groovyRequest();
     const [r, c] = await Promise.all([
       call<GroovyResult>('groovy.run', params, app.groovyProfile),
@@ -954,10 +1402,14 @@ export async function runGroovy() {
         // Arguments typed for another function do not belong to this one (a test case's do: mapping is null then).
         if (groovy.mapping && groovy.mapping.function !== r.mapping.function) groovy.args = [];
         groovy.mapping = { function: r.mapping.function, parameters: r.mapping.parameters };
-        if (!known && groovy.args.some((a) => a === null || a.trim() !== '')) return void runGroovy();
+        groovy.stepFunction = null;
+        const same = sent?.parameters.join() === r.mapping.parameters.join();
+        if (!same && groovy.args.some((a) => a === null || a.trim() !== '')) return void runGroovy();
       } else if (r.failedPhase !== 'compile') {
         if (groovy.mapping) groovy.args = [];
         groovy.mapping = null;
+        // The engine called it as a script step: that wins over the reading of the text.
+        groovy.stepFunction = params.function;
       }
     }
   } catch (e) {
@@ -997,16 +1449,26 @@ export async function runXsd() {
 
 let xpathSeq = 0;
 
+const XPATH_HISTORY = 20;
+
 export async function runXpath() {
   const seq = ++xpathSeq;
   xpath.running = true;
   app.error = '';
   const ns: Record<string, string> = {};
   for (const r of xpath.namespaces) if (r.name.trim() && !r.disabled) ns[r.name.trim()] = r.value;
+  const expression = xpath.expression;
+  const body = xpath.body;
+  if (expression.trim() !== '') {
+    xpath.history = [...xpath.history.filter((h) => h !== expression), expression].slice(-XPATH_HISTORY);
+  }
   try {
-    const r = await call('xpath.eval', { expression: xpath.expression, version: xpath.version,
-      namespaces: ns, input: { body: xpath.body } }, app.profile);
-    if (seq === xpathSeq) xpath.result = r;
+    const r = await call('xpath.eval', { expression, version: xpath.version,
+      namespaces: ns, input: { body } }, app.profile);
+    if (seq === xpathSeq) {
+      xpath.result = r;
+      xpath.resultBody = body;
+    }
   } catch (e) {
     if (seq === xpathSeq) fail(e);
   } finally {
@@ -1266,10 +1728,14 @@ async function loadGroovyCase(path: string, dir: string, tc: any) {
   groovy.args = (tc.args ?? []).map(argText);
   groovy.mapping = null;
   groovy.functions = [];
+  groovy.stepFunction = null;
   forgetGroovyRun();
   if (tc.profile && hasProfile(tc.profile)) app.groovyProfile = tc.profile;
-  const extras: CaseExtras = { dir, attachments: tc.input?.attachments, soapHeaders: tc.input?.soapHeaders, platform: tc.platform };
-  groovy.caseExtras = extras.attachments || extras.soapHeaders || extras.platform ? extras : null;
+  // A case names attachment files relative to its folder. A path that leaves the project keeps its "..", so the
+  // engine refuses it as outside the project instead of reading another file inside it.
+  groovy.attachments = attachmentRows(tc.input?.attachments, (file) => projectPath(dir, file));
+  groovy.soapHeaders = soapHeaderRows(tc.input?.soapHeaders);
+  groovy.casePlatform = tc.platform && typeof tc.platform === 'object' ? tc.platform : null;
   groovy.casePath = path;
   app.tool = 'groovy';
   disarmGroovy('test case ' + (tc.name ?? path));

@@ -1,0 +1,5 @@
+<Order id="4711">
+  <Item sku="M-100" qty="2"/>
+  <Item sku="M-200" qty="1"/>
+  <Item sku="M-300" qty="5"/>
+</Order>

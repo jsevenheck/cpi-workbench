@@ -18,6 +18,11 @@ Download the installer for your platform from the
   name that exists asks before it overwrites the file, and opening another file asks before it
   drops unsaved changes (the dot after the file name).
 * Right-click a file in the tree to open, rename, copy or delete it, or to copy its path.
+* The **×** next to a file name closes that file; the file on disk stays as it is. It asks first when there
+  are unsaved changes. In the mapping, script and schema panes it leaves an empty editor without a path, so
+  **Save** asks for a new name; for a test case it also drops the case's input and its attachments. Next to
+  the input file it empties the input body; headers and properties stay. The **File** tab closes the same way, also from the × on its
+  tab in the tool bar.
 * Drag the bars between input, mapping or script and output to resize them; double-click a bar to reset.
 * **Save…** above the input body stores it under `inputs/`. Clicking a file there, or **Use as input**
   in a file's context menu, loads it as the input body of the current tool. A JSON file goes to the
@@ -38,6 +43,19 @@ Download the installer for your platform from the
 * **Parameters** (XSLT) shows how each `xsl:param` was bound: header, property or default.
 * **MPL**, **Console** and **API calls** (Groovy) show message processing log entries, `println`
   output and the calls to SAP APIs with their arguments.
+* **Attachments** and **SOAP** (Groovy, next to Headers and Properties) hold what the script reads with
+  `message.getAttachments()` and `getSoapHeaders()` (Script API v1): an attachment's content is text typed
+  there, a file of the project (its path) or Base64; a test case's attachments and SOAP headers open
+  there. A Message Mapping function gets no message, so the two tabs are hidden for it.
+* **Platform** (Groovy) shows the mocked platform data the script reads through `ITApiFactory` as tables:
+  value mappings, the Secure Store's credentials, Partner Directory parameters and number ranges, from
+  the project's `platform/*.json` files ([format](test-cases.md#mocked-platform-data-platform)). A changed
+  table applies to the next run at once and is marked with a dot until **Save** writes its file, as
+  indented JSON (numbers keep their spelling). What a table does not show stays in the file as it is: a credential's properties and
+  OAuth2 tokens, binary parameters, alternative partners and authorized users; **Open file** edits
+  those. The keystore is edited as a file. Without a project the tables work in memory. A test case's own
+  `platform` object wins over a table for its runs, and the tab says so. Use test-only values, never a
+  tenant's real secrets.
 * Groovy scripts run like on a tenant: Java 21, Camel 3.14.7, timezone UTC and locale `en_US`
   whatever your computer uses, and the libraries a tenant offers (commons-lang3; on 1.x also Jackson
   and commons-codec; on 2.x yaml and toml). On 1.x, `log` and `logger` are SAP's `ScriptLogger`: `log.logInfo(…)`,
@@ -46,12 +64,20 @@ Download the installer for your platform from the
   Groovy Script 1.x ↔ 2.x) and lists what differs: status, headers, properties and a body diff.
   This helps before you move a script from 1.x to 2.x.
 * Test cases (see [Test cases](test-cases.md)) are written by hand and run from the command line;
-  the app has no test runner. Opening a `case.json` loads the case into its editor view. Inputs only
-  a case file can hold (attachments, SOAP headers, platform overrides) are kept while the case is
-  open and are shown below the input.
+  the app has no test runner. Opening a `case.json` loads the case into its editor view. A Groovy
+  case's attachments and SOAP headers open in the input's **Attachments** and **SOAP** tabs; its
+  `platform` overrides apply to its runs while it is open, and the **Platform** tab says so.
 * **XSD** validates a document against a schema; **XPath** evaluates an expression (3.1 by default, or 1.0).
   Both run with **▶ Run** (Ctrl+Enter). XSD validation uses the JDK's validator, so it has no
   *Runtime* choice; for XPath the runtime picks the Saxon version of XPath 3.1 (1.0 runs on the JDK).
+* In the **XPath** tab, the nodes an expression selects are marked in the document, and a result with ↗
+  shows its place. Edit the document and the marks go until the next run. **XPath at cursor** writes the
+  XPath of the element or attribute at the cursor, for that node (with positions where siblings share the
+  name) or for all like it; the choice goes into the expression field and the clipboard, and runs. Its
+  prefixes come from the **Namespace mapping**; a namespace without a prefix there is written `Q{uri}name`
+  (3.1) or with `local-name()` (1.0), and the status line says which to add. **↑** and **↓** in the field
+  bring back the expressions run in this session. A document with entity references (`&name;` other than
+  `&amp;`, `&lt;` and the like) can hide elements from the text, so the tab neither marks nor writes paths for it.
 * **Flow Steps** runs a **Content Modifier**, **Filter**, **Router**, **General / Iterating Splitter**,
   **Gather** or **Converter** on an input message (body, headers, properties, namespace mapping):
   * Content Modifier: header and property rows with their source types and data types, and the
@@ -92,16 +118,23 @@ Download the installer for your platform from the
   other variable names get no suggestions. Ctrl+Space opens the list again.
 * **Message Mapping functions** (custom functions such as `def String getHeader(String name,
   MappingContext context)` or `def void f(String[] values, Output output, MappingContext context)`):
-  a script that has them lists them above the editor under **Run as**; a click runs one, or enter
-  its name under **fn**. The label next to **fn** says *Script step* (the function gets the message)
-  or *Mapping function*. A mapping function takes **Arguments** instead of the body: a text field per
-  `String` (**null** passes null), and per `String[]` one context per line as a JSON array
-  (`["A", "B"]`; `{"suppress": true}` and `{"xsiNil": true}` stand for SUPPRESS and xsi:nil). A
-  `String[]` function runs once per context, a `String` function once (a tenant calls it once per
-  value). A script opened from the file tree with only mapping functions runs the first one on its first run;
+  pick the function under **Function** above the editor. It lists the script's functions in two groups:
+  *Script step* (gets the message) and *Message Mapping function* (gets field values), each with its
+  parameter names; **Other name…** takes any other name, e.g. from an iFlow step. The list is read from
+  the script text when the script opens, so nothing runs for it; after a run, the engine's list wins where
+  they differ (the reading of the text is a heuristic and may miss unusual declarations). For a mapping
+  function the left pane shows **Function arguments** instead of the body: a field per `String` parameter,
+  named as in the script (**null** passes null), and per `String[]` parameter the values of the source
+  field as the mapping passes them in: one box per context (a context change starts the next one, e.g. per
+  parent element), with **+ Value**, **+ Context** and per value *text* (the field's value), *SUPPRESS*
+  (a suppressed value: no content, but still a place in the context), *xsi:nil* or *null*. **Text** shows the
+  same as one context per line in JSON (`["A", "B"]`; `{"suppress": true}` and `{"xsiNil": true}`), as
+  in `case.json`. `Output` and `MappingContext` come from the simulator. A `String[]` function runs once
+  per context, a `String` function once (a tenant calls it once per value). A script with only mapping
+  functions opens with its first one;
   each script keeps its function and arguments while the app is open, also when you switch to
   another script or tab and back. **Result** shows the returned
-  value or the output queue; `MappingContext` reads and sets the Headers and Properties tabs. The
+  value or the output queue, one row per result context (**Text** shows it as JSON); `MappingContext` reads and sets the Headers and Properties tabs. The
   mapping itself (`.mmap`) is not simulated. SAP does not support Groovy Script 2.x in Message
   Mappings, and a tenant ran mapping scripts on Groovy 2.4.21 and Java 21, so use 1.x
   ([Fidelity](fidelity.md)).
@@ -111,6 +144,41 @@ Download the installer for your platform from the
   * wildcard imports.
 
 **✕** closes the project in the engines too, so runs no longer see its files or `platform/` data.
+
+### A message from a tenant's trace (CPI Helper)
+
+The [CPI Helper](https://github.com/dbeck121/CPI-Helper-Chrome-Extension) browser extension can hand a traced
+step's message to an external IDE: its **GroovyDebugX** plugin for a Groovy Script step, **xsltDebugX** for an
+XSLT Mapping step, each with the body, headers and properties before the step and, if you tick it, the step's
+script or mapping. CPI Workbench takes that hand-over. It goes one way, into the app: CPI Workbench sends
+nothing and calls nothing for it, neither the tenant nor CPI Helper. The extension, in your browser, has the
+data and puts it into a link; the app only reads that link. CPI Helper is optional, too: **Import…** takes a
+message you write as JSON just as well.
+
+* **Desktop app:** send the step from CPI Helper; it opens a browser tab. Copy that tab's address, then
+  **Import…** above the input body of the Groovy or XSLT tab, and paste it. Set the plugin's *Custom URL*
+  first (next point, last point): the tab need not show a page for its address to hold the link.
+* **Browser mode:** let the plugins open CPI Workbench directly. In CPI Helper's plugin settings choose
+  *Custom URL*: for GroovyDebugX `http://127.0.0.1:7777/#share/`, for xsltDebugX `http://127.0.0.1:7777/`
+  (with the port, and the `?engines=…` part before `#`, that you start the browser mode with). Each
+  hand-over opens a new tab with the message in it.
+* The message lands in its tab: body, headers and properties replace what is there, parts you did not send
+  stay. A script or mapping that comes along is unsaved text (**Save** asks for a path) and does not run
+  until you press **Run**: a link can come from anywhere, so nothing in it starts by itself.
+* A trace's values are text, so all headers and properties arrive as *String*; set another type in the table
+  where the script needs it (`getHeader(name, Integer)`).
+* **Import…** also takes a message as JSON: `{ "body": "…", "headers": { "Name": "value" }, "properties": { … } }`.
+* Keep the data on your computer: with *Custom URL* set to an address that has `#share/` in it, the message is
+  in the part of the link after `#`, which a browser never sends to a server; `http://127.0.0.1/#share/`
+  does that even when nothing answers there. GroovyDebugX's default target, groovyide.com, and its Contiva
+  option get the message as part of the address their site is called with; xsltDebugX's default keeps it
+  after `#`. A trace can hold business data; treat the link like the message.
+* Not read: GroovyDebugX's *Contiva IDE* format; choose *Custom URL* or *GroovyIDE* in the plugin. On macOS
+  before 13.3 the desktop app cannot unpack a link (its web view lacks the function); use the browser mode
+  there or paste JSON.
+
+The link formats are the plugins' own, read from their source code in November 2026 and not tried with a
+tenant yet; they are not documented and may change.
 
 ### What a run can access
 
@@ -142,8 +210,10 @@ own scripts, this is the app's only network request, and it is made only when yo
 
 ## Coding agents (MCP)
 
-`cpi-workbench mcp` gives a coding agent such as Claude Code the app's tabs (XSLT, Groovy, XSD, XPath,
-Flow Steps) over the Model Context Protocol. Setup, tools and what the server can access: [MCP server](mcp.md).
+`cpi-workbench mcp` gives an agent such as Claude Code or Claude Desktop the app's tabs (XSLT, Groovy, XSD,
+XPath, Flow Steps) over the Model Context Protocol, plus reading and saving project files, importing an iFlow and
+a reference of the Script API, so it can write a step and try it on the simulator. Setup, tools and what the
+server can access: [MCP server](mcp.md).
 
 ## Command line (CI-friendly)
 

@@ -10,10 +10,13 @@
   import FileView from './components/FileView.svelte';
   import SettingsMenu from './components/SettingsMenu.svelte';
   import { isDesktop } from './lib/engine';
-  import { app, xslt, xpath, groovy, fileView, init, runXslt, runXsd, runXpath, runFlowStep, runGroovy, autoRunXslt, autoRunGroovy, onGroovyProfileChange } from './lib/store.svelte';
+  import { app, xslt, xpath, groovy, fileView, init, runXslt, runXsd, runXpath, runFlowStep, runGroovy, closeFileTab, importFromAddress, autoRunXslt, autoRunGroovy, onGroovyProfileChange } from './lib/store.svelte';
 
   onMount(async () => {
     await init();
+    // A link from CPI Helper that points here; another one into the open tab arrives as a hash change.
+    await importFromAddress();
+    window.addEventListener('hashchange', () => void importFromAddress());
     if (app.tool === 'xslt' && !xslt.result && hasKind('xslt')) autoRunXslt();
     if (app.tool === 'groovy' && !groovy.result && hasKind('groovy')) autoRunGroovy();
   });
@@ -79,6 +82,8 @@
       {#if fileView.path}
         <button role="tab" class="file-tab" class:active={app.tool === 'file'} onclick={() => (app.tool = 'file')}
           title={fileView.path}>{fileView.path.split('/').pop()}{#if fileView.content !== fileView.saved} ●{/if}</button>
+        <button class="close-file file-tab-close" onclick={() => void closeFileTab()} title="Close this file (it stays on disk)"
+          aria-label="Close file tab">×</button>
       {/if}
     </div>
     <div class="spacer"></div>
@@ -152,6 +157,7 @@
   .tools { display: flex; gap: 2px; flex-wrap: wrap; }
   .tools button { border: none; background: none; padding: 6px 10px; border-radius: 6px; color: var(--muted); font-weight: 600; font-size: 12px; cursor: pointer; }
   .tools button.active { background: var(--active); color: var(--accent); }
+  .tools .file-tab-close { align-self: center; }
   .tools .file-tab { font-family: var(--mono); font-weight: 500; border-left: 1px solid var(--border); border-radius: 0 6px 6px 0; }
   .tools button:disabled { opacity: 0.5; cursor: default; }
   .spacer { flex: 1; }

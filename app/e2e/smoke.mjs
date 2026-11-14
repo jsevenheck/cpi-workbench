@@ -136,6 +136,56 @@ await page.getByLabel('XPath expression').fill('count(//Item)');
 await page.getByTitle('Run (Ctrl+Enter)').click();
 await page.locator('.res .item').first().waitFor({ timeout: 10000 });
 if (shots) await page.screenshot({ path: path.join(shots, '6-xpath.png') });
+// Closing the input while a run is under way: its answer must not come back (review F09).
+let holdXpath;
+const xpathHeld = new Promise((r) => (holdXpath = r));
+await page.route(/\/rpc$/, async (route) => {
+  if (route.request().postData()?.includes('"xpath.eval"')) await xpathHeld;
+  await route.continue().catch(() => {});
+});
+const bodyBefore = await page.evaluate(() => document.querySelector('section.pane .view-lines')?.textContent ?? '');
+await page.getByTitle('Run (Ctrl+Enter)').click();
+await page.waitForTimeout(300);
+await page.locator('.tree .file', { hasText: 'standard-order/input.xml' }).click({ button: 'right' });
+await page.getByRole('menu').getByRole('menuitem', { name: 'Use as input' }).click();
+await page.locator('section.pane').first().getByRole('button', { name: 'Close input file' }).click();
+holdXpath();
+await page.waitForTimeout(1500);
+await page.unroute(/\/rpc$/);
+if (await page.locator('.res .item').count()) fail('the result of a run started before the input was closed came back');
+if (!bodyBefore) fail('no document before the held run');
+await page.getByRole('button', { name: 'Use XSLT input' }).click();
+
+// The nodes an expression selects are marked in the document; a result opens its place.
+await page.getByLabel('XPath expression').fill('//Item/@sku');
+await page.getByLabel('XPath expression').press('Enter');
+await page.locator('.res button.link', { hasText: 'attribute sku' }).nth(1).waitFor({ timeout: 10000 })
+  .catch(async () => fail('XPath results do not link to their place: ' + await page.locator('.res').innerText()));
+const marks = await page.locator('section.pane .cpiwb-match').count();
+if (marks < 2) fail('the selected attributes are not marked in the document: ' + marks);
+// The XPath of the attribute at the cursor: this node and all like it; the choice goes into the field and runs.
+await page.locator('.res button.link').nth(1).click();
+await page.getByRole('button', { name: /XPath at cursor/ }).click();
+const menu = await page.getByRole('menu', { name: 'XPath at cursor' }).innerText();
+if (!/\/Item\[2\]\/@sku/.test(menu) || !/Item\/@sku/.test(menu)) fail('XPath at cursor: ' + menu);
+await page.getByRole('menuitem').first().click();
+const atCursor = await page.getByLabel('XPath expression').inputValue();
+if (!/\/Item\[2\]\/@sku$/.test(atCursor)) fail('XPath at cursor did not fill the field: ' + atCursor);
+await page.locator('.res .item', { hasText: /m-200/i }).waitFor({ timeout: 10000 }).catch(() => fail('the XPath at cursor did not run'));
+// ↑ brings back the expression before it, ↓ the current one.
+await page.getByLabel('XPath expression').press('ArrowUp');
+if ((await page.getByLabel('XPath expression').inputValue()) !== '//Item/@sku') fail('↑ in the XPath field: ' + await page.getByLabel('XPath expression').inputValue());
+await page.getByLabel('XPath expression').press('ArrowDown');
+if ((await page.getByLabel('XPath expression').inputValue()) !== atCursor) fail('↓ in the XPath field');
+// Edited after the run: nothing stays marked, and the result says why.
+await page.locator('section.pane .view-lines').first().click({ position: { x: 40, y: 10 } });
+await page.keyboard.press('Control+End');
+await page.keyboard.type(' ');
+await page.locator('.note', { hasText: 'document changed since this run' }).waitFor({ timeout: 5000 })
+  .catch(() => fail('no note that the marks belong to the text before the edit'));
+// Monaco draws decorations on the next animation frame: wait for the marks to go rather than count at once.
+await page.locator('section.pane .cpiwb-match').first().waitFor({ state: 'detached', timeout: 5000 })
+  .catch(() => fail('marks stayed after the document changed'));
 
 // 8) Files that are not steps open in the File tab and leave the input alone; inputs/ holds saved inputs.
 await page.getByRole('tab', { name: 'XSLT Mapping' }).click();
@@ -179,8 +229,39 @@ await page.locator('section h2', { hasText: '· order.xml' }).waitFor({ state: '
   .catch(() => fail('XSD header still names order.xml after Use XSLT output'));
 await page.getByRole('tab', { name: 'XSLT Mapping' }).click();
 await page.getByRole('tab', { name: 'value-mappings.json' }).click();
-await page.locator('section[aria-label="File"]').getByRole('button', { name: 'Close' }).click();
+await page.locator('section[aria-label="File"]').getByRole('button', { name: 'Close file' }).click();
 await page.getByRole('tab', { name: 'value-mappings.json' }).waitFor({ state: 'detached', timeout: 5000 });
+
+// 8b) The × in a pane closes the open file and leaves it on disk: first the input, then the test case's mapping.
+await page.getByRole('tab', { name: 'XSLT Mapping' }).click();
+const orderXml = fs.readFileSync(path.join(project, 'inputs/order.xml'), 'utf8');
+await page.locator('section.input').getByRole('button', { name: 'Close input file' }).click();
+await page.locator('section.input h2', { hasText: '· order.xml' }).waitFor({ state: 'detached', timeout: 5000 })
+  .catch(() => fail('the input header still names order.xml after closing it'));
+// Monaco renders on the next frame.
+await page.waitForFunction(() => !document.querySelector('section.input .view-lines')?.textContent?.trim(), null, { timeout: 5000 })
+  .catch(() => fail('closing the input left its body in the editor'));
+if (fs.readFileSync(path.join(project, 'inputs/order.xml'), 'utf8') !== orderXml) fail('closing the input changed inputs/order.xml');
+// Unsaved changes: Cancel keeps the file open, OK closes it without writing the changes.
+const caseXsl = fs.readFileSync(path.join(project, 'mappings/order-to-salesorder.xsl'), 'utf8');
+await page.locator('section.mapping .view-lines').click({ position: { x: 40, y: 10 } });
+await page.keyboard.press('Control+End');
+await page.keyboard.type('<!-- edit -->');
+const closeMapping = page.locator('section.mapping').getByRole('button', { name: 'Close file' });
+await closeMapping.click();
+await discard.getByRole('button', { name: 'Cancel' }).click().catch(() => fail('no question before closing a changed mapping'));
+await page.locator('section.mapping h2[title="From test case tests/standard-order/case.json"]').waitFor({ timeout: 5000 })
+  .catch(() => fail('Cancel closed the mapping anyway'));
+await closeMapping.click();
+await discard.getByRole('button', { name: 'OK' }).click();
+await page.locator('section.mapping h2', { hasText: 'No mapping open' }).waitFor({ timeout: 5000 })
+  .catch(() => fail('the mapping pane does not say that no mapping is open'));
+await page.locator('section.mapping .empty-hint').waitFor({ timeout: 5000 }).catch(() => fail('no hint in the empty mapping editor'));
+if (fs.readFileSync(path.join(project, 'mappings/order-to-salesorder.xsl'), 'utf8') !== caseXsl) fail('closing the mapping changed the file');
+if ((await mappingFile.getAttribute('class')).includes('active')) fail('the closed mapping is still marked in the tree');
+// Opening it again from the tree works as before.
+await mappingFile.click();
+await page.locator('section.mapping h2[title="mappings/order-to-salesorder.xsl"]').waitFor({ timeout: 5000 });
 
 // 9) The gutter between input and mapping resizes the panes.
 const inputPane = page.locator('section.input');
@@ -197,6 +278,8 @@ if (shots) await page.screenshot({ path: path.join(shots, '7-resized.png') });
 // 10) "+ Script" suggests a free name and asks before it overwrites an existing file.
 fs.writeFileSync(path.join(project, 'scripts/new-script.groovy'), '// keep me\n');
 await page.getByTitle('Reload file list').click();
+// The reload is asynchronous: "+ Script" must see the new file, or it suggests the taken name.
+await page.locator('.tree .file', { hasText: 'new-script.groovy' }).waitFor({ timeout: 10000 });
 await page.getByRole('button', { name: '+ Script' }).click();
 const newName = await page.getByRole('dialog').getByRole('textbox').inputValue();
 if (newName !== 'scripts/new-script-2.groovy') fail('+ Script suggestion: ' + newName);
@@ -216,6 +299,36 @@ await page.getByTitle('Close project').click();
 await page.getByRole('dialog').filter({ hasText: 'Discard the unsaved changes' }).getByRole('button', { name: 'Cancel' }).click()
   .catch(() => fail('no question before Close project drops File tab changes'));
 if (!(await page.locator('.tree .file', { hasText: 'value-mappings.json' }).isVisible())) fail('Cancel closed the project anyway');
+// The × on the File tab in the tool bar closes the file too, after the same question.
+await page.getByRole('button', { name: 'Close file tab' }).click();
+await page.getByRole('dialog').filter({ hasText: 'Discard the unsaved changes' }).getByRole('button', { name: 'OK' }).click()
+  .catch(() => fail('no question before the File tab closes with unsaved changes'));
+await page.getByRole('tab', { name: 'value-mappings.json' }).waitFor({ state: 'detached', timeout: 5000 })
+  .catch(() => fail('the × on the File tab did not close it'));
+
+// 12) A link from CPI Helper's xsltDebugX plugin that points at the app: the traced message and the mapping
+// arrive in the XSLT tab and the data leaves the address. The mapping is someone's code: it runs on Run only.
+/** A link's data as CPI Helper's plugins write it: JSON, raw DEFLATE, URL-safe Base64 without padding. */
+async function shareData(data) {
+  const stream = new Blob([JSON.stringify(data)]).stream().pipeThrough(new CompressionStream('deflate-raw'));
+  return Buffer.from(await new Response(stream).arrayBuffer()).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+const shared = await shareData({ xml: '<Order id="from-trace"/>',
+  xslt: '<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform"><xsl:param name="Sender"/>'
+    + '<xsl:template match="/"><Traced by="{$Sender}" id="{Order/@id}"/></xsl:template></xsl:stylesheet>',
+  headers: [{ name: 'Sender', value: 'TENANT_TRACE' }], properties: [] });
+await page.evaluate((hash) => { location.hash = hash; }, '#share/' + shared);
+await page.locator('.status', { hasText: 'Imported from CPI Helper: body, 1 header, mapping' }).waitFor({ timeout: 10000 })
+  .catch(async () => fail('the shared link was not imported: ' + (await page.locator('.status').innerText()) + ' ' + (await page.locator('.banner.error').allInnerTexts())));
+await page.locator('section.mapping h2', { hasText: 'mapping.xsl (unsaved)' }).waitFor({ timeout: 5000 })
+  .catch(() => fail('the imported mapping is not an unsaved mapping'));
+if (!(await page.locator('.status').innerText()).includes('has not run')) fail('the imported mapping is not announced as not run');
+await page.waitForTimeout(1500);
+if (await page.locator('section.output .badge.ok, section.output .badge.bad').count()) fail('a mapping from a link ran without Run');
+await page.getByTitle('Run (Ctrl+Enter)').click();
+await page.locator('section.output .view-lines', { hasText: 'TENANT_TRACE' }).waitFor({ timeout: 15000 })
+  .catch(async () => fail('the imported mapping did not run on the imported message: ' + (await page.locator('section.output').innerText()).slice(0, 300)));
+if ((await page.evaluate(() => location.hash)) !== '') fail('the shared data stayed in the address');
 
 if (errors.length) fail('browser errors: ' + errors.join(' | '));
 await browser.close();

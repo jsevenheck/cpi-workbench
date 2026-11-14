@@ -1,7 +1,7 @@
 <script lang="ts">
   import Editor from './Editor.svelte';
   import { languageFor } from '../lib/monaco';
-  import { fileView, saveFileView, closeFileView, useAsInput, confirm, app } from '../lib/store.svelte';
+  import { fileView, saveFileView, closeFileTab, useAsInput, app } from '../lib/store.svelte';
 
   let dirty = $derived(fileView.content !== fileView.saved);
 
@@ -13,20 +13,16 @@
     }
   }
 
-  async function close() {
-    if (dirty && !(await confirm(`Discard the changes to ${fileView.path}?`))) return;
-    closeFileView();
-  }
 </script>
 
 <section class="pane" aria-label="File">
   <header>
     <h2 title={fileView.path ?? ''}>{fileView.path}{#if dirty}<span class="dirty" title="Unsaved changes">●</span>{/if}</h2>
+    <button class="close-file" onclick={() => void closeFileTab()} title="Close this file (it stays on disk)" aria-label="Close file">×</button>
     <div class="spacer"></div>
     <button class="small" onclick={() => fileView.path && useAsInput(fileView.path)}
       title={`Load this file as the input body of the ${app.stepTool.toUpperCase()} step`}>Use as input</button>
     <button class="small" onclick={save} title="Save (Ctrl+S)">Save</button>
-    <button class="small" onclick={close}>Close</button>
   </header>
   <div class="body">
     {#key fileView.path}

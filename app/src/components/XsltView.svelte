@@ -4,7 +4,7 @@
   import Editor from './Editor.svelte';
   import KeyValueTable from './KeyValueTable.svelte';
   import CompareView from './CompareView.svelte';
-  import { app, xslt, runXslt, autoRunXslt, saveMapping, saveMappingAs, formatXml, otherProfile, saveInput } from '../lib/store.svelte';
+  import { app, xslt, runXslt, autoRunXslt, saveMapping, saveMappingAs, formatXml, otherProfile, saveInput, askImportMessage, closeInput, closeEditorFile } from '../lib/store.svelte';
   import { reindentXml } from '../lib/indent';
   import { languageFor } from '../lib/monaco';
   import type { Diagnostic } from '../lib/types';
@@ -70,14 +70,15 @@
 <div class="xslt" style:grid-template-columns={paneColumns(panes.sizes)}>
   <section class="pane input" aria-label="Input message">
     <header>
-      <h2 title={app.inputPaths.xslt ?? ''}>Input message{#if app.inputPaths.xslt} <span class="from">· {app.inputPaths.xslt.split('/').pop()}</span>{/if}</h2>
+      <h2 title={app.inputPaths.xslt ?? ''}>Input message{#if app.inputPaths.xslt} <span class="from">· {app.inputPaths.xslt.split('/').pop()}</span><button class="close-file" onclick={() => closeInput('xslt')} title="Close the input file (it stays on disk)" aria-label="Close input file">×</button>{/if}</h2>
       <div class="tabs" role="tablist">
         <button role="tab" class:active={inputTab === 'body'} onclick={() => (inputTab = 'body')}>Body</button>
         <button role="tab" class:active={inputTab === 'headers'} onclick={() => (inputTab = 'headers')}>Headers <span class="count">{xslt.headers.length}</span></button>
         <button role="tab" class:active={inputTab === 'properties'} onclick={() => (inputTab = 'properties')}>Properties <span class="count">{xslt.properties.length}</span></button>
       </div>
       {#if inputTab === 'body'}<button class="small" onclick={prettyInput} title="Pretty-print">Format</button>
-        <button class="small" onclick={saveInput} disabled={!app.project} title={app.project ? 'Save the input body under inputs/' : 'Open a project to save'}>Save…</button>{/if}
+        <button class="small" onclick={saveInput} disabled={!app.project} title={app.project ? 'Save the input body under inputs/' : 'Open a project to save'}>Save…</button>
+        <button class="small" onclick={askImportMessage} title="Take a traced message over from CPI Helper (paste its link), or a message as JSON">Import…</button>{/if}
     </header>
     <div class="body">
       {#if inputTab === 'body'}
@@ -94,9 +95,11 @@
 
   <section class="pane mapping" aria-label="XSLT mapping">
     <header>
-      <h2 title={xslt.mappingPath ?? 'Unsaved mapping'}>
-        {xslt.mappingPath ?? 'mapping.xsl (unsaved)'}{#if dirty}<span class="dirty" title="Unsaved changes">●</span>{/if}
+      <h2 title={xslt.casePath ? 'From test case ' + xslt.casePath : xslt.mappingPath ?? 'Unsaved mapping'}>
+        {xslt.mappingPath ?? (xslt.mapping ? 'mapping.xsl (unsaved)' : 'No mapping open')}{#if dirty}<span class="dirty" title="Unsaved changes">●</span>{/if}
       </h2>
+      {#if xslt.mappingPath || xslt.casePath || xslt.mapping}<button class="close-file" onclick={() => closeEditorFile('xslt')}
+        title="Close this file (it stays on disk)" aria-label="Close file">×</button>{/if}
       <div class="spacer"></div>
       <button class="small" onclick={saveMapping} disabled={!app.project} title={app.project ? 'Save (Ctrl+S)' : 'Open a project to save'}>Save</button>
       <button class="small" onclick={() => { xslt.mapping = reindentXml(xslt.mapping); changed(); }}
@@ -104,6 +107,7 @@
       <button class="small" onclick={saveMappingAs} disabled={!app.project} title="Save under a new name; the open file stays as it is">Save as…</button>
     </header>
     <div class="body">
+      {#if !xslt.mapping}<p class="empty-hint">Open a mapping from the project, or type or paste one here.</p>{/if}
       <Editor bind:this={mappingEditor} bind:value={xslt.mapping} language={languageFor(xslt.mappingPath ?? 'm.xsl')}
         markers={markers} onchange={changed} onrun={runXslt} onsave={saveMapping} label="XSLT mapping" />
     </div>

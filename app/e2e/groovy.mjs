@@ -24,6 +24,21 @@ await page.reload();
 await page.locator('.status', { hasText: 'engine(s) available' }).waitFor({ timeout: 20000 });
 
 const runIt = () => page.getByRole('button', { name: /^\W*Run$/ }).click();
+// The function picker lists the script's functions; any other name goes in under "Other name…".
+const OTHER = '\u0000other';
+const fnSelect = () => page.getByLabel('Function', { exact: true });
+const fnName = async () => {
+  const v = await fnSelect().inputValue();
+  return v === OTHER ? page.getByLabel('Function name').inputValue() : v;
+};
+const setOtherFn = async (name) => {
+  await fnSelect().selectOption(OTHER);
+  await page.getByLabel('Function name').fill(name);
+};
+/** Waits until the output queue (one context per line, as in case.json) is exactly `text`. */
+const waitQueue = (text, message) => page.waitForFunction((t) => document.querySelector('section.output .queue-out')?.getAttribute('data-queue') === t,
+  text, { timeout: 20000 }).catch(async () => fail(`${message}: ${(await page.locator('section.output').innerText()).slice(0, 400)}`));
+const inputTitle = () => page.locator('section.input h2').innerText();
 /** Opens a file from the tree and starts it once it is open: opening alone runs no script. */
 async function openAndRun(file, statusText) {
   await page.locator('.tree .file', { hasText: file }).click();
@@ -95,16 +110,106 @@ if (!cmp.includes('Groovy Script 2.x') || !cmp.includes('XmlParser')) fail('comp
 if (shots) await page.screenshot({ path: path.join(shots, 'g3b-compare.png') });
 await page.getByRole('button', { name: 'Comparing' }).click();
 
-// 4a2) A case with an attachment file: the app keeps it while the case is open.
+// 4a1) Platform data as tables: a change applies to the next run before it is saved; Save writes the file.
+const inputTab = (name) => page.locator('section.input').getByRole('tab', { name });
+const vmFile = path.join(project, 'platform/value-mappings.json');
+await inputTab(/^Platform/).click();
+const target = page.getByLabel('Target value 1');
+const soldTo = await target.inputValue();
+if (soldTo !== '0010000077') fail('value mapping table does not show the project file: ' + soldTo);
+await target.fill('SOLD-TO-EDITED');
+await page.locator('section[aria-label="Value mappings"] .dirty').waitFor({ timeout: 5000 })
+  .catch(() => fail('a changed value mapping is not marked as unsaved'));
+await page.locator('section.output').getByRole('tab', { name: /^Properties/ }).click();
+await page.locator('section.output tr', { hasText: 'SOLD-TO-EDITED' }).waitFor({ timeout: 20000 })
+  .catch(() => fail('an unsaved value mapping did not reach the run'));
+if (fs.readFileSync(vmFile, 'utf8').includes('SOLD-TO-EDITED')) fail('the value mapping file changed before Save');
+await page.getByRole('button', { name: 'Save Value mappings' }).click();
+await page.locator('.status', { hasText: 'Saved platform/value-mappings.json' }).waitFor({ timeout: 10000 });
+const savedVm = JSON.parse(fs.readFileSync(vmFile, 'utf8'));
+if (savedVm[0].targetValue !== 'SOLD-TO-EDITED' || savedVm.length !== 2) fail('saved value mappings: ' + JSON.stringify(savedVm));
+// The Secure Store's password is kept when another field changes, and the Partner Directory's alternative partners stay.
+if (!(await page.locator('section[aria-label="Partner Directory"]').innerText()).includes('alternative partner')) fail('no note on the partners\' other data');
+await target.fill(soldTo);
+await page.getByRole('button', { name: 'Save Value mappings' }).click();
+await page.locator('section[aria-label="Value mappings"] .dirty').waitFor({ state: 'detached', timeout: 10000 })
+  .catch(() => fail('the value mappings still count as unsaved after Save'));
+
+// 4a1b) Another project replaces unsaved table rows, after a question: they must not land in its runs or files.
+const otherProject = project + '-other';
+fs.rmSync(otherProject, { recursive: true, force: true });
+fs.cpSync(project, otherProject, { recursive: true });
+await target.fill('UNSAVED-IN-A');
+const openFolder = async (dir) => {
+  await page.getByTitle('Close project').click().catch(() => {});
+  await page.getByRole('dialog').filter({ hasText: 'Discard the unsaved platform data' }).getByRole('button', { name: 'OK' }).click({ timeout: 3000 }).catch(() => {});
+  await page.getByLabel('Project folder').fill(dir);
+  if (await page.getByRole('button', { name: 'Open file' }).count()) fail('the Platform tab offers a file with no project open: '
+    + dir + ' ' + JSON.stringify(await page.getByRole('button', { name: 'Open file' }).evaluateAll((es) => es.map((e) => e.closest('section')?.getAttribute('aria-label')))));
+  await page.getByRole('button', { name: 'Open', exact: true }).click();
+  await page.locator('.tree .file').first().waitFor({ timeout: 10000 });
+};
+await page.getByTitle('Close project').click();
+await page.getByRole('dialog').filter({ hasText: 'Discard the unsaved platform data' }).getByRole('button', { name: 'Cancel' }).click()
+  .catch(() => fail('no question before Close project drops unsaved platform rows'));
+if ((await target.inputValue()) !== 'UNSAVED-IN-A') fail('Cancel did not keep the unsaved row');
+await openFolder(otherProject);
+await inputTab(/^Platform/).click();
+await page.getByLabel('Target value 1').waitFor({ timeout: 10000 });
+if ((await page.getByLabel('Target value 1').inputValue()) !== soldTo) fail('the other project shows the first one\'s unsaved row: ' + await page.getByLabel('Target value 1').inputValue());
+if (fs.readFileSync(path.join(otherProject, 'platform/value-mappings.json'), 'utf8').includes('UNSAVED-IN-A')) fail('an unsaved row reached the other project\'s file');
+// A save that answers after its project closed must not touch the tables of the project open by then (review F01).
+await page.getByLabel('Target value 1').fill('SAVED-IN-OTHER');
+let releaseWrite;
+const writeHeld = new Promise((r) => (releaseWrite = r));
+// The write reaches the engine at once (it writes into the open project); only its answer is held back.
+await page.route(/\/rpc$/, async (route) => {
+  if (!route.request().postData()?.includes('"file.write"')) return route.continue().catch(() => {});
+  const response = await route.fetch();
+  await writeHeld;
+  await route.fulfill({ response }).catch(() => {});
+});
+await page.getByRole('button', { name: 'Save Value mappings' }).click();
+await page.waitForTimeout(300);
+await openFolder(project);
+releaseWrite();
+await page.waitForTimeout(1500);
+await page.unroute(/\/rpc$/);
+await inputTab(/^Platform/).click();
+if (!(await page.getByLabel('Target value 1').count())) fail('a late save of another project emptied this project\'s table');
+else if ((await page.getByLabel('Target value 1').inputValue()) !== soldTo) fail('a late save changed the open project\'s table');
+if (await page.locator('section[aria-label="Value mappings"] .dirty').count()) fail('a late save of another project marks this table as changed');
+if (!fs.readFileSync(path.join(otherProject, 'platform/value-mappings.json'), 'utf8').includes('SAVED-IN-OTHER')) fail('the held save did not reach its own project');
+fs.rmSync(otherProject, { recursive: true, force: true });
+await page.locator('.tree .file', { hasText: 'groovy-enrich-order/case.json' }).click();
+await page.locator('section.script h2', { hasText: 'enrich-order.groovy' }).waitFor({ timeout: 10000 });
+
+// 4a2) A case with an attachment file: it shows as a row of the Attachments tab, with the file's project path.
 await page.locator('.tree .file', { hasText: 'groovy-attachment/case.json' }).click();
 // The previous case's result stays visible until this run ends, so wait for content, not the badge.
-await page.locator('.extras', { hasText: '1 attachment' }).waitFor({ timeout: 20000 })
-  .catch(() => fail('case extras missing'));
+await inputTab(/^Attachments\s*1/).waitFor({ timeout: 20000 }).catch(() => fail('the case\'s attachment is not counted on the Attachments tab'));
+await inputTab(/^Attachments/).click();
+if ((await page.getByLabel('Content 1').inputValue()) !== 'tests/groovy-attachment/delivery-note.txt') fail('attachment file path: ' + await page.getByLabel('Content 1').inputValue());
 await page.locator('.status', { hasText: 'read a message attachment' }).waitFor({ timeout: 10000 });
 await runIt();
 await page.locator('section.output').getByRole('tab', { name: /^Headers/ }).click();
 await page.locator('section.output tr', { hasText: 'DN-4711' }).waitFor({ timeout: 20000 })
   .catch(async () => fail('attachment header: ' + (await page.locator('section.output').innerText()).slice(0, 400)));
+// The same attachment as text typed in the tab.
+await page.getByLabel('Content from 1').selectOption('text');
+await page.getByLabel('Name 1').fill('delivery-note.txt');
+await page.getByLabel('Content 1').fill('Delivery DN-TYPED');
+await page.locator('section.output tr', { hasText: 'DN-TYPED' }).waitFor({ timeout: 20000 })
+  .catch(async () => fail('attachment typed as text: ' + (await page.locator('section.output').innerText()).slice(0, 400)));
+
+// 4a3) The × closes the case with its script: the editor, the case's input and its extras go; the file stays.
+const caseScript = (await page.locator('section.script h2').getAttribute('title')) ?? '';
+await page.locator('section.script').getByRole('button', { name: 'Close file' }).click();
+await page.locator('section.script h2', { hasText: 'No script open' }).waitFor({ timeout: 5000 })
+  .catch(() => fail('the script pane does not say that no script is open'));
+await page.locator('section.script .empty-hint').waitFor({ timeout: 5000 }).catch(() => fail('no hint in the empty script editor'));
+if (!(await inputTab(/^Attachments\s*0/).count())) fail('the closed case kept its attachments');
+if (!caseScript.startsWith('From test case ')) fail('the script header does not name the test case: ' + caseScript);
 
 // 4b) Import an exported iFlow (zip) and open its Groovy step.
 if (process.env.CPIWB_IFLOW_ZIP) {
@@ -113,7 +218,7 @@ if (process.env.CPIWB_IFLOW_ZIP) {
   await page.locator('.dlg').getByRole('button', { name: 'OK' }).click();
   await page.locator('.steps .step', { hasText: 'Enrich order' }).click();
   await page.locator('section.script h2', { hasText: 'enrich.groovy' }).waitFor({ timeout: 10000 });
-  const fn = await page.getByLabel('Function name').inputValue();
+  const fn = await fnName();
   if (fn !== 'enrich') fail('function from iFlow step: ' + fn);
   const prof = await page.getByLabel('Runtime profile').inputValue();
   if (prof !== 'groovy-2.x') fail('profile from iFlow step: ' + prof);
@@ -134,23 +239,25 @@ if (process.env.CPIWB_IFLOW_ZIP) {
   await runIt();
   await page.locator('section.output .badge.ok').waitFor({ timeout: 20000 })
     .catch(() => fail('mapping script from the iFlow did not run'));
-  if ((await page.getByLabel('Function name').inputValue()) !== 'getHeader') fail('mapping function not picked');
+  if ((await fnName()) !== 'getHeader') fail('mapping function not picked');
   await page.getByRole('tab', { name: 'Groovy Script' }).click();
 }
 
 // 4c) Another script starts with processData again, not with the function set for the previous one.
-await page.getByLabel('Function name').fill('customFunction');
+await setOtherFn('customFunction');
 await page.locator('.tree .file', { hasText: 'route-by-partner.groovy' }).click();
 await page.locator('section.script h2', { hasText: 'route-by-partner.groovy' }).waitFor({ timeout: 10000 });
-if ((await page.getByLabel('Function name').inputValue()) !== 'processData') fail('function name kept from the previous script');
-if (await page.locator('.functions').count()) fail('function bar shown for a script without mapping functions');
-if ((await page.locator('section.script .mode').innerText()) !== 'Script step') fail('mode label for a script step');
+if ((await fnName()) !== 'processData') fail('function name kept from the previous script');
+if (await page.getByLabel('Function name').count()) fail('"Other name…" kept for a script whose function is listed');
+if (!(await inputTitle()).startsWith('Input message')) fail('input pane title for a script step');
 // 4c2) Live off: a run that answers after another script was opened does not land in that script.
 // The first run is held until the other script is open; any later run is held until the check is done.
 await page.getByLabel('Live').uncheck();
 await page.locator('.tree .file', { hasText: 'mapping-null.groovy' }).click();
 await page.locator('section.script h2', { hasText: 'mapping-null.groovy' }).waitFor({ timeout: 10000 });
-await page.getByLabel('Function name').fill('classify');
+// A script with mapping functions only opens with its first one, read from the text before any run.
+if ((await fnName()) !== 'classify') fail('mapping function not picked from the script text');
+if (!(await inputTitle()).startsWith('Function arguments')) fail('arguments not shown before the first run');
 await page.getByLabel('Runtime profile').selectOption('groovy-1.x');
 await page.locator('section.output .badge.run').waitFor({ state: 'detached', timeout: 20000 }).catch(() => {});
 let releaseFirst, releaseLater;
@@ -169,8 +276,7 @@ await page.locator('section.script h2', { hasText: 'enrich-order.groovy' }).wait
 releaseFirst();
 await page.waitForTimeout(1500);
 if (heldRuns === 0) fail('the late-run check held no run');
-if (await page.locator('.functions').count()) fail('a late run of the previous script showed its functions');
-if ((await page.locator('section.script .mode').innerText()) !== 'Script step') fail('a late run of the previous script set its mode');
+if (!(await inputTitle()).startsWith('Input message')) fail('a late run of the previous script turned this one into a mapping function');
 releaseLater();
 await page.unroute(groovyRpc);
 await page.getByLabel('Live').check();
@@ -180,18 +286,27 @@ await page.getByLabel('Live').check();
 await openAndRun('mapping-context/case.json', 'all values of a context');
 // The output keeps the tab chosen before (Headers in 4a2), so open the result.
 await page.locator('section.output').getByRole('tab', { name: 'Result' }).click();
-await page.locator('section.output pre', { hasText: '["2"]\n["1"]\n["0"]' }).waitFor({ timeout: 20000 })
-  .catch(async () => fail('mapping queue: ' + (await page.locator('section.output').innerText()).slice(0, 400)));
-if (!(await page.getByLabel('Argument 1').inputValue()).includes('"Multi Print"')) fail('mapping argument from the case');
+await waitQueue('["2"]\n["1"]\n["0"]', 'mapping queue');
+if (!(await page.locator('section.output .queue-out tr').first().innerText()).match(/Context 1\s+2/)) fail('output queue rows are not named by context');
+// A String[] argument shows its contexts as rows; SUPPRESS is a kind of value.
+if ((await page.getByLabel('Argument 1, context 1, value 1').inputValue()) !== 'Multi Print') fail('mapping argument from the case');
+if ((await page.getByLabel('Kind of value 2 in context 2').inputValue()) !== 'suppress') fail('SUPPRESS from the case');
 if (shots) await page.screenshot({ path: path.join(shots, 'g3c-mapping-context.png') });
 // Compare runs the function on 2.x too and compares the function result, not only the body.
 await page.getByRole('button', { name: 'Compare', exact: true }).click();
 await page.locator('section.output .compare .same', { hasText: 'function result' }).waitFor({ timeout: 20000 })
   .catch(async () => fail('compare of a mapping function: ' + (await page.locator('section.output').innerText()).slice(0, 400)));
 await page.getByRole('button', { name: 'Comparing' }).click();
-await page.getByLabel('Argument 1').fill('["A", "B", "C"]');
-await page.locator('section.output pre', { hasText: '["3"]' }).waitFor({ timeout: 20000 })
-  .catch(() => fail('mapping argument typed in the tab'));
+await page.locator('section.input').getByRole('button', { name: 'Text', exact: true }).click();
+await page.getByLabel('Argument 1', { exact: true }).fill('["A", "B", "C"]');
+await waitQueue('["3"]', 'mapping argument typed in the tab');
+// Back to rows: SUPPRESS on a value takes it out of the count; + Context adds a context change.
+await page.locator('section.input').getByRole('button', { name: 'Text', exact: true }).click();
+await page.getByLabel('Kind of value 3 in context 1').selectOption('suppress');
+await waitQueue('["2"]', 'SUPPRESS chosen in the context editor did not reach the run');
+await page.locator('section.input').getByRole('button', { name: '+ Context' }).click();
+await page.getByLabel('Argument 1, context 2, value 1').fill('D');
+await waitQueue('["2"]\n["1"]', 'a context added in the editor');
 await openAndRun('mapping-get-header/case.json', 'getHeader through MappingContext');
 await page.locator('section.output pre', { hasText: '4711' }).waitFor({ timeout: 20000 })
   .catch(async () => fail('mapping returned value: ' + (await page.locator('section.output').innerText()).slice(0, 400)));
@@ -205,15 +320,14 @@ await page.locator('section.output .pad', { hasText: 'EMPTY' }).waitFor({ timeou
   .catch(() => fail('the null button did not switch to an empty string'));
 await openAndRun('mapping-get-header/case.json', 'getHeader through MappingContext');
 await page.locator('section.output pre', { hasText: '4711' }).waitFor({ timeout: 20000 });
-await page.getByLabel('Argument 1').fill('Missing');
+await page.getByLabel('Argument 1', { exact: true }).fill('Missing');
 await page.locator('section.output .pad .hint', { hasText: 'null' }).waitFor({ timeout: 20000 })
   .catch(() => fail('getHeader of a missing header is not null'));
-// The function bar shows the script's mapping functions; a click switches the function and the mode label.
-if ((await page.locator('section.script .mode').innerText()) !== 'Mapping function') fail('mode label for a mapping function');
-await page.locator('.functions .chip', { hasText: 'countPerContext' }).click();
-await page.locator('.functions .chip.active', { hasText: 'countPerContext' }).waitFor({ timeout: 10000 })
-  .catch(() => fail('function chip did not switch the function'));
-if ((await page.getByLabel('Function name').inputValue()) !== 'countPerContext') fail('function chip did not set fn');
+// The picker lists the script's functions; choosing one switches the arguments to its parameters.
+await fnSelect().selectOption('countPerContext');
+await page.locator('section.input .arg-head', { hasText: 'all values of a context' }).waitFor({ timeout: 10000 })
+  .catch(() => fail('choosing countPerContext did not show its String[] argument'));
+if ((await fnName()) !== 'countPerContext') fail('the picker did not set the function');
 // Opening a script starts with processData again, so the Body tab is back.
 await page.locator('.tree .file', { hasText: 'route-by-partner.groovy' }).click();
 await page.locator('section.input').getByRole('tab', { name: 'Body' }).waitFor({ timeout: 10000 })
@@ -223,25 +337,80 @@ await page.locator('section.input').getByRole('tab', { name: 'Body' }).waitFor({
 await openAndRun('mapping-functions.groovy', 'mapping-functions.groovy. A script runs with your rights');
 await page.locator('section.input').getByRole('tab', { name: /Arguments/ }).waitFor({ timeout: 20000 })
   .catch(() => fail('a script with only mapping functions did not open with its arguments'));
-const fnOpened = await page.getByLabel('Function name').inputValue();
-await page.getByLabel('Argument 1').fill('["kept"]');
+const fnOpened = await fnName();
+await page.getByLabel('Argument 1', { exact: true }).fill('["kept"]');
 await page.getByRole('tab', { name: 'XSLT Mapping' }).click();
 await page.locator('.tree .file', { hasText: 'mapping-functions.groovy' }).click();
 await page.locator('section.script').waitFor({ timeout: 10000 });
-if ((await page.getByLabel('Argument 1').inputValue()) !== '["kept"]') fail('arguments lost when the open script was clicked again');
+if ((await page.getByLabel('Argument 1', { exact: true }).inputValue()) !== '["kept"]') fail('arguments lost when the open script was clicked again');
 await page.locator('.tree .file', { hasText: 'route-by-partner.groovy' }).click();
 await page.locator('section.input').getByRole('tab', { name: 'Body' }).waitFor({ timeout: 10000 });
 // Opened after another script, it has not run yet: its function is back at once, its arguments with the run.
 await page.locator('.tree .file', { hasText: 'mapping-functions.groovy' }).click();
 await page.locator('.status', { hasText: 'mapping-functions.groovy. A script runs with your rights' }).waitFor({ timeout: 10000 });
-if ((await page.getByLabel('Function name').inputValue()) !== fnOpened) fail('function not back before the run');
+if ((await fnName()) !== fnOpened) fail('function not back before the run');
 await runIt();
-await page.getByLabel('Argument 1').waitFor({ timeout: 20000 })
+await page.getByLabel('Argument 1', { exact: true }).waitFor({ timeout: 20000 })
   .catch(() => fail('arguments tab not back after reopening the script'));
-if ((await page.getByLabel('Argument 1').inputValue()) !== '["kept"]') fail('arguments lost after another script');
-if ((await page.getByLabel('Function name').inputValue()) !== fnOpened) fail('function lost after another script');
+if ((await page.getByLabel('Argument 1', { exact: true }).inputValue()) !== '["kept"]') fail('arguments lost after another script');
+if ((await fnName()) !== fnOpened) fail('function lost after another script');
 await page.locator('.tree .file', { hasText: 'route-by-partner.groovy' }).click();
 await page.locator('section.input').getByRole('tab', { name: 'Body' }).waitFor({ timeout: 10000 });
+
+// 4e) Import…: a link from CPI Helper's GroovyDebugX plugin brings a traced step's message and script.
+// The script is someone's code: it does not run until Run.
+/** A link's data as CPI Helper's plugins write it: JSON, raw DEFLATE, URL-safe Base64 without padding. */
+async function shareData(data) {
+  const stream = new Blob([JSON.stringify(data)]).stream().pipeThrough(new CompressionStream('deflate-raw'));
+  return Buffer.from(await new Response(stream).arrayBuffer()).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+const sharedLink = 'https://groovyide.com/cpi/share/v1/' + await shareData({
+  input: { body: '<Order id="traced-1"/>', headers: { TraceHeader: 'from-tenant' }, properties: { TraceProp: 'p1' } },
+  script: { code: 'import com.sap.gateway.ip.core.customdev.util.Message\ndef Message enrichTraced(Message message) {\n  message.setHeader("Seen", message.getHeader("TraceHeader", String) + "!")\n  return message\n}\n', function: 'enrichTraced' } });
+await page.locator('section.input').getByRole('tab', { name: 'Body' }).click();
+await page.locator('section.input').getByRole('button', { name: 'Import…' }).click();
+await page.getByRole('dialog').getByRole('textbox').fill(sharedLink);
+await page.getByRole('dialog').getByRole('button', { name: 'OK' }).click();
+await page.locator('.status', { hasText: 'Imported from CPI Helper: body, 1 header, 1 property, script' }).waitFor({ timeout: 10000 })
+  .catch(async () => fail('import of a GroovyDebugX link: ' + (await page.locator('.status').innerText()) + ' ' + (await page.locator('.banner.error').allInnerTexts())));
+if (!(await page.locator('.status').innerText()).includes('it has not run')) fail('the imported script is not announced as not run');
+if (await page.locator('section.output .badge.ok, section.output .badge.bad').count()) fail('an imported script ran without Run');
+if ((await fnName()) !== 'enrichTraced') fail('function of the imported script: ' + await fnName());
+await page.locator('section.input .view-lines', { hasText: 'traced-1' }).waitFor({ timeout: 5000 }).catch(() => fail('imported body missing'));
+await runIt();
+await page.locator('section.output').getByRole('tab', { name: /^Headers/ }).click();
+await page.locator('section.output tr', { hasText: 'from-tenant!' }).waitFor({ timeout: 20000 })
+  .catch(async () => fail('the imported script on the imported message: ' + (await page.locator('section.output').innerText()).slice(0, 300)));
+// What cannot be read says why.
+await page.locator('section.input').getByRole('button', { name: 'Import…' }).click();
+await page.getByRole('dialog').getByRole('textbox').fill('https://ide.contiva.com/cpi/script/debug?data=H4sIAAAA');
+await page.getByRole('dialog').getByRole('button', { name: 'OK' }).click();
+await page.locator('.banner.error', { hasText: 'Contiva IDE' }).waitFor({ timeout: 5000 }).catch(() => fail('no reason for a link that cannot be read'));
+await page.locator('.banner.error').getByRole('button', { name: 'Dismiss' }).click();
+await page.locator('.tree .file', { hasText: 'route-by-partner.groovy' }).click();
+await page.getByRole('dialog').filter({ hasText: 'Discard the unsaved changes' }).getByRole('button', { name: 'OK' }).click()
+  .catch(() => fail('the imported script does not count as unsaved'));
+await page.locator('section.script h2', { hasText: 'route-by-partner.groovy' }).waitFor({ timeout: 10000 });
+
+// 4f) Another mapping function: what is typed for it before its first run stays after the run (review F05).
+await page.locator('.tree .file', { hasText: 'mapping-functions.groovy' }).click();
+await page.locator('section.script h2', { hasText: 'mapping-functions.groovy' }).waitFor({ timeout: 10000 });
+await page.getByLabel('Live').uncheck();
+await fnSelect().selectOption('getHeader');
+await runIt();
+await page.locator('section.output .badge.ok').waitFor({ timeout: 20000 });
+await fnSelect().selectOption('setProperty');
+await page.getByLabel('Argument 1', { exact: true }).fill('P');
+await page.getByLabel('Argument 2', { exact: true }).fill('B-value');
+await runIt();
+await page.locator('section.output').getByRole('tab', { name: 'Result' }).click();
+await page.locator('section.output pre', { hasText: 'B-value' }).waitFor({ timeout: 20000 })
+  .catch(async () => fail('setProperty did not return its argument: ' + (await page.locator('section.output').innerText()).slice(0, 300)));
+await page.waitForTimeout(500);
+if ((await page.getByLabel('Argument 2', { exact: true }).inputValue()) !== 'B-value') fail('the arguments typed for a new function were dropped after its first run');
+await page.getByLabel('Live').check();
+await page.locator('.tree .file', { hasText: 'route-by-partner.groovy' }).click();
+await page.locator('section.script h2', { hasText: 'route-by-partner.groovy' }).waitFor({ timeout: 10000 });
 
 // 5) A file from inputs/ opens as the Groovy input body.
 fs.mkdirSync(path.join(project, 'inputs'), { recursive: true });

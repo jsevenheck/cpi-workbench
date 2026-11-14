@@ -41,13 +41,13 @@ fn legacy_handshake_negotiates_the_version() {
     assert_eq!(msgs.len(), 4, "a notification gets no answer: {msgs:?}");
     let init = &by_id(&msgs, 1)["result"];
     assert_eq!(init["protocolVersion"], "2025-06-18");
-    assert_eq!(init["capabilities"], json!({ "tools": {} }));
+    assert_eq!(init["capabilities"], json!({ "tools": {}, "prompts": {} }));
     assert_eq!(init["serverInfo"]["name"], "cpi-workbench");
     assert_eq!(by_id(&msgs, 2)["result"]["protocolVersion"], LEGACY[0], "unknown version: the newest legacy one");
     assert_eq!(by_id(&msgs, 3)["result"], json!({}));
     let list = &by_id(&msgs, 4)["result"];
     assert!(list.get("resultType").is_none() && list.get("ttlMs").is_none(), "legacy results stay legacy: {list}");
-    assert_eq!(list["tools"].as_array().unwrap().len(), 6);
+    assert_eq!(list["tools"].as_array().unwrap().len(), 10);
 }
 
 #[test]
@@ -120,11 +120,20 @@ fn protocol_errors() {
 fn tool_definitions_follow_the_spec() {
     let tools = tools::definitions();
     let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
-    assert_eq!(names, ["project_info", "run_xslt", "run_groovy", "validate_xsd", "evaluate_xpath", "run_flow_step"]);
+    assert_eq!(names, ["project_info", "read_file", "run_xslt", "run_groovy", "validate_xsd", "evaluate_xpath", "run_flow_step",
+        "save_file", "import_iflow", "reference"]);
     // Only tools that cannot run code are read-only: XSLT's java: calls and Groovy can (JavaExtensions).
     let read_only: Vec<&str> = tools.iter().filter(|t| t["annotations"]["readOnlyHint"] == true)
         .map(|t| t["name"].as_str().unwrap()).collect();
-    assert_eq!(read_only, ["project_info", "validate_xsd", "evaluate_xpath"]);
+    assert_eq!(read_only, ["project_info", "read_file", "validate_xsd", "evaluate_xpath", "reference"]);
+    // Writing tools say so, so that a client can ask before they run; tools that run code keep the defaults.
+    for name in ["save_file", "import_iflow"] {
+        let a = &tools.iter().find(|t| t["name"] == name).unwrap()["annotations"];
+        assert_eq!(*a, json!({ "readOnlyHint": false, "destructiveHint": true, "idempotentHint": true, "openWorldHint": false }), "{name}");
+    }
+    for name in ["run_xslt", "run_groovy", "run_flow_step"] {
+        assert!(tools.iter().find(|t| t["name"] == name).unwrap().get("annotations").is_none(), "{name}");
+    }
     for t in &tools {
         let name = t["name"].as_str().unwrap();
         assert!(name.len() <= 128 && name.chars().all(|c| c.is_ascii_alphanumeric() || "_-.".contains(c)));
@@ -155,6 +164,55 @@ fn wrong_arguments_are_tool_errors() {
     assert!(call(json!({ "expression": "/a", "headers": {} })).contains("Unknown argument 'headers'"), "the XPath tab has no headers");
     assert!(call_tool("run_groovy", json!({ "script": "x", "headers": { "h": 1 } })).contains("headers.h"));
     assert!(call(json!({ "expression": "/a", "bodyPath": "x.xml" })).contains("No project is open"));
+    assert!(call_tool("read_file", json!({ "path": "a.xml", "startLine": 0 })).contains("startLine"));
+    assert!(call_tool("save_file", json!({ "path": "a.xml", "content": "x", "overwrite": "yes" })).contains("type boolean"));
+    assert!(call_tool("save_file", json!({ "path": "a.xml" })).contains("Give content, or contentFrom"));
+    assert!(call_tool("reference", json!({ "topic": "groovy" })).contains("must be one of"));
+    assert!(call_tool("read_file", json!({ "path": "a.xml" })).contains("No project is open"));
+}
+
+#[test]
+fn prompts_list_and_get() {
+    let msgs = session(bare(), &[
+        json!({ "jsonrpc": "2.0", "id": 1, "method": "prompts/list" }),
+        modern(2, "prompts/list", json!({})),
+        json!({ "jsonrpc": "2.0", "id": 3, "method": "prompts/get", "params": { "name": "develop_step",
+            "arguments": { "task": "Map orders to S/4", "input": "inputs/order.xml" } } }),
+        json!({ "jsonrpc": "2.0", "id": 4, "method": "prompts/get", "params": { "name": "nope" } }),
+        json!({ "jsonrpc": "2.0", "id": 5, "method": "prompts/get", "params": { "name": "develop_step", "arguments": {} } }),
+    ]);
+    let p = &by_id(&msgs, 1)["result"]["prompts"][0];
+    assert_eq!(p["name"], "develop_step");
+    assert_eq!(p["arguments"][0], json!({ "name": "task", "description": p["arguments"][0]["description"], "required": true }));
+    let modern_list = &by_id(&msgs, 2)["result"];
+    assert_eq!(modern_list["resultType"], "complete");
+    assert!(modern_list["ttlMs"].as_u64().is_some());
+    let text = by_id(&msgs, 3)["result"]["messages"][0]["content"]["text"].as_str().unwrap().to_string();
+    assert!(text.contains("Map orders to S/4") && text.contains("inputs/order.xml") && text.contains("project_info"), "{text}");
+    assert_eq!(by_id(&msgs, 3)["result"]["messages"][0]["role"], "user");
+    assert_eq!(by_id(&msgs, 4)["error"]["code"], INVALID_PARAMS);
+    assert_eq!(by_id(&msgs, 5)["error"]["code"], INVALID_PARAMS);
+}
+
+/// The reference is generated from the sources; renaming a doc section or a Java class must not empty it.
+#[test]
+fn reference_topics_come_from_the_sources() {
+    let api = reference::topic("script-api").unwrap();
+    for member in ["`Object getBody()`", "`void setHeader(String name, Object value)`", "`void resetBodyStream()`",
+        "`MessageLog getMessageLog(Object message)`", "`void addValue(Object value)`: Appends a value.",
+        "`String getMappedValue(String sourceAgency, String sourceIdentifier, String sourceValue, String targetAgency, String targetIdentifier)`",
+        "`UserCredential getUserCredential(String alias) throws SecureStoreException`",
+        "`String getNextValuefromNumberRange(String name, String correlationId) throws NumberRangeConfigException`",
+        "## interface com.sap.it.api.mapping.MappingContext", "## com.sap.it.api.keystore.KeystoreService"] {
+        assert!(api.contains(member), "{member} missing from:
+{api}");
+    }
+    assert!(!api.contains("Platform") && !api.contains("first("), "no constructors or private helpers: {api}");
+    let platform = reference::topic("platform").unwrap();
+    assert!(platform.starts_with("## Mocked platform data") && platform.contains("value-mappings.json"), "{platform}");
+    assert!(!platform.contains("## Further"), "one section only: {platform}");
+    assert!(reference::topic("fidelity").unwrap().contains("## Groovy Script"));
+    assert!(reference::topic("nope").is_err());
 }
 
 #[test]
@@ -380,4 +438,218 @@ fn a_reused_id_keeps_the_cancellation() {
     assert_eq!(ones.len(), 1, "only the refusal, no answer to the cancelled run: {msgs:?}");
     assert_eq!(ones[0]["error"]["code"], INVALID_REQUEST);
     engines.shutdown();
+}
+
+
+/// A zip with stored (uncompressed) entries, enough for an iFlow export in a test.
+fn stored_zip(entries: &[(&str, &str)]) -> Vec<u8> {
+    fn crc32(data: &[u8]) -> u32 {
+        let mut c = !0u32;
+        for b in data {
+            c ^= *b as u32;
+            for _ in 0..8 {
+                c = if c & 1 != 0 { (c >> 1) ^ 0xEDB8_8320 } else { c >> 1 };
+            }
+        }
+        !c
+    }
+    let (mut out, mut central) = (Vec::new(), Vec::new());
+    for (name, text) in entries {
+        let (n, d) = (name.as_bytes(), text.as_bytes());
+        let (crc, offset) = (crc32(d), out.len() as u32);
+        let fixed = |sig: u32, central: bool| {
+            let mut h = sig.to_le_bytes().to_vec();
+            if central { h.extend(20u16.to_le_bytes()); }
+            for v in [20u16, 0, 0, 0, 0] { h.extend(v.to_le_bytes()); }
+            h.extend(crc.to_le_bytes());
+            h.extend((d.len() as u32).to_le_bytes());
+            h.extend((d.len() as u32).to_le_bytes());
+            h.extend((n.len() as u16).to_le_bytes());
+            h.extend(0u16.to_le_bytes());
+            h
+        };
+        out.extend(fixed(0x0403_4b50, false));
+        out.extend(n);
+        out.extend(d);
+        central.extend(fixed(0x0201_4b50, true));
+        for v in [0u16, 0, 0] { central.extend(v.to_le_bytes()); }
+        central.extend(0u32.to_le_bytes());
+        central.extend(offset.to_le_bytes());
+        central.extend(n);
+    }
+    let (start, size) = (out.len() as u32, central.len() as u32);
+    out.extend(central);
+    out.extend(0x0605_4b50u32.to_le_bytes());
+    for v in [0u16, 0, entries.len() as u16, entries.len() as u16] { out.extend(v.to_le_bytes()); }
+    out.extend(size.to_le_bytes());
+    out.extend(start.to_le_bytes());
+    out.extend(0u16.to_le_bytes());
+    out
+}
+
+/// Claude Desktop has no file access of its own: it reads, saves and imports through the server.
+#[test]
+fn files_are_read_saved_and_imported_inside_the_project() {
+    let Some(engines) = engines() else { return };
+    let dir = project("files");
+    *engines.on_start.lock().unwrap() = Some(("project.open".into(), json!({ "dir": dir.to_string_lossy() })));
+    let server = Server::new(engines.clone(), Some(dir.clone()));
+    let c = Call(&server);
+
+    // Read, whole and in parts.
+    std::fs::create_dir_all(dir.join("inputs")).unwrap();
+    std::fs::write(dir.join("inputs/lines.txt"), "one\ntwo\nthree\n").unwrap();
+    let all = c.ok("read_file", json!({ "path": "inputs/lines.txt" }));
+    assert_eq!(all["content"], "one\ntwo\nthree\n");
+    assert_eq!(all["totalLines"], 3);
+    assert!(all.get("truncated").is_none(), "{all}");
+    let part = c.ok("read_file", json!({ "path": "inputs/lines.txt", "startLine": 2, "maxLines": 1 }));
+    assert_eq!(part["content"], "two\n");
+    assert!(part["truncated"].as_str().unwrap().contains("startLine 3"), "{part}");
+    assert!(c.err("read_file", json!({ "path": "inputs/lines.txt", "startLine": 9 })).contains("past its end"));
+    // Minified XML: one line longer than the cap comes back cut, and says so.
+    std::fs::write(dir.join("inputs/minified.xml"), format!("<a>{}</a>", "é".repeat(150_000))).unwrap();
+    let long = c.ok("read_file", json!({ "path": "inputs/minified.xml" }));
+    assert!(long["content"].as_str().unwrap().len() <= 200_000 && long["lineCut"].is_string(), "{}", long["lineCut"]);
+    assert!(c.err("read_file", json!({ "path": "inputs" })).contains("folder"));
+    for outside in ["../outside.xml", "inputs/../../outside.xml", "/etc/hosts", r"C:\Windows\win.ini"] {
+        assert!(c.err("read_file", json!({ "path": outside })).contains("not a project-relative path"), "{outside}");
+    }
+
+    // Calls run in parallel: of two saves to the same new path without overwrite, one wins and one is refused (F02).
+    let results: Vec<Result<Value, String>> = std::thread::scope(|scope| {
+        let handles: Vec<_> = ["A", "B"].iter().map(|text| {
+            let server = &server;
+            scope.spawn(move || tools::call(server, "save_file", json!({ "path": "inputs/race.txt", "content": text }).as_object().unwrap()))
+        }).collect();
+        handles.into_iter().map(|h| h.join().unwrap()).collect()
+    });
+    assert_eq!(results.iter().filter(|r| r.is_ok()).count(), 1, "{results:?}");
+    assert!(results.iter().any(|r| r.as_ref().is_err_and(|e| e.contains("exists already"))), "{results:?}");
+
+    // Save: new files and folders; an existing file only with overwrite.
+    let s = c.ok("save_file", json!({ "path": "mappings/new/agent.xsl", "content": "<a/>" }));
+    assert_eq!(s, json!({ "path": "mappings/new/agent.xsl", "saved": true, "replaced": false }));
+    assert_eq!(std::fs::read_to_string(dir.join("mappings/new/agent.xsl")).unwrap(), "<a/>");
+    assert!(c.err("save_file", json!({ "path": "mappings/new/agent.xsl", "content": "<b/>" })).contains("overwrite: true"));
+    assert_eq!(std::fs::read_to_string(dir.join("mappings/new/agent.xsl")).unwrap(), "<a/>", "not replaced");
+    let r = c.ok("save_file", json!({ "path": "mappings/new/agent.xsl", "content": "<b/>", "overwrite": true }));
+    assert_eq!(r["replaced"], true);
+    assert_eq!(c.ok("read_file", json!({ "path": "mappings/new/agent.xsl" }))["content"], "<b/>");
+    assert!(c.err("save_file", json!({ "path": "../escape.xsl", "content": "x" })).contains("not a project-relative path"));
+    assert!(!dir.parent().unwrap().join("escape.xsl").exists());
+
+    // Import an exported iFlow from outside the project; its steps come back; a second import needs overwrite.
+    let iflow = std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../engine/core/src/test/resources/iflow/src/main/resources/scenarioflows/integrationflow/Order_Replication.iflw")).unwrap();
+    let zip = std::env::temp_dir().join(format!("cpiwb-mcp-export-{}.zip", std::process::id()));
+    std::fs::write(&zip, stored_zip(&[("src/main/resources/scenarioflows/integrationflow/Order Sync.iflw", &iflow)])).unwrap();
+    let imp = c.ok("import_iflow", json!({ "zip": zip.to_string_lossy(), "name": "Order Sync" }));
+    assert_eq!(imp["imported"], "iflows/Order_Sync", "{imp}");
+    let steps = imp["steps"].as_array().unwrap();
+    assert!(!steps.is_empty() && steps.iter().all(|s| s["iflow"] == "Order_Sync"), "only the imported iFlow's steps: {imp}");
+    assert!(c.err("import_iflow", json!({ "zip": zip.to_string_lossy(), "name": "Order Sync" })).contains("exists already"));
+    c.ok("import_iflow", json!({ "zip": zip.to_string_lossy(), "name": "Order Sync", "overwrite": true }));
+    assert!(c.err("import_iflow", json!({ "zip": "missing.zip" })).contains("No file"));
+    let info = c.ok("project_info", json!({}));
+    assert!(info["iflowSteps"].as_array().unwrap().iter().any(|s| s["iflow"] == "Order_Sync"));
+
+    engines.shutdown();
+    let _ = std::fs::remove_file(&zip);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Steps chained by runId, as the message flows through an iFlow, without copying bodies.
+#[test]
+fn runs_chain_by_id() {
+    let Some(engines) = engines() else { return };
+    let dir = project("chain");
+    *engines.on_start.lock().unwrap() = Some(("project.open".into(), json!({ "dir": dir.to_string_lossy() })));
+    let server = Server::new(engines.clone(), Some(dir.clone()));
+    let c = Call(&server);
+    let id = |v: &Value| v["runId"].as_str().unwrap_or_else(|| panic!("no runId: {v}")).to_string();
+
+    // XSLT with a header; its output carries the header on.
+    let x = c.ok("run_xslt", json!({ "body": "<in/>", "headers": { "Sender": "ERP" },
+        "mapping": "<xsl:stylesheet version='2.0' xmlns:xsl='http://www.w3.org/1999/XSL/Transform'>\
+            <xsl:template match='/'><Order id='7'><Item>a</Item><Item>b</Item><Item>c</Item></Order></xsl:template></xsl:stylesheet>" }));
+    let r1 = id(&x);
+    // The XML Validator passes the message on.
+    let v = c.ok("validate_xsd", json!({ "messageFrom": r1, "schema": "<xs:schema xmlns:xs='http://www.w3.org/2001/XMLSchema'>\
+        <xs:element name='Order'><xs:complexType><xs:sequence><xs:element name='Item' type='xs:string' maxOccurs='unbounded'/>\
+        </xs:sequence><xs:attribute name='id'/></xs:complexType></xs:element></xs:schema>" }));
+    assert_eq!(v["valid"], true, "{v}");
+    let r2 = id(&v);
+    // Content Modifier on it: XPath from the body, the header from the XSLT run still there, one property given here.
+    let cm = c.ok("run_flow_step", json!({ "messageFrom": r2, "properties": { "Channel": "WEB" },
+        "step": { "type": "contentModifier", "config": { "headers": [{ "name": "OrderId", "type": "xpath", "value": "/Order/@id" }] } } }));
+    let headers = cm["output"]["headers"].as_array().unwrap();
+    assert!(headers.iter().any(|h| h["name"] == "OrderId" && h["value"] == "7"), "{cm}");
+    assert!(headers.iter().any(|h| h["name"] == "Sender" && h["value"] == "ERP"), "headers flow on: {cm}");
+    assert!(cm["output"]["properties"].as_array().unwrap().iter().any(|p| p["name"] == "Channel"), "{cm}");
+    // A header given with the call replaces the one of the same name.
+    let over = c.ok("run_groovy", json!({ "messageFrom": id(&cm), "headers": { "Sender": "Shop" },
+        "script": "def processData(m) { m.setBody(m.getHeaders()['Sender'] + '/' + m.getHeaders()['OrderId']); m }" }));
+    assert_eq!(over["output"]["body"], "Shop/7", "{over}");
+    // Splitter, then Gather all its messages; one part on its own.
+    let split = c.ok("run_flow_step", json!({ "messageFrom": id(&cm), "step": { "type": "splitter", "config": { "expression": "/Order/Item" } } }));
+    let rs = id(&split);
+    let part = c.ok("evaluate_xpath", json!({ "messageFrom": format!("{rs}/2"), "expression": "string(//Item)" }));
+    assert_eq!(part["items"][0]["value"], "b", "{part}");
+    assert!(part.get("runId").is_none(), "XPath produces no message");
+    assert!(c.err("run_flow_step", json!({ "messageFrom": rs, "step": { "type": "filter", "config": { "expression": "/Item" } } }))
+        .contains(&format!("{rs}/1, {rs}/2, {rs}/3")), "a split run names its parts");
+    let g = c.ok("run_flow_step", json!({ "messagesFrom": rs, "step": { "type": "gather", "config": {} } }));
+    assert_eq!(g["body"].as_str().unwrap().matches("<Item>").count(), 3, "{g}");
+    // runtime: both keeps each runtime's output.
+    let both = c.ok("run_xslt", json!({ "runtime": "both", "messageFrom": r1,
+        "mapping": "<xsl:stylesheet version='2.0' xmlns:xsl='http://www.w3.org/1999/XSL/Transform'><xsl:output method='text'/>\
+            <xsl:template match='/'><xsl:value-of select='system-property(\"xsl:product-version\")'/></xsl:template></xsl:stylesheet>" }));
+    let rb = id(&both);
+    assert_eq!(c.ok("read_file", json!({ "runId": format!("{rb}/saxon-he-12") }))["content"], "HE 12.9", "{both}");
+
+    // A long body comes back shortened; read_file and save_file take it whole by id.
+    let long = c.ok("run_groovy", json!({ "script": "def processData(m) { m.setBody('x' * 50000); m }" }));
+    assert_eq!(long["output"]["body"].as_str().unwrap().len(), runs::PREVIEW_CHARS, "{}", long["output"]["bodyShortened"]);
+    let rl = id(&long);
+    assert_eq!(c.ok("read_file", json!({ "runId": rl }))["content"].as_str().unwrap().len(), 50000);
+    c.ok("save_file", json!({ "path": "inputs/long.txt", "contentFrom": rl }));
+    assert_eq!(std::fs::read_to_string(dir.join("inputs/long.txt")).unwrap().len(), 50000);
+
+    // A failed run, an invalid message and an unknown id.
+    let bad = c.ok("run_groovy", json!({ "script": "def processData(m) { throw new RuntimeException('no') }" }));
+    assert!(bad["ok"] == false && bad.get("runId").is_none(), "{bad}");
+    assert!(c.err("run_xslt", json!({ "messageFrom": "run-0000-9", "mappingPath": "mappings/order-to-salesorder.xsl" })).contains("Unknown run"));
+
+    // A Router that raises an exception passes nothing on: ok false and no runId (review of 2026-11-14, F04).
+    for config in [json!({ "routes": [], "throwException": true }),
+        json!({ "routes": [{ "name": "a", "expressionType": "xml", "condition": "/a" }, { "name": "b", "expressionType": "nonxml", "condition": "1 = 1" }] }),
+        json!({ "routes": [{ "name": "bad", "expressionType": "xml", "condition": "/a[" }] })] {
+        let r = c.ok("run_flow_step", json!({ "body": "<a/>", "step": { "type": "router", "config": config } }));
+        assert!(r["ok"] == false && r.get("runId").is_none(), "{config}: {r}");
+    }
+    let routed = c.ok("run_flow_step", json!({ "body": "<a/>", "step": { "type": "router", "config": {
+        "routes": [{ "name": "yes", "expressionType": "xml", "condition": "/a" }] } } }));
+    assert!(routed["ok"] == true && routed["runId"].is_string(), "a taken route passes the message on: {routed}");
+
+    // The input is read once, before the run: a script that deletes its bodyPath file still gets its result
+    // and runId, and the kept message is the one the step got (F03).
+    std::fs::write(dir.join("inputs/gone.txt"), "before").unwrap();
+    let gone = dir.join("inputs/gone.txt").to_string_lossy().replace('\\', "/");
+    let deleted = c.ok("run_groovy", json!({ "bodyPath": "inputs/gone.txt",
+        "script": format!("def processData(m) {{ new File('{gone}').delete(); m.setBody('done ' + m.getBody(String)); m }}") }));
+    assert!(deleted["ok"] == true && deleted["output"]["body"] == "done before" && deleted["runId"].is_string(), "{deleted}");
+    assert!(!dir.join("inputs/gone.txt").exists());
+
+    // One long line (minified XML or JSON) is read whole in parts by characters (F10).
+    let one = c.ok("run_groovy", json!({ "script": "def processData(m) { m.setBody('<a>' + ('x' * 300000) + '</a>'); m }" }));
+    let first = c.ok("read_file", json!({ "runId": id(&one) }));
+    let hint = first["lineCut"].as_str().unwrap().to_string();
+    assert!(hint.contains("startChar 200000"), "{hint}");
+    let rest = c.ok("read_file", json!({ "runId": id(&one), "startChar": 200000 }));
+    assert_eq!(first["content"].as_str().unwrap().len() + rest["content"].as_str().unwrap().len(), 300007);
+    assert!(rest["content"].as_str().unwrap().ends_with("x</a>") && rest.get("truncated").is_none(), "{}", rest["endChar"]);
+
+    engines.shutdown();
+    let _ = std::fs::remove_dir_all(&dir);
 }

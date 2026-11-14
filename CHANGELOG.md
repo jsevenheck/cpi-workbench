@@ -6,6 +6,57 @@ of its version.
 
 ## [Unreleased]
 
+### Added
+
+- **XPath tab**: the selected nodes are marked in the document and a result jumps to its node; **XPath at cursor**
+  writes the XPath of the element or attribute at the cursor (this node, or all like it) with the Namespace
+  mapping's prefixes; **↑** / **↓** in the expression field bring back the session's expressions.
+- **A message from a tenant's trace, through CPI Helper.** The browser extension's GroovyDebugX and xsltDebugX
+  plugins hand a traced step's body, headers and properties (and the script or mapping) to an external IDE;
+  CPI Workbench takes that link: **Import…** in the Groovy and XSLT tabs (paste the link), or directly in the
+  browser mode with the plugins' *Custom URL* set to it. It goes one way: the app only reads the link and still
+  connects to nothing, and an imported script or mapping does not run until you start it. See the [user guide](docs/user-guide.md#a-message-from-a-tenants-trace-cpi-helper).
+- **Groovy tab: platform data, attachments and SOAP headers as tables.** The new **Platform** tab edits value
+  mappings, Secure Store credentials, Partner Directory parameters and number ranges from the project's
+  `platform/*.json` files; a change applies to the next run at once and **Save** writes the file. **Attachments**
+  and **SOAP** hold what the script reads from the message; before, only a test case could bring them.
+- **Close an open file** with the × next to its name in the mapping, script, schema, input and File panes,
+  and on the File tab in the tool bar.
+  The file on disk stays as it is; unsaved changes are asked about first. A closed mapping, script or schema
+  leaves an empty editor whose **Save** asks for a new path, and a closed input empties the input body.
+- **MCP server for Claude Desktop and other agents without file access**: `read_file` reads a project file
+  (long files in parts), `save_file` writes one (an existing file only with `overwrite`), `import_iflow` imports an
+  exported iFlow, and `reference` explains the Script API, the `platform/` data formats and what is verified
+  against CPI, generated from the simulator's sources. The server's instructions say how to develop a step with the
+  tools, and the prompt **develop_step** starts it. See [docs/mcp.md](docs/mcp.md#working-from-claude-desktop).
+- **MCP: pass results on by `runId`**: every run that produces a message returns a `runId`; `messageFrom` makes it
+  the next step's input (body, headers and properties), a Gather takes a Splitter's messages with `messagesFrom`.
+  A body the step did not change is left out of the result, and long bodies come back shortened; `read_file` with `runId` and `save_file` with `contentFrom`
+  take the whole body, `read_file` with `startChar` also a body that is one long line. A Router that raises an
+  exception has `ok: false` and passes nothing on.
+
+### Changed
+
+- **Groovy tab, Message Mapping functions**: a **Function** picker lists the script's functions as *Script step*
+  or *Message Mapping function*, with their parameter names, and replaces the **fn** field, the mode label and
+  the **Run as** bar. The functions are read from the script text when it opens, so a mapping script shows its
+  arguments before the first run (still without running it). The arguments carry the parameter names from the
+  script; a `String[]` argument is edited as the source field's values grouped by context (**+ Value**,
+  **+ Context**, per value text, SUPPRESS, xsi:nil or null), with **Text** for the JSON form of `case.json`.
+  **Result** lists the output queue as one row per context.
+- **Gather**: Combine warns when a message is not a well-formed XML document (JSON or text from a script), and
+  separately when the combined result is not well-formed XML; it still runs as before. What CPI does in that case is open; `probes/gather/` asks a tenant.
+
+### Fixed
+
+- **Gather's Combine at XPath, the Splitter and XPath results** write XML for a document whose root is an
+  unnamespaced `<html>`; the Java XML writer switched to HTML there (`<br>` unclosed, a `META` element added).
+- **XPath 1.0** knows the `xml` prefix without a Namespace mapping row (`//@xml:lang`), as 3.1 does.
+- **Splitter and Gather on Windows**: split messages, a Gather's Combine at XPath, an XPath's element results and
+  a script's SOAP headers in the result use LF line breaks, as on macOS and Linux; they had CRLF from the Java XML writer.
+- **Groovy: an attachment given as a file while no project is open** is an error that says so; it ran as an
+  empty attachment before.
+
 ## [0.3.1] - 2026-11-11
 
 Fixes from a review of the whole app (2026-11-10), and the Groovy tab keeps a script's settings.

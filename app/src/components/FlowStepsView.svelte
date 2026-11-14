@@ -4,7 +4,7 @@
   import Editor from './Editor.svelte';
   import KeyValueTable from './KeyValueTable.svelte';
   import CmTable from './CmTable.svelte';
-  import { app, flow, groovy, xpath, runFlowStep, useAsFlowInput, gatherSplitResult, saveInput, type FlowStep } from '../lib/store.svelte';
+  import { app, flow, groovy, xpath, runFlowStep, useAsFlowInput, gatherSplitResult, saveInput, closeInput, type FlowStep } from '../lib/store.svelte';
 
   const panes = paneSizes('flow', [1, 1.2, 1]);
   const STEPS: [FlowStep, string][] = [['contentModifier', 'Content Modifier'], ['filter', 'Filter'], ['router', 'Router'],
@@ -70,7 +70,7 @@
       {#if gathering}
         <h2>Input messages</h2>
       {:else}
-        <h2 title={app.inputPaths.flow ?? ''}>Input message{#if app.inputPaths.flow} <span class="from">· {app.inputPaths.flow.split('/').pop()}</span>{/if}</h2>
+        <h2 title={app.inputPaths.flow ?? ''}>Input message{#if app.inputPaths.flow} <span class="from">· {app.inputPaths.flow.split('/').pop()}</span><button class="close-file" onclick={() => closeInput('flow')} title="Close the input file (it stays on disk)" aria-label="Close input file">×</button>{/if}</h2>
       {/if}
       <div class="tabs" role="tablist">
         {#if gathering}

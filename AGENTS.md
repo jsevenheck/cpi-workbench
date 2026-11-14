@@ -42,7 +42,8 @@ in `docs/building.md` (*Releasing*).
   * `groovy-v1`, `groovy-v2`: the two builds and their entry points.
 * `app/src`: the UI. `app/src-tauri`: the Rust shell; `src/mcp/` is the MCP server (`cpi-workbench mcp`).
   `mcp/flow.rs` repeats the Flow Steps tab's calls (`app/src/lib/store.svelte.ts`), including the converter
-  defaults; change both together.
+  defaults; change both together. `mcp/reference.rs` builds its topics from `app/src/lib/completions.ts`,
+  the clean-room platform classes and `docs/test-cases.md` / `docs/fidelity.md`; its test names what it expects.
 * `examples/demo-project`: the sample project users open in the app (no test cases).
 * `testdata/regression-project`: the project with test cases that CI, the e2e and the shell tests run.
 * `probes`: tenant probes, the simulator's baseline output and a tenant's results (`results-tenant/`).

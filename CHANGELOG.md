@@ -6,6 +6,13 @@ of its version.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-14
+
+Workflow in the tabs: platform data as tables, a traced message from CPI Helper, XPath matches in the
+document, Message Mapping functions with a picker, closing files, and chaining runs in the MCP server.
+The CPI Helper import was tested against links built as the plugins' sources build them, not yet with the
+extension on a tenant.
+
 ### Added
 
 - **XPath tab**: the selected nodes are marked in the document and a result jumps to its node; **XPath at cursor**
@@ -291,7 +298,8 @@ First public release.
   supported.
 - The installers and engine jars include the licence texts and notices of the bundled components.
 
-[Unreleased]: https://github.com/jsevenheck/cpi-workbench/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/jsevenheck/cpi-workbench/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/jsevenheck/cpi-workbench/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/jsevenheck/cpi-workbench/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/jsevenheck/cpi-workbench/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/jsevenheck/cpi-workbench/compare/v0.1.1...v0.2.0

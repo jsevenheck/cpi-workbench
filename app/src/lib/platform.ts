@@ -59,16 +59,39 @@ export function parsePlatformFile(json: string): unknown {
 
 /**
  * The document as a run takes it: marked numbers as numbers. An integer beyond 2^53 cannot cross JSON in the
- * browser exactly, so it goes as its text: the engine reads number range fields from a string as well.
+ * browser exactly, so it goes as its digits, however the file writes it (`9007199254740993`, `…993.0`,
+ * `9.007199254740993e15`): the engine reads number range fields from a string as well, exactly, and
+ * rejects one beyond a long as it does in the file. Other numbers go as numbers.
  */
 export function platformRunData(doc: unknown): unknown {
   if (isMarked(doc)) {
     const t = doc.slice(NUM.length);
-    return /^-?\d+$/.test(t) && !Number.isSafeInteger(Number(t)) ? t : Number(t);
+    const n = Number(t);
+    const digits = Number.isSafeInteger(n) ? null : integerDigits(t);
+    return digits ?? n;
   }
   if (Array.isArray(doc)) return doc.map(platformRunData);
   if (isObj(doc)) return Object.fromEntries(Object.entries(doc).map(([k, v]) => [k, platformRunData(v)]));
   return doc;
+}
+
+/** The exact integer a JSON number writes, as digits; null when it has a fraction or is not a number. */
+export function integerDigits(t: string): string | null {
+  const m = /^(-?)(\d+)(?:\.(\d+))?(?:[eE]([+-]?\d+))?$/.exec(t);
+  if (!m) return null;
+  const frac = m[3] ?? '';
+  const exp = Number(m[4] ?? 0) - frac.length;
+  // Far beyond a long, where the engine says so either way: no string of hundreds of zeros.
+  if (!Number.isFinite(exp) || exp > 40) return null;
+  let digits = m[2] + frac;
+  if (exp >= 0) digits += '0'.repeat(exp);
+  else {
+    const cut = digits.length + exp;
+    if (!/^0*$/.test(digits.slice(Math.max(cut, 0)))) return null;
+    digits = cut > 0 ? digits.slice(0, cut) : '0';
+  }
+  digits = (m[1] ? '-' : '') + digits.replace(/^0+(?=\d)/, '');
+  return digits === '-0' ? '0' : digits;
 }
 
 // ------------------------------------------------------------------ value mappings

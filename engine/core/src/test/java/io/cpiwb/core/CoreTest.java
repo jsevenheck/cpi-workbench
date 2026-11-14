@@ -34,6 +34,29 @@ class CoreTest {
     }
 
     @Test
+    void wholeNumbersAreReadExactlyOrRejected() {
+        Map<String, Object> m = Json.parse("{\"a\":9007199254740993.0,\"b\":9.007199254740993e15,\"c\":\"9007199254740993\","
+                + "\"d\":5e3,\"e\":99999999999999999999,\"f\":1.5,\"g\":\"x\",\"h\":9223372036854775807}") instanceof Map<?, ?> x
+                ? cast(x) : null;
+        assertEquals(9007199254740993L, Json.num(m, "a", 0));
+        assertEquals(9007199254740993L, Json.num(m, "b", 0));
+        assertEquals(9007199254740993L, Json.num(m, "c", 0));
+        assertEquals(5000L, Json.num(m, "d", 0));
+        assertEquals(Long.MAX_VALUE, Json.num(m, "h", 0));
+        assertEquals(7L, Json.num(m, "missing", 7));
+        // longValue() wrapped e and cut f without a word.
+        for (String k : List.of("e", "f", "g")) {
+            IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> Json.num(m, k, 0));
+            assertTrue(e.getMessage().startsWith(k + " must be a whole number"), e.getMessage());
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> cast(Map<?, ?> m) {
+        return (Map<String, Object>) m;
+    }
+
+    @Test
     void typedValues() {
         assertEquals(42, TypedValue.toJava("Integer", "42"));
         assertEquals(42L, TypedValue.toJava("Long", " 42 "));
@@ -94,6 +117,20 @@ class CoreTest {
         files.close();
         assertNull(files.root());
         assertThrows(IllegalStateException.class, () -> files.read(Map.of("path", "a.txt")));
+    }
+
+    /** createNew is checked by the file system: a file another process wrote after the caller looked stays. */
+    @Test
+    void createNewDoesNotReplaceAFile(@TempDir Path tmp) throws Exception {
+        ProjectFiles files = new ProjectFiles();
+        files.open(Map.of("dir", tmp.toString()));
+        files.write(Map.of("path", "sub/a.txt", "content", "first", "createNew", true));
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+                () -> files.write(Map.of("path", "sub/a.txt", "content", "second", "createNew", true)));
+        assertTrue(e.getMessage().contains("exists already"), e.getMessage());
+        assertEquals("first", Files.readString(tmp.resolve("sub/a.txt")));
+        files.write(Map.of("path", "sub/a.txt", "content", "third"));
+        assertEquals("third", Files.readString(tmp.resolve("sub/a.txt")));
     }
 
     /** Paths are checked where they really lead: a symbolic link inside the project may not point outside. */

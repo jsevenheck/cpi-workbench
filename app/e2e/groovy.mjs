@@ -408,6 +408,42 @@ await page.locator('section.output pre', { hasText: 'B-value' }).waitFor({ timeo
   .catch(async () => fail('setProperty did not return its argument: ' + (await page.locator('section.output').innerText()).slice(0, 300)));
 await page.waitForTimeout(500);
 if ((await page.getByLabel('Argument 2', { exact: true }).inputValue()) !== 'B-value') fail('the arguments typed for a new function were dropped after its first run');
+// The same with the name typed under "Other name…" (re-review of 86beb74, R05).
+await fnSelect().selectOption('getHeader');
+await runIt();
+await page.locator('section.output .badge.ok').waitFor({ timeout: 20000 });
+await fnSelect().selectOption(OTHER);
+await page.getByLabel('Function name').fill('setProperty');
+await page.getByLabel('Argument 1', { exact: true }).fill('P');
+await page.getByLabel('Argument 2', { exact: true }).fill('C-value');
+await runIt();
+await page.locator('section.output pre', { hasText: 'C-value' }).waitFor({ timeout: 20000 })
+  .catch(async () => fail('setProperty (typed) did not return its argument: ' + (await page.locator('section.output').innerText()).slice(0, 300)));
+await page.waitForTimeout(500);
+if ((await page.getByLabel('Argument 2', { exact: true }).inputValue()) !== 'C-value') fail('the arguments typed for a function named under Other name were dropped');
+// And with the old function's run still under way: its late answer belongs to it, not to the new one.
+let releaseOld;
+const oldHeld = new Promise((r) => (releaseOld = r));
+let heldOld = 0;
+await page.route(/127\.0\.0\.1:777[89]\/rpc/, async (route) => {
+  if (route.request().postData()?.includes('"getHeader"') && ++heldOld === 1) await oldHeld;
+  await route.continue().catch(() => {});
+});
+await fnSelect().selectOption('getHeader');
+await runIt();
+await page.waitForTimeout(300);
+await fnSelect().selectOption('setProperty');
+await page.getByLabel('Argument 1', { exact: true }).fill('P');
+await page.getByLabel('Argument 2', { exact: true }).fill('D-value');
+releaseOld();
+await page.waitForTimeout(1000);
+await page.unroute(/127\.0\.0\.1:777[89]\/rpc/);
+if (heldOld === 0) fail('the late-answer check held no run');
+await runIt();
+await page.locator('section.output pre', { hasText: 'D-value' }).waitFor({ timeout: 20000 })
+  .catch(async () => fail('setProperty after a late getHeader answer: ' + (await page.locator('section.output').innerText()).slice(0, 300)));
+await page.waitForTimeout(500);
+if ((await page.getByLabel('Argument 2', { exact: true }).inputValue()) !== 'D-value') fail('a late answer of the old function dropped the new one\'s arguments');
 await page.getByLabel('Live').check();
 await page.locator('.tree .file', { hasText: 'route-by-partner.groovy' }).click();
 await page.locator('section.script h2', { hasText: 'route-by-partner.groovy' }).waitFor({ timeout: 10000 });

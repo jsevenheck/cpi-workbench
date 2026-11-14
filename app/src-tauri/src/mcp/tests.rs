@@ -631,6 +631,12 @@ fn runs_chain_by_id() {
     let routed = c.ok("run_flow_step", json!({ "body": "<a/>", "step": { "type": "router", "config": {
         "routes": [{ "name": "yes", "expressionType": "xml", "condition": "/a" }] } } }));
     assert!(routed["ok"] == true && routed["runId"].is_string(), "a taken route passes the message on: {routed}");
+    // A route's name may be empty or missing: it is taken all the same (re-review of 86beb74, N01).
+    for route in [json!({ "name": "", "expressionType": "xml", "condition": "/a" }), json!({ "expressionType": "xml", "condition": "/a" })] {
+        let r = c.ok("run_flow_step", json!({ "body": "<a/>", "step": { "type": "router", "config": {
+            "routes": [route], "throwException": true } } }));
+        assert!(r["ok"] == true && r["runId"].is_string() && r["taken"] == "Route 1", "{r}");
+    }
 
     // The input is read once, before the run: a script that deletes its bodyPath file still gets its result
     // and runId, and the kept message is the one the step got (F03).

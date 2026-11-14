@@ -33,7 +33,7 @@ of its version.
   the next step's input (body, headers and properties), a Gather takes a Splitter's messages with `messagesFrom`.
   A body the step did not change is left out of the result, and long bodies come back shortened; `read_file` with `runId` and `save_file` with `contentFrom`
   take the whole body, `read_file` with `startChar` also a body that is one long line. A Router that raises an
-  exception has `ok: false` and passes nothing on.
+  exception has `ok: false` and passes nothing on; a route without a name is shown as *Route n*.
 
 ### Changed
 
@@ -52,6 +52,11 @@ of its version.
 - **Gather's Combine at XPath, the Splitter and XPath results** write XML for a document whose root is an
   unnamespaced `<html>`; the Java XML writer switched to HTML there (`<br>` unclosed, a `META` element added).
 - **XPath 1.0** knows the `xml` prefix without a Namespace mapping row (`//@xml:lang`), as 3.1 does.
+- **Number ranges**: `min`, `max`, `next` and `fieldLength` are read exactly (`9007199254740993.0` and `5e3`
+  included); a fraction or a value beyond a long is an error naming the field. Before, it was cut or wrapped
+  without a word (a `max` of `99999999999999999999` became 7766279631452241919).
+- **Flow Steps, Router**: a true route with an empty name was reported as "No route matched" (and raised the
+  exception with *Throw Exception*); it is taken and shown as *Route n*.
 - **Splitter and Gather on Windows**: split messages, a Gather's Combine at XPath, an XPath's element results and
   a script's SOAP headers in the result use LF line breaks, as on macOS and Linux; they had CRLF from the Java XML writer.
 - **Groovy: an attachment given as a file while no project is open** is an error that says so; it ran as an

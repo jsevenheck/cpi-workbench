@@ -59,4 +59,11 @@ test('entity references in the content switch the places off: they can hold elem
   assert.equal(scanXml('<r>&amp;&lt;&#65;&#x41;<x a="&e;"/></r>').entities, false, 'predefined, character refs and attributes are fine');
   assert.equal(scanXml('<!DOCTYPE r [<!ENTITY e "x">]><r/>').entities, false, 'declared but not used in the content');
   assert.equal(scanXml(DOC).entities, false);
+  // Entity names may use most of Unicode (re-review of 86beb74, R08): any other reference counts.
+  for (const name of ['ä', 'eä', '中']) {
+    assert.equal(scanXml(`<!DOCTYPE r [<!ENTITY ${name} "<x id='entity'/>">]><r>&${name};<x id='literal'/></r>`).entities, true, name);
+  }
+  // In a namespace declaration the URI is the entity's text, which the scan does not know.
+  assert.equal(scanXml(`<!DOCTYPE r [<!ENTITY u "urn:u">]><r xmlns:p="&u;"><p:x/></r>`).entities, true);
+  assert.equal(scanXml('<r xmlns:p="urn:a&amp;b"><p:x/></r>').entities, false);
 });

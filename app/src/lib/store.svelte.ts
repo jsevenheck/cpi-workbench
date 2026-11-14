@@ -1370,6 +1370,19 @@ function forgetGroovyRun() {
   groovySeq++;
   groovy.running = false;
 }
+/**
+ * Another function, chosen in the list or typed: the arguments, the parameters the last run reported and a run
+ * still under way belong to the old one. Kept, a late or the next result would take the new function's arguments
+ * for the old one's and drop them. False when the name is the same.
+ */
+export function setGroovyFunction(name: string): boolean {
+  if (groovy.functionName === name) return false;
+  groovy.functionName = name;
+  groovy.args = [];
+  groovy.mapping = null;
+  forgetGroovyRun();
+  return true;
+}
 /** Set when a Message Mapping step opens its script: the first run picks a mapping function if there is no processData. */
 let pickMappingFunction = false;
 
@@ -1585,7 +1598,9 @@ async function runRouter(run: FlowRun, router: typeof flow.router) {
     return { routes, diagnostics: [],
       taken: 'Error: the routes mix XML and Non-XML conditions; SAP: "the evaluation fails" (Define Router).' };
   }
+  // Whether a route was taken, apart from its name: a route's name may be empty.
   let taken = '';
+  let decided = false;
   for (const [i, r] of router.routes.entries()) {
     if (r.default) continue;
     try {
@@ -1594,14 +1609,16 @@ async function runRouter(run: FlowRun, router: typeof flow.router) {
     } catch (e) {
       routes[i] = { status: 'error', message: (e as Error).message };
       taken = 'Error: the route condition failed, so CPI raises an exception.';
+      decided = true;
       break;
     }
     if (routes[i].status === 'true') {
-      taken = r.name;
+      taken = r.name || `Route ${i + 1}`;
+      decided = true;
       break;
     }
   }
-  if (!taken) {
+  if (!decided) {
     const d = router.routes.find((r) => r.default);
     taken = router.throwException ? 'No route matched: Throw Exception is set, so the Router raises an exception.'
       : d ? d.name + ' (default route)' : 'No route matched and there is no default route.';

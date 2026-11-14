@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { attachmentInput, attachmentRows, newPlatformRow, parsePlatformFile, partnerExtras, platformDoc, platformFileText, platformRows,
-  platformRunData, PLATFORM_FILES, PLATFORM_KEYS, soapHeaderInput, soapHeaderRows } from '../src/lib/platform.ts';
+  platformRunData, integerDigits, PLATFORM_FILES, PLATFORM_KEYS, soapHeaderInput, soapHeaderRows } from '../src/lib/platform.ts';
 
 const project = new URL('../../testdata/regression-project/', import.meta.url);
 
@@ -34,6 +34,18 @@ test('numbers keep their text in the file and are numbers in a run', () => {
   const big = parsePlatformFile('{ "INV": { "next": 9007199254740993, "max": 9223372036854775807 } }');
   assert.deepEqual(platformRunData(platformDoc('numberRanges', platformRows('numberRanges', big), big)),
     { INV: { next: '9007199254740993', max: '9223372036854775807', rotate: false } });
+  // However the file writes the integer (re-review of 86beb74, R06).
+  for (const t of ['9007199254740993.0', '9.007199254740993e15', '900719925474099300e-2', '9007199254740993.000']) {
+    const doc = parsePlatformFile(`{ "INV": { "next": ${t} } }`);
+    assert.deepEqual(platformRunData(platformDoc('numberRanges', platformRows('numberRanges', doc), doc)),
+      { INV: { next: '9007199254740993', rotate: false } }, t);
+  }
+  assert.equal(integerDigits('-12.50e1'), '-125');
+  assert.equal(integerDigits('0.0'), '0');
+  assert.equal(integerDigits('-0'), '0');
+  assert.equal(integerDigits('1.5'), null, 'a fraction');
+  assert.equal(integerDigits('9007199254740993.5'), null);
+  assert.equal(integerDigits('abc'), null);
 });
 
 test('value mappings: rows in order, unknown members kept, empty rows left out', () => {

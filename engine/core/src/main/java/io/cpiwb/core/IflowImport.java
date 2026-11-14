@@ -36,6 +36,14 @@ public final class IflowImport {
 
     /** Extracts {@code zip} into {@code projectRoot/iflows/<name>/} and returns the steps found. */
     public static Map<String, Object> importZip(Path zip, Path projectRoot, String name) throws IOException {
+        return importZip(zip, projectRoot, name, false);
+    }
+
+    /**
+     * As {@link #importZip(Path, Path, String)}; with {@code createNew} the folder must not exist. The file system
+     * checks that as it creates the folder, so of two imports to the same name at once, one fails.
+     */
+    public static Map<String, Object> importZip(Path zip, Path projectRoot, String name, boolean createNew) throws IOException {
         if (!Files.isRegularFile(zip)) {
             throw new IllegalArgumentException("Not a file: " + zip);
         }
@@ -49,7 +57,16 @@ public final class IflowImport {
         if (!ProjectPaths.inside(projectRoot, target)) {
             throw new IllegalArgumentException("The iFlow folder is outside the project (a symbolic link leads outside): " + target);
         }
-        Files.createDirectories(target);
+        if (createNew) {
+            Files.createDirectories(iflows);
+            try {
+                Files.createDirectory(target);
+            } catch (java.nio.file.FileAlreadyExistsException e) {
+                throw new IllegalArgumentException("exists already: iflows/" + n);
+            }
+        } else {
+            Files.createDirectories(target);
+        }
         long total = 0;
         int files = 0;
         try (ZipInputStream in = new ZipInputStream(Files.newInputStream(zip))) {

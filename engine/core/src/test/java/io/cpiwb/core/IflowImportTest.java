@@ -157,4 +157,23 @@ class IflowImportTest {
         assertTrue(Files.notExists(project.resolve("a.txt")));
         assertTrue(Files.notExists(project.resolve("iflows/a.txt")));
     }
+
+    /** createNew: the file system decides whether the folder is new, so two imports at once cannot both write it. */
+    @Test
+    void createNewRefusesAnExistingFolder(@TempDir Path tmp) throws Exception {
+        Path zip = tmp.resolve("ok.zip");
+        try (ZipOutputStream z = new ZipOutputStream(Files.newOutputStream(zip))) {
+            z.putNextEntry(new ZipEntry("a.txt"));
+            z.write("x".getBytes());
+            z.closeEntry();
+        }
+        Path project = Files.createDirectories(tmp.resolve("project"));
+        IflowImport.importZip(zip, project, "f", true);
+        Files.writeString(project.resolve("iflows/f/a.txt"), "mine");
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> IflowImport.importZip(zip, project, "f", true));
+        assertTrue(e.getMessage().contains("exists already"), e.getMessage());
+        assertEquals("mine", Files.readString(project.resolve("iflows/f/a.txt")));
+        IflowImport.importZip(zip, project, "f", false);
+        assertEquals("x", Files.readString(project.resolve("iflows/f/a.txt")));
+    }
 }

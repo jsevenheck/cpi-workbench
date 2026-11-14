@@ -201,7 +201,9 @@ fn router(ctx: &Ctx, config: &Value) -> Result<Value, String> {
         return Ok(json!({ "ok": false, "routes": out, "diagnostics": [],
             "taken": "Error: the routes mix XML and Non-XML conditions; SAP: \"the evaluation fails\" (Define Router)." }));
     }
+    // Whether a route was taken, apart from its name: a route's name may be empty.
     let mut taken = String::new();
+    let mut decided = false;
     let mut raised = false;
     for (i, r) in routes.iter().enumerate() {
         if r["default"] == true {
@@ -224,15 +226,17 @@ fn router(ctx: &Ctx, config: &Value) -> Result<Value, String> {
                 out[i]["message"] = json!(e);
                 taken = "Error: the route condition failed, so CPI raises an exception.".into();
                 raised = true;
+                decided = true;
                 break;
             }
         }
         if out[i]["status"] == "true" {
-            taken = s(r, "name").to_string();
+            taken = match s(r, "name") { "" => format!("Route {}", i + 1), n => n.to_string() };
+            decided = true;
             break;
         }
     }
-    if taken.is_empty() {
+    if !decided {
         let d = routes.iter().find(|r| r["default"] == true);
         raised = config["throwException"] == true;
         taken = if raised {
@@ -276,7 +280,7 @@ fn gather(ctx: &Ctx, config: &Value, args: &Args) -> Result<Value, String> {
     let messages = match (args.get("messages"), args.get("messagesFrom")) {
         (Some(_), Some(_)) => return Err("Give messages or messagesFrom, not both.".into()),
         (Some(m), None) => m.clone(),
-        (None, Some(refs)) => json!(tools::message_refs(ctx.server, refs)?.into_iter().map(|m| m.body).collect::<Vec<_>>()),
+        (None, Some(_)) => json!(tools::messages_from(ctx.server, args)?.into_iter().map(|m| m.body).collect::<Vec<_>>()),
         (None, None) => return Err("A Gather step needs messages (the bodies to gather) or messagesFrom (a Splitter's runId).".into()),
     };
     engine_call(ctx.server, ctx.xml, "gather.run", json!({

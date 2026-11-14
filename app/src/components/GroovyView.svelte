@@ -8,7 +8,7 @@
   import QueueEditor from './QueueEditor.svelte';
   import RowTable from './RowTable.svelte';
   import PlatformPanel from './PlatformPanel.svelte';
-  import { app, groovy, runGroovy, autoRunGroovy, saveScript, saveScriptAs, formatXml, otherProfile, saveInput, askImportMessage, closeInput, closeEditorFile, selectedMapping, platformDirty } from '../lib/store.svelte';
+  import { app, groovy, runGroovy, autoRunGroovy, saveScript, saveScriptAs, formatXml, otherProfile, saveInput, askImportMessage, closeInput, closeEditorFile, selectedMapping, platformDirty, setGroovyFunction } from '../lib/store.svelte';
   import { reindentGroovy } from '../lib/indent';
   import { formatQueue, type QueueEntry } from '../lib/queue';
   import { scriptFunctions, kindLabel, type ParamKind } from '../lib/functions';
@@ -67,13 +67,7 @@
 
   function useFunction(name: string) {
     otherChosen = false;
-    if (groovy.functionName === name) return;
-    groovy.functionName = name;
-    // Arguments belong to one function; so do the parameters the last run reported. Kept, they would make the
-    // next run of this function drop the arguments typed for it now.
-    groovy.args = [];
-    groovy.mapping = null;
-    changed(); // runs only code the user has started (autoRunGroovy)
+    if (setGroovyFunction(name)) changed(); // runs only code the user has started (autoRunGroovy)
   }
   $effect(() => {
     void groovy.scriptPath; // another script: back to the list
@@ -261,7 +255,8 @@
         </select>
       </label>
       {#if selectValue === OTHER}
-        <input class="mono fn-name" bind:value={groovy.functionName} onchange={changed} aria-label="Function name" placeholder="processData" />
+        <input class="mono fn-name" value={groovy.functionName} onchange={changed}
+          oninput={(e) => setGroovyFunction((e.currentTarget as HTMLInputElement).value)} aria-label="Function name" placeholder="processData" />
       {/if}
       <div class="spacer"></div>
       <button class="small" onclick={saveScript} disabled={!app.project} title={app.project ? 'Save (Ctrl+S)' : 'Open a project to save'}>Save</button>

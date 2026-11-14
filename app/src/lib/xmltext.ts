@@ -6,8 +6,9 @@
  * A scanner, not a parser: it follows tags, comments, CDATA, processing instructions and the DOCTYPE, and
  * does not check well-formedness or expand entities. An entity reference in the content (`&name;`, other than
  * the five XML predefines and character references) can stand for elements the parser counts and the scanner
- * cannot see, so positions from the engine would point at the wrong element; such a document is flagged
- * (`entities`) and the XPath tab neither marks nor writes paths for it. The element name sent with each
+ * cannot see, so positions from the engine would point at the wrong element; so can one in a namespace
+ * declaration, for the namespace URI. Such a document is flagged (`entities`) and the XPath tab neither marks
+ * nor writes paths for it. The element name sent with each
  * place is also compared, for what else could disagree.
  */
 
@@ -47,8 +48,12 @@ export interface Scan {
   entities: boolean;
 }
 
-/** A general entity reference: not one of XML's five predefined entities and not a character reference. */
-const ENTITY_REF = /&(?!(?:lt|gt|amp|quot|apos);|#)[A-Za-z_:][\w.:-]*;/;
+/**
+ * A general entity reference: an `&` that does not start one of XML's five predefined entities or a character
+ * reference. Not a check of the name: names may use most of Unicode, and an `&` that starts no reference at
+ * all is not well-formed, so either way the positions cannot be trusted.
+ */
+const ENTITY_REF = /&(?!(?:lt|gt|amp|quot|apos);|#)/;
 
 const NAME_CHAR = /[^\s/>=<"']/;
 
@@ -127,8 +132,11 @@ export function scanXml(text: string): Scan {
           }
         }
         attributes.push({ name: aName, start: aStart, end: j });
-        if (aName === 'xmlns') ns[''] = decodeEntities(value);
-        else if (aName.startsWith('xmlns:')) ns[aName.slice(6)] = decodeEntities(value);
+        if (aName === 'xmlns' || aName.startsWith('xmlns:')) {
+          ns[aName === 'xmlns' ? '' : aName.slice(6)] = decodeEntities(value);
+          // The namespace is the entity's text, which the scan does not know: the XPath at the cursor would be wrong.
+          if (ENTITY_REF.test(value)) entities = true;
+        }
       }
       const parent = open.length ? open[open.length - 1] : -1;
       const siblings = parent >= 0 ? elements[parent].children : roots;

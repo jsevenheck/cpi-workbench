@@ -252,12 +252,19 @@ pub fn exists(name: &str) -> bool {
 /// The input message of a run, resolved once before it runs (`call`): the step and the kept result see the same
 /// message, even if the script changes or deletes its bodyPath file. Set after `check_args`, so no client can.
 const RESOLVED_INPUT: &str = "\u{0}input";
+/// A Gather's `messagesFrom`, resolved once with the input (its first message is the input's base).
+const RESOLVED_MESSAGES: &str = "\u{0}messages";
 
 pub fn call(server: &Server, name: &str, args: &Args) -> Result<Value, String> {
     check_args(name, args)?;
     let runs_step = matches!(name, "run_xslt" | "run_groovy" | "validate_xsd" | "run_flow_step");
     let mut args = args.clone();
     if runs_step {
+        if let Some(refs) = args.get("messagesFrom") {
+            let ms: Vec<Value> = message_refs(server, refs)?.into_iter()
+                .map(|m| json!({ "body": m.body, "headers": m.headers, "properties": m.properties })).collect();
+            args.insert(RESOLVED_MESSAGES.into(), Value::Array(ms));
+        }
         let m = message(server, &args)?;
         args.insert(RESOLVED_INPUT.into(), m);
     }
@@ -415,7 +422,7 @@ pub fn message(server: &Server, args: &Args) -> Result<Value, String> {
     }
     let base = match (str_arg(args, "messageFrom"), args.get("messagesFrom")) {
         (Some(r), _) => Some(server.runs().message(r)?),
-        (None, Some(refs)) => message_refs(server, refs)?.into_iter().next(),
+        (None, Some(_)) => messages_from(server, args)?.into_iter().next(),
         _ => None,
     };
     let body = match one_of(args, "body", "bodyPath", true)? {
@@ -429,6 +436,16 @@ pub fn message(server: &Server, args: &Args) -> Result<Value, String> {
         None => (headers, properties),
     };
     Ok(json!({ "body": body, "headers": headers, "properties": properties }))
+}
+
+/// The messages of `messagesFrom`, as the call resolved them before the step (`call`), or now.
+pub fn messages_from(server: &Server, args: &Args) -> Result<Vec<runs::Message>, String> {
+    match args.get(RESOLVED_MESSAGES) {
+        Some(Value::Array(ms)) => Ok(ms.iter().map(|m| runs::Message {
+            body: m["body"].as_str().unwrap_or_default().to_string(), headers: m["headers"].clone(), properties: m["properties"].clone(),
+        }).collect()),
+        _ => message_refs(server, args.get("messagesFrom").unwrap_or(&Value::Null)),
+    }
 }
 
 /// The messages of `messagesFrom`: one run id or runId/part, or a list of them, in order.

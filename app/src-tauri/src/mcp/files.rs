@@ -122,7 +122,11 @@ pub fn save_file(server: &Server, args: &Args) -> Result<Value, String> {
         return Err(format!("{path} exists already. Read it first; to replace it, call save_file again with \
             overwrite: true, or save under another name."));
     }
-    engine_call(server, file_runtime(server)?, "file.write", json!({ "path": path, "content": content }))?;
+    // createNew: the engine creates the file only if none is there, so a second MCP server (another agent session
+    // on the same project), which the lock does not reach, cannot be replaced either.
+    engine_call(server, file_runtime(server)?, "file.write", json!({ "path": path, "content": content, "createNew": !overwrite }))
+        .map_err(|e| if e.contains("exists already") { format!("{path} exists already (written just now by another call). \
+            Read it first; to replace it, call save_file again with overwrite: true.") } else { e })?;
     Ok(json!({ "path": path, "saved": true, "replaced": exists }))
 }
 
@@ -164,12 +168,16 @@ pub fn import_iflow(server: &Server, args: &Args) -> Result<Value, String> {
         return Err("Give the iFlow a name of letters, digits, '.', '_' or '-'.".into());
     }
     let target = project.join("iflows").join(&folder);
+    let overwrite = args.get("overwrite").and_then(Value::as_bool).unwrap_or(false);
+    let exists_msg = || format!("iflows/{folder} exists already. Give another name, or overwrite: true to replace its files.");
     let _write = server.write_lock();
-    if target.exists() && !args.get("overwrite").and_then(Value::as_bool).unwrap_or(false) {
-        return Err(format!("iflows/{folder} exists already. Give another name, or overwrite: true to replace its files."));
+    if target.exists() && !overwrite {
+        return Err(exists_msg());
     }
+    // createNew: the engine creates the folder only if none is there (another MCP server, past this lock).
     let r = engine_call(server, file_runtime(server)?, "iflow.import",
-        json!({ "zip": zip.to_string_lossy(), "name": folder }))?;
+        json!({ "zip": zip.to_string_lossy(), "name": folder, "createNew": !overwrite }))
+        .map_err(|e| if e.contains("exists already") { exists_msg() } else { e })?;
     let steps: Vec<Value> = r["steps"].as_array().into_iter().flatten().filter(|s| s["iflow"] == folder.as_str()).cloned().collect();
     Ok(json!({ "imported": r["imported"], "files": r["files"], "steps": steps }))
 }

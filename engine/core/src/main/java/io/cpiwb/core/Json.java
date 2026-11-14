@@ -326,12 +326,25 @@ public final class Json {
         return v == null ? def : Boolean.parseBoolean(v.toString());
     }
 
+    /**
+     * A whole number within a long: a number or its text, exactly ({@code 5e3} and {@code 42.0} are fine). A
+     * fraction or a value beyond a long is an error naming the field; {@code longValue()} would cut or wrap it
+     * without a word.
+     */
     public static long num(Map<String, Object> m, String key, long def) {
         Object v = m == null ? null : m.get(key);
-        if (v instanceof Number) {
+        if (v == null) {
+            return def;
+        }
+        if (v instanceof Long || v instanceof Integer || v instanceof Short || v instanceof Byte) {
             return ((Number) v).longValue();
         }
-        return v == null ? def : Long.parseLong(v.toString());
+        try {
+            return new BigDecimal(v.toString().trim()).longValueExact();
+        } catch (NumberFormatException | ArithmeticException e) {
+            throw new IllegalArgumentException(key + " must be a whole number from " + Long.MIN_VALUE + " to "
+                    + Long.MAX_VALUE + ", not " + v);
+        }
     }
 
     @SuppressWarnings("unchecked")

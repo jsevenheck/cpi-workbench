@@ -161,8 +161,9 @@ await page.getByLabel('XPath expression').fill('//Item/@sku');
 await page.getByLabel('XPath expression').press('Enter');
 await page.locator('.res button.link', { hasText: 'attribute sku' }).nth(1).waitFor({ timeout: 10000 })
   .catch(async () => fail('XPath results do not link to their place: ' + await page.locator('.res').innerText()));
-const marks = await page.locator('section.pane .cpiwb-match').count();
-if (marks < 2) fail('the selected attributes are not marked in the document: ' + marks);
+// Monaco draws decorations on a later frame: wait for them rather than count at once.
+await page.waitForFunction(() => document.querySelectorAll('section.pane .cpiwb-match').length >= 2, null, { timeout: 5000 })
+  .catch(async () => fail('the selected attributes are not marked in the document: ' + await page.locator('section.pane .cpiwb-match').count()));
 // The XPath of the attribute at the cursor: this node and all like it; the choice goes into the field and runs.
 await page.locator('.res button.link').nth(1).click();
 await page.getByRole('button', { name: /XPath at cursor/ }).click();

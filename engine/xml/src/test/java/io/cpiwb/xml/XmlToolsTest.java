@@ -100,7 +100,23 @@ class XmlToolsTest {
             assertEquals(List.of(Json.o().with("path", List.of(1)).with("name", "p:a")), at.apply("/p:a"), version);
             // The document node, and values, are nowhere in particular.
             assertEquals(java.util.Arrays.asList((Object) null), at.apply("/"), version);
+            if ("3.1".equals(version)) {
+                // Namespace nodes are in scope, often declared on an ancestor: no place (not the element's text).
+                assertTrue(at.apply("/p:a/namespace::p").stream().allMatch(java.util.Objects::isNull), version);
+            }
             assertEquals(java.util.Arrays.asList((Object) null), at.apply("count(//p:b)"), version);
+        }
+    }
+
+    /** The xml prefix is bound by definition, in XPath 1.0 (JDK) as in 3.1, without a Namespace mapping row. */
+    @Test
+    void xmlPrefixWithoutMapping() {
+        XPathStep x = new XPathStep();
+        for (String version : List.of("1.0", "3.1")) {
+            Map<String, Object> r = x.run(Json.o().with("expression", "string(//@xml:lang)").with("version", version)
+                    .with("input", Json.o().with("body", "<a xml:lang='de'/>")));
+            assertTrue(Json.bool(r, "ok", false), () -> version + ": " + Json.write(r));
+            assertEquals("de", ((Map<String, Object>) Json.arr(r, "items").get(0)).get("value"), version);
         }
     }
 

@@ -516,6 +516,17 @@ fn files_are_read_saved_and_imported_inside_the_project() {
         assert!(c.err("read_file", json!({ "path": outside })).contains("not a project-relative path"), "{outside}");
     }
 
+    // Calls run in parallel: of two saves to the same new path without overwrite, one wins and one is refused (F02).
+    let results: Vec<Result<Value, String>> = std::thread::scope(|scope| {
+        let handles: Vec<_> = ["A", "B"].iter().map(|text| {
+            let server = &server;
+            scope.spawn(move || tools::call(server, "save_file", json!({ "path": "inputs/race.txt", "content": text }).as_object().unwrap()))
+        }).collect();
+        handles.into_iter().map(|h| h.join().unwrap()).collect()
+    });
+    assert_eq!(results.iter().filter(|r| r.is_ok()).count(), 1, "{results:?}");
+    assert!(results.iter().any(|r| r.as_ref().is_err_and(|e| e.contains("exists already"))), "{results:?}");
+
     // Save: new files and folders; an existing file only with overwrite.
     let s = c.ok("save_file", json!({ "path": "mappings/new/agent.xsl", "content": "<a/>" }));
     assert_eq!(s, json!({ "path": "mappings/new/agent.xsl", "saved": true, "replaced": false }));
@@ -609,6 +620,35 @@ fn runs_chain_by_id() {
     let bad = c.ok("run_groovy", json!({ "script": "def processData(m) { throw new RuntimeException('no') }" }));
     assert!(bad["ok"] == false && bad.get("runId").is_none(), "{bad}");
     assert!(c.err("run_xslt", json!({ "messageFrom": "run-0000-9", "mappingPath": "mappings/order-to-salesorder.xsl" })).contains("Unknown run"));
+
+    // A Router that raises an exception passes nothing on: ok false and no runId (review of 2026-11-14, F04).
+    for config in [json!({ "routes": [], "throwException": true }),
+        json!({ "routes": [{ "name": "a", "expressionType": "xml", "condition": "/a" }, { "name": "b", "expressionType": "nonxml", "condition": "1 = 1" }] }),
+        json!({ "routes": [{ "name": "bad", "expressionType": "xml", "condition": "/a[" }] })] {
+        let r = c.ok("run_flow_step", json!({ "body": "<a/>", "step": { "type": "router", "config": config } }));
+        assert!(r["ok"] == false && r.get("runId").is_none(), "{config}: {r}");
+    }
+    let routed = c.ok("run_flow_step", json!({ "body": "<a/>", "step": { "type": "router", "config": {
+        "routes": [{ "name": "yes", "expressionType": "xml", "condition": "/a" }] } } }));
+    assert!(routed["ok"] == true && routed["runId"].is_string(), "a taken route passes the message on: {routed}");
+
+    // The input is read once, before the run: a script that deletes its bodyPath file still gets its result
+    // and runId, and the kept message is the one the step got (F03).
+    std::fs::write(dir.join("inputs/gone.txt"), "before").unwrap();
+    let gone = dir.join("inputs/gone.txt").to_string_lossy().replace('\\', "/");
+    let deleted = c.ok("run_groovy", json!({ "bodyPath": "inputs/gone.txt",
+        "script": format!("def processData(m) {{ new File('{gone}').delete(); m.setBody('done ' + m.getBody(String)); m }}") }));
+    assert!(deleted["ok"] == true && deleted["output"]["body"] == "done before" && deleted["runId"].is_string(), "{deleted}");
+    assert!(!dir.join("inputs/gone.txt").exists());
+
+    // One long line (minified XML or JSON) is read whole in parts by characters (F10).
+    let one = c.ok("run_groovy", json!({ "script": "def processData(m) { m.setBody('<a>' + ('x' * 300000) + '</a>'); m }" }));
+    let first = c.ok("read_file", json!({ "runId": id(&one) }));
+    let hint = first["lineCut"].as_str().unwrap().to_string();
+    assert!(hint.contains("startChar 200000"), "{hint}");
+    let rest = c.ok("read_file", json!({ "runId": id(&one), "startChar": 200000 }));
+    assert_eq!(first["content"].as_str().unwrap().len() + rest["content"].as_str().unwrap().len(), 300007);
+    assert!(rest["content"].as_str().unwrap().ends_with("x</a>") && rest.get("truncated").is_none(), "{}", rest["endChar"]);
 
     engines.shutdown();
     let _ = std::fs::remove_dir_all(&dir);

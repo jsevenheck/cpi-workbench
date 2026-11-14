@@ -23,6 +23,9 @@ public final class DomXml {
 
     public static String serialize(Node node, TransformerFactory factory) throws TransformerException {
         Transformer t = factory.newTransformer();
+        // Explicitly XML: without a method the JDK's identity transformer writes a document whose root is an
+        // unnamespaced <html> as HTML (<br> unclosed, a META element added), which is no longer XML.
+        t.setOutputProperty(OutputKeys.METHOD, "xml");
         t.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "yes");
         StringWriter w = new StringWriter();
         t.transform(new DOMSource(node), new StreamResult(w));

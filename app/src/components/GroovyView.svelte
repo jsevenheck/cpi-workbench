@@ -69,7 +69,10 @@
     otherChosen = false;
     if (groovy.functionName === name) return;
     groovy.functionName = name;
-    groovy.args = []; // arguments belong to one function
+    // Arguments belong to one function; so do the parameters the last run reported. Kept, they would make the
+    // next run of this function drop the arguments typed for it now.
+    groovy.args = [];
+    groovy.mapping = null;
     changed(); // runs only code the user has started (autoRunGroovy)
   }
   $effect(() => {

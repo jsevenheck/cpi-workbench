@@ -109,6 +109,9 @@ pub struct Server {
     engines: Arc<Engines>,
     project: Option<PathBuf>,
     runs: runs::Runs,
+    /// Held from the check whether a file exists to the write: requests run in parallel (one thread each), and
+    /// without it two calls without `overwrite` could both find a path free and both write it.
+    writes: Mutex<()>,
 }
 
 /// Entry point for `cpi-workbench mcp [--project <folder>]`. Returns the process exit code.
@@ -284,7 +287,7 @@ fn supported_versions() -> Vec<&'static str> {
 
 impl Server {
     pub fn new(engines: Arc<Engines>, project: Option<PathBuf>) -> Self {
-        Server { engines, project, runs: runs::Runs::default() }
+        Server { engines, project, runs: runs::Runs::default(), writes: Mutex::new(()) }
     }
 
     pub fn engines(&self) -> &Engines {
@@ -293,6 +296,11 @@ impl Server {
 
     pub fn runs(&self) -> &runs::Runs {
         &self.runs
+    }
+
+    /// The lock save_file and import_iflow hold over "does it exist?" and the write.
+    pub fn write_lock(&self) -> std::sync::MutexGuard<'_, ()> {
+        self.writes.lock().unwrap_or_else(|e| e.into_inner())
     }
 
     pub fn project(&self) -> Option<&Path> {

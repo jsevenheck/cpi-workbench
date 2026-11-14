@@ -524,8 +524,10 @@ another route.
 **W3. XPath tab: matches in the document, copy an element's XPath, history (S; built on 2026-11-14).** *Seen in XSLTDebugX.*
 Built: the engine gives each node of the body its place as element positions from the root (`at`), on both
 XPath versions (the JDK's DOM has no line numbers, so positions instead of lines); the UI finds the place in the
-text with a small scanner (`app/src/lib/xmltext.ts`) and marks it only where the element name matches, so an
-entity that holds elements cannot misplace a mark. The same scanner writes the XPath at the cursor, which goes
+text with a small scanner (`app/src/lib/xmltext.ts`). An entity reference in the content can stand for elements
+the scanner cannot see, which shifts same-named siblings (found in a review on 2026-11-14: the mark landed on the
+wrong one); for such a document nothing is marked and XPath at cursor is off. The element name is compared as
+well. The same scanner writes the XPath at the cursor, which goes
 into the expression field and the clipboard. The plan as written before:
 * Matches marked in the document editor. `xpath.eval` returns the items without their position, so the engine
   has to add line numbers: Saxon keeps them when asked; whether the JDK's XPath 1.0 path can is to check.
@@ -654,7 +656,7 @@ writes, SUPPRESS in a mapping function's input).
 | Q-T2 | How CPI Helper's GroovyDebugX and xsltDebugX plugins hand a traced step's payload, headers and properties to an external IDE (URL, clipboard, file; the encoding) | Answered from the plugins' sources (S47): a link, `<url><data>` or `<url>#share/<data>`, the data being JSON, raw DEFLATE, URL-safe Base64; a *Custom URL* can be set. Not tried on a tenant. | Send one step from a tenant and import it |
 | Q-M1 | Message Mapping scripts: Groovy and Java version, whether the signature alone picks the execution type (single value or context, F44), how the per-context results are joined, the marker value of SUPPRESS, whether a single-value function is called once per value | Partial: versions, one call per context, the join by context changes, single-value calls once per value and the marker texts answered (F59–F61, an empty context is called with an empty array); open: SUPPRESS in a function's input, identity or equals for the markers | `probe-mapping-v1.groovy` with the `Call` target (probes/README.md, step 6) |
 | Q-C1 | Converters: compact or indented output, the XML declaration, CSV line ends and quoting, an unmapped JSON prefix without namespace mapping (F47), the XML to JSON namespace table's cell order | Answered for the probes' cases (F54–F57); open: the XML to JSON namespace table's cell order, `\r\n` or `\n` in CSV | Save a response with `curl --output` |
-| Q-F1 | Gather's Combine with a body that is not XML (JSON or plain text after a script): failure, the text as it is (the result not well-formed XML), or another form. SAP documents XML only and shows no such case | Open; the simulator keeps the text and warns | `probes/gather/` (probes/README.md, step 8) |
+| Q-F1 | Gather's Combine with a body that is not XML (JSON or plain text after a script): failure, the text as it is (as character data in the wrapper, malformed only where the text is, e.g. `a & b`), or another form. SAP documents XML only and shows no such case | Open; the simulator keeps the text and warns | `probes/gather/` (probes/README.md, step 8) |
 | Q-P1 | Partner Directory / Keystore / Secure Store edge cases: missing parameter, unknown partner, unknown keystore alias (null or exception, which message) | Answered (F52) | — |
 | Q-E1 | Encoder, Decoder and Message Digest: line breaks in Base64 output, the entry name in a ZIP, the digest's header name, encoding and canonicalization | Open (§10.5 W4) | SAP's step documentation, then a probe iFlow |
 | Q-V1 | Format of an exported Value Mapping artifact | Open (§10.5 W7) | Export one sample, or read one from SAP's public sample packages |

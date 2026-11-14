@@ -84,7 +84,7 @@ agent without file access of its own what the app's file tree and **Import iFlow
 | Tool | Tab in the app |
 |---|---|
 | `project_info` | The project: its files, the steps of the iFlows under `iflows/` (flow steps with their configuration; script, XSLT and XML Validator steps with file, function and runtime) and the installed runtimes. |
-| `read_file` | Opening a file: the text of a project file, long files in parts (`startLine`, `maxLines`); with `runId`, the whole output body of a run. |
+| `read_file` | Opening a file: the text of a project file, long files in parts (`startLine`, `maxLines`), text in one long line by characters (`startChar`); with `runId`, the whole output body of a run. |
 | `run_xslt` | XSLT (`mappingPath` or `mapping`). `runtime: "both"` runs Saxon-HE 9.9 and 12, as the runtime comparison does. |
 | `run_groovy` | Groovy, with the Script API and the project's `platform/` mocks, and the body type (`bodyType`). The runtime (1.x or 2.x) follows the script's imports unless given; `both` runs both. A custom function of a Message Mapping script takes `args` instead, as the Groovy tab's *Arguments*; the result's `mapping` holds the returned value or the output queue. |
 | `validate_xsd` | XSD. |
@@ -106,9 +106,11 @@ message, diagnostics with lines, `xsl:message` output, the message log, timings.
 ### Passing results on (`runId`)
 
 A run that produces a message returns a `runId`: `run_xslt`, `run_groovy`, `validate_xsd` (the message
-passes on, as the XML Validator lets it), `run_flow_step` (the Router passes the message on; a Splitter's
+passes on, as the XML Validator lets it), `run_flow_step` (the Router passes the message on, unless it raises an
+exception: then `ok` is false; a Splitter's
 messages are `runId/1`, `runId/2`, …; with `runtime: both`, `runId/saxon-he-12` and so on). A failed run and an
-invalid message get none. `messageFrom: "<runId>"` makes that message (body, headers, properties) the input of
+invalid message get none. The input is read once, before the step runs, so the kept message is the one the step got.
+Calls run in parallel; `save_file` and `import_iflow` check "exists already" and write under one lock. `messageFrom: "<runId>"` makes that message (body, headers, properties) the input of
 the next call, as it flows to the next step in an iFlow; `body`, `headers` and `properties` given in the same call
 replace the body or the rows of the same name. A Gather takes `messagesFrom` (a Splitter's `runId`, or a list).
 

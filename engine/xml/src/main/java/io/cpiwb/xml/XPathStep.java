@@ -145,6 +145,10 @@ public final class XPathStep {
         return new NamespaceContext() {
             @Override
             public String getNamespaceURI(String prefix) {
+                // The xml prefix is bound by definition (Namespaces in XML), as XPath 3.1 has it without a mapping.
+                if ("xml".equals(prefix) && !ns.containsKey(prefix)) {
+                    return javax.xml.XMLConstants.XML_NS_URI;
+                }
                 return ns.getOrDefault(prefix, "");
             }
 
@@ -242,6 +246,9 @@ public final class XPathStep {
         }
         Json.Obj at = Json.o();
         XdmNodeKind kind = n.getNodeKind();
+        if (kind == XdmNodeKind.NAMESPACE) {
+            return null; // in scope on an element, often declared on an ancestor: no single place in the text
+        }
         if (kind == XdmNodeKind.ATTRIBUTE) {
             at.with("attribute", n.getUnderlyingNode().getDisplayName());
             n = n.getParent();

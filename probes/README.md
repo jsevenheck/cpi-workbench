@@ -130,8 +130,9 @@ plan). The differences that remain:
 
 The Gather baselines come from the MCP server: `run_flow_step` with the Splitter of step 8, `run_groovy`
 (groovy-1.x) on each part by its `runId` with the property `CamelSplitIndex` (0, 1, 2), and the Gather
-with `messagesFrom` those runs. Each run there gives `ok: true` and a warning for the first part that is
-not XML; the bodies are not well-formed XML.
+with `messagesFrom` those runs. Each run there gives `ok: true` and a warning for each part that is not an
+XML document; the bodies are well-formed XML all the same, since JSON and plain text are character data inside
+the multimap wrapper.
 
 The converter baselines come from the Flow Steps tab's Converter (or `convert.run`) with the settings
 in step 7. In the baselines, IDs that change with each run are replaced by `x` (the random alias suffix

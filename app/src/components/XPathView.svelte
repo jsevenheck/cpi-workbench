@@ -16,7 +16,9 @@
   /** The result is for the text in the editor (not edited since the run). */
   let current = $derived(!!xpath.result && xpath.resultBody === xpath.body);
   // Scanned only for a result with places, not on every keystroke.
-  let scan = $derived(current && placed ? scanXml(xpath.resultBody) : null);
+  let scanned = $derived(current && placed ? scanXml(xpath.resultBody) : null);
+  // With entity references the positions may point at other elements: then nothing is marked.
+  let scan = $derived(scanned && !scanned.entities ? scanned : null);
   let ranges = $derived(scan ? (xpath.result!.items as { at?: NodePlace }[]).map((it) => (it.at ? rangeOf(scan!, it.at) : null)) : []);
   let marked = $derived(ranges.filter((r): r is { start: number; end: number } => r !== null));
   let highlights = $derived(marked.slice(0, MAX_MARKS));
@@ -36,10 +38,19 @@
     return ns;
   }
 
+  const ENTITY_NOTE = 'The document uses entity references (&name;), which can stand for elements: positions in its text '
+    + 'do not match the parsed document, so nodes are not marked and XPath at cursor is off.';
+
   function atCursor() {
     const offset = docEditor?.cursorOffset();
     cursorNote = '';
-    cursorMenu = offset == null ? null : xpathAt(scanXml(xpath.body), offset, namespaceMapping(), xpath.version);
+    const s = scanXml(xpath.body);
+    if (s.entities) {
+      cursorMenu = null;
+      cursorNote = ENTITY_NOTE;
+      return;
+    }
+    cursorMenu = offset == null ? null : xpathAt(s, offset, namespaceMapping(), xpath.version);
     if (!cursorMenu) cursorNote = 'Put the cursor on an element or an attribute of the document first.';
   }
 
@@ -149,6 +160,7 @@
       <div class="ns"><KeyValueTable bind:rows={xpath.namespaces} emptyText="Prefix → namespace URI (like the iFlow's Namespace Mapping)" /></div>
       <header><h2>Result{#if xpath.result} <span class="muted">· {xpath.result.count} item(s) · {xpath.result.engine ?? ''}</span>{/if}</h2></header>
       {#if xpath.result && placed && !current}<p class="note">The document changed since this run: its nodes are not marked. Run again.</p>{/if}
+      {#if scanned?.entities}<p class="note">{ENTITY_NOTE}</p>{/if}
       {#if marked.length > MAX_MARKS}<p class="note">The first {MAX_MARKS} of {marked.length} nodes are marked in the document.</p>{/if}
       <div class="res">
         {#if xpath.result}

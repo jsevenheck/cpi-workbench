@@ -197,10 +197,12 @@ fn router(ctx: &Ctx, config: &Value) -> Result<Value, String> {
     let kinds: std::collections::BTreeSet<&str> = routes.iter().filter(|r| r["default"] != true)
         .map(|r| s(r, "expressionType")).collect();
     if kinds.len() > 1 {
-        return Ok(json!({ "routes": out, "diagnostics": [],
+        // ok: false wherever CPI raises an exception: the message goes no further, so it gets no runId either.
+        return Ok(json!({ "ok": false, "routes": out, "diagnostics": [],
             "taken": "Error: the routes mix XML and Non-XML conditions; SAP: \"the evaluation fails\" (Define Router)." }));
     }
     let mut taken = String::new();
+    let mut raised = false;
     for (i, r) in routes.iter().enumerate() {
         if r["default"] == true {
             continue;
@@ -221,6 +223,7 @@ fn router(ctx: &Ctx, config: &Value) -> Result<Value, String> {
                 out[i]["status"] = json!("error");
                 out[i]["message"] = json!(e);
                 taken = "Error: the route condition failed, so CPI raises an exception.".into();
+                raised = true;
                 break;
             }
         }
@@ -231,7 +234,8 @@ fn router(ctx: &Ctx, config: &Value) -> Result<Value, String> {
     }
     if taken.is_empty() {
         let d = routes.iter().find(|r| r["default"] == true);
-        taken = if config["throwException"] == true {
+        raised = config["throwException"] == true;
+        taken = if raised {
             "No route matched: Throw Exception is set, so the Router raises an exception.".into()
         } else if let Some(d) = d {
             format!("{} (default route)", s(d, "name"))
@@ -239,7 +243,7 @@ fn router(ctx: &Ctx, config: &Value) -> Result<Value, String> {
             "No route matched and there is no default route.".into()
         };
     }
-    Ok(json!({ "routes": out, "taken": taken, "diagnostics": [] }))
+    Ok(json!({ "ok": !raised, "routes": out, "taken": taken, "diagnostics": [] }))
 }
 
 /// XPath and grouping may refer to a header or property (SAP); Camel Simple resolves the reference first.

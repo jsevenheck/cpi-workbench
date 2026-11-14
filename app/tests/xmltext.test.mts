@@ -51,3 +51,12 @@ test('text that is not well-formed gives what can be read', () => {
   assert.equal(scanXml('not xml').elements.length, 0);
   assert.equal(scanXml('').roots.length, 0);
 });
+
+test('entity references in the content switch the places off: they can hold elements the scan cannot see', () => {
+  // The review's case: /r/x[1] is the entity's element; the scan would have marked the literal one.
+  const doc = `<!DOCTYPE r [<!ENTITY e "<x id='entity'/>">]><r>&e;<x id='literal'/></r>`;
+  assert.equal(scanXml(doc).entities, true);
+  assert.equal(scanXml('<r>&amp;&lt;&#65;&#x41;<x a="&e;"/></r>').entities, false, 'predefined, character refs and attributes are fine');
+  assert.equal(scanXml('<!DOCTYPE r [<!ENTITY e "x">]><r/>').entities, false, 'declared but not used in the content');
+  assert.equal(scanXml(DOC).entities, false);
+});

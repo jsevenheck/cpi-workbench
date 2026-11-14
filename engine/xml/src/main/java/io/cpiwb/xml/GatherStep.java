@@ -121,11 +121,12 @@ public final class GatherStep {
             }
             String problem = notWellFormed(body);
             if (problem != null) {
-                // SAP documents XML messages for Combine and shows no case of another body; the simulator
-                // puts the text in unchanged, so the result is not well-formed XML. What CPI does is open (Q-F1).
-                diags.add(Diagnostic.warning("Message " + (i + 1) + " is not well-formed XML (" + problem + "). Combine "
-                        + "puts it into the result as it is, so the result is not well-formed XML either. What CPI does "
-                        + "with such a message is not documented (an assumption; probe in probes/README.md, step 8).").toJson());
+                // SAP documents XML messages for Combine and shows no case of another body; the simulator puts the
+                // text in unchanged. What CPI does is open (Q-F1). Whether the result is still XML depends on the
+                // text (JSON is character data; "a & b" is not), so the result is checked on its own below.
+                diags.add(Diagnostic.warning("Message " + (i + 1) + " is not a well-formed XML document (" + problem + "). "
+                        + "Combine puts its text into the result as it is. What CPI does with such a message is not "
+                        + "documented (an assumption; probe in probes/README.md, step 8).").toJson());
             }
             if (different) {
                 sb.append("<multimap:Message").append(i + 1).append('>');
@@ -138,7 +139,12 @@ public final class GatherStep {
         if (!different) {
             sb.append("</multimap:Message1>");
         }
-        return sb.append("</multimap:Messages>").toString();
+        String result = sb.append("</multimap:Messages>").toString();
+        String problem = notWellFormed(result);
+        if (problem != null) {
+            diags.add(Diagnostic.warning("The combined result is not well-formed XML (" + problem + ").").toJson());
+        }
+        return result;
     }
 
     /** Why a body is not a well-formed XML document, or null. DOCTYPEs are refused before this is called. */

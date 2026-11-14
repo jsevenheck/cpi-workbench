@@ -18,4 +18,10 @@ test('projectPath: a case-relative file as a project path, keeping ".." above th
   // Above the project root the ".." stay, so the engine refuses the file instead of reading another one.
   assert.equal(projectPath('tests/case', '../../../etc/passwd'), '../etc/passwd');
   assert.equal(projectPath('', 'a/b'), 'a/b');
+  // Absolute paths stay as written, so the engine refuses them instead of reading a file inside the project.
+  assert.equal(projectPath('tests/case', '/etc/x.txt'), '/etc/x.txt');
+  assert.equal(projectPath('tests/case', 'C:\\data\\x.txt'), 'C:\\data\\x.txt');
+  assert.equal(projectPath('tests/case', 'C:/data/x.txt'), 'C:/data/x.txt');
+  assert.equal(projectPath('tests/case', '\\\\server\\share\\x.txt'), '\\\\server\\share\\x.txt');
+  assert.equal(projectPath('tests/case', '..\\..\\..\\x.txt'), '../x.txt', 'backslashes as separators');
 });

@@ -32,7 +32,8 @@ of its version.
 - **MCP: pass results on by `runId`**: every run that produces a message returns a `runId`; `messageFrom` makes it
   the next step's input (body, headers and properties), a Gather takes a Splitter's messages with `messagesFrom`.
   A body the step did not change is left out of the result, and long bodies come back shortened; `read_file` with `runId` and `save_file` with `contentFrom`
-  take the whole body.
+  take the whole body, `read_file` with `startChar` also a body that is one long line. A Router that raises an
+  exception has `ok: false` and passes nothing on.
 
 ### Changed
 
@@ -43,11 +44,14 @@ of its version.
   script; a `String[]` argument is edited as the source field's values grouped by context (**+ Value**,
   **+ Context**, per value text, SUPPRESS, xsi:nil or null), with **Text** for the JSON form of `case.json`.
   **Result** lists the output queue as one row per context.
-- **Gather**: Combine warns when a message is not well-formed XML (JSON or text from a script), since the result
-  is then not XML either; it still runs as before. What CPI does in that case is open; `probes/gather/` asks a tenant.
+- **Gather**: Combine warns when a message is not a well-formed XML document (JSON or text from a script), and
+  separately when the combined result is not well-formed XML; it still runs as before. What CPI does in that case is open; `probes/gather/` asks a tenant.
 
 ### Fixed
 
+- **Gather's Combine at XPath, the Splitter and XPath results** write XML for a document whose root is an
+  unnamespaced `<html>`; the Java XML writer switched to HTML there (`<br>` unclosed, a `META` element added).
+- **XPath 1.0** knows the `xml` prefix without a Namespace mapping row (`//@xml:lang`), as 3.1 does.
 - **Splitter and Gather on Windows**: split messages, a Gather's Combine at XPath, an XPath's element results and
   a script's SOAP headers in the result use LF line breaks, as on macOS and Linux; they had CRLF from the Java XML writer.
 - **Groovy: an attachment given as a file while no project is open** is an error that says so; it ran as an

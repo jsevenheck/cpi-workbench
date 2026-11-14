@@ -13,7 +13,7 @@
 
 Automated checks:
 
-* Engine tests (`mvn -f engine/pom.xml verify`): core 20, XSLT/XSD/XPath/Splitter/Filter/Gather/Converter 83 per Saxon version (20 of them on project boundaries, 9 splitter cases, 8 of them from SAP's examples, 5 Filter, 5 Gather and 18 converter tests, most with SAP's examples), Groovy 47 per script version (4 Camel Simple, 4 Content Modifier, 11 Message Mapping functions, 2 on what a tenant probe showed).
+* Engine tests (`mvn -f engine/pom.xml verify`): core 20, XSLT/XSD/XPath/Splitter/Filter/Gather/Converter 85 per Saxon version (20 of them on project boundaries, 9 splitter cases, 8 of them from SAP's examples, 5 Filter, 6 Gather and 18 converter tests, most with SAP's examples), Groovy 47 per script version (4 Camel Simple, 4 Content Modifier, 11 Message Mapping functions, 2 on what a tenant probe showed).
 * Regression test cases (`testdata/regression-project`): 9.
 * Browser end-to-end tests: `app/e2e/smoke.mjs` (XML tools) and `groovy.mjs` (Groovy, Flow Steps and the iFlow import, which CI runs with the iFlow fixture as a zip).
 * UI unit tests (`npm --prefix app test`): the JSON, XSLT and Groovy formatters, test-case rows, path comparison, the Script API completions (checked against the clean-room Java classes), the Filter's `function:simple(...)` substitution, Message Mapping arguments, the Groovy functions read from a script's text, the platform data tables (rows to file and back, with the regression project's files), the links CPI Helper's plugins write, the XPath tab's scan of a document (places and the XPath at the cursor) and the update check's SemVer comparison.

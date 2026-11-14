@@ -605,9 +605,13 @@ export async function savePlatform(key: PlatformKey): Promise<boolean> {
     return false;
   }
   const path = PLATFORM_FILES[key];
+  const gen = platformGen;
+  const root = app.project.root;
   try {
     const content = platformFileText(doc);
     await writeFile(path, content);
+    // The file is written; if the project closed (or another one opened) meanwhile, its tables are not this one's.
+    if (gen !== platformGen || app.project?.root !== root) return true;
     sec.doc = doc;
     sec.saved = JSON.stringify(doc);
     sec.exists = true;
@@ -956,6 +960,8 @@ export async function closeEditorFile(editor: 'xslt' | 'groovy' | 'xsd'): Promis
     app.status = path ? 'Closed ' + path : 'Closed the unsaved script';
   } else {
     const path = xsd.casePath ?? xsd.schemaPath;
+    xsdSeq++; // a validation still under way belongs to the closed schema
+    xsd.running = false;
     if (xsd.casePath) xsd.body = '';
     xsd.schemaPath = xsd.casePath = null;
     xsd.schema = xsd.savedSchema = '';
@@ -971,13 +977,20 @@ export async function closeEditorFile(editor: 'xslt' | 'groovy' | 'xsd'): Promis
  */
 export function closeInput(tool: StepTool) {
   const path = app.inputPaths[tool];
+  // A run still under way belongs to the closed input: its answer must not come back.
   if (tool === 'xsd') {
+    xsdSeq++;
+    xsd.running = false;
     xsd.body = '';
     xsd.result = null;
   } else if (tool === 'xpath') {
+    xpathSeq++;
+    xpath.running = false;
     xpath.body = '';
     xpath.result = null;
   } else if (tool === 'flow') {
+    flowSeq++;
+    flow.running = false;
     flow.body = '';
     flow.cmResult = flow.routerResult = flow.splitResult = flow.filterResult = flow.gatherResult = flow.converterResult = null;
   } else if (tool === 'groovy') {

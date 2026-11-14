@@ -136,6 +136,26 @@ await page.getByLabel('XPath expression').fill('count(//Item)');
 await page.getByTitle('Run (Ctrl+Enter)').click();
 await page.locator('.res .item').first().waitFor({ timeout: 10000 });
 if (shots) await page.screenshot({ path: path.join(shots, '6-xpath.png') });
+// Closing the input while a run is under way: its answer must not come back (review F09).
+let holdXpath;
+const xpathHeld = new Promise((r) => (holdXpath = r));
+await page.route(/\/rpc$/, async (route) => {
+  if (route.request().postData()?.includes('"xpath.eval"')) await xpathHeld;
+  await route.continue().catch(() => {});
+});
+const bodyBefore = await page.evaluate(() => document.querySelector('section.pane .view-lines')?.textContent ?? '');
+await page.getByTitle('Run (Ctrl+Enter)').click();
+await page.waitForTimeout(300);
+await page.locator('.tree .file', { hasText: 'standard-order/input.xml' }).click({ button: 'right' });
+await page.getByRole('menu').getByRole('menuitem', { name: 'Use as input' }).click();
+await page.locator('section.pane').first().getByRole('button', { name: 'Close input file' }).click();
+holdXpath();
+await page.waitForTimeout(1500);
+await page.unroute(/\/rpc$/);
+if (await page.locator('.res .item').count()) fail('the result of a run started before the input was closed came back');
+if (!bodyBefore) fail('no document before the held run');
+await page.getByRole('button', { name: 'Use XSLT input' }).click();
+
 // The nodes an expression selects are marked in the document; a result opens its place.
 await page.getByLabel('XPath expression').fill('//Item/@sku');
 await page.getByLabel('XPath expression').press('Enter');

@@ -46,6 +46,9 @@ pub fn read_file(server: &Server, args: &Args) -> Result<Value, String> {
             ("path", path, content)
         }
     };
+    if let Some(from) = args.get("startChar").and_then(Value::as_u64) {
+        return Ok(read_chars(key, path, &content, from as usize));
+    }
     let start = args.get("startLine").and_then(Value::as_u64).unwrap_or(1).max(1) as usize;
     let max = args.get("maxLines").and_then(Value::as_u64).map_or(DEFAULT_LINES, |n| n.max(1) as usize);
     let lines: Vec<&str> = content.split_inclusive('\n').collect();
@@ -72,8 +75,11 @@ pub fn read_file(server: &Server, args: &Args) -> Result<Value, String> {
     }
     let mut r = json!({ key: path, "content": text, "totalLines": total });
     if cut_line {
+        // The shown text is the cut line's beginning: the next character's offset in the whole content.
+        let next: usize = lines.iter().take(end - 1).map(|l| l.chars().count()).sum::<usize>() + text.chars().count();
         r["lineCut"] = json!(format!("Line {end} is longer than {MAX_CHARS} characters; only its beginning is shown. \
-            The run tools read the whole file with bodyPath, mappingPath or scriptPath."));
+            Read on with startChar {next} (character offsets instead of lines). The run tools read the whole file \
+            with bodyPath, mappingPath or scriptPath."));
     }
     if start > 1 || end < total {
         r["startLine"] = json!(start);
@@ -83,6 +89,18 @@ pub fn read_file(server: &Server, args: &Args) -> Result<Value, String> {
         r["truncated"] = json!(format!("Lines {start}-{end} of {total}; read on with startLine {}.", end + 1));
     }
     Ok(r)
+}
+
+/// Characters from a 0-based offset, at most MAX_CHARS: for text that is one long line (minified XML or JSON).
+fn read_chars(key: &str, path: &str, content: &str, from: usize) -> Value {
+    let total = content.chars().count();
+    let text: String = content.chars().skip(from).take(MAX_CHARS).collect();
+    let end = (from + text.chars().count()).min(total);
+    let mut r = json!({ key: path, "content": text, "startChar": from, "endChar": end, "totalChars": total });
+    if end < total {
+        r["truncated"] = json!(format!("Characters {from}-{end} of {total}; read on with startChar {end}."));
+    }
+    r
 }
 
 pub fn save_file(server: &Server, args: &Args) -> Result<Value, String> {
@@ -95,6 +113,7 @@ pub fn save_file(server: &Server, args: &Args) -> Result<Value, String> {
     let path = str_arg(args, "path").unwrap_or_default();
     let full = relative(server, path)?;
     let overwrite = args.get("overwrite").and_then(Value::as_bool).unwrap_or(false);
+    let _write = server.write_lock();
     if full.is_dir() {
         return Err(format!("{path} is a folder."));
     }
@@ -145,6 +164,7 @@ pub fn import_iflow(server: &Server, args: &Args) -> Result<Value, String> {
         return Err("Give the iFlow a name of letters, digits, '.', '_' or '-'.".into());
     }
     let target = project.join("iflows").join(&folder);
+    let _write = server.write_lock();
     if target.exists() && !args.get("overwrite").and_then(Value::as_bool).unwrap_or(false) {
         return Err(format!("iflows/{folder} exists already. Give another name, or overwrite: true to replace its files."));
     }
@@ -157,6 +177,17 @@ pub fn import_iflow(server: &Server, args: &Args) -> Result<Value, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_long_line_is_read_on_by_characters() {
+        let content = format!("a\n{}é", "x".repeat(MAX_CHARS + 10));
+        let first = read_chars("path", "f", &content, 0);
+        assert_eq!(first["content"].as_str().unwrap().chars().count(), MAX_CHARS);
+        assert!(first["truncated"].as_str().unwrap().contains(&format!("startChar {MAX_CHARS}")));
+        let rest = read_chars("path", "f", &content, MAX_CHARS);
+        assert_eq!(rest["content"].as_str().unwrap(), "x".repeat(12) + "é", "to the end, with a multibyte character");
+        assert!(rest.get("truncated").is_none());
+    }
 
     #[test]
     fn iflow_folder_follows_the_engine() {

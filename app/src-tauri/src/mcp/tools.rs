@@ -174,6 +174,7 @@ fieldSeparator, firstLineHeader, headerMapping: \"xsd\"|\"csv\"}." } },
         ("runId", path("The runId (or runId/part) of an earlier run: its whole output body, e.g. when the result showed it shortened.")),
         ("startLine", json!({ "type": "integer", "minimum": 1, "default": 1, "description": "First line to return (1-based)." })),
         ("maxLines", json!({ "type": "integer", "minimum": 1, "default": 2000, "description": "Lines to return at most; long files come in parts." })),
+        ("startChar", json!({ "type": "integer", "minimum": 0, "description": "Read by characters instead of lines, from this 0-based offset (200,000 at most per call): for text in one long line, such as minified XML or JSON." })),
     ]);
     let save = obj(vec![
         ("path", path("Project-relative file to write, in the folder of its kind: mappings/*.xsl, scripts/*.groovy, \
@@ -248,13 +249,23 @@ pub fn exists(name: &str) -> bool {
 
 // ------------------------------------------------------------------ calls
 
+/// The input message of a run, resolved once before it runs (`call`): the step and the kept result see the same
+/// message, even if the script changes or deletes its bodyPath file. Set after `check_args`, so no client can.
+const RESOLVED_INPUT: &str = "\u{0}input";
+
 pub fn call(server: &Server, name: &str, args: &Args) -> Result<Value, String> {
     check_args(name, args)?;
-    let mut result = dispatch(server, name, args)?;
+    let runs_step = matches!(name, "run_xslt" | "run_groovy" | "validate_xsd" | "run_flow_step");
+    let mut args = args.clone();
+    if runs_step {
+        let m = message(server, &args)?;
+        args.insert(RESOLVED_INPUT.into(), m);
+    }
+    let mut result = dispatch(server, name, &args)?;
     // A run that produced a message keeps it under a runId; long bodies come back shortened.
-    if matches!(name, "run_xslt" | "run_groovy" | "validate_xsd" | "run_flow_step") && result["ok"] != false && result["valid"] != false {
-        let m = message(server, args)?;
-        let input = runs::Message::from_output(&m).unwrap_or_else(|| runs::Message { body: String::new(), headers: json!([]), properties: json!([]) });
+    if runs_step && result["ok"] != false && result["valid"] != false {
+        let input = runs::Message::from_output(&args[RESOLVED_INPUT])
+            .unwrap_or_else(|| runs::Message { body: String::new(), headers: json!([]), properties: json!([]) });
         if let Some(id) = server.runs().keep(runs::produced(name, &input, &result)) {
             runs::shorten(&mut result, &id, &input.body);
             result["runId"] = json!(id);
@@ -399,6 +410,9 @@ fn value_rows(args: &Args, key: &str) -> Result<Value, String> {
 /// The incoming message: {body, headers, properties}. With messageFrom (or, for a Gather, the first message of
 /// messagesFrom) an earlier run's output is the base; what the call gives replaces its body or rows.
 pub fn message(server: &Server, args: &Args) -> Result<Value, String> {
+    if let Some(m) = args.get(RESOLVED_INPUT) {
+        return Ok(m.clone());
+    }
     let base = match (str_arg(args, "messageFrom"), args.get("messagesFrom")) {
         (Some(r), _) => Some(server.runs().message(r)?),
         (None, Some(refs)) => message_refs(server, refs)?.into_iter().next(),

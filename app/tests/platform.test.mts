@@ -28,8 +28,12 @@ test('numbers keep their text in the file and are numbers in a run', () => {
   assert.ok(saved.includes('"max": 99999999999999999999') && saved.includes('"step": 1.50') && saved.includes('"next": 42'), saved);
   assert.ok(saved.includes('"note": "7 of 9, -1"') && saved.includes('"next": 5e3'), saved);
   assert.deepEqual(platformRunData(platformDoc('numberRanges', rows, doc)),
-    { ORDER: { next: 42, max: 1e20, rotate: false, step: 1.5, note: '7 of 9, -1', q: 'a "1" b\\' }, T: { next: 5000, rotate: false } });
+    { ORDER: { next: 42, max: '99999999999999999999', rotate: false, step: 1.5, note: '7 of 9, -1', q: 'a "1" b\\' }, T: { next: 5000, rotate: false } });
   assert.throws(() => parsePlatformFile('{ "a": 1, }'), SyntaxError);
+  // Integers beyond 2^53 reach a run as their text, exactly; the engine reads number range fields from strings.
+  const big = parsePlatformFile('{ "INV": { "next": 9007199254740993, "max": 9223372036854775807 } }');
+  assert.deepEqual(platformRunData(platformDoc('numberRanges', platformRows('numberRanges', big), big)),
+    { INV: { next: '9007199254740993', max: '9223372036854775807', rotate: false } });
 });
 
 test('value mappings: rows in order, unknown members kept, empty rows left out', () => {

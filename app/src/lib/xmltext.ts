@@ -4,9 +4,11 @@
  * the XPath of the element or attribute at the cursor.
  *
  * A scanner, not a parser: it follows tags, comments, CDATA, processing instructions and the DOCTYPE, and
- * does not check well-formedness or expand entities. Where it and the engine's parser could disagree (an
- * entity that holds elements), the element name the engine sends with each place is compared, and a place
- * that does not match is not marked.
+ * does not check well-formedness or expand entities. An entity reference in the content (`&name;`, other than
+ * the five XML predefines and character references) can stand for elements the parser counts and the scanner
+ * cannot see, so positions from the engine would point at the wrong element; such a document is flagged
+ * (`entities`) and the XPath tab neither marks nor writes paths for it. The element name sent with each
+ * place is also compared, for what else could disagree.
  */
 
 export interface ScannedAttribute {
@@ -41,7 +43,12 @@ export interface Scan {
   elements: ScannedElement[];
   /** Top-level elements (one in a well-formed document). */
   roots: number[];
+  /** The content has entity references that may hold elements: positions in the text are not reliable. */
+  entities: boolean;
 }
+
+/** A general entity reference: not one of XML's five predefined entities and not a character reference. */
+const ENTITY_REF = /&(?!(?:lt|gt|amp|quot|apos);|#)[A-Za-z_:][\w.:-]*;/;
 
 const NAME_CHAR = /[^\s/>=<"']/;
 
@@ -50,10 +57,13 @@ export function scanXml(text: string): Scan {
   const elements: ScannedElement[] = [];
   const roots: number[] = [];
   const open: number[] = [];
+  let entities = false;
   let i = 0;
   const n = text.length;
   while (i < n) {
     const lt = text.indexOf('<', i);
+    // Character data before the next markup: where an entity reference could add elements.
+    if (!entities && open.length && ENTITY_REF.test(text.slice(i, lt < 0 ? n : lt))) entities = true;
     if (lt < 0) break;
     if (text.startsWith('<!--', lt)) {
       const e = text.indexOf('-->', lt + 4);
@@ -135,7 +145,7 @@ export function scanXml(text: string): Scan {
     elements[k].contentEnd = n;
     elements[k].end = n;
   }
-  return { elements, roots };
+  return { elements, roots, entities };
 }
 
 /** Skips `<!DOCTYPE …>` with its internal subset, quoted strings and comments inside. */

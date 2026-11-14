@@ -76,7 +76,8 @@ Download the installer for your platform from the
   name) or for all like it; the choice goes into the expression field and the clipboard, and runs. Its
   prefixes come from the **Namespace mapping**; a namespace without a prefix there is written `Q{uri}name`
   (3.1) or with `local-name()` (1.0), and the status line says which to add. **↑** and **↓** in the field
-  bring back the expressions run in this session.
+  bring back the expressions run in this session. A document with entity references (`&name;` other than
+  `&amp;`, `&lt;` and the like) can hide elements from the text, so the tab neither marks nor writes paths for it.
 * **Flow Steps** runs a **Content Modifier**, **Filter**, **Router**, **General / Iterating Splitter**,
   **Gather** or **Converter** on an input message (body, headers, properties, namespace mapping):
   * Content Modifier: header and property rows with their source types and data types, and the

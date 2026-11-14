@@ -158,7 +158,28 @@ await inputTab(/^Platform/).click();
 await page.getByLabel('Target value 1').waitFor({ timeout: 10000 });
 if ((await page.getByLabel('Target value 1').inputValue()) !== soldTo) fail('the other project shows the first one\'s unsaved row: ' + await page.getByLabel('Target value 1').inputValue());
 if (fs.readFileSync(path.join(otherProject, 'platform/value-mappings.json'), 'utf8').includes('UNSAVED-IN-A')) fail('an unsaved row reached the other project\'s file');
+// A save that answers after its project closed must not touch the tables of the project open by then (review F01).
+await page.getByLabel('Target value 1').fill('SAVED-IN-OTHER');
+let releaseWrite;
+const writeHeld = new Promise((r) => (releaseWrite = r));
+// The write reaches the engine at once (it writes into the open project); only its answer is held back.
+await page.route(/\/rpc$/, async (route) => {
+  if (!route.request().postData()?.includes('"file.write"')) return route.continue().catch(() => {});
+  const response = await route.fetch();
+  await writeHeld;
+  await route.fulfill({ response }).catch(() => {});
+});
+await page.getByRole('button', { name: 'Save Value mappings' }).click();
+await page.waitForTimeout(300);
 await openFolder(project);
+releaseWrite();
+await page.waitForTimeout(1500);
+await page.unroute(/\/rpc$/);
+await inputTab(/^Platform/).click();
+if (!(await page.getByLabel('Target value 1').count())) fail('a late save of another project emptied this project\'s table');
+else if ((await page.getByLabel('Target value 1').inputValue()) !== soldTo) fail('a late save changed the open project\'s table');
+if (await page.locator('section[aria-label="Value mappings"] .dirty').count()) fail('a late save of another project marks this table as changed');
+if (!fs.readFileSync(path.join(otherProject, 'platform/value-mappings.json'), 'utf8').includes('SAVED-IN-OTHER')) fail('the held save did not reach its own project');
 fs.rmSync(otherProject, { recursive: true, force: true });
 await page.locator('.tree .file', { hasText: 'groovy-enrich-order/case.json' }).click();
 await page.locator('section.script h2', { hasText: 'enrich-order.groovy' }).waitFor({ timeout: 10000 });
@@ -369,6 +390,26 @@ await page.locator('.banner.error').getByRole('button', { name: 'Dismiss' }).cli
 await page.locator('.tree .file', { hasText: 'route-by-partner.groovy' }).click();
 await page.getByRole('dialog').filter({ hasText: 'Discard the unsaved changes' }).getByRole('button', { name: 'OK' }).click()
   .catch(() => fail('the imported script does not count as unsaved'));
+await page.locator('section.script h2', { hasText: 'route-by-partner.groovy' }).waitFor({ timeout: 10000 });
+
+// 4f) Another mapping function: what is typed for it before its first run stays after the run (review F05).
+await page.locator('.tree .file', { hasText: 'mapping-functions.groovy' }).click();
+await page.locator('section.script h2', { hasText: 'mapping-functions.groovy' }).waitFor({ timeout: 10000 });
+await page.getByLabel('Live').uncheck();
+await fnSelect().selectOption('getHeader');
+await runIt();
+await page.locator('section.output .badge.ok').waitFor({ timeout: 20000 });
+await fnSelect().selectOption('setProperty');
+await page.getByLabel('Argument 1', { exact: true }).fill('P');
+await page.getByLabel('Argument 2', { exact: true }).fill('B-value');
+await runIt();
+await page.locator('section.output').getByRole('tab', { name: 'Result' }).click();
+await page.locator('section.output pre', { hasText: 'B-value' }).waitFor({ timeout: 20000 })
+  .catch(async () => fail('setProperty did not return its argument: ' + (await page.locator('section.output').innerText()).slice(0, 300)));
+await page.waitForTimeout(500);
+if ((await page.getByLabel('Argument 2', { exact: true }).inputValue()) !== 'B-value') fail('the arguments typed for a new function were dropped after its first run');
+await page.getByLabel('Live').check();
+await page.locator('.tree .file', { hasText: 'route-by-partner.groovy' }).click();
 await page.locator('section.script h2', { hasText: 'route-by-partner.groovy' }).waitFor({ timeout: 10000 });
 
 // 5) A file from inputs/ opens as the Groovy input body.

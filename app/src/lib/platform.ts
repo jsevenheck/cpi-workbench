@@ -57,9 +57,15 @@ export function parsePlatformFile(json: string): unknown {
   return JSON.parse(out);
 }
 
-/** The document as a run takes it: marked numbers as numbers. */
+/**
+ * The document as a run takes it: marked numbers as numbers. An integer beyond 2^53 cannot cross JSON in the
+ * browser exactly, so it goes as its text: the engine reads number range fields from a string as well.
+ */
 export function platformRunData(doc: unknown): unknown {
-  if (isMarked(doc)) return Number(doc.slice(NUM.length));
+  if (isMarked(doc)) {
+    const t = doc.slice(NUM.length);
+    return /^-?\d+$/.test(t) && !Number.isSafeInteger(Number(t)) ? t : Number(t);
+  }
   if (Array.isArray(doc)) return doc.map(platformRunData);
   if (isObj(doc)) return Object.fromEntries(Object.entries(doc).map(([k, v]) => [k, platformRunData(v)]));
   return doc;

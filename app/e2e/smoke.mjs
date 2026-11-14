@@ -136,6 +136,36 @@ await page.getByLabel('XPath expression').fill('count(//Item)');
 await page.getByTitle('Run (Ctrl+Enter)').click();
 await page.locator('.res .item').first().waitFor({ timeout: 10000 });
 if (shots) await page.screenshot({ path: path.join(shots, '6-xpath.png') });
+// The nodes an expression selects are marked in the document; a result opens its place.
+await page.getByLabel('XPath expression').fill('//Item/@sku');
+await page.getByLabel('XPath expression').press('Enter');
+await page.locator('.res button.link', { hasText: 'attribute sku' }).nth(1).waitFor({ timeout: 10000 })
+  .catch(async () => fail('XPath results do not link to their place: ' + await page.locator('.res').innerText()));
+const marks = await page.locator('section.pane .cpiwb-match').count();
+if (marks < 2) fail('the selected attributes are not marked in the document: ' + marks);
+// The XPath of the attribute at the cursor: this node and all like it; the choice goes into the field and runs.
+await page.locator('.res button.link').nth(1).click();
+await page.getByRole('button', { name: /XPath at cursor/ }).click();
+const menu = await page.getByRole('menu', { name: 'XPath at cursor' }).innerText();
+if (!/\/Item\[2\]\/@sku/.test(menu) || !/Item\/@sku/.test(menu)) fail('XPath at cursor: ' + menu);
+await page.getByRole('menuitem').first().click();
+const atCursor = await page.getByLabel('XPath expression').inputValue();
+if (!/\/Item\[2\]\/@sku$/.test(atCursor)) fail('XPath at cursor did not fill the field: ' + atCursor);
+await page.locator('.res .item', { hasText: /m-200/i }).waitFor({ timeout: 10000 }).catch(() => fail('the XPath at cursor did not run'));
+// ↑ brings back the expression before it, ↓ the current one.
+await page.getByLabel('XPath expression').press('ArrowUp');
+if ((await page.getByLabel('XPath expression').inputValue()) !== '//Item/@sku') fail('↑ in the XPath field: ' + await page.getByLabel('XPath expression').inputValue());
+await page.getByLabel('XPath expression').press('ArrowDown');
+if ((await page.getByLabel('XPath expression').inputValue()) !== atCursor) fail('↓ in the XPath field');
+// Edited after the run: nothing stays marked, and the result says why.
+await page.locator('section.pane .view-lines').first().click({ position: { x: 40, y: 10 } });
+await page.keyboard.press('Control+End');
+await page.keyboard.type(' ');
+await page.locator('.note', { hasText: 'document changed since this run' }).waitFor({ timeout: 5000 })
+  .catch(() => fail('no note that the marks belong to the text before the edit'));
+// Monaco draws decorations on the next animation frame: wait for the marks to go rather than count at once.
+await page.locator('section.pane .cpiwb-match').first().waitFor({ state: 'detached', timeout: 5000 })
+  .catch(() => fail('marks stayed after the document changed'));
 
 // 8) Files that are not steps open in the File tab and leave the input alone; inputs/ holds saved inputs.
 await page.getByRole('tab', { name: 'XSLT Mapping' }).click();

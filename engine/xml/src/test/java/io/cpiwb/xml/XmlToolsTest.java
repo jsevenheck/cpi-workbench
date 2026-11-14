@@ -78,6 +78,32 @@ class XmlToolsTest {
         assertFalse(Json.bool(err, "ok", true));
     }
 
+    /** Each node says where it is in the body, alike on both XPath versions, so the XPath tab can mark it. */
+    @Test
+    void xpathNodesSayWhereTheyAre() {
+        XPathStep x = new XPathStep();
+        Map<String, Object> in = Json.o().with("body",
+                "<?xml version='1.0'?><!-- c --><p:a xmlns:p='urn:p'><x/><!-- c --><p:b n='1'>t</p:b><?pi?><p:b q:n='2' xmlns:q='urn:q'/></p:a>");
+        for (String version : List.of("1.0", "3.1")) {
+            java.util.function.Function<String, List<Object>> at = (expr) -> {
+                Map<String, Object> r = x.run(Json.o().with("expression", expr).with("version", version)
+                        .with("namespaces", Json.o().with("p", "urn:p").with("q", "urn:q")).with("input", in));
+                assertTrue(Json.bool(r, "ok", false), () -> version + " " + expr + ": " + Json.write(r));
+                return Json.arr(r, "items").stream().map(i -> ((Map<String, Object>) i).get("at")).toList();
+            };
+            assertEquals(List.of(Json.o().with("path", List.of(1, 2)).with("name", "p:b"),
+                    Json.o().with("path", List.of(1, 3)).with("name", "p:b")), at.apply("//p:b"), version);
+            assertEquals(List.of(Json.o().with("attribute", "q:n").with("path", List.of(1, 3)).with("name", "p:b")),
+                    at.apply("//@q:n"), version);
+            assertEquals(List.of(Json.o().with("text", true).with("path", List.of(1, 2)).with("name", "p:b")),
+                    at.apply("//p:b/text()"), version);
+            assertEquals(List.of(Json.o().with("path", List.of(1)).with("name", "p:a")), at.apply("/p:a"), version);
+            // The document node, and values, are nowhere in particular.
+            assertEquals(java.util.Arrays.asList((Object) null), at.apply("/"), version);
+            assertEquals(java.util.Arrays.asList((Object) null), at.apply("count(//p:b)"), version);
+        }
+    }
+
     @Test
     void xpathValuesForFlowSteps() {
         XPathStep x = new XPathStep();

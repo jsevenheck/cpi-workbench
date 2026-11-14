@@ -221,6 +221,10 @@ export const xpath = $state({
   namespaces: [] as Row[],
   body: SAMPLE_INPUT,
   result: null as null | { ok: boolean; items: any[]; count: number; diagnostics: Diagnostic[]; engine: string },
+  /** The document the result is for: its places are marked only while the text is still this. */
+  resultBody: '',
+  /** Expressions run in this session, newest last (↑ and ↓ in the expression field). */
+  history: [] as string[],
   running: false,
 });
 
@@ -1410,16 +1414,26 @@ export async function runXsd() {
 
 let xpathSeq = 0;
 
+const XPATH_HISTORY = 20;
+
 export async function runXpath() {
   const seq = ++xpathSeq;
   xpath.running = true;
   app.error = '';
   const ns: Record<string, string> = {};
   for (const r of xpath.namespaces) if (r.name.trim() && !r.disabled) ns[r.name.trim()] = r.value;
+  const expression = xpath.expression;
+  const body = xpath.body;
+  if (expression.trim() !== '') {
+    xpath.history = [...xpath.history.filter((h) => h !== expression), expression].slice(-XPATH_HISTORY);
+  }
   try {
-    const r = await call('xpath.eval', { expression: xpath.expression, version: xpath.version,
-      namespaces: ns, input: { body: xpath.body } }, app.profile);
-    if (seq === xpathSeq) xpath.result = r;
+    const r = await call('xpath.eval', { expression, version: xpath.version,
+      namespaces: ns, input: { body } }, app.profile);
+    if (seq === xpathSeq) {
+      xpath.result = r;
+      xpath.resultBody = body;
+    }
   } catch (e) {
     if (seq === xpathSeq) fail(e);
   } finally {

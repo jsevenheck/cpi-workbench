@@ -8,6 +8,9 @@ of its version.
 
 ### Added
 
+- **XPath tab**: the selected nodes are marked in the document and a result jumps to its node; **XPath at cursor**
+  writes the XPath of the element or attribute at the cursor (this node, or all like it) with the Namespace
+  mapping's prefixes; **↑** / **↓** in the expression field bring back the session's expressions.
 - **A message from a tenant's trace, through CPI Helper.** The browser extension's GroovyDebugX and xsltDebugX
   plugins hand a traced step's body, headers and properties (and the script or mapping) to an external IDE;
   CPI Workbench takes that link: **Import…** in the Groovy and XSLT tabs (paste the link), or directly in the

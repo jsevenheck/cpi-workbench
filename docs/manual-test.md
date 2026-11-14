@@ -78,6 +78,7 @@ The first run starts the Java engines and can take a few seconds.
 |---|---|---|
 | 2.12 | XSD: `schemas/salesorder.xsd` against the output of 2.2 | Valid. Break an element → an error with its line. |
 | 2.13 | XPath on `inputs/order.xml`, once 3.1, once 1.0 | A result appears. |
+| 2.13a | XPath `//Item/@sku`; click a result's ↗; cursor on a `qty` attribute → **XPath at cursor** → *This node*; then ↑ in the field | Both `sku` attributes are marked; ↗ selects one; the field gets `/Order/Items/Item[2]/@qty` (also in the clipboard) and runs; ↑ brings `//Item/@sku` back. |
 | 2.14 | Press Ctrl+Enter several times quickly, or change the input while it runs | The result always belongs to the current input, never to an older run. |
 
 ### Flow Steps

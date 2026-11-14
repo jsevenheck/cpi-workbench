@@ -8,6 +8,8 @@
     language?: string;
     readOnly?: boolean;
     markers?: Diagnostic[];
+    /** Text ranges (character offsets) to mark, e.g. the nodes an XPath selected. */
+    highlights?: { start: number; end: number }[];
     /** When set, a side-by-side diff (original → value) is shown instead of a plain editor. */
     original?: string | null;
     onchange?: (v: string) => void;
@@ -21,6 +23,7 @@
     language = 'xml',
     readOnly = false,
     markers = [],
+    highlights = [],
     original = null,
     onchange,
     onrun,
@@ -67,6 +70,8 @@
       editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => onsave?.());
     }
     applyMarkers();
+    highlightIds = [];
+    applyHighlights();
   }
 
   function dispose() {
@@ -89,6 +94,37 @@
       endLineNumber: m.line!,
       endColumn: m.column && m.column > 0 ? m.column + 1 : model!.getLineMaxColumn(Math.min(m.line!, model!.getLineCount())),
     })));
+  }
+
+  let highlightIds: string[] = [];
+  function applyHighlights() {
+    if (!model || !editor) return;
+    const m = model;
+    highlightIds = editor.deltaDecorations(highlightIds, (highlights ?? []).map((h) => {
+      const s = m.getPositionAt(h.start);
+      const e = m.getPositionAt(h.end);
+      return {
+        range: new monaco.Range(s.lineNumber, s.column, e.lineNumber, e.column),
+        options: { className: 'cpiwb-match', overviewRuler: { color: '#e0a800', position: monaco.editor.OverviewRulerLane.Center } },
+      };
+    }));
+  }
+
+  /** The cursor as a character offset, or null without an editor. */
+  export function cursorOffset(): number | null {
+    const p = editor?.getPosition();
+    return p && model ? model.getOffsetAt(p) : null;
+  }
+
+  /** Selects a text range and scrolls it into view. */
+  export function selectRange(start: number, end: number) {
+    if (!editor || !model) return;
+    const s = model.getPositionAt(start);
+    const e = model.getPositionAt(end);
+    const range = new monaco.Range(s.lineNumber, s.column, e.lineNumber, e.column);
+    editor.setSelection(range);
+    editor.revealRangeInCenterIfOutsideViewport(range);
+    editor.focus();
   }
 
   export function revealLine(line: number) {
@@ -136,6 +172,12 @@
   $effect(() => {
     markers;
     applyMarkers();
+  });
+
+  $effect(() => {
+    highlights;
+    value; // offsets belong to the text they were found in
+    applyHighlights();
   });
 
   // Switching between plain and diff mode needs a new editor instance.

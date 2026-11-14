@@ -330,7 +330,7 @@ Plain, git-friendly files. The engines' `test` command (`cpiwb-xml test tests/`,
 | **3 — Groovy MVP** | Groovy 1.x and 2.x, typed headers/properties, MPL, API call log, console, diff | Done (0.1.0) |
 | **4 — Productivity** | Platform API mocks, lint, runtime comparison, iFlow-zip import, flow steps, MCP server | Done (0.1.0–0.3.0) |
 | **5 — Distribution** | Installers for Windows, macOS, Linux; code signing, auto-update (§10.2) | Unsigned installers and a manual update check; signing and auto-update open |
-| **6 — Workflow** | What a review of other tools showed (§10.5): platform data in the Groovy tab, a traced message from CPI Helper, XPath comfort, Encoder / Decoder and Message Digest steps, JUnit output and compare rules for test cases, Value Mapping import, run history, examples, debugging | Planned (2026-11-13); W1 and W2 built (W2 without the desktop link) |
+| **6 — Workflow** | What a review of other tools showed (§10.5): platform data in the Groovy tab, a traced message from CPI Helper, XPath comfort, Encoder / Decoder and Message Digest steps, JUnit output and compare rules for test cases, Value Mapping import, run history, examples, debugging | Planned (2026-11-13); W1 to W3 built (W2 without the desktop link) |
 
 ### 10.1 MCP server for coding agents (built, 2026-11-01)
 
@@ -521,7 +521,12 @@ another route.
   the computer, and the user guide says so.
 * Done when a traced step's message is the input of a local run in two steps, and the user guide shows how.
 
-**W3. XPath tab: matches in the document, copy an element's XPath, history (S).** *Seen in XSLTDebugX.*
+**W3. XPath tab: matches in the document, copy an element's XPath, history (S; built on 2026-11-14).** *Seen in XSLTDebugX.*
+Built: the engine gives each node of the body its place as element positions from the root (`at`), on both
+XPath versions (the JDK's DOM has no line numbers, so positions instead of lines); the UI finds the place in the
+text with a small scanner (`app/src/lib/xmltext.ts`) and marks it only where the element name matches, so an
+entity that holds elements cannot misplace a mark. The same scanner writes the XPath at the cursor, which goes
+into the expression field and the clipboard. The plan as written before:
 * Matches marked in the document editor. `xpath.eval` returns the items without their position, so the engine
   has to add line numbers: Saxon keeps them when asked; whether the JDK's XPath 1.0 path can is to check.
 * *Copy XPath* for the element at the cursor, written with the prefixes of the Namespace mapping.

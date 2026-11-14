@@ -64,12 +64,19 @@ Download the installer for your platform from the
   Groovy Script 1.x ↔ 2.x) and lists what differs: status, headers, properties and a body diff.
   This helps before you move a script from 1.x to 2.x.
 * Test cases (see [Test cases](test-cases.md)) are written by hand and run from the command line;
-  the app has no test runner. Opening a `case.json` loads the case into its editor view. Inputs only
-  a case file can hold (attachments, SOAP headers, platform overrides) are kept while the case is
-  open and are shown below the input.
+  the app has no test runner. Opening a `case.json` loads the case into its editor view. A Groovy
+  case's attachments and SOAP headers open in the input's **Attachments** and **SOAP** tabs; its
+  `platform` overrides apply to its runs while it is open, and the **Platform** tab says so.
 * **XSD** validates a document against a schema; **XPath** evaluates an expression (3.1 by default, or 1.0).
   Both run with **▶ Run** (Ctrl+Enter). XSD validation uses the JDK's validator, so it has no
   *Runtime* choice; for XPath the runtime picks the Saxon version of XPath 3.1 (1.0 runs on the JDK).
+* In the **XPath** tab, the nodes an expression selects are marked in the document, and a result with ↗
+  shows its place. Edit the document and the marks go until the next run. **XPath at cursor** writes the
+  XPath of the element or attribute at the cursor, for that node (with positions where siblings share the
+  name) or for all like it; the choice goes into the expression field and the clipboard, and runs. Its
+  prefixes come from the **Namespace mapping**; a namespace without a prefix there is written `Q{uri}name`
+  (3.1) or with `local-name()` (1.0), and the status line says which to add. **↑** and **↓** in the field
+  bring back the expressions run in this session.
 * **Flow Steps** runs a **Content Modifier**, **Filter**, **Router**, **General / Iterating Splitter**,
   **Gather** or **Converter** on an input message (body, headers, properties, namespace mapping):
   * Content Modifier: header and property rows with their source types and data types, and the

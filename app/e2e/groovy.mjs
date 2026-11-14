@@ -135,6 +135,34 @@ await page.getByRole('button', { name: 'Save Value mappings' }).click();
 await page.locator('section[aria-label="Value mappings"] .dirty').waitFor({ state: 'detached', timeout: 10000 })
   .catch(() => fail('the value mappings still count as unsaved after Save'));
 
+// 4a1b) Another project replaces unsaved table rows, after a question: they must not land in its runs or files.
+const otherProject = project + '-other';
+fs.rmSync(otherProject, { recursive: true, force: true });
+fs.cpSync(project, otherProject, { recursive: true });
+await target.fill('UNSAVED-IN-A');
+const openFolder = async (dir) => {
+  await page.getByTitle('Close project').click().catch(() => {});
+  await page.getByRole('dialog').filter({ hasText: 'Discard the unsaved platform data' }).getByRole('button', { name: 'OK' }).click({ timeout: 3000 }).catch(() => {});
+  await page.getByLabel('Project folder').fill(dir);
+  if (await page.getByRole('button', { name: 'Open file' }).count()) fail('the Platform tab offers a file with no project open: '
+    + dir + ' ' + JSON.stringify(await page.getByRole('button', { name: 'Open file' }).evaluateAll((es) => es.map((e) => e.closest('section')?.getAttribute('aria-label')))));
+  await page.getByRole('button', { name: 'Open', exact: true }).click();
+  await page.locator('.tree .file').first().waitFor({ timeout: 10000 });
+};
+await page.getByTitle('Close project').click();
+await page.getByRole('dialog').filter({ hasText: 'Discard the unsaved platform data' }).getByRole('button', { name: 'Cancel' }).click()
+  .catch(() => fail('no question before Close project drops unsaved platform rows'));
+if ((await target.inputValue()) !== 'UNSAVED-IN-A') fail('Cancel did not keep the unsaved row');
+await openFolder(otherProject);
+await inputTab(/^Platform/).click();
+await page.getByLabel('Target value 1').waitFor({ timeout: 10000 });
+if ((await page.getByLabel('Target value 1').inputValue()) !== soldTo) fail('the other project shows the first one\'s unsaved row: ' + await page.getByLabel('Target value 1').inputValue());
+if (fs.readFileSync(path.join(otherProject, 'platform/value-mappings.json'), 'utf8').includes('UNSAVED-IN-A')) fail('an unsaved row reached the other project\'s file');
+await openFolder(project);
+fs.rmSync(otherProject, { recursive: true, force: true });
+await page.locator('.tree .file', { hasText: 'groovy-enrich-order/case.json' }).click();
+await page.locator('section.script h2', { hasText: 'enrich-order.groovy' }).waitFor({ timeout: 10000 });
+
 // 4a2) A case with an attachment file: it shows as a row of the Attachments tab, with the file's project path.
 await page.locator('.tree .file', { hasText: 'groovy-attachment/case.json' }).click();
 // The previous case's result stays visible until this run ends, so wait for content, not the badge.

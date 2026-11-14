@@ -6,7 +6,7 @@ import { readShared, sharedSummary, type SharedMessage } from './share';
 import { attachmentInput, attachmentRows, parsePlatformFile, platformDoc, platformFileText, platformRows, platformRunData, PLATFORM_FILES, PLATFORM_KEYS,
   soapHeaderInput, soapHeaderRows, type AttachmentRow, type PlatformKey, type PlatformRows, type SoapHeaderRow } from './platform';
 import { toRows } from './rows';
-import { pathKey } from './paths';
+import { pathKey, projectPath } from './paths';
 import { resolveSimpleFunctions } from './simple';
 import { callsJava } from './trust';
 
@@ -550,6 +550,11 @@ function dirtyPlatformFiles(): string[] {
  */
 export async function loadPlatform(force = false) {
   if (!app.project) return;
+  // A newer load, or a closed or other project, makes this one stale: it reads files one by one, and what it
+  // read late must not land in the tables of the project open by then.
+  const gen = ++platformGen;
+  const root = app.project.root;
+  const stale = () => gen !== platformGen || app.project?.root !== root;
   platform.keystoreExists = fileExists(PLATFORM_FILES.keystore);
   for (const key of PLATFORM_KEYS) {
     const sec = platform[key] as PlatformSection<PlatformKey>;
@@ -562,10 +567,13 @@ export async function loadPlatform(force = false) {
     next.exists = fileExists(PLATFORM_FILES[key]);
     if (next.exists) {
       try {
-        next.doc = parsePlatformFile(await readFile(PLATFORM_FILES[key])); // numbers keep their text
+        const text = await readFile(PLATFORM_FILES[key]);
+        if (stale()) return;
+        next.doc = parsePlatformFile(text); // numbers keep their text
         next.rows = platformRows(key, next.doc);
         next.saved = JSON.stringify(platformDoc(key, next.rows, next.doc));
       } catch (e) {
+        if (stale()) return;
         next.doc = undefined;
         next.rows = [];
         next.loadError = (e as Error).message;
@@ -576,7 +584,11 @@ export async function loadPlatform(force = false) {
   }
 }
 
+/** Counts loads and resets: a load that started before the latest one of either stops. */
+let platformGen = 0;
+
 function resetPlatform() {
+  platformGen++;
   for (const key of PLATFORM_KEYS) Object.assign(platform[key], emptySection(key));
   platform.keystoreExists = false;
 }
@@ -630,15 +642,18 @@ function platformOverride(): Record<string, unknown> | undefined {
 
 export async function open(dir: string, initProject = false) {
   app.error = '';
-  // The project's platform files take the tables' place; rows typed without a project would otherwise look
-  // like unsaved changes of files they never came from.
-  const fresh = !app.project;
-  if (fresh && dirtyPlatformFiles().length
-    && !(await confirm('The project\'s platform files replace the platform data entered without a project. Open it?'))) return;
+  // The opened project's platform files take the tables' place. Unsaved rows typed without a project, or for
+  // another project, would otherwise go into this project's runs and, on Save, into its files.
+  const before = app.project?.root ?? null;
+  const unsaved = dirtyPlatformFiles();
+  if (unsaved.length && before !== dir && !(await confirm(before === null
+    ? 'The project\'s platform files replace the platform data entered without a project. Open it?'
+    : `Discard the unsaved platform data of the open project (${unsaved.join(', ')})?`))) return;
   const r = await openProject(dir, initProject);
-  if (app.project?.root !== r.root) scriptMemory.clear(); // its paths belong to the other project
+  const other = before !== r.root;
+  if (other) scriptMemory.clear(); // its paths belong to the other project
   app.project = { root: r.root, files: r.files };
-  if (fresh) resetPlatform(); // at once: no run of the opened project uses the rows typed before it
+  if (other) resetPlatform(); // at once: no run of the opened project uses rows typed before it
   safeSet('cpiwb.project', r.root);
   await loadIflowSteps();
   if (!r.isProject && !initProject) app.status = 'Folder has no cpi-workbench.json – it still works; use "Init" to add the standard folders.';
@@ -991,7 +1006,14 @@ export async function saveFileView(): Promise<boolean> {
   await writeFile(fileView.path, fileView.content);
   fileView.saved = fileView.content;
   app.status = 'Saved ' + fileView.path;
-  if (fileView.path.startsWith('platform/')) await loadPlatform(); // the Groovy tab's tables follow the file
+  if (fileView.path.startsWith('platform/')) {
+    // The Groovy tab's table follows the file, unless it has unsaved changes of its own: then both exist.
+    const key = PLATFORM_KEYS.find((k) => PLATFORM_FILES[k] === fileView.path);
+    if (key && platformDirty(key)) {
+      app.status = `Saved ${fileView.path}. The Groovy tab's Platform table for it still has unsaved changes; its Save would replace this file, ↻ Reload files there takes the file.`;
+    }
+    await loadPlatform();
+  }
   return true;
 }
 
@@ -1696,8 +1718,9 @@ async function loadGroovyCase(path: string, dir: string, tc: any) {
   groovy.stepFunction = null;
   forgetGroovyRun();
   if (tc.profile && hasProfile(tc.profile)) app.groovyProfile = tc.profile;
-  // A case names attachment files relative to its folder.
-  groovy.attachments = attachmentRows(tc.input?.attachments, (file) => joinPath(dir, file));
+  // A case names attachment files relative to its folder. A path that leaves the project keeps its "..", so the
+  // engine refuses it as outside the project instead of reading another file inside it.
+  groovy.attachments = attachmentRows(tc.input?.attachments, (file) => projectPath(dir, file));
   groovy.soapHeaders = soapHeaderRows(tc.input?.soapHeaders);
   groovy.casePlatform = tc.platform && typeof tc.platform === 'object' ? tc.platform : null;
   groovy.casePath = path;

@@ -1,7 +1,7 @@
 <script lang="ts">
   import RowTable from './RowTable.svelte';
-  import { app, groovy, platform, platformDirty, platformSectionDoc, savePlatform, loadPlatform, openFile } from '../lib/store.svelte';
-  import { newPlatformRow, partnerExtras, PLATFORM_FILES, type PlatformKey } from '../lib/platform';
+  import { app, groovy, platform, platformDirty, platformSectionDoc, savePlatform, loadPlatform, openFile, confirm } from '../lib/store.svelte';
+  import { newPlatformRow, partnerExtras, PLATFORM_FILES, PLATFORM_KEYS, type PlatformKey } from '../lib/platform';
 
   /**
    * The mocked platform data a script reads through ITApiFactory, as tables over the project's platform/*.json
@@ -25,6 +25,12 @@
 
   let overridden = $derived(Object.keys(groovy.casePlatform ?? {}));
   let extras = $derived(partnerExtras(platform.partnerDirectory.doc));
+
+  async function reload() {
+    const unsaved = PLATFORM_KEYS.filter(platformDirty);
+    if (unsaved.length && !(await confirm(`Read the platform files again and drop the unsaved changes (${unsaved.map((k) => PLATFORM_FILES[k]).join(', ')})?`))) return;
+    await loadPlatform(true);
+  }
 
   async function save(key: PlatformKey) {
     await savePlatform(key).catch((e) => (app.error = (e as Error).message));
@@ -95,7 +101,7 @@
       : 'No keystore.json: the keystore is empty. It names a keystore file next to it and is edited as a file.'}</p>
   </section>
   {#if app.project}
-    <button class="small reload" onclick={() => loadPlatform()} title="Read the platform files again; tables with unsaved changes stay">↻ Reload files</button>
+    <button class="small reload" onclick={reload} title="Read the platform files again; unsaved changes in the tables are dropped">↻ Reload files</button>
   {/if}
 </div>
 

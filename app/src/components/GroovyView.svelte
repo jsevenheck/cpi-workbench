@@ -423,7 +423,6 @@
   .badge.run { color: var(--muted); }
   .hint { color: var(--muted); font-size: 12px; padding: 4px 0; margin: 0; }
   .body > .hint { padding: 12px; }
-  .extra-unused { padding: 4px 8px; border-top: 1px solid var(--border-soft); }
   .pad.extra { display: flex; flex-direction: column; gap: 8px; }
   .pad.extra .hint { margin: 0; }
   .errors, .pad { padding: 8px; overflow: auto; height: 100%; box-sizing: border-box; font-size: 12px; }

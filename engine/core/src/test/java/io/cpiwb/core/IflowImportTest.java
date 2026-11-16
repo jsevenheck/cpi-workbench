@@ -190,8 +190,10 @@ class IflowImportTest {
         assertEquals("encoder", zip.get("type"));
         assertEquals("zipCompress", Json.obj(zip, "config").get("scheme"));
         assertEquals("base64Encode", Json.obj(FlowSteps.of(act, Map.of("activityType", "Encoder", "encoderType", "Base64 Encode"), params), "config").get("scheme"));
-        // A Decoder keeps its scheme in encoderType as well; it is not simulated, so it is not a flow step.
-        assertNull(FlowSteps.of(act, Map.of("activityType", "Decoder", "encoderType", "Base64 Decode"), params));
+        // A Decoder keeps its scheme in encoderType as well.
+        Map<String, Object> unzip = FlowSteps.of(act, Map.of("activityType", "Decoder", "encoderType", "ZIP Decompress"), params);
+        assertEquals("decoder", unzip.get("type"));
+        assertEquals("zipDecompress", Json.obj(unzip, "config").get("scheme"));
 
         Map<String, String> seen = Map.of("activityType", "MessageDigest", "componentVersion", "1.1", "canonicalizationMethod", "none",
                 "digestAlgorithm", "SHA-512", "targetHeader", "{{Header}}", "cmdVariantUri", "ctype::FlowstepVariant/cname::MessageDigest/version::1.1.1");

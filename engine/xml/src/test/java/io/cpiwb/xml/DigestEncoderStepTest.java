@@ -128,41 +128,145 @@ class DigestEncoderStepTest {
     }
 
     static Map<String, Object> encode(String body, String scheme) {
-        return new EncoderStep().run(Json.o().with("scheme", scheme).with("input", Json.o().with("body", body)));
+        return new EncoderStep().run(Json.o().with("scheme", scheme).with("input", Json.o().with("body", body)), false);
+    }
+
+    static Map<String, Object> decode(Map<String, Object> input, String scheme) {
+        return new EncoderStep().run(Json.o().with("scheme", scheme).with("input", input), true);
+    }
+
+    /** A step's output as the next step's input: the text, or the bytes of a binary body. */
+    static Map<String, Object> output(Map<String, Object> r) {
+        assertTrue(Json.bool(r, "ok", false), () -> Json.write(r));
+        return Json.obj(r, "output");
     }
 
     @Test
-    void base64EncodeIsSapsExample() {
+    void base64EncodeIsSapsExampleInCamelsLines() {
+        // SAP's example; the line end after it is Camel's (a documentation page would not show it).
         Map<String, Object> r = encode("<message>\r\n\tInput for encoder\r\n</message>\r\n", "base64Encode");
-        assertEquals("PG1lc3NhZ2U+DQoJSW5wdXQgZm9yIGVuY29kZXINCjwvbWVzc2FnZT4NCg==", r.get("body"));
-        assertTrue(Json.write(r.get("diagnostics")).contains("\"info\"") && Json.write(r.get("diagnostics")).contains("Q-E1"), Json.write(r));
-        // The body's bytes: UTF-8, or the encoding its XML declaration names.
-        assertEquals("w6Q=", encode("ä", "base64Encode").get("body"));
-        String latin1 = (String) encode("<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?><a>ä</a>", "base64Encode").get("body");
-        byte[] bytes = Base64.getDecoder().decode(latin1);
-        assertEquals((byte) 0xE4, bytes[bytes.length - 5]);
-        // Long output is one line here; that CPI does the same is not known, so it is a warning.
-        Map<String, Object> longer = encode("x".repeat(100), "base64Encode");
-        assertEquals(136, ((String) longer.get("body")).length());
-        assertFalse(((String) longer.get("body")).contains("\n"));
-        assertTrue(Json.write(longer.get("diagnostics")).contains("\"warning\""), Json.write(longer));
+        assertEquals("PG1lc3NhZ2U+DQoJSW5wdXQgZm9yIGVuY29kZXINCjwvbWVzc2FnZT4NCg==\r\n", r.get("body"));
+        assertTrue(Json.write(r.get("diagnostics")).contains("Camel 3.14.7") && Json.write(r.get("diagnostics")).contains("Q-E1"), Json.write(r));
+        // Lines of 76 characters, each ended by CR LF: 100 bytes are 136 characters, 76 and 60.
+        String longer = (String) encode("x".repeat(100), "base64Encode").get("body");
+        assertEquals(List.of(76, 60), java.util.Arrays.stream(longer.split("\r\n")).map(String::length).toList());
+        assertTrue(longer.endsWith("\r\n") && longer.length() == 136 + 4, longer);
+        // A last line that is full gets one line end, not two.
+        assertEquals(76 + 2, ((String) encode("x".repeat(57), "base64Encode").get("body")).length());
         assertEquals("", encode("", "base64Encode").get("body"));
+        // The body's bytes: UTF-8, or the encoding its XML declaration names.
+        assertEquals("w6Q=\r\n", encode("ä", "base64Encode").get("body"));
+        byte[] bytes = Base64.getMimeDecoder().decode((String) encode("<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?><a>ä</a>", "base64Encode").get("body"));
+        assertEquals((byte) 0xE4, bytes[bytes.length - 5]);
     }
 
     @Test
-    void binarySchemesAreRefused() {
-        for (String scheme : List.of("gzipCompress", "zipCompress", "mimeMultipartEncode", "other")) {
+    void base64DecodeIsLenientAsCamels() {
+        String text = "Grüße aus Köln, " + "x".repeat(80);
+        assertEquals(text, decode(output(encode(text, "base64Encode")), "base64Decode").get("body"), "wrapped input");
+        assertEquals("abc", decode(Json.o().with("body", "YWJj"), "base64Decode").get("body"));
+        assertEquals("a", decode(Json.o().with("body", "YQ"), "base64Decode").get("body"), "padding is not required");
+        // Not clean Base64: nothing fails, as with Camel's decoder; the result says what was skipped.
+        Map<String, Object> dirty = decode(Json.o().with("body", "YW*Jj"), "base64Decode");
+        assertEquals("abc", dirty.get("body"));
+        assertTrue(Json.write(dirty.get("diagnostics")).contains("1 character(s) outside the alphabet skipped"), Json.write(dirty));
+        Map<String, Object> twice = decode(Json.o().with("body", "YQ==YWJj"), "base64Decode");
+        assertEquals("a", twice.get("body"), "the text ends at the first =");
+        assertTrue(Json.write(twice.get("diagnostics")).contains("4 character(s) after the first '=' ignored"), Json.write(twice));
+        Map<String, Object> odd = decode(Json.o().with("body", "YWJjZ"), "base64Decode");
+        assertEquals("abc", odd.get("body"));
+        assertTrue(Json.write(odd.get("diagnostics")).contains("one character left over"), Json.write(odd));
+        assertFalse(Json.write(decode(Json.o().with("body", "YWJj\r\n"), "base64Decode").get("diagnostics")).contains("warning"));
+    }
+
+    @Test
+    void aResultThatIsNoTextIsGivenAsBytes() {
+        // 0x00 0xFF 0x10: not UTF-8, and a NUL.
+        Map<String, Object> r = decode(Json.o().with("body", "AP8Q"), "base64Decode");
+        assertTrue(Json.bool(r, "ok", false), () -> Json.write(r));
+        assertNull(r.get("body"));
+        assertEquals(true, r.get("binary"));
+        assertEquals(3, ((Number) r.get("bodySize")).intValue());
+        assertEquals("00000000  00 ff 10                                         |...|\n", r.get("preview"));
+        Map<String, Object> out = Json.obj(r, "output");
+        assertEquals("AP8Q", out.get("bodyBase64"));
+        assertNull(out.get("body"));
+        // The bytes are the next step's input.
+        assertEquals("AP8Q\r\n", new EncoderStep().run(Json.o().with("scheme", "base64Encode").with("input", out), false).get("body"));
+        // Text with a NUL is no text either; plain text stays text.
+        assertEquals(true, decode(Json.o().with("body", "YQBi"), "base64Decode").get("binary"));
+        assertNull(decode(Json.o().with("body", "YWJj"), "base64Decode").get("binary"));
+    }
+
+    @Test
+    void gzipHasCamelsHeaderAndComesBack() {
+        String text = "<Order id=\"4711\">Müller</Order>";
+        Map<String, Object> gz = encode(text, "gzipCompress");
+        assertEquals(true, gz.get("binary"));
+        byte[] bytes = Base64.getDecoder().decode((String) output(gz).get("bodyBase64"));
+        // Magic, deflate, no flags, time 0, no extra flags, operating system 255: commons-compress's defaults.
+        assertEquals("1f8b0800000000000" + "0ff", java.util.HexFormat.of().formatHex(bytes, 0, 10));
+        assertTrue(((String) gz.get("preview")).startsWith("00000000  1f 8b 08 00"), (String) gz.get("preview"));
+        Map<String, Object> back = decode(output(gz), "gzipDecompress");
+        assertEquals(text, back.get("body"));
+        assertTrue(error(decode(Json.o().with("body", "no gzip"), "gzipDecompress")).contains("GZIP"));
+    }
+
+    @Test
+    void zipNamesItsEntryAsCamelDoes() throws Exception {
+        String text = "<Order id=\"4711\"/>";
+        Map<String, Object> named = new EncoderStep().run(Json.o().with("scheme", "zipCompress").with("input", Json.o().with("body", text)
+                .with("headers", List.of(Json.o().with("name", "CamelFileName").with("value", "out/order.xml").with("type", "String"),
+                        Json.o().with("name", "Keep").with("value", "1").with("type", "String")))), false);
+        Map<String, Object> out = output(named);
+        // The file name part names the entry; the header then names the archive.
+        String headers = Json.write(out.get("headers"));
+        assertTrue(headers.contains("\"order.xml.zip\"") && headers.contains("\"Keep\""), headers);
+        try (java.util.zip.ZipInputStream zis = new java.util.zip.ZipInputStream(
+                new java.io.ByteArrayInputStream(Base64.getDecoder().decode((String) out.get("bodyBase64"))))) {
+            assertEquals("order.xml", zis.getNextEntry().getName());
+            assertEquals(text, new String(zis.readAllBytes(), StandardCharsets.UTF_8));
+            assertNull(zis.getNextEntry());
+        }
+        Map<String, Object> back = decode(out, "zipDecompress");
+        assertEquals(text, back.get("body"));
+        assertTrue(Json.write(Json.obj(back, "output").get("headers")).contains("\"value\":\"order.xml\""), Json.write(back));
+        // Without the header Camel takes the message id; the simulator makes one up and says so.
+        Map<String, Object> unnamed = encode(text, "zipCompress");
+        assertTrue(Json.write(unnamed.get("diagnostics")).contains("made one up"), Json.write(unnamed));
+        assertTrue(Json.write(output(unnamed).get("headers")).matches(".*ID-cpi-workbench-\\d+\\.zip.*"), Json.write(unnamed));
+
+        // Camel's two failures: an archive with a second entry, and a body that is no archive.
+        java.io.ByteArrayOutputStream two = new java.io.ByteArrayOutputStream();
+        try (java.util.zip.ZipOutputStream zos = new java.util.zip.ZipOutputStream(two)) {
+            zos.putNextEntry(new java.util.zip.ZipEntry("first.xml"));
+            zos.write("<first/>".getBytes(StandardCharsets.UTF_8));
+            zos.putNextEntry(new java.util.zip.ZipEntry("second.xml"));
+            zos.write("<second/>".getBytes(StandardCharsets.UTF_8));
+        }
+        assertTrue(error(decode(Json.o().with("bodyBase64", Base64.getEncoder().encodeToString(two.toByteArray())), "zipDecompress"))
+                .contains("Zip file has more than 1 entry."));
+        assertTrue(error(decode(Json.o().with("body", "no zip"), "zipDecompress")).contains("Unable to unzip the file"));
+    }
+
+    @Test
+    void otherSchemesAreRefused() {
+        for (String scheme : List.of("mimeMultipartEncode", "base64Decode", "other")) {
             String e = error(encode("<a/>", scheme));
             assertTrue(e.contains("UnsupportedInSimulator") && e.contains(scheme), e);
+        }
+        for (String scheme : List.of("mimeMultipartDecode", "gzipCompress")) {
+            assertTrue(error(decode(Json.o().with("body", "YQ=="), scheme)).contains("UnsupportedInSimulator"));
         }
     }
 
     @Test
     void theEngineKnowsBothSteps() throws Exception {
         XmlEngine engine = new XmlEngine();
-        assertTrue(Json.write(engine.describe().get("methods")).contains("\"encode.run\",\"digest.run\""));
+        assertTrue(Json.write(engine.describe().get("methods")).contains("\"encode.run\",\"decode.run\",\"digest.run\""));
         Map<String, Object> input = Json.o().with("body", "<a/>");
-        assertEquals("PGEvPg==", ((Map<?, ?>) engine.call("encode.run", Json.o().with("scheme", "base64Encode").with("input", input))).get("body"));
+        assertEquals("PGEvPg==\r\n", ((Map<?, ?>) engine.call("encode.run", Json.o().with("scheme", "base64Encode").with("input", input))).get("body"));
+        assertEquals("<a/>", ((Map<?, ?>) engine.call("decode.run", Json.o().with("scheme", "base64Decode").with("input", Json.o().with("body", "PGEvPg==")))).get("body"));
         assertEquals(hash("SHA-512", "<a></a>"), header((Map<String, Object>) engine.call("digest.run", Json.o().with("input", input))));
     }
 }

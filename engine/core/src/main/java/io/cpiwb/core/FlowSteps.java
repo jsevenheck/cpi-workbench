@@ -38,9 +38,10 @@ import java.util.regex.Pattern;
  * {@code Include_Master}, {@code Master_XPath_Field_Location}, {@code Include_Attribute}; CsvToXmlConverter
  * {@code XML_Schema_File_Path}, {@code XPath_Field_Location}, {@code Field_Separator_in_CSV},
  * {@code ignoreFirstLineAsHeader}, {@code headerMapping}. Encoder and Message Digest (keys seen in three public
- * iFlows, 2026-11-16, plan F62): Encoder {@code encoderType} (Base64 Encode, ZIP Compress); MessageDigest
+ * iFlows, 2026-11-16, plan F62): Encoder and Decoder {@code encoderType} (Base64 Encode, ZIP Compress; Base64
+ * Decode, ZIP Decompress: a Decoder's scheme is in {@code encoderType} too); MessageDigest
  * {@code canonicalizationMethod} (none), {@code digestAlgorithm} (SHA-512), {@code targetHeader}; the key of its
- * filter XPath was not seen. A Decoder (its scheme is in {@code encoderType} too) is not simulated and not listed.
+ * filter XPath was not seen.
  * The format is not documented.
  * {@code {{name}}} placeholders take the value from parameters.prop.
  */
@@ -54,7 +55,7 @@ final class FlowSteps {
     private FlowSteps() {
     }
 
-    /** A Content Modifier, Filter, Gather, Encoder, Message Digest, converter or General / Iterating Splitter; null for other activities. */
+    /** A Content Modifier, Filter, Gather, Encoder, Decoder, Message Digest, converter or General / Iterating Splitter; null for other activities. */
     static Json.Obj of(Element act, Map<String, String> props, Properties params) throws Exception {
         String activity = props.getOrDefault("activityType", "");
         if ("Enricher".equals(activity)) {
@@ -69,11 +70,12 @@ final class FlowSteps {
                     .with("expression", param(props.getOrDefault("wrapContent", ""), params))
                     .with("valueType", param(props.getOrDefault("xpathType", "Nodelist"), params).toLowerCase()));
         }
-        if ("Encoder".equals(activity)) {
-            // The scheme as the tab names it: "Base64 Encode" becomes base64Encode, "ZIP Compress" zipCompress.
+        if ("Encoder".equals(activity) || "Decoder".equals(activity)) {
+            // The scheme as the tab names it: "Base64 Encode" becomes base64Encode, "ZIP Decompress" zipDecompress.
+            // A Decoder keeps its scheme in encoderType as well (plan F62).
             String[] words = param(props.getOrDefault("encoderType", ""), params).trim().split("\\s+");
             words[0] = words[0].toLowerCase(Locale.ROOT);
-            return step(act, "encoder", props).with("config", Json.o().with("scheme", String.join("", words)));
+            return step(act, activity.toLowerCase(Locale.ROOT), props).with("config", Json.o().with("scheme", String.join("", words)));
         }
         if ("MessageDigest".equals(activity)) {
             Json.Obj step = step(act, "messageDigest", props).with("config", Json.o()

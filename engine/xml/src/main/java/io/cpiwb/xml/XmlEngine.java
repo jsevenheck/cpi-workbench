@@ -47,7 +47,7 @@ public final class XmlEngine implements RpcHandler {
                 .with("java", System.getProperty("java.vm.name") + " " + System.getProperty("java.version"))
                 .with("nativeImage", System.getProperty("org.graalvm.nativeimage.imagecode") != null)
                 .with("types", TypedValue.TYPES)
-                .with("methods", List.of("engine.info", "xslt.run", "xsd.validate", "xpath.eval", "split.run", "filter.run", "gather.run", "convert.run", "encode.run", "digest.run", "xml.format",
+                .with("methods", List.of("engine.info", "xslt.run", "xsd.validate", "xpath.eval", "split.run", "filter.run", "gather.run", "convert.run", "encode.run", "decode.run", "digest.run", "xml.format",
                         "project.open", "project.close", "project.list", "file.read", "file.write", "file.delete", "iflow.import", "iflow.steps", "tests.run"));
     }
 
@@ -72,7 +72,9 @@ public final class XmlEngine implements RpcHandler {
             case "convert.run":
                 return converter.run(withProjectRoot(params));
             case "encode.run":
-                return encoder.run(params);
+                return encoder.run(params, false);
+            case "decode.run":
+                return encoder.run(params, true);
             case "digest.run":
                 return digest.run(withProjectRoot(params));
             case "xml.format":

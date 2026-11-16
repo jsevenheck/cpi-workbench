@@ -3,7 +3,7 @@ title: "The CPI Helper receiver's default port moved to 7790; a saved 7778 is le
 author: Claude
 date: 2026-11-16
 branch: claude/great-cannon-v2nd6h
-cost: { minutes: 66, tokens: 749473 }
+cost: { minutes: 75, tokens: 868827 }
 id: l-460c0a5b
 scope: repo
 status: active
@@ -36,6 +36,9 @@ touches:
 - Canonical XML comes from the JDK's public XML signature API (`XMLSignatureFactory`, a `CanonicalizationMethod` as transform) with a node set of the element, its attributes and everything below it. That gives the W3C's document-subset form: a filtered element keeps the namespaces in scope and, for Canonical XML, inherited xml: attributes.
 - What SAP does not document is refused or labelled, not guessed: a filter with several nodes or none, a filter with None, None hashing the body's bytes (assumption, with an info or warning).
 - A Decoder step in an imported iFlow is not listed, like other steps that are not simulated. A Message Digest whose iFlow has keys the import does not know gets a note, because the filter's key was never seen.
+- Stage 2 of W4 (user, 2026-11-16: go on before the probe has run). Base64, GZIP and ZIP in both directions follow the source of Camel 3.14.7's camel-base64, camel-zip-deflater and camel-zipfile data formats with their defaults, on the assumption that CPI's steps are those data formats (not verified, Q-E1).
+- That corrected stage 1: Base64 Encode now writes lines of 76 characters, each ended by CR LF, the last one too. The first version wrote one line, a guess.
+- A result that is no text travels as `bodyBase64` with `binary: true` and no `body`; the engine's input already took `bodyBase64`.
 
 ## Tried and ruled out
 - Rewriting a saved 7778 to the new default: the hand-over is one way, the app cannot change the Custom URL in the extension, so the one-click path would break without a word. A saved 7778 also cannot be told apart from one the user chose.
@@ -82,3 +85,7 @@ In the code: `docs/plan.md` (F62, F63, S49, S50, Q-E1, W4); `SimExchange.fromJso
 - In the Flow Steps tab the function that opens an imported step treats a type it does not know as a Splitter: every new step type needs its own branch there, and a row in the MCP server's config keys, its type list and `produced`.
 
 In the code: `DigestStep`, `EncoderStep` in `engine/xml`; `FlowSteps.of` in `engine/core`; `flow.encoder`, `flow.digest`, `openFlowStep` in `app/src/lib/store.svelte.ts`; `mcp/flow.rs`, `mcp/runs.rs`; `engine/native/workload.py`; `META-INF/native-image/io.cpiwb/cpiwb-xml-he*/`; `probes/encoders/`.
+- Checked in a scratch run against commons-codec 1.16.1 and commons-compress 1.26.1 (Camel 3.14.7 ships older ones): 401 random inputs for Base64 Encode and GZIP, 20,000 dirty Base64 texts for the lenient decoder, no difference. commons-codec's decoder also takes `-` and `_`.
+- The work was interrupted: see the last commit's message for what is not adapted yet.
+
+In the code: `EncoderStep` (`encode.run`, `decode.run`), `SimExchange.toJsonOrBinary`, `ProjectFiles` (`binary`, `contentBase64`), `FlowSteps.of`.

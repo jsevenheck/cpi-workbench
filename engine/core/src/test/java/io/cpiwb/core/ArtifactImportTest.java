@@ -142,6 +142,8 @@ class ArtifactImportTest {
         Map<String, byte[]> flow = new LinkedHashMap<>();
         flow.put("src/main/resources/scenarioflows/integrationflow/Order Flow.iflw", b(iflw));
         flow.put("META-INF/MANIFEST.MF", b("Manifest-Version: 1.0\n"));
+        // The iFlow's own script of the same name is another script.
+        flow.put("src/main/resources/script/shared.groovy", b("def processData(m) { null }"));
         Map<String, byte[]> scripts = new LinkedHashMap<>();
         scripts.put("src/main/resources/script/shared.groovy", b("def processData(m) { m }"));
         String resources = "{\"resources\":["
@@ -149,11 +151,14 @@ class ArtifactImportTest {
                 + resource("i1", "IFlow", "OrderFlow.zip", "OrderFlow") + ","
                 + resource("s1", "ScriptCollection", "Shared Scripts.zip", "Shared_Scripts") + ","
                 + resource("v1", "ValueMapping", "VM.zip", "VM_Red_Blue") + ","
+                + resource("v2", "ValueMapping", "VM2.zip", "VM_Red_Blue_2") + ","
                 + resource("d1", "DataType", "Order.zip", "OrderType") + "],\"relations\":[]}";
         Map<String, byte[]> pkg = new LinkedHashMap<>();
         pkg.put("i1_content", zip(flow));
         pkg.put("s1_content", zip(scripts));
         pkg.put("v1_content", valueMappingZip(VM));
+        // A second value mapping for the same agencies and identifiers: its rows are added, not put in place of the first's.
+        pkg.put("v2_content", valueMappingZip("<vm version=\"2.0\">" + group("h1", "Red", "R9", false, "Blue", "NINE") + "</vm>"));
         pkg.put("d1_content", zip(Map.of("x.xsd", b("<x/>"))));
         pkg.put("resources.cnt", b(Base64.getEncoder().encodeToString(b(resources))));
         pkg.put("contentmetadata.md", b(Base64.getEncoder().encodeToString(b("-- listing properties --\n"))));
@@ -172,7 +177,9 @@ class ArtifactImportTest {
         Map<String, Object> gone = (Map<String, Object>) steps.get(1);
         assertEquals(false, gone.get("fileFound"));
         assertTrue(gone.get("note").toString().contains("script collection Not_Exported"), () -> Json.write(gone));
-        assertTrue(Files.isRegularFile(project.resolve("platform/value-mappings.json")));
+        List<Object> rows = (List<Object>) Json.parse(Files.readString(project.resolve("platform/value-mappings.json")));
+        assertEquals("LEAD", lookup(rows, "Red", "R1", "Blue"));
+        assertEquals("NINE", lookup(rows, "Red", "R9", "Blue"));
 
         // Again with createNew: the first folder that exists stops it before anything is written.
         assertTrue(assertThrows(IllegalArgumentException.class, () -> ArtifactImport.importZip(zip, project, null, true))

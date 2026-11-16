@@ -457,11 +457,7 @@ pub fn message(server: &Server, args: &Args) -> Result<Value, String> {
 
 /// A project file as a message body: its text, or its bytes when it is no text (an archive for a Decoder).
 fn read_body(server: &Server, path: &str) -> Result<runs::Message, String> {
-    require_project(server)?;
-    let runtime = file_runtime(server)?;
-    let text = engine_call(server, runtime, "file.read", json!({ "path": path }))
-        .map(|r| r["content"].as_str().unwrap_or_default().to_string());
-    match text {
+    match read_file(server, path) {
         Ok(t) if !t.contains('\0') => Ok(runs::Message::text(&t, json!([]), json!([]))),
         Ok(_) => read_bytes(server, path),
         Err(e) if e.contains("cannot be read as text") => read_bytes(server, path),
@@ -585,7 +581,7 @@ fn api_runtime(script: &str) -> &'static str {
 
 fn validate_xsd(server: &Server, args: &Args) -> Result<Value, String> {
     let m = message(server, args)?;
-    let params = json!({ "schema": source(args, "schema", "schemaPath", "schema.xsd")?, "input": { "body": m["body"] } });
+    let params = json!({ "schema": source(args, "schema", "schemaPath", "schema.xsd")?, "input": flow::body_only(&m) });
     engine_call(server, str_arg(args, "runtime").unwrap_or(xml_runtime(server)), "xsd.validate", params)
 }
 
@@ -594,7 +590,7 @@ fn evaluate_xpath(server: &Server, args: &Args) -> Result<Value, String> {
         "expression": str_arg(args, "expression").unwrap_or_default(),
         "version": str_arg(args, "version").unwrap_or("3.1"),
         "namespaces": args.get("namespaces").cloned().unwrap_or(json!({})),
-        "input": { "body": message(server, args)?["body"] },
+        "input": flow::body_only(&message(server, args)?),
     });
     engine_call(server, str_arg(args, "runtime").unwrap_or(xml_runtime(server)), "xpath.eval", params)
 }

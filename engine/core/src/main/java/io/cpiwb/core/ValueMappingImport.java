@@ -96,18 +96,25 @@ public final class ValueMappingImport {
      * Writes the rows of {@code xml} into the project's table. Rows already there for the same agency and
      * identifier pairs are replaced; with {@code createNew} such rows are an error instead. Returns what changed.
      */
-    @SuppressWarnings("unchecked")
     public static Json.Obj importXml(byte[] xml, Path projectRoot, boolean createNew, String artifact) throws Exception {
-        List<List<Entry>> groups = groups(xml);
+        return importGroups(groups(xml), projectRoot, createNew, artifact);
+    }
+
+    /**
+     * As {@link #importXml} for groups already read. A package's value mappings come as one list: imported one
+     * after the other, each would replace the rows of the one before it for the same agencies and identifiers.
+     */
+    @SuppressWarnings("unchecked")
+    static Json.Obj importGroups(List<List<Entry>> groups, Path projectRoot, boolean createNew, String artifact) throws Exception {
         List<Map<String, Object>> rows = rows(groups);
         Set<String> pairs = new LinkedHashSet<>();
         for (Map<String, Object> r : rows) {
             pairs.add(pair(r));
         }
         Path file = projectRoot.resolve(FILE).normalize();
-        Path platform = file.getParent();
-        if (Files.exists(platform) && !ProjectPaths.inside(projectRoot, platform)) {
-            throw new IllegalArgumentException("The platform folder is outside the project (a symbolic link leads outside).");
+        // The file itself, not only its folder: writing follows a link.
+        if (!ProjectPaths.inside(projectRoot, file)) {
+            throw new IllegalArgumentException(FILE + " is outside the project (a symbolic link leads outside).");
         }
         List<Object> existing = new ArrayList<>();
         if (Files.isRegularFile(file)) {
@@ -130,7 +137,7 @@ public final class ValueMappingImport {
             throw new IllegalArgumentException("exists already: " + FILE + " has value mappings for " + String.join(", ", labels(pairs)));
         }
         kept.addAll(rows);
-        Files.createDirectories(platform);
+        Files.createDirectories(file.getParent());
         Files.writeString(file, table(kept), StandardCharsets.UTF_8);
         List<Object> notes = new ArrayList<>();
         int ambiguous = ambiguous(rows);
@@ -142,27 +149,20 @@ public final class ValueMappingImport {
                 .with("replaced", replaced).with("pairs", new ArrayList<Object>(labels(pairs))).with("notes", notes);
     }
 
-    /** Lookups with several answers and none marked default: the same source key towards one target pair. */
+    /**
+     * Lookups with several answers and none marked default: the same source key towards one target pair, with
+     * several rows, whose first row (rows towards a default come first) is not such a row.
+     */
     private static int ambiguous(List<Map<String, Object>> rows) {
         Map<String, Integer> count = new LinkedHashMap<>();
-        for (Map<String, Object> r : rows) {
-            count.merge(pair(r) + "|" + r.get("sourceValue"), 1, Integer::sum);
-        }
-        // Rows towards a default come first; a key whose first row is not such a row and that has several rows.
-        int n = 0;
-        Set<String> seen = new LinkedHashSet<>();
+        Set<String> defaultFirst = new LinkedHashSet<>();
         for (Map<String, Object> r : rows) {
             String key = pair(r) + "|" + r.get("sourceValue");
-            if (seen.add(key) && count.get(key) > 1 && !defaultFirst(rows, key)) {
-                n++;
+            if (count.merge(key, 1, Integer::sum) == 1 && Boolean.TRUE.equals(r.get(DEFAULT_MARK))) {
+                defaultFirst.add(key);
             }
         }
-        return n;
-    }
-
-    private static boolean defaultFirst(List<Map<String, Object>> rows, String key) {
-        return Boolean.TRUE.equals(rows.stream().filter(r -> (pair(r) + "|" + r.get("sourceValue")).equals(key)).findFirst()
-                .map(r -> r.get(DEFAULT_MARK)).orElse(false));
+        return (int) count.entrySet().stream().filter(e -> e.getValue() > 1 && !defaultFirst.contains(e.getKey())).count();
     }
 
     /** Not written: rows carry it only while the import sorts them. */

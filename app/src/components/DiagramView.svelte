@@ -1,16 +1,16 @@
 <script lang="ts">
   // The imported iFlows drawn from the layout their export carries (plan F68), read-only. A step that a tab can run
   // opens there (double-click, or Open in the details); the others show their settings.
+  import { untrack } from 'svelte';
   import { app, iflowStepFor, openIflowStep, selectIflowNode } from '../lib/store.svelte';
   import { extent, flowPath, shapeOf, typeLabel, type Box, type IflowModel, type IflowNode } from '../lib/iflowmodel';
 
   const TAB: Record<string, string> = { groovy: 'Groovy Script', xslt: 'XSLT Mapping', xsd: 'XSD Validation', mmap: 'Groovy Script' };
 
-  let chosen = $state<string | null>(null);
   let model = $derived<IflowModel | undefined>(
-    app.iflowModels.find((m) => m.iflow === (app.iflowSelected?.iflow ?? chosen)) ?? app.iflowModels[0]);
+    app.iflowModels.find((m) => m.iflow === app.iflowSelected?.iflow) ?? app.iflowModels[0]);
   let nodes = $derived(new Map((model?.nodes ?? []).map((n) => [n.id, n])));
-  let selected = $derived(app.iflowSelected && app.iflowSelected.iflow === model?.iflow ? nodes.get(app.iflowSelected.id) : undefined);
+  let selected = $derived(app.iflowSelected?.id && app.iflowSelected.iflow === model?.iflow ? nodes.get(app.iflowSelected.id) : undefined);
   let full = $derived(model ? extent(model) : null);
 
   let view = $state<Box | null>(null);
@@ -25,19 +25,15 @@
     }
   });
   $effect(() => {
-    // An element chosen in the list that is out of sight: centre it.
+    // An element chosen in the list that is out of sight: centre it. Only when the choice changes: run on every
+    // change of the view, this would pull a chosen element back while the user pans away from it.
     const b = selected?.bounds;
-    const v = view;
+    const v = untrack(() => view);
     if (!b || !v) return;
     if (b.x < v.x || b.y < v.y || b.x + b.width > v.x + v.width || b.y + b.height > v.y + v.height) {
       view = { ...v, x: b.x + b.width / 2 - v.width / 2, y: b.y + b.height / 2 - v.height / 2 };
     }
   });
-
-  function choose(iflow: string) {
-    chosen = iflow;
-    selectIflowNode(iflow, null);
-  }
 
   function fit() {
     view = full ? { ...full } : null;
@@ -147,7 +143,7 @@
 <div class="diagram">
   <header class="bar">
     {#if app.iflowModels.length > 1}
-      <select aria-label="iFlow" value={model?.iflow} onchange={(e) => choose(e.currentTarget.value)}>
+      <select aria-label="iFlow" value={model?.iflow} onchange={(e) => selectIflowNode(e.currentTarget.value, null)}>
         {#each app.iflowModels as m}<option value={m.iflow}>{m.name ?? m.iflow}</option>{/each}
       </select>
     {:else if model}

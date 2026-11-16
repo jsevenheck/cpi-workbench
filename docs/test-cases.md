@@ -74,7 +74,8 @@ my-project/
     whole document, or stands without `expect.body` or with another `compare` than `xml` or `json`.
   * With `"compare": "json"` the rules are JSON Pointers (RFC 6901) instead of XPaths, and a segment `*` stands
     for every member or element: `"ignore": ["/order/createdAt", "/order/items/*/uuid"]`. A rule that does not
-    start with `/` is an error; one that matches nothing is named when the bodies differ, as above.
+    start with `/` is an error; one that matches nothing is named when the bodies differ, as above. Every rule
+    addresses the bodies as written: `/items/0` and `/items/1` leave out the first two elements.
   * This is CPI Workbench's own rule for its test cases; it imitates nothing in CPI.
 * `expect.ok: false` asserts that the mapping or script fails.
 

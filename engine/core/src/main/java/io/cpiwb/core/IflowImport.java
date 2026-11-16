@@ -195,12 +195,13 @@ public final class IflowImport {
                     break;
                 }
             }
-            Path resolved = file == null ? null : resolve(flowRoot, file);
             // A script of a script collection: scriptBundleId names the collection (plan F66). A package import
-            // puts the collection into iflows/<its id>/, next to the iFlow.
+            // puts the collection into iflows/<its id>/, next to the iFlow. The collection's file, not a file of
+            // the same name in the iFlow itself.
             String bundle = props.getOrDefault("scriptBundleId", "").trim();
             String bundleNote = null;
-            if (resolved == null && file != null && !bundle.isEmpty()) {
+            Path resolved = file == null || !bundle.isEmpty() ? null : resolve(flowRoot, file);
+            if (file != null && !bundle.isEmpty()) {
                 Path collection = flowRoot.getParent().resolve(bundle.replaceAll("[^A-Za-z0-9._-]+", "_")).normalize();
                 if (collection.getParent().equals(flowRoot.getParent()) && Files.isDirectory(collection)
                         && ProjectPaths.inside(projectRoot, collection)) {

@@ -355,6 +355,8 @@ class CoreTest {
         String actual = "{\"order\":{\"id\":\"1\",\"createdAt\":\"2026-11-16\",\"items\":[{\"uuid\":\"x\",\"n\":1},{\"uuid\":\"y\",\"n\":2}]}}";
         assertNotNull(TestRunner.compare(expected, actual, "json"));
         assertNull(TestRunner.compare(expected, actual, "json", List.of("/order/createdAt", "/order/items/*/uuid"), Map.of()));
+        // The rules index the documents as written: the first two elements, not the first and the third.
+        assertNull(TestRunner.compare("{\"b\":[1,2,3]}", "{\"b\":[8,9,3]}", "json", List.of("/b/0", "/b/1"), Map.of()));
         String diff = TestRunner.compare(expected, actual, "json", List.of("/order/created", "/order/items/*/uuid"), Map.of());
         assertTrue(diff.startsWith("at /order/createdAt") && diff.contains("expect.ignore matched nothing: /order/created"), diff);
         for (String bad : List.of("", "order/id")) {

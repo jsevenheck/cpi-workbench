@@ -478,8 +478,9 @@ public final class ScriptRunner {
                 java.nio.charset.Charset own = io.cpiwb.core.TextFiles.declaredCharset((byte[]) body);
                 Charset cs = own == null ? charset : own;
                 text = new String((byte[]) body, cs);
-                // Bytes the text does not give back (not decodable) or with a NUL character are no text.
-                if (!java.util.Arrays.equals(text.getBytes(cs), (byte[]) body) || text.indexOf('\0') >= 0) {
+                // Bytes that are not decodable or hold a NUL character are no text. Not "the text gives the bytes
+                // back": UTF-16 with a little-endian byte order mark is text, and Java encodes it big-endian.
+                if (!decodable((byte[]) body, cs) || text.indexOf('\0') >= 0) {
                     diags.add(Diagnostic.warning("UnsupportedInSimulator: the output body is no text (" + ((byte[]) body).length
                             + " bytes). A script's result is shown and passed on as text, which changes such bytes."));
                 }
@@ -504,6 +505,16 @@ public final class ScriptRunner {
                 .with("bodySize", text == null ? 0 : text.getBytes(charset).length)
                 .with("headers", TypedValue.writeList(headers))
                 .with("properties", TypedValue.writeList(props));
+    }
+
+    private static boolean decodable(byte[] bytes, Charset cs) {
+        try {
+            cs.newDecoder().onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
+                    .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT).decode(java.nio.ByteBuffer.wrap(bytes));
+            return true;
+        } catch (java.nio.charset.CharacterCodingException e) {
+            return false;
+        }
     }
 
     private Json.Obj finish(Json.Obj result, boolean ok, String failedPhase, List<Diagnostic> diags, Json.Obj output,

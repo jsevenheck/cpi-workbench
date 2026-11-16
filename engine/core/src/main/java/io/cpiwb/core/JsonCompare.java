@@ -35,6 +35,8 @@ final class JsonCompare {
                 unmatched.add(pointer);
             }
         }
+        prune(e);
+        prune(a);
         String diff = diff(e, a, "");
         if (diff == null) {
             return null;
@@ -56,6 +58,19 @@ final class JsonCompare {
             out.add(s.replace("~1", "/").replace("~0", "~"));
         }
         return out;
+    }
+
+    /** Stands for a removed array element until every rule is applied: the rules index the documents as written. */
+    private static final Object REMOVED = new Object();
+
+    @SuppressWarnings("unchecked")
+    private static void prune(Object node) {
+        if (node instanceof List) {
+            ((List<Object>) node).removeIf(v -> v == REMOVED);
+            ((List<Object>) node).forEach(JsonCompare::prune);
+        } else if (node instanceof Map) {
+            ((Map<String, Object>) node).values().forEach(JsonCompare::prune);
+        }
     }
 
     /** Removes what {@code path} selects below {@code node}; returns how many values it removed. */
@@ -89,8 +104,8 @@ final class JsonCompare {
                 if (any) {
                     n = l.size();
                     l.clear();
-                } else if (index >= 0 && index < l.size()) {
-                    l.remove(index);
+                } else if (index >= 0 && index < l.size() && l.get(index) != REMOVED) {
+                    l.set(index, REMOVED);
                     n = 1;
                 }
             } else if (any) {

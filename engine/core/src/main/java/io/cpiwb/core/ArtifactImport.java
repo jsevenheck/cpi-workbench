@@ -110,11 +110,19 @@ public final class ArtifactImport {
             }
         }
         long budget = MAX_PACKAGE;
-        List<Object> vmResults = new ArrayList<>();
+        // The package's value mappings as one table: nothing is written when one of them exists (createNew), and
+        // none replaces the rows of another for the same agencies and identifiers.
+        List<List<ValueMappingImport.Entry>> groups = new ArrayList<>();
+        List<String> names = new ArrayList<>();
         for (Map<String, Object> r : valueMappings) {
             byte[] inner = read(z, z.getEntry(Json.str(r, "id", "") + "_content"), budget);
             budget -= inner.length;
-            vmResults.add(ValueMappingImport.importXml(valueMappingXml(inner, artifactName(r)), projectRoot, createNew, artifactName(r)));
+            groups.addAll(ValueMappingImport.groups(valueMappingXml(inner, artifactName(r))));
+            names.add(artifactName(r));
+        }
+        List<Object> vmResults = new ArrayList<>();
+        if (!names.isEmpty()) {
+            vmResults.add(ValueMappingImport.importGroups(groups, projectRoot, createNew, String.join(", ", names)));
         }
         List<String> imported = new ArrayList<>();
         int files = 0;

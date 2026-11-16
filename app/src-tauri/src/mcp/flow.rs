@@ -283,7 +283,7 @@ fn splitter(ctx: &Ctx, config: &Value) -> Result<Value, String> {
 }
 
 /// The message's body alone, text or bytes, as the tab's splitter sends it.
-fn body_only(input: &Value) -> Value {
+pub(super) fn body_only(input: &Value) -> Value {
     match input.get("bodyBase64") {
         Some(b) => json!({ "bodyBase64": b }),
         None => json!({ "body": input["body"] }),

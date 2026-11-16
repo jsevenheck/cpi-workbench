@@ -63,8 +63,8 @@ export const app = $state({
   iflowSteps: [] as IflowStep[],
   /** The imported iFlows as a whole (processes, all elements, flows, layout), for the list and the Diagram tab. */
   iflowModels: [] as IflowModel[],
-  /** The element chosen in the list or the diagram. */
-  iflowSelected: null as { iflow: string; id: string } | null,
+  /** The iFlow the Diagram tab shows and the element chosen in the list or the diagram (id null: none). */
+  iflowSelected: null as { iflow: string; id: string | null } | null,
 });
 
 export interface IflowStep {
@@ -810,7 +810,7 @@ export function iflowStepFor(iflow: string, id: string): IflowStep | undefined {
 
 /** Selects an element of an imported iFlow; with show, the Diagram tab comes up with it. */
 export function selectIflowNode(iflow: string, id: string | null, show = false) {
-  app.iflowSelected = id ? { iflow, id } : null;
+  app.iflowSelected = { iflow, id };
   if (show) app.tool = 'diagram';
 }
 

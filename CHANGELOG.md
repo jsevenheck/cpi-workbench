@@ -6,27 +6,12 @@ of its version.
 
 ## [Unreleased]
 
-### Added
+## [0.4.0] - 2026-11-16
 
-- **One click from CPI Helper into the desktop app.** Under **⚙**, *Receive links from CPI Helper* (off by default)
-  lets the app listen on this computer only (127.0.0.1, port 7778) for the link the GroovyDebugX and xsltDebugX
-  plugins open; the settings show the *Custom URL* to enter in each plugin. The app asks in a dialog before it
-  imports the message, and nothing runs by itself. See the [user guide](docs/user-guide.md#a-message-from-a-tenants-trace-cpi-helper).
-- **A cut-off body is pointed out**: a body imported from a link or as JSON that starts like XML or JSON and does
-  not parse gets a warning; a large traced body can arrive cut off before CPI Helper builds the link.
-
-### Changed
-
-- **Documentation refreshed:** current scope and verification gaps replace estimated completion
-  percentages and stale test counts; completed roadmap drafts are condensed, and build, security,
-  CPI Helper and platform-library guidance is aligned with the current implementation.
-
-## [0.4.0] - 2026-11-14
-
-Workflow in the tabs: platform data as tables, a traced message from CPI Helper, XPath matches in the
-document, Message Mapping functions with a picker, closing files, and chaining runs in the MCP server.
-The CPI Helper import was tested against links built as the plugins' sources build them, not yet with the
-extension on a tenant.
+Workflow in the tabs: platform data as tables, a traced message from CPI Helper (pasted, or with one click
+into the desktop app), XPath matches in the document, Message Mapping functions with a picker, closing files,
+and chaining runs in the MCP server. The CPI Helper hand-over was tried with both plugins on a tenant
+(Windows desktop app).
 
 ### Added
 
@@ -38,6 +23,12 @@ extension on a tenant.
   CPI Workbench takes that link: **Import…** in the Groovy and XSLT tabs (paste the link), or directly in the
   browser mode with the plugins' *Custom URL* set to it. It goes one way: the app only reads the link and still
   connects to nothing, and an imported script or mapping does not run until you start it. See the [user guide](docs/user-guide.md#a-message-from-a-tenants-trace-cpi-helper).
+- **One click from CPI Helper into the desktop app.** Under **⚙**, *Receive links from CPI Helper* (off by default)
+  lets the app listen on this computer only (127.0.0.1, port 7778) for the link the GroovyDebugX and xsltDebugX
+  plugins open; the settings show the *Custom URL* to enter in each plugin. The app asks in a dialog before it
+  imports the message, and nothing runs by itself, not even the open script or mapping with **Live** on.
+- **A cut-off body is pointed out**: a body imported from a link or as JSON that starts like XML or JSON and does
+  not parse gets a warning; a large traced body can arrive cut off before CPI Helper builds the link.
 - **Groovy tab: platform data, attachments and SOAP headers as tables.** The new **Platform** tab edits value
   mappings, Secure Store credentials, Partner Directory parameters and number ranges from the project's
   `platform/*.json` files; a change applies to the next run at once and **Save** writes the file. **Attachments**
@@ -68,6 +59,9 @@ extension on a tenant.
   **Result** lists the output queue as one row per context.
 - **Gather**: Combine warns when a message is not a well-formed XML document (JSON or text from a script), and
   separately when the combined result is not well-formed XML; it still runs as before. What CPI does in that case is open; `probes/gather/` asks a tenant.
+- **Documentation refreshed:** current scope and verification gaps replace estimated completion
+  percentages and stale test counts; completed roadmap drafts are condensed, and build, security,
+  CPI Helper and platform-library guidance is aligned with the current implementation.
 
 ### Fixed
 

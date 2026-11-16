@@ -3,7 +3,7 @@ title: "The CPI Helper receiver's default port moved to 7790; a saved 7778 is le
 author: Claude
 date: 2026-11-16
 branch: claude/great-cannon-v2nd6h
-cost: { minutes: 75, tokens: 868827 }
+cost: { minutes: 78, tokens: 1496643 }
 id: l-460c0a5b
 scope: repo
 status: active
@@ -39,6 +39,9 @@ touches:
 - Stage 2 of W4 (user, 2026-11-16: go on before the probe has run). Base64, GZIP and ZIP in both directions follow the source of Camel 3.14.7's camel-base64, camel-zip-deflater and camel-zipfile data formats with their defaults, on the assumption that CPI's steps are those data formats (not verified, Q-E1).
 - That corrected stage 1: Base64 Encode now writes lines of 76 characters, each ended by CR LF, the last one too. The first version wrote one line, a guess.
 - A result that is no text travels as `bodyBase64` with `binary: true` and no `body`; the engine's input already took `bodyBase64`.
+- `expect.ignore` with "compare": "json" indexes the documents as written: several pointers into one array remove the elements they name, not the ones that slid into their place after an earlier removal.
+- A package export's Value Mapping artifacts are imported as one table. Importing them one after another let a later artifact replace an earlier one's rows for the same agencies and identifiers, and with createNew it failed half-way. The import result therefore has one valueMappings entry per package.
+- A script step with a scriptBundleId is resolved in its script collection only; a file of the same name in the iFlow itself is another script.
 
 ## Tried and ruled out
 - Rewriting a saved 7778 to the new default: the hand-over is one way, the app cannot change the Custom URL in the extension, so the one-click path would break without a word. A saved 7778 also cannot be told apart from one the user chose.
@@ -89,3 +92,8 @@ In the code: `DigestStep`, `EncoderStep` in `engine/xml`; `FlowSteps.of` in `eng
 - The work was interrupted: see the last commit's message for what is not adapted yet.
 
 In the code: `EncoderStep` (`encode.run`, `decode.run`), `SimExchange.toJsonOrBinary`, `ProjectFiles` (`binary`, `contentBase64`), `FlowSteps.of`.
+- In the Diagram tab an effect that reads the view and writes it pulls a chosen element back on every pan; read the view untracked there.
+- The check that platform/value-mappings.json stays inside the project has no test yet, and the two Diagram fixes were not tried in a running app. The check run for that commit was interrupted after mvn verify and the regression cases.
+- Two artifacts of one package whose names give the same folder under iflows/ still overwrite each other or stop half-way with createNew.
+
+In the code: `JsonCompare`, `ArtifactImport.importPackage`, `ValueMappingImport.importGroups`, `IflowImport` (scriptBundleId), `DiagramView.svelte`, `mcp/tools.rs` (validate_xsd, evaluate_xpath with `flow::body_only`), `ScriptRunner` (decodable).

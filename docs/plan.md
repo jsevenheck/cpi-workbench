@@ -112,6 +112,7 @@ Labels follow the REA evidence rules (see §4): **Observed** = read in a source 
 | F65 | An exported Value Mapping artifact (zip): `value_mapping.xml` with `<vm version="2.0">`, one `<group id>` per set of equivalent values, one `<entry>` per side with `<agency>`, `<schema>` and `<value>`; an entry may carry `isDefault="true"`. Next to it `META-INF/MANIFEST.MF` (`SAP-BundleType: ValueMapping`), `.project` and `metainfo.prop` (`source=`, `target=`). Seen: two agencies per artifact, one schema each, defaults on entries whose value repeats in other groups | Observed (one export, 2026-11-16) | — |
 | F66 | An exported integration package (zip): `resources.cnt`, Base64 of JSON with `resources` (`id`, `resourceType`, `name`, `uniqueId`, …) and `relations`; one `<id>_content` per resource, itself the artifact's export zip; `contentmetadata.md` (Base64 properties), `hash`, `ExportInformation.info`. Types seen: `ContentPackage` (the package, no content to import), `IFlow`, `ScriptCollection`, `ValueMapping`, `RESTAPIProvider`. A Script step whose script lives in a script collection has the key `scriptBundleId` = the collection's `uniqueId`, and the iFlow's manifest a `Require-Capability: scriptcollection.<id>` | Observed (one export, 2026-11-16) | — |
 | F67 | A Groovy script run by `cpiwb-groovy-v1.jar run` or `cpiwb-groovy-v2.jar run` under `-agentlib:jdwp` (SapMachine 25, Windows): jdb's `stop at <class>:<line>` binds in `processData` and stops there, with `message` and the local variables readable. The class is the file name made a Java name (`enrich-order.groovy` → `enrich_order`, source name `enrich_order.groovy`), so a debugger that maps by file name needs a file name that is a Java name. IntelliJ and VS Code not tried → Q-D1 | Observed (simulator, 2026-11-16) | — |
+| F68 | The `.iflw` beyond the steps (S53): one `bpmn2:collaboration`; `bpmn2:participant` with `ifl:type` `EndpointSender`, `EndpointRecevier` (sic) or `IntegrationProcess`; main and local processes differ only in the process's `cmdVariantUri` (`cname::IntegrationProcess` / `cname::LocalIntegrationProcess`), not in name or participant type, and an iFlow can have several main processes. Adapters are `bpmn2:messageFlow` with `ComponentType` and `direction`. An Exception Subprocess is a `bpmn2:subProcess` inside its process with `activityType` `ErrorEventSubProcessTemplate`, connected by no flow. A Router is an `exclusiveGateway` whose `default` attribute names the default route; the other routes carry a `conditionExpression` and `expressionType`. A Sequential Multicast is a `parallelGateway` (`activityType` `SequentialMulticast`). Process Call and Looping Process Call: `callActivity` with `activityType` `ProcessCallElement`, `subActivityType` `NonLoopingProcess` / `LoopingProcess` and `processId` = the called process's id. `bpmndi:BPMNDiagram` has a shape (absolute `dc:Bounds`) for every element and an edge for every flow, with waypoints from centre to centre. Not seen: Join and parallel Multicast | Observed (public exports, 2026-11-16) | S53 |
 
 ---
 
@@ -574,7 +575,16 @@ Groovy Script.*
   Splitter iterates) would need evidence step by step. If it is built, then as a chain the user puts
   together, with no claim to be the iFlow.
 * **A diagram or description of an imported iFlow** (as `iflow_render` in S44): helps to find a step, changes
-  nothing about the simulation. M.
+  nothing about the simulation. Researched (F68, S53, S54); the owner finds it interesting but has not decided.
+  * *Ordered list* (S to M): per process (main, local, exception subprocess), the steps in flow order from the
+    start events, Router routes with their conditions and the default, Process Calls as links to their process,
+    adapters from the message flows, steps that are not simulated shown, not dropped. Clicking a step opens it as
+    the step list does today. Needs the engine to read flows and processes; keyed by element id (names repeat).
+  * *Diagram* (M): the iFlow's own layout from `bpmndi` as hand-written SVG (waypoints clipped at the shapes,
+    subprocesses drawn open), so it looks like the editor without SAP's icons. bpmn-js would do it but brings its
+    licence's visible mark (S54); Mermaid (as S44) loses the editor's layout.
+  * Watch out: cycles through Process Calls and loops, unreachable steps, unknown `activityType`s, escaped XML in
+    property values.
 
 #### Not taken over
 
@@ -714,3 +724,11 @@ writes, SUPPRESS in a mapping function's input).
 - S50 Public iFlows on GitHub with Encoder, Decoder and Message Digest steps (code search `encoderType` and `MessageDigest canonicalizationMethod` in `.iflw` files, 2026-11-16), read for property names only: `alee536/CPI-iFlows` (Encoder and Decoder), `stevedpedersen/cpilint` (IF_LINT_NAMES), `nesun3/sap-cloud-integration-artifacts` (Zip Spliting).
 - S51 Apache Camel 3.14.7 source, read on 2026-11-16 for the defaults of the data formats behind Base64, GZIP and ZIP: `components/camel-base64` (`Base64DataFormat`), `components/camel-zip-deflater` (`GzipDeflaterDataFormat`), `components/camel-zipfile` (`ZipFileDataFormat`); no code taken: https://github.com/apache/camel/tree/camel-3.14.7/components
 - S52 SAP Help, *Integration Suite*, mirrored in SAP-docs/btp-integration-suite (commit 147acb7, 2026-10-22), read on 2026-11-16: `editing-value-mapping-6c8847f.md` (a value mapping is a bi-directional lookup table; when target values repeat for different source values, defaults are generated and can be changed in the *Default Values* tab).
+- S53 Public `.iflw` files read on 2026-11-16 for their structure: SAP/apibusinesshub-integration-recipes (the
+  recipes *Pattern IDoc Recipient – Dynamic Routing of IDoc*, *Pagination with SFSF* and the openSAP BTP week 4
+  solution, each a package export), alee536/CPI-iFlows, nesun3/sap-cloud-integration-artifacts.
+- S54 Tools that draw or describe iFlows, read on 2026-11-16: cpi-saper-dev-mcp's `iflow_render` (Apache-2.0,
+  commit 3e47ee8: Mermaid from the model, the diagram's coordinates not used); codebude/iflow-plotter (MIT, 2021:
+  the iFlow's own diagram through bpmn-js, whose licence keeps the bpmn.io mark visible); the *iFlow Documenter*
+  of CPI Developer Studio (commercial: an ordered step list in Markdown). No SAP specification of the format was
+  found.

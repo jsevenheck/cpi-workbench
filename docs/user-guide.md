@@ -157,6 +157,15 @@ come with the app; **Save** asks where to keep them, once a project is open. As 
   and message mapping goes to `iflows/<its id>/`, its value mappings into the table, other artifact types
   are named as skipped. A Groovy step whose script is in a script collection opens the script from that
   collection's folder.
+* The list under **iFlows** shows each imported iFlow whole: its adapters (⇢ from a sender, ⇠ to a
+  receiver), then each process (main, exception subprocesses, local processes) with its elements in flow
+  order. A Router's routes are indented under it with their conditions, the default marked; where routes
+  meet, the step is listed again with ↪; elements no flow reaches come last. A step a tab can run opens
+  there, as before; any other element opens in the **Diagram** tab with its settings (read-only).
+* **Diagram** (shown once iFlows are imported) draws an iFlow in the layout its export stores, without
+  SAP's icons: pools, steps, Routers, events, adapters and exception subprocesses. Scroll to zoom, drag to
+  move, **Fit** shows all of it. A click shows an element's type and settings; a step that runs in the
+  app (blue outline) opens with a double-click or **Open in …**. Nothing in the diagram can be changed.
 ### Groovy completions and Message Mapping functions
 
 * **Completions** in Groovy scripts: after `message.` (or a variable declared as `Message`),

@@ -5,6 +5,7 @@
   import GroovyView from './components/GroovyView.svelte';
   import XsdView from './components/XsdView.svelte';
   import XPathView from './components/XPathView.svelte';
+  import DiagramView from './components/DiagramView.svelte';
   import FlowStepsView from './components/FlowStepsView.svelte';
   import Dialog from './components/Dialog.svelte';
   import FileView from './components/FileView.svelte';
@@ -29,7 +30,7 @@
   }
 
   $effect(() => {
-    if (app.tool !== 'file') app.stepTool = app.tool;
+    if (app.tool !== 'file' && app.tool !== 'diagram') app.stepTool = app.tool;
   });
 
   let kind = $derived<'xslt' | 'groovy'>(app.tool === 'groovy' || app.tool === 'flow' ? 'groovy' : 'xslt');
@@ -88,9 +89,13 @@
         <button class="close-file file-tab-close" onclick={() => void closeFileTab()} title="Close this file (it stays on disk)"
           aria-label="Close file tab">×</button>
       {/if}
+      {#if app.iflowModels.length}
+        <button role="tab" class:active={app.tool === 'diagram'} onclick={() => (app.tool = 'diagram')}
+          title="The imported iFlows as their editor draws them (read-only)">Diagram</button>
+      {/if}
     </div>
     <div class="spacer"></div>
-    {#if app.tool !== 'file' && app.tool !== 'flow' && app.tool !== 'xsd'}
+    {#if app.tool !== 'file' && app.tool !== 'diagram' && app.tool !== 'flow' && app.tool !== 'xsd'}
       <!-- XSD validation uses the JDK's validator in both XML engines, so the runtime changes nothing there;
            XPath 1.0 runs on the JDK too. -->
       <label class="profile" title={xpathOnJdk ? 'XPath 1.0 runs on the JDK: the runtime applies to XPath 3.1 only' : profile?.note ?? ''}>Runtime
@@ -114,7 +119,7 @@
     {:else if app.tool === 'groovy'}
       <label class="live" title="Re-run on every change"><input type="checkbox" bind:checked={groovy.live} /> Live</label>
     {/if}
-    {#if app.tool !== 'file'}
+    {#if app.tool !== 'file' && app.tool !== 'diagram'}
       <button class="primary" onclick={run} title="Run (Ctrl+Enter)">▶ Run</button>
     {/if}
   </header>
@@ -134,6 +139,7 @@
       {:else if app.tool === 'xsd'}<XsdView />
       {:else if app.tool === 'xpath'}<XPathView />
       {:else if app.tool === 'flow'}<FlowStepsView />
+      {:else if app.tool === 'diagram'}<DiagramView />
       {:else}<FileView />{/if}
     </main>
   </div>

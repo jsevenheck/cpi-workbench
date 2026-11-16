@@ -328,7 +328,7 @@ Plain, git-friendly files. The engines' `test` command (`cpiwb-xml test tests/`,
 | **3 — Groovy MVP** | Groovy 1.x and 2.x, typed headers/properties, MPL, API call log, console, diff | Done (0.1.0) |
 | **4 — Productivity** | Platform API mocks, lint, runtime comparison, iFlow-zip import, flow steps, MCP server | Done (0.1.0–0.3.0) |
 | **5 — Distribution** | Windows/macOS installers, engine jars for Java 17+, code signing and auto-update (§10.2) | Unsigned installers and manual update check built; signing and auto-update open |
-| **6 — Workflow** | What a review of other tools showed (§10.5): platform data in the Groovy tab, a traced message from CPI Helper, XPath comfort, Encoder / Decoder and Message Digest steps, JUnit output and compare rules for test cases, Value Mapping import, run history, examples, debugging | Planned (2026-11-13); W1 to W3, W5, W6 (XML) and W4 built (W2 with the desktop link, W2b; W4's tenant probe not run yet) |
+| **6 — Workflow** | What a review of other tools showed (§10.5): platform data in the Groovy tab, a traced message from CPI Helper, XPath comfort, Encoder / Decoder and Message Digest steps, JUnit output and compare rules for test cases, Value Mapping import, run history, examples, debugging, iFlow outline and diagram | Built: W1 to W11 (W2 with the desktop link, W2b; W4's tenant probe not run yet, W10 tried with jdb only) |
 
 ### 10.1 MCP server for coding agents (built, 2026-11-01)
 
@@ -508,11 +508,6 @@ the XPath at the cursor with the namespace mapping, and recalls session expressi
 Entity references that can hide nodes or namespaces disable text locations rather than mark the
 wrong node. Inspired by XSLTDebugX; covered by unit and browser tests.
 
-#### Planned work, in this order
-
-Sizes are rough estimates: S is a day or two, M about a week, L more. Follow `AGENTS.md` for tests,
-fidelity evidence, status updates and changelog entries. The following are proposals, not available features.
-
 **W4. Encoder, Decoder and Message Digest as flow steps (built; tenant probe pending).** *Prompted by the
 encoding tools in All-in-one; they are CPI steps, listed as not built in §10.4.*
 * Sources: SAP's documentation of each step (F63), the iFlow keys from public iFlows (F62), and Camel's data
@@ -536,7 +531,7 @@ as skipped. Reports from all four engines validate against Surefire's published 
 Jenkins, GitLab) has read one yet, and CI does not use the option. In `Cli`; documented in
 [test cases](test-cases.md).
 
-**W6. Test cases: leave out values that change per run (built for XML).** *Our own idea; no tool's page
+**W6. Test cases: leave out values that change per run (built).** *Our own idea; no tool's page
 describes how it compares.*
 `compare` knows `xml`, `text` and `trimmed`; headers and properties are checked only when named.
 `expect.ignore` is a list of XPaths whose nodes are removed from both sides before an `xml` comparison
@@ -568,23 +563,17 @@ Groovy Script.*
   a full JDK: the app's trimmed JRE (`engine/groovy/build-jre.sh`) has no `jdk.jdwp.agent` module.
 * Stage 2, breakpoints in the app's editor, only if users ask for it.
 
-#### To decide before any work
+**W11. iFlow outline and diagram (M). Built.** *Seen in cpi-saper-dev-mcp (S44) and CPI Developer Studio (S54).*
+The sidebar lists each imported iFlow whole (adapters, processes, every element in flow order, Router routes
+with conditions); a *Diagram* tab draws it from the layout its export stores, read-only. Steps the app runs open
+from both; the other elements show their settings. Engine `iflow.models` reads the `.iflw` as F68 describes;
+`app/src/lib/iflowmodel.ts` orders and draws it. A hand-written SVG, not bpmn-js (its licence keeps a visible mark)
+and not Mermaid (it loses the editor's layout). Join and parallel Multicast were not seen in an export (F68).
 
-* **A chain of steps in the app.** SAP simulates up to 10 steps, and the MCP server chains runs by `runId`
-  (§10.1). Whole iFlows are out of scope (§1): what happens between steps (which headers stay, how a
-  Splitter iterates) would need evidence step by step. If it is built, then as a chain the user puts
-  together, with no claim to be the iFlow.
-* **A diagram or description of an imported iFlow** (as `iflow_render` in S44): helps to find a step, changes
-  nothing about the simulation. Researched (F68, S53, S54); the owner finds it interesting but has not decided.
-  * *Ordered list* (S to M): per process (main, local, exception subprocess), the steps in flow order from the
-    start events, Router routes with their conditions and the default, Process Calls as links to their process,
-    adapters from the message flows, steps that are not simulated shown, not dropped. Clicking a step opens it as
-    the step list does today. Needs the engine to read flows and processes; keyed by element id (names repeat).
-  * *Diagram* (M): the iFlow's own layout from `bpmndi` as hand-written SVG (waypoints clipped at the shapes,
-    subprocesses drawn open), so it looks like the editor without SAP's icons. bpmn-js would do it but brings its
-    licence's visible mark (S54); Mermaid (as S44) loses the editor's layout.
-  * Watch out: cycles through Process Calls and loops, unreachable steps, unknown `activityType`s, escaped XML in
-    property values.
+#### Planned work
+
+None at the moment. New proposals go here with a rough size (S is a day or two, M about a week, L more) and
+follow `AGENTS.md` for tests, fidelity evidence, status updates and changelog entries.
 
 #### Not taken over
 
@@ -598,6 +587,7 @@ Groovy Script.*
 | JWT, certificate and general utility tools | S38 | Not CPI steps. |
 | Memory profiling of a simulation | S39 | Tenant limits are not reproduced (§8.4). |
 | Generating public share links | S35 | Project folders are the sharing unit. Importing CPI Helper's local links is supported (W2), but the app does not publish message data to a sharing service. |
+| A chain of steps in the app, run history in Flow Steps, breakpoints in the app's editor | S39, S36, S34 | Not wanted by the owner (2026-11-16). A chain would also need evidence for what happens between steps (§1); the MCP server chains runs by `runId`, and `docs/debugging.md` covers breakpoints. |
 | Saving a test case from the app | — | Removed on purpose (2026-10-25): test cases are written by hand and run from the CLI. |
 | A VS Code extension | S33, S34 | A second UI to maintain; the CLI and the MCP server connect editors. |
 

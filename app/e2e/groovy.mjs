@@ -240,6 +240,19 @@ if (process.env.CPIWB_IFLOW_ZIP) {
   await page.locator('section.output .badge.ok').waitFor({ timeout: 20000 })
     .catch(() => fail('mapping script from the iFlow did not run'));
   if ((await fnName()) !== 'getHeader') fail('mapping function not picked');
+  // 4b2) The list holds the whole iFlow (routes, adapters, other processes); an element that is not simulated
+  // shows its settings in the Diagram tab, and a double-click there opens a step that runs.
+  if (!(await page.locator('.steps .route', { hasText: 'ERP' }).count())) fail('the Router route is not in the list');
+  if (!(await page.locator('.steps .adapter', { hasText: 'HTTPS' }).count())) fail('the sender adapter is not in the list');
+  await page.locator('.steps .node', { hasText: 'Write to data store' }).click();
+  await page.locator('.diagram svg').waitFor({ timeout: 10000 }).catch(() => fail('the Diagram tab did not open'));
+  const details = page.locator('.diagram .details');
+  await details.waitFor({ timeout: 5000 }).catch(() => fail('no details for the selected element'));
+  if (!(await details.innerText()).includes('storageName')) fail('details of the data store step: ' + (await details.innerText()));
+  if (shots) await page.screenshot({ path: path.join(shots, 'g5b-diagram.png') });
+  await page.locator('.diagram [data-node="CallActivity_1"]').dblclick();
+  await page.locator('section.script h2', { hasText: 'enrich.groovy' }).waitFor({ timeout: 10000 })
+    .catch(() => fail('a double-click in the diagram did not open the Groovy step'));
   await page.getByRole('tab', { name: 'Groovy Script' }).click();
 }
 

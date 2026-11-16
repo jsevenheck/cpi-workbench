@@ -168,6 +168,12 @@ public final class ProjectFiles {
         return IflowImport.steps(root);
     }
 
+    /** {@code iflow.models}: processes, elements, flows and layout of the imported iFlows ({@link IflowModel}). */
+    public synchronized Map<String, Object> iflowModels() throws IOException {
+        requireRoot();
+        return IflowModel.models(root);
+    }
+
     public synchronized Path root() {
         return root;
     }

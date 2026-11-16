@@ -1,4 +1,5 @@
 import { EXAMPLES } from './examples';
+import type { IflowModel } from './iflowmodel';
 import { addRun, type HistoryEntry } from './history';
 import { call, openProject, closeProject as closeEngineProject, availableProfiles, DEFAULT_PROFILE, type Profile, type ProfileInfo } from './engine';
 import type { Diagnostic, FileEntry, GroovyResult, Row, XsltResult } from './types';
@@ -51,7 +52,7 @@ export const app = $state({
   engineInfo: null as any,
   profile: DEFAULT_PROFILE as Profile,
   groovyProfile: 'groovy-1.x' as Profile,
-  tool: 'xslt' as StepTool | 'file',
+  tool: 'xslt' as StepTool | 'file' | 'diagram',
   /** The step tool last shown; inputs opened from the tree go to its body. */
   stepTool: 'xslt' as StepTool,
   /** The inputs/ file last loaded or saved as each tool's input body. */
@@ -60,6 +61,10 @@ export const app = $state({
   error: '',
   busy: false,
   iflowSteps: [] as IflowStep[],
+  /** The imported iFlows as a whole (processes, all elements, flows, layout), for the list and the Diagram tab. */
+  iflowModels: [] as IflowModel[],
+  /** The element chosen in the list or the diagram. */
+  iflowSelected: null as { iflow: string; id: string } | null,
 });
 
 export interface IflowStep {
@@ -766,6 +771,9 @@ export async function closeProject() {
   resetPlatform();
   app.inputPaths = {};
   app.iflowSteps = [];
+  app.iflowModels = [];
+  app.iflowSelected = null;
+  if (app.tool === 'diagram') app.tool = app.stepTool;
 }
 
 export async function refreshFiles() {
@@ -782,6 +790,28 @@ export async function loadIflowSteps() {
   } catch {
     app.iflowSteps = [];
   }
+  await loadIflowModels();
+}
+
+export async function loadIflowModels() {
+  if (!app.project) return;
+  try {
+    app.iflowModels = (await call('iflow.models')).models;
+  } catch {
+    app.iflowModels = [];
+  }
+  if (!app.iflowModels.length && app.tool === 'diagram') app.tool = app.stepTool;
+}
+
+/** The step of an iFlow element that a tab can open (Groovy, XSLT, a flow step, …), if any. */
+export function iflowStepFor(iflow: string, id: string): IflowStep | undefined {
+  return app.iflowSteps.find((s) => s.iflow === iflow && s.id === id);
+}
+
+/** Selects an element of an imported iFlow; with show, the Diagram tab comes up with it. */
+export function selectIflowNode(iflow: string, id: string | null, show = false) {
+  app.iflowSelected = id ? { iflow, id } : null;
+  if (show) app.tool = 'diagram';
 }
 
 /** Imports an exported iFlow, Value Mapping or integration package (the engine tells them apart). */
@@ -789,6 +819,7 @@ export async function importIflow(zip: string) {
   const r = await call('iflow.import', { zip });
   if (app.project) app.project.files = r.fileList;
   app.iflowSteps = r.steps;
+  await loadIflowModels();
   const vms: { rows: number; replaced: number; notes: string[] }[] = r.valueMappings ?? [];
   const skipped: { name: string; type: string; reason: string }[] = r.skipped ?? [];
   const parts: string[] = [];

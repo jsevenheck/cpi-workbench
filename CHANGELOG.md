@@ -12,6 +12,9 @@ of its version.
   takes an exported Value Mapping, whose groups become rows of `platform/value-mappings.json` in both directions
   (the value marked default first), and a whole package export with its iFlows, script collections and value
   mappings. A Groovy step whose script is in a script collection finds it in that collection's folder.
+- **iFlow outline and Diagram tab.** After an import the sidebar lists each iFlow whole: adapters, processes,
+  exception subprocesses and every element in flow order, with the Router's routes and conditions. The new
+  *Diagram* tab draws the iFlow in the layout of its export (read-only); steps the app runs open from both.
 - **Examples without a project.** *Examples…* in the sidebar loads a mapping or script of the demo project with
   its input; they come with the app.
 - **Debugging Groovy scripts.** `docs/debugging.md` shows how to stop a script at a breakpoint: an engine jar

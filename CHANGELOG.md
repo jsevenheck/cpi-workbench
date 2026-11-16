@@ -54,6 +54,12 @@ of its version.
   turned the receiver on in 0.4.0, it stays on 7778 and the *Custom URL* in the plugins keeps working; to move,
   set the port under **⚙** and enter the new *Custom URL* in both plugins.
 
+### Fixed
+
+- **Package import** rejects artifact folder-name collisions after sanitization (also ignoring case), before
+  writing any files or value mappings, even when overwrite is enabled. Resolve the conflicting artifact
+  identifiers before importing.
+
 ## [0.4.0] - 2026-11-16
 
 Workflow in the tabs: platform data as tables, a traced message from CPI Helper (pasted, or with one click

@@ -578,6 +578,73 @@ await page.locator('.res pre', { hasText: 'multimap:Message1' }).waitFor({ timeo
   .catch(() => fail('the Gather result was lost after switching steps'));
 if (shots) await page.screenshot({ path: path.join(shots, 'g4-flow-steps.png') });
 
+// 6b) Diagram regressions: pan a selected element out of view, and deselect without changing iFlow.
+if (process.env.CPIWB_IFLOW_ZIP) {
+  // A second real import, not a mocked model. Keep the archive outside the disposable project.
+  const secondZip = project + '-diagram-second.zip';
+  fs.copyFileSync(process.env.CPIWB_IFLOW_ZIP, secondZip);
+  try {
+    await page.getByRole('button', { name: 'Import iFlow' }).click();
+    await page.locator('.dlg input.mono').fill(secondZip);
+    await page.locator('.dlg').getByRole('button', { name: 'OK' }).click();
+    await page.getByRole('tab', { name: 'Diagram', exact: true }).click();
+    const picker = page.getByLabel('iFlow', { exact: true });
+    await picker.waitFor();
+    const options = await picker.locator('option').evaluateAll((els) => els.map((e) => e.value));
+    if (options.length !== 2) throw new Error('diagram regression needs two imported iFlows: ' + options);
+    const shown = options[1]; // Not the first model: falling back to that model must fail this check.
+    await picker.selectOption(shown);
+    const modelPath = await page.locator('.diagram .bar .file').innerText();
+    if (!modelPath.startsWith(`iflows/${shown}/`)) throw new Error('picker and rendered iFlow disagree: ' + modelPath);
+    const diagram = page.locator('.diagram svg');
+    const node = diagram.locator('[data-node="CallActivity_1"]');
+    await node.click();
+    await page.locator('.diagram .details').waitFor();
+    const before = await diagram.getAttribute('viewBox');
+    const rect = await diagram.boundingBox();
+    for (let i = 0; i < 3; i++) {
+      await page.mouse.move(rect.x + rect.width * 0.15, rect.y + rect.height * 0.5);
+      await page.mouse.down();
+      await page.mouse.move(rect.x + rect.width * 0.85, rect.y + rect.height * 0.5, { steps: 12 });
+      await page.mouse.up();
+    }
+    const panned = await diagram.getAttribute('viewBox');
+    const [bx, , bw] = before.split(' ').map(Number);
+    const [px] = panned.split(' ').map(Number);
+    if (!(bx - px > bw)) throw new Error(`selected element snapped back while panning: ${before} -> ${panned}`);
+    // Let Svelte effects and browser rendering settle before checking that it stayed there.
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    if ((await diagram.getAttribute('viewBox')) !== panned) throw new Error('diagram snapped back after panning');
+    if (!(await node.getAttribute('class')).includes('selected')) throw new Error('panning lost the selected node');
+    if (shots) await page.screenshot({ path: path.join(shots, 'g6b-diagram-panned.png') });
+    await page.getByRole('button', { name: 'Close details' }).click();
+    await page.locator('.diagram .details').waitFor({ state: 'detached' });
+    if ((await picker.inputValue()) !== shown) throw new Error('Close details switched to another iFlow');
+    if ((await page.locator('.diagram .bar .file').innerText()) !== modelPath) throw new Error('Close details changed the rendered iFlow');
+    if ((await diagram.getAttribute('viewBox')) !== panned) throw new Error('Close details reset the diagram view');
+    await page.getByTitle('Show the whole iFlow').click();
+    await node.click();
+    await page.locator('.diagram .details').waitFor();
+    const blank = await diagram.evaluate((svg) => {
+      const r = svg.getBoundingClientRect();
+      for (const dy of [0.05, 0.95, 0.5]) for (const dx of [0.05, 0.95, 0.5]) {
+        const x = r.left + r.width * dx, y = r.top + r.height * dy;
+        const el = document.elementFromPoint(x, y);
+        if (el && svg.contains(el) && !el.closest('[data-node]')) return { x, y };
+      }
+      throw new Error('no empty point in the diagram');
+    });
+    await page.mouse.click(blank.x, blank.y);
+    await page.locator('.diagram .details').waitFor({ state: 'detached' });
+    if ((await picker.inputValue()) !== shown) throw new Error('background deselection switched to another iFlow');
+    if ((await page.locator('.diagram .bar .file').innerText()) !== modelPath) throw new Error('background deselection changed the rendered iFlow');
+    if (shots) await page.screenshot({ path: path.join(shots, 'g6b-diagram-deselected.png') });
+    console.log('diagram regressions passed: selected pan, Close details, background deselection on second iFlow');
+  } finally {
+    fs.rmSync(secondZip, { force: true });
+  }
+}
+
 // 7) Closing the project closes it in the engines too: runs no longer see its platform data.
 await page.getByTitle('Close project').click();
 await page.getByLabel('Project folder').waitFor({ timeout: 5000 });

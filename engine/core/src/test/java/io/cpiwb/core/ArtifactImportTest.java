@@ -2,6 +2,9 @@ package io.cpiwb.core;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
@@ -125,6 +128,112 @@ class ArtifactImportTest {
         assertTrue(assertThrows(IllegalArgumentException.class, () -> ArtifactImport.importZip(other, project, null, false))
                 .getMessage().contains("<vm>"));
         assertFalse(Files.exists(project.resolve("platform/value-mappings.json")));
+    }
+
+    @ParameterizedTest
+    @CsvSource(value = {"[]|true", "[]|false", "not JSON|true", "not JSON|false",
+            "{\"synthetic\":true}|true", "{\"synthetic\":true}|false"}, delimiter = '|')
+    void aValueMappingFileLinkOutsideIsRefusedBeforeReadingOrWriting(String original, boolean createNew,
+                                                                    @TempDir Path tmp) throws Exception {
+        // [] would be imported successfully without the file-level guard; invalid JSON must not even be read.
+        Path project = Files.createDirectories(tmp.resolve("project/platform")).getParent();
+        Path outside = Files.writeString(tmp.resolve("outside.json"), original);
+        Path link = project.resolve(ValueMappingImport.FILE);
+        symbolicLink(link, outside);
+        Path archive = Files.write(tmp.resolve("VM.zip"), valueMappingZip(VM));
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> ArtifactImport.importZip(archive, project, null, createNew));
+        assertEquals(ValueMappingImport.FILE + " is outside the project (a symbolic link leads outside).", error.getMessage());
+        assertTrue(Files.isSymbolicLink(link), "refusing the import must retain the link");
+        assertEquals(outside, Files.readSymbolicLink(link));
+        assertEquals(original, Files.readString(outside), "the external target must be unchanged");
+        assertFalse(Files.exists(project.resolve("iflows")));
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void aValueMappingFileLinkInsideStillImports(boolean createNew, @TempDir Path tmp) throws Exception {
+        Path project = Files.createDirectories(tmp.resolve("project/platform")).getParent();
+        Path target = Files.writeString(project.resolve("table.json"), "[]");
+        Path link = project.resolve(ValueMappingImport.FILE);
+        symbolicLink(link, target);
+        Path archive = Files.write(tmp.resolve("VM.zip"), valueMappingZip(VM));
+        ArtifactImport.importZip(archive, project, null, createNew);
+        assertTrue(Files.isSymbolicLink(link));
+        assertEquals(target, Files.readSymbolicLink(link));
+        assertEquals("LEAD", lookup((List<Object>) Json.parse(Files.readString(target)), "Red", "R1", "Blue"));
+    }
+
+    private static void symbolicLink(Path link, Path target) throws Exception {
+        try {
+            Files.createSymbolicLink(link, target);
+        } catch (UnsupportedOperationException | java.io.IOException e) {
+            org.junit.jupiter.api.Assumptions.abort("symbolic links are not available here: " + e);
+        }
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "Same, Same, true", "Same, Same, false",
+            "Order Flow, Order_Flow, true", "Order Flow, Order_Flow, false",
+            "Order:Flow, Order?Flow, true", "Order:Flow, Order?Flow, false",
+            "Shared, shared, true", "Shared, shared, false"
+    })
+    void packageFolderCollisionsAreRefusedBeforeAnyWrites(String first, String second, boolean createNew,
+                                                          @TempDir Path tmp) throws Exception {
+        assertPackageCollision(first, second, false, createNew, tmp);
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void packageFallbackFileNamesAlsoCollide(boolean createNew, @TempDir Path tmp) throws Exception {
+        assertPackageCollision("Fallback.zip", "Fallback.ZIP", true, createNew, tmp);
+    }
+
+    private static void assertPackageCollision(String first, String second, boolean fallback, boolean createNew,
+                                               Path tmp) throws Exception {
+        String resources = "{\"resources\":["
+                + resource("early", "RESTAPIProvider", "Early.zip", "Early") + ","
+                + resource("v1", "ValueMapping", "VM.zip", "VM") + ","
+                + resource("one", "IFlow", first, fallback ? "" : first) + ","
+                + resource("two", "ScriptCollection", second, fallback ? "" : second) + "]}";
+        Map<String, byte[]> pkg = new LinkedHashMap<>();
+        pkg.put("resources.cnt", b(Base64.getEncoder().encodeToString(b(resources))));
+        pkg.put("early_content", zip(Map.of("early.txt", b("must not be written"))));
+        pkg.put("v1_content", valueMappingZip(VM));
+        pkg.put("one_content", zip(Map.of("same.txt", b("first artifact"), "first-only.txt", b("first"))));
+        pkg.put("two_content", zip(Map.of("same.txt", b("second artifact"), "second-only.txt", b("second"))));
+        Path archive = Files.write(tmp.resolve("Collision.zip"), zip(pkg));
+        // Both an absent table and existing unrelated rows must remain exactly as they were.
+        for (boolean existingTable : List.of(false, true)) {
+            Path project = Files.createDirectories(tmp.resolve("project-" + existingTable));
+            Files.createDirectories(project.resolve("iflows/Existing"));
+            Files.writeString(project.resolve("iflows/Existing/keep.txt"), "existing artifact\n");
+            if (existingTable) {
+                Files.createDirectories(project.resolve("platform"));
+                Files.writeString(project.resolve(ValueMappingImport.FILE),
+                        "[ {\"sourceAgency\":\"Other\",\"targetAgency\":\"Elsewhere\",\"sourceValue\":\"keep\"} ]\n");
+            }
+            Map<String, String> before = snapshot(project);
+            IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                    () -> ArtifactImport.importZip(archive, project, null, createNew));
+            assertTrue(error.getMessage().contains("Package artifact folder collision: iflows/"), error::getMessage);
+            assertTrue(error.getMessage().contains("one") && error.getMessage().contains("two"), error::getMessage);
+            assertEquals(before, snapshot(project), "collision preflight must leave every file and directory unchanged");
+        }
+    }
+
+    /** Exact synthetic project contents, including directories, to detect even empty partial imports. */
+    private static Map<String, String> snapshot(Path project) throws Exception {
+        Map<String, String> result = new LinkedHashMap<>();
+        try (var paths = Files.walk(project)) {
+            for (Path path : paths.sorted().toList()) {
+                result.put(project.relativize(path).toString(), Files.isDirectory(path) ? "directory"
+                        : Base64.getEncoder().encodeToString(Files.readAllBytes(path)));
+            }
+        }
+        return result;
     }
 
     /** A package: an iFlow whose script is in a script collection, the collection, a value mapping, a type not imported. */

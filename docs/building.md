@@ -74,7 +74,9 @@ node app/e2e/groovy.mjs /tmp/demo-project
 ```
 
 With `CPIWB_IFLOW_ZIP` set to a zip of `engine/core/src/test/resources/iflow`, `groovy.mjs` also imports
-that iFlow and opens its Groovy, Content Modifier, Filter, Gather and Message Mapping steps. CI does this; locally:
+that iFlow and opens its Groovy, Content Modifier, Filter, Gather and Message Mapping steps. It also imports
+another copy and checks panning with a selected diagram element, plus deselection on the non-first iFlow
+through both *Close details* and a background click. CI does this; locally:
 `jar --create --no-manifest --file /tmp/iflow.zip -C engine/core/src/test/resources/iflow .`
 
 The scripts modify their project: give each a fresh disposable copy. The receiver's XML-body

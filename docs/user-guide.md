@@ -156,7 +156,10 @@ come with the app; **Save** asks where to keep them, once a project is open. As 
 * It also takes a whole **integration package** export: each iFlow, script collection, REST API provider
   and message mapping goes to `iflows/<its id>/`, its value mappings into the table, other artifact types
   are named as skipped. A Groovy step whose script is in a script collection opens the script from that
-  collection's folder.
+  collection's folder. If two artifacts would use the same folder after replacing unsupported characters
+  with `_` (also ignoring letter case), the entire package is rejected before any files or value mappings
+  are written, even when overwriting is allowed. Resolve the conflicting artifact identifiers before
+  exporting again, or export the artifacts separately and import them under distinct folder names.
 * The list under **iFlows** shows each imported iFlow whole: its adapters (⇢ from a sender, ⇠ to a
   receiver), then each process (main, exception subprocesses, local processes) with its elements in flow
   order. A Router's routes are indented under it with their conditions, the default marked; where routes

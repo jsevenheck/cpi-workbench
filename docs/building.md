@@ -21,7 +21,7 @@ JAVA_HOME=/path/to/jdk21 engine/groovy/build-jre.sh /tmp/jre    # trimmed Java 2
 cd app
 npm ci
 npm run check                                        # Svelte/TypeScript checks
-npm test                                             # UI unit tests (formatters; Node 22.18+)
+npm test                                             # UI unit tests (Node 22.18+)
 CPIWB_JRE_DIR=/tmp/jre node scripts/prepare-sidecars.mjs   # stage engines + JRE for bundling
 npx tauri build                                      # installer for the current OS
 npx tauri dev                                        # development (UI hot reload)
@@ -29,11 +29,12 @@ npx tauri dev                                        # development (UI hot reloa
 
 ## Shell tests
 
-`cargo test` in `app/src-tauri` checks the desktop shell's path to the engines: each engine is
-started over stdio and runs the regression project's test cases. It needs `npm run build` (the shell embeds the
-UI bundle) and the engine builds; it looks for the native engines in `engine/native/out` and for
-the jars in the engine `target/` folders. `JAVA_HOME` selects the Java runtime, e.g. the trimmed
-one from `build-jre.sh`. Without `CPIWB_REQUIRE_ENGINES=1` the test is skipped.
+`cargo test` in `app/src-tauri` covers the engine supervisor, MCP and local receiver. Engine
+integration tests start all profiles over stdio and run the regression cases. Build the UI first
+(the shell embeds it), and stage the sidecars/resources or use the override below. The development
+shell finds native engines in `engine/native/out` and jars in the engine `target/` folders.
+`JAVA_HOME` selects the Java runtime. Without `CPIWB_REQUIRE_ENGINES=1`, missing engines may cause
+integration checks to be skipped; pure Rust tests still run.
 
 ```sh
 npm --prefix app run build
@@ -55,20 +56,32 @@ Installers still need the staged sidecars.
 
 ## End-to-end tests (browser mode)
 
+Install Playwright locally (CI uses the same temporary dependency). Run the following shell commands
+from the repository root; keep the engine processes running while the browser tests execute.
+
 ```sh
+npm --prefix app install --no-save playwright
+(cd app && npx playwright install chromium)
 npm --prefix app run build
 java -jar engine/xml-he99/target/cpiwb-xml-he99.jar serve --http 7777 --ui app/dist &
 java -jar engine/groovy-v1/target/cpiwb-groovy-v1.jar serve --http 7778 &
 java -jar engine/groovy-v2/target/cpiwb-groovy-v2.jar serve --http 7779 &
 java -jar engine/xml-he12/target/cpiwb-xml-he12.jar serve --http 7780 &
 cp -r testdata/regression-project /tmp/demo-project   # the tests write into the project
-node app/e2e/smoke.mjs /tmp/demo-project [screenshotDir]
-node app/e2e/groovy.mjs /tmp/demo-project [screenshotDir]
+node app/e2e/smoke.mjs /tmp/demo-project     # optional second argument: screenshot directory
+rm -rf /tmp/demo-project && cp -r testdata/regression-project /tmp/demo-project
+node app/e2e/groovy.mjs /tmp/demo-project
 ```
 
 With `CPIWB_IFLOW_ZIP` set to a zip of `engine/core/src/test/resources/iflow`, `groovy.mjs` also imports
 that iFlow and opens its Groovy, Content Modifier, Filter, Gather and Message Mapping steps. CI does this; locally:
 `jar --create --no-manifest --file /tmp/iflow.zip -C engine/core/src/test/resources/iflow .`
+
+The scripts modify their project: give each a fresh disposable copy. The receiver's XML-body
+warning uses `DOMParser`, so Node unit tests cannot verify it. When changing `share.ts`, also check
+it in Edge (Windows desktop engine) and Firefox: valid XML, a cut-off body, an ordinary
+`<parsererror>` and an XHTML-namespaced `<h:parsererror>`, including a cut-off document containing
+one. These browser-warning checks are not yet part of the committed e2e scripts.
 
 ## CI and installers
 

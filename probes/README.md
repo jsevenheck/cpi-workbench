@@ -13,7 +13,7 @@ Groovy engines follow it since 0.3.0.
 | `fingerprint.xsl` | XSLT Mapping 1.2+ | Saxon edition/version, supported features, localisation of `format-date` (Q-X1) | Ran 2026-11-09 |
 | `probe-platform-v1.groovy` | Groovy Script **1.x** | Partner Directory, Keystore, Secure Store and number range behaviour for entries that do not exist, plus the real method lists (Q-P1) | Ran 2026-11-09 |
 | `prepare-xslt-probe.groovy` + `probe-xslt-behaviour.xsl` | Groovy 1.x, then XSLT Mapping | Header vs. property precedence, Java→XDM types, missing params, `setHeader` return value (Q-X2 … Q-X5) | Ran 2026-11-09 |
-| `converters/` | **JSON to XML, XML to JSON, XML to CSV, CSV to XML** converters | Output formatting and XML declaration, JSON escaping, CSV line ends and quoting, an unmapped JSON prefix without namespace mapping (Q-C1) | All four ran; the simulator gives the same bytes |
+| `converters/` | **JSON to XML, XML to JSON, XML to CSV, CSV to XML** converters | Output formatting and XML declaration, JSON escaping, CSV line ends and quoting, an unmapped JSON prefix without namespace mapping (Q-C1) | All four ran; observed output matches, but CSV line-end bytes remain unverified |
 | `gather/` | General Splitter, **Groovy Script 1.x**, **Gather** (Combine) | What Combine does with a body that is not XML: JSON or plain text among XML parts, or only such parts (Q-F1) | Not run yet |
 | `probe-mapping-v1.groovy` | Custom function in a **Message Mapping** | Groovy and Java version of mapping scripts, the classes and methods behind `MappingContext` and `Output`, and how values reach a `String[]` function: one call per context, how the results are joined, single-value calls (Q-M1) | Ran 2026-11-09 with both targets and both requests |
 
@@ -102,8 +102,9 @@ curl -s -u "<clientid>:<clientsecret>" --data-binary @probes/gather/request.xml 
 curl -s -u "<clientid>:<clientsecret>" --data-binary @probes/converters/csv-to-xml.csv -H "Content-Type: text/plain" "$U/cpiwb/csv-to-xml" --output csv-to-xml.xml
 ```
 
-Send the response bodies (or attach them to an issue); they go into `results-tenant/<date>/`. Nothing
-in them is confidential beyond version numbers, class names and the tenant's default timezone/locale.
+Review response bodies and errors for tenant hostnames, paths, IDs or other confidential data before
+sharing them or attaching them to an issue. Sanitized results go into `results-tenant/<date>/`;
+record any edits so byte-level observations remain distinguishable from redacted text.
 
 ## Baseline from the simulator
 
@@ -113,7 +114,8 @@ plan). The differences that remain:
 
 * `xsl:product-version` is `HE 9.9.1.8` locally and `EE 9.9.1.6` on the tenant.
 * `xsl:supports-higher-order-functions` / `xsl:supports-dynamic-evaluation` / streaming are `no` in
-  Saxon-HE 9.9 and `yes` on the tenant. Use the *Modern HE (Saxon-HE 12)* profile for stylesheets that need them.
+  Saxon-HE 9.9 and `yes` on the tenant. *Modern HE (Saxon-HE 12)* supplies higher-order functions
+  and dynamic evaluation, but **not streaming**, which remains EE-only.
 * `FormatDateGerman`: Saxon-HE only has English names (`[Language: en]5. March 2026`); the tenant
   prints `5. März 2026`. A real fidelity gap for `format-date`/`format-dateTime` in other languages.
 * Groovy: Java, Camel, timezone, locale, charset, bindings, message methods and libraries follow the
@@ -145,11 +147,11 @@ java -jar $G run --script probes/fingerprint-v1.groovy --in any.xml
 java -jar $G run --script probes/probe-platform-v1.groovy --in any.xml
 ```
 
-The mapping baseline comes from the Groovy tab (*Run as* `describeQueue` and `describeValue` with the
+The mapping baseline comes from the Groovy tab (**Function** `describeQueue` and `describeValue` with the
 arguments in step 6, header `CamelHttpMethod` = `POST`) or the `groovy.run` call with `function` and
 `args`; it lists the documents of both functions.
 
-and the XSLT baselines with:
+Regenerate the XSLT baselines with:
 
 ```sh
 E=engine/native/out/cpiwb-xml-he99   # or: java -jar engine/xml-he99/target/cpiwb-xml-he99.jar

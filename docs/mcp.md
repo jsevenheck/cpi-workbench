@@ -67,7 +67,8 @@ it finds the checkout's engine jars.
 
 ## Working from Claude Desktop
 
-Claude Desktop has no access to your files of its own; the server gives it the project. For example, with an
+With only CPI Workbench configured, Claude Desktop can access the project through this server;
+a separate filesystem server is not required. For example, with an
 iFlow and a sample message in the project: *"Here is the iFlow Order_Replication and inputs/order.xml. Write the
 mapping to the S/4 format and try it."* The agent lists the project (`project_info`), reads the input and the
 iFlow's files (`read_file`), writes the mapping and runs it (`run_xslt`) until the output is right, and shows
@@ -110,10 +111,7 @@ passes on, as the XML Validator lets it), `run_flow_step` (the Router passes the
 exception: then `ok` is false; a Splitter's
 messages are `runId/1`, `runId/2`, …; with `runtime: both`, `runId/saxon-he-12` and so on). A failed run and an
 invalid message get none. The input (with a Gather's `messagesFrom`) is read once, before the step runs, so the
-kept message is the one the step got. Calls run in parallel. Without `overwrite`, `save_file` and `import_iflow`
-create the file or iFlow folder only if none is there, checked by the file system as it creates it, so a second
-server on the same project (another agent session) cannot replace it either; with `overwrite`, two calls at once
-both write and `replaced` may say false for the one that came second. `messageFrom: "<runId>"` makes that message (body, headers, properties) the input of
+kept message is the one the step got. `messageFrom: "<runId>"` makes that message (body, headers, properties) the input of
 the next call, as it flows to the next step in an iFlow; `body`, `headers` and `properties` given in the same call
 replace the body or the rows of the same name. A Gather takes `messagesFrom` (a Splitter's `runId`, or a list).
 
@@ -121,6 +119,11 @@ To keep results small, a body the step left as it was (from 200 characters) is l
 `bodyUnchanged` saying so; bodies longer than 20,000 characters, and a Splitter's messages longer than 2,000,
 come back shortened, with `bodyShortened`. The run keeps the whole body: `read_file` with `runId` reads it, `save_file` with `contentFrom` saves it. The server keeps the
 last 50 runs (at most 64 MB) of its process; an older or unknown `runId` is an error that says to run again.
+
+Calls can run concurrently. Without `overwrite`, file/iFlow creation is checked atomically by the
+file system, so another server on the same project cannot replace an existing destination either.
+With `overwrite`, concurrent writes are not a transaction; avoid writing the same path from two
+sessions. The `replaced` flag is informational and may be stale under concurrent overwrites.
 
 Wrong arguments, files outside the project and engine failures come back as tool results with
 `isError: true` and a message, so the agent can correct the call. A failing mapping or script is a
@@ -144,7 +147,8 @@ lists what is verified against CPI.
   `read_file`, `validate_xsd`, `evaluate_xpath` and `reference` are marked read-only and closed-world;
   `save_file` and `import_iflow` are marked as writing (destructive, idempotent, closed-world). A client that
   uses these hints can ask before the others run.
-* **Network:** the server opens no port and connects nowhere. XML runs resolve includes, documents
+* **Network:** MCP opens no port, starts no CPI Helper receiver and makes no external requests.
+  XML runs resolve includes, documents
   and entities in the project only, so they fetch nothing from the network; XPath refuses
   `fn:transform()`, which could escape that. Reflexive `java:` calls and `fn:transform()` in XSLT,
   and Groovy scripts, are not restricted.

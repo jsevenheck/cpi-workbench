@@ -52,6 +52,21 @@ when it starts, and maps each tool to engine calls. Its flow-step tool repeats t
 step by step (`mcp/flow.rs`). The app leads: the tools
 add no function of their own.
 
+## CPI Helper receiver
+
+The desktop receiver is separate from the engines' HTTP servers and is **off by default**.
+`app/src-tauri/src/receiver.rs` binds `127.0.0.1` at the configured port (default 7778). Its page
+reads `#share/<data>` and POSTs the token to `/message` on the same origin. Host/Origin checks,
+16 KiB request headers, an 8 MiB POST limit, at most four active handlers and a 15-second read
+deadline bound HTTP input. Stopping prevents old handlers from delivering more messages.
+
+The shell emits the token to `app/src/lib/receiver.svelte.ts`. Settings changes are serialized;
+message generations keep the newest undecided link. `share.ts` limits unpacked links to
+128 million UTF-16 code units and checks XML/JSON bodies up to 64 million. The UI confirms the
+import, reuses the parsed message and disarms automatic Groovy/XSLT runs, including pending
+Live callbacks. This is not sender authentication: any browser page can open a receiver link.
+The receiver opens no engine RPC endpoint and is not started by MCP.
+
 The design reasons and the build-vs-reuse principle are in the [plan](plan.md) §3 and §5.
 
 ## Measured performance
@@ -65,6 +80,9 @@ measured again since; Windows and macOS have not been measured.
 | First run | ≈ 10 ms | ≈ 170 ms | ≈ 420 ms |
 | Later runs (cached) | < 1 ms | ≈ 2 ms | ≈ 2 ms |
 | Peak memory | ≈ 60 MB (270 KB input) | ≈ 75 MB | ≈ 150 MB |
-| Size | 48 / 54 MB executables (≈ 16 / 18 MB compressed) | jars 15 + 16 MB, Java 21 runtime 81 MB (≈ 51 MB compressed), 0.3.0 | |
+
+A separate 0.3.0 size observation recorded 48 / 54 MB native XML executables (about 16 / 18 MB
+compressed), 15 + 16 MB Groovy jars and an 81 MB Java 21 runtime (about 51 MB compressed).
+These are historical artifact sizes, not guarantees for current bundles.
 
 A 7.4 MB message took 1.3 s through XSLT and 0.45 s through Groovy over HTTP.

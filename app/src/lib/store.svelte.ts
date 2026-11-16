@@ -2,7 +2,7 @@ import { call, openProject, closeProject as closeEngineProject, availableProfile
 import type { Diagnostic, FileEntry, GroovyResult, Row, XsltResult } from './types';
 import { argText, mappingArgs } from './queue';
 import { scriptFunctions } from './functions';
-import { readShared, sharedSummary, type SharedMessage } from './share';
+import { bodyWarning, readShared, sharedSummary, type SharedMessage } from './share';
 import { attachmentInput, attachmentRows, parsePlatformFile, platformDoc, platformFileText, platformRows, platformRunData, PLATFORM_FILES, PLATFORM_KEYS,
   soapHeaderInput, soapHeaderRows, type AttachmentRow, type PlatformKey, type PlatformRows, type SoapHeaderRow } from './platform';
 import { toRows } from './rows';
@@ -321,19 +321,20 @@ export const dialog = $state({
   checked: true,
   /** false: a yes/no question without a text field. */
   input: true,
+  okLabel: 'OK',
   resolve: null as null | ((r: { value: string; checked: boolean } | null) => void),
 });
 
 export function ask(title: string, value: string, checkboxLabel = ''): Promise<{ value: string; checked: boolean } | null> {
   return new Promise((resolve) => {
-    Object.assign(dialog, { open: true, title, value, checkboxLabel, checked: true, input: true, resolve });
+    Object.assign(dialog, { open: true, title, value, checkboxLabel, checked: true, input: true, okLabel: 'OK', resolve });
   });
 }
 
 /** In-app confirmation (window.confirm is not available in every desktop webview). */
-export function confirm(title: string): Promise<boolean> {
+export function confirm(title: string, okLabel = 'OK'): Promise<boolean> {
   return new Promise((resolve) => {
-    Object.assign(dialog, { open: true, title, value: '', checkboxLabel: '', checked: true, input: false,
+    Object.assign(dialog, { open: true, title, value: '', checkboxLabel: '', checked: true, input: false, okLabel,
       resolve: (r: unknown) => resolve(r !== null) });
   });
 }
@@ -377,16 +378,17 @@ function safeSet(key: string, v: string | null) {
 // ------------------------------------------------------------------ a message handed over
 // From CPI Helper's GroovyDebugX and xsltDebugX plugins (share.ts): a traced step's message, with the step's
 // script or mapping if the user sent it along. The app connects to nothing for this; the text comes in pasted,
-// or in the address the browser mode was opened with.
+// in the address the browser mode was opened with, or through the desktop app's receiver (receiver.svelte.ts).
 
 /**
  * Takes the message of a pasted link or JSON into its tab. One way only: nothing is sent or called for it.
  * A script or mapping that comes along is not run: it is someone's code until the user starts it.
  */
-export async function importMessage(pasted: string): Promise<boolean> {
+export async function importMessage(pasted: string | SharedMessage, options: ImportOptions = {}): Promise<boolean> {
+  const { rerun = true } = options;
   try {
     app.error = '';
-    const m = await readShared(pasted);
+    const m = typeof pasted === 'string' ? await readShared(pasted) : pasted;
     const what = sharedSummary(m);
     if (what === '') throw new Error('The link holds no body, headers, properties or script: nothing was sent along.');
     const tool: StepTool = m.kind === 'message' ? app.stepTool : m.kind;
@@ -394,8 +396,8 @@ export async function importMessage(pasted: string): Promise<boolean> {
       throw new Error(`The link is for a ${m.kind === 'groovy' ? 'Groovy script' : 'XSLT mapping'}, and no engine for it is installed or running.`);
     }
     if (m.source !== '' && !(await mayDiscard(tool === 'groovy' ? 'groovy' : 'xslt'))) return false;
-    if (tool === 'groovy') importGroovy(m);
-    else if (tool === 'xslt') importXslt(m);
+    if (tool === 'groovy') importGroovy(m, rerun);
+    else if (tool === 'xslt') importXslt(m, rerun);
     else {
       // XSD, XPath and Flow Steps take a message typed as JSON: the body, and for Flow Steps the rows.
       if (m.body !== '') {
@@ -411,6 +413,8 @@ export async function importMessage(pasted: string): Promise<boolean> {
       app.tool = tool;
       app.status = `Imported: ${what}.`;
     }
+    const warning = options.warning ?? bodyWarning(m.body);
+    if (warning) app.error = 'Imported, but: ' + warning;
     return true;
   } catch (e) {
     fail(e);
@@ -418,7 +422,14 @@ export async function importMessage(pasted: string): Promise<boolean> {
   }
 }
 
-function importGroovy(m: SharedMessage) {
+export interface ImportOptions {
+  /** false (the receiver): nothing runs after the import, not even the open script or mapping with Live on. */
+  rerun?: boolean;
+  /** The body's warning, if the caller has it already (bodyWarning). */
+  warning?: string;
+}
+
+function importGroovy(m: SharedMessage, rerun: boolean) {
   if (m.source !== '') {
     rememberScript();
     groovy.scriptPath = groovy.casePath = null;
@@ -446,11 +457,16 @@ function importGroovy(m: SharedMessage) {
     app.status = `Imported from CPI Helper: ${sharedSummary(m)}. A script runs with your rights, so it has not run: press Ctrl+Enter to run it.`;
   } else {
     app.status = `Imported: ${sharedSummary(m)}.`;
-    rerunIfLive('groovy');
+    if (rerun) rerunIfLive('groovy');
+    else {
+      // From the receiver: the open script waits for a run by hand, a live timer already set included.
+      groovy.armed = false;
+      app.status += ' The open script has not run on it: press Ctrl+Enter to run it.';
+    }
   }
 }
 
-function importXslt(m: SharedMessage) {
+function importXslt(m: SharedMessage, rerun: boolean) {
   if (m.source !== '') {
     xslt.mappingPath = xslt.casePath = null;
     xslt.mapping = m.source;
@@ -473,7 +489,12 @@ function importXslt(m: SharedMessage) {
     app.status = `Imported from CPI Helper: ${sharedSummary(m)}. A mapping from a link has not run: press Ctrl+Enter to run it.`;
   } else {
     app.status = `Imported: ${sharedSummary(m)}.`;
-    rerunIfLive('xslt');
+    if (rerun) rerunIfLive('xslt');
+    else {
+      // From the receiver: the open mapping waits for a run by hand, a live timer already set included.
+      xslt.armed = false;
+      app.status += ' The open mapping has not run on it: press Ctrl+Enter to run it.';
+    }
   }
 }
 

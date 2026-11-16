@@ -11,10 +11,9 @@ need Java, Groovy or Saxon on your machine.
 | macOS 11 or later, Apple Silicon | `CPI-Workbench_<version>_aarch64.dmg` |
 | Command line, any OS with Java 17+ | `cpiwb-xml-he99-<version>.jar` and the other `cpiwb-*.jar` files |
 
-There is no build for Intel Macs yet, and no installer for Linux (0.3.0 was the last release with one): on Linux, use the
-command-line jars or the browser mode ([User guide](user-guide.md#browser-mode-no-desktop-shell-needed)),
-or build the desktop app yourself ([Building](building.md)). `SHA256SUMS.txt` in the release lists the checksums of all
-files.
+Current releases have no Intel Mac build or Linux installer. On Linux, use the command-line jars
+or [browser mode](user-guide.md#browser-mode-no-desktop-shell-needed), or build the desktop app
+from source ([Building](building.md)). `SHA256SUMS.txt` lists the release files' checksums.
 
 The installers are **not code-signed** yet, so Windows and macOS warn on the first start.
 

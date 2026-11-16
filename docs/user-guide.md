@@ -7,6 +7,8 @@ Download the installer for your platform from the
 [Installing](install.md)), install it and open a project folder. Any folder works; **Init** adds `mappings/`, `schemas/`,
 `scripts/`, `tests/` and example files in `platform/`.
 
+### Files and editors
+
 * Open a `.xsl` or `.groovy` file in the tree and enter the input body, headers and properties on the left.
   Opening a Groovy script picks the runtime from its Script API import; for a pasted script, choose
   it under **Runtime**.
@@ -28,18 +30,20 @@ Download the installer for your platform from the
   in a file's context menu, loads it as the input body of the current tool. A JSON file goes to the
   Groovy tab, unless Flow Steps is open (the Converter takes JSON); **Format** pretty-prints JSON too.
 * Other files, such as `platform/*.json` or `cpi-workbench.json`, open in a **File** tab with their own
-  editor. They no longer replace the input body.
+  editor rather than replacing the input body.
 * The output updates live, or press **Ctrl+Enter**. Compile and runtime errors are marked in the editor.
-* Opening a file does not run its code. A Groovy script, a Groovy test case, and a stylesheet with
-  reflexive `java:` calls run for the first time when you press **Run** or **Ctrl+Enter**; from then
-  on live runs follow your edits. Such code runs with your rights, and a file may come from someone
-  else (an imported iFlow, a shared project). Other stylesheets run when opened, as before.
+* Opening a Groovy script, a Groovy test case or a stylesheet with reflexive `java:` calls does not
+  execute it until **Run** or **Ctrl+Enter**; afterwards Live follows your edits. Such code runs with
+  your rights, so trust the source of imported iFlows and shared projects. Other stylesheets run
+  automatically when opened. Code imported from a message link always waits for a manual run.
 * A message or file whose XML declaration names an encoding (`<?xml version="1.0" encoding="ISO-8859-1"?>`)
   is handled in that encoding: the body reaches the parser, or a script's `InputStream` / `byte[]`,
   in it, and the file is read and saved in it. A character the
   declared encoding lacks (`€` in ISO-8859-1) is an error, in a run and when saving. Text without such a declaration is UTF-8.
 * A file cannot be renamed or copied to its own name in another spelling (`./a.xsl`, or `A.xsl` where
   the file system ignores case).
+### Groovy, XSLT and platform data
+
 * **Parameters** (XSLT) shows how each `xsl:param` was bound: header, property or default.
 * **MPL**, **Console** and **API calls** (Groovy) show message processing log entries, `println`
   output and the calls to SAP APIs with their arguments.
@@ -67,6 +71,8 @@ Download the installer for your platform from the
   the app has no test runner. Opening a `case.json` loads the case into its editor view. A Groovy
   case's attachments and SOAP headers open in the input's **Attachments** and **SOAP** tabs; its
   `platform` overrides apply to its runs while it is open, and the **Platform** tab says so.
+### XSD and XPath
+
 * **XSD** validates a document against a schema; **XPath** evaluates an expression (3.1 by default, or 1.0).
   Both run with **▶ Run** (Ctrl+Enter). XSD validation uses the JDK's validator, so it has no
   *Runtime* choice; for XPath the runtime picks the Saxon version of XPath 3.1 (1.0 runs on the JDK).
@@ -79,6 +85,8 @@ Download the installer for your platform from the
   bring back the expressions run in this session. A document with entity references (`&name;` other than
   `&amp;`, `&lt;` and the like) in its content or in a namespace declaration can hide elements or the namespace
   from the text, so the tab neither marks nor writes paths for it.
+### Flow Steps
+
 * **Flow Steps** runs a **Content Modifier**, **Filter**, **Router**, **General / Iterating Splitter**,
   **Gather** or **Converter** on an input message (body, headers, properties, namespace mapping):
   * Content Modifier: header and property rows with their source types and data types, and the
@@ -104,7 +112,9 @@ Download the installer for your platform from the
 
   Camel Simple and the Content Modifier run on Camel 3.14.7, as on a tenant for both script versions
   (tenants still on software 6.x / 5.x run Camel 2 and are not covered). XPath and the converters run on
-  Saxon-HE 9.9. See [Fidelity](fidelity.md#flow-steps-content-modifier-filter-router-splitter-gather-converter).
+  an installed XML engine (Saxon-HE 9.9 by default, otherwise 12). See [Fidelity](fidelity.md#flow-steps-content-modifier-filter-router-splitter-gather-converter).
+### iFlow import
+
 * **Import iFlow** unpacks an iFlow exported from Integration Suite (zip) into `iflows/` and lists
   its steps. A Groovy Script or XSLT Mapping step opens its file with the step's function name and
   script version; a flow step opens in Flow Steps with its settings, with `{{parameters}}` from the
@@ -112,6 +122,8 @@ Download the installer for your platform from the
   **Message Mapping** step (**M**) is not simulated; clicking it opens the first Groovy script its
   `.mmap` uses, with its first mapping function. The `.iflw` format is not publicly documented, so
   it is read generically (best effort).
+### Groovy completions and Message Mapping functions
+
 * **Completions** in Groovy scripts: after `message.` (or a variable declared as `Message`),
   `messageLogFactory.`, a message log (`MessageLog log`, or `def log = messageLogFactory.getMessageLog(...)`,
   also with `log?.`) and `ITApiFactory.`, the editor lists the methods of SAP's Script API with their
@@ -156,30 +168,46 @@ nothing and calls nothing for it, neither the tenant nor CPI Helper. The extensi
 data and puts it into a link; the app only reads that link. CPI Helper is optional, too: **Import…** takes a
 message you write as JSON just as well.
 
-* **Desktop app:** send the step from CPI Helper; it opens a browser tab. Copy that tab's address, then
-  **Import…** above the input body of the Groovy or XSLT tab, and paste it. Set the plugin's *Custom URL*
-  first (next point, last point): the tab need not show a page for its address to hold the link.
+* **Desktop app, one click:** under **⚙** turn on *Receive links from CPI Helper*; the app then listens on this
+  computer only (127.0.0.1, port 7778 unless you change it) and shows the *Custom URL* for each plugin:
+  `http://127.0.0.1:7778/#share/` for GroovyDebugX, `http://127.0.0.1:7778/` for xsltDebugX. Enter it in
+  CPI Helper's plugin settings. When you send a step, the plugin's tab hands the message to the app and says so,
+  and the app asks before it imports it: the dialog names the tab, the body's size and what it replaces. Any web
+  page can open such a link, so the dialog does not claim it came from CPI Helper; check what it shows. If the
+  app was not running, the tab shows the browser's error page with the message still in its address: start
+  the app and reload the tab. The setting is off by default, and then the app opens no port. A message may hold
+  up to 128 million characters unpacked; importing it runs nothing, not even the open script or mapping with
+  **Live** on: press Ctrl+Enter to run it.
+* **Desktop app, by hand:** use the same local *Custom URL* values above, send the step, then copy
+  the browser tab's address into **Import…** above the Groovy or XSLT input. This works with the
+  receiver off too: an error page still has the link in its address.
 * **Browser mode:** let the plugins open CPI Workbench directly. In CPI Helper's plugin settings choose
   *Custom URL*: for GroovyDebugX `http://127.0.0.1:7777/#share/`, for xsltDebugX `http://127.0.0.1:7777/`
   (with the port, and the `?engines=…` part before `#`, that you start the browser mode with). Each
   hand-over opens a new tab with the message in it.
 * The message lands in its tab: body, headers and properties replace what is there, parts you did not send
   stay. A script or mapping that comes along is unsaved text (**Save** asks for a path) and does not run
-  until you press **Run**: a link can come from anywhere, so nothing in it starts by itself.
+  until you press **Run**. With a pasted or browser-mode message that contains no code, the existing
+  script/mapping may re-run when Live is enabled. The desktop receiver is stricter: every import
+  disables automatic runs until you press **Run**.
+* A body that starts like XML or JSON and does not parse gets a warning (in the dialog, and in the red bar after
+  the import): a large traced body can arrive cut off before CPI Helper builds the link. It is imported anyway.
+  A body of more than 64 million characters is not checked.
 * A trace's values are text, so all headers and properties arrive as *String*; set another type in the table
   where the script needs it (`getHeader(name, Integer)`).
 * **Import…** also takes a message as JSON: `{ "body": "…", "headers": { "Name": "value" }, "properties": { … } }`.
-* Keep the data on your computer: with *Custom URL* set to an address that has `#share/` in it, the message is
-  in the part of the link after `#`, which a browser never sends to a server; `http://127.0.0.1/#share/`
-  does that even when nothing answers there. GroovyDebugX's default target, groovyide.com, and its Contiva
-  option get the message as part of the address their site is called with; xsltDebugX's default keeps it
-  after `#`. A trace can hold business data; treat the link like the message.
+* Treat the link like the message: traces may contain confidential business data. Use a local target
+  (`127.0.0.1`) to keep the hand-over on this computer. URL fragments are not sent in the browser's HTTP
+  navigation, but the destination page can read them; the receiver page deliberately POSTs the fragment
+  to the local app. An external target can therefore receive the data even when its URL uses `#share/`.
+  GroovyDebugX's default GroovyIDE and Contiva targets also put data in the URL path or query.
 * Not read: GroovyDebugX's *Contiva IDE* format; choose *Custom URL* or *GroovyIDE* in the plugin. On macOS
   before 13.3 the desktop app cannot unpack a link (its web view lacks the function); use the browser mode
   there or paste JSON.
 
-The link formats are the plugins' own, read from their source code in November 2026 and not tried with a
-tenant yet; they are not documented and may change.
+The link formats are the plugins' own, read from their source code in November 2026 and tried with a tenant
+(GroovyDebugX and xsltDebugX, body and script or mapping); they are not documented and may change. The link,
+with the message, can stay in the browser's history.
 
 ### What a run can access
 
@@ -207,7 +235,8 @@ The Groovy runtime starts only when the Groovy or Flow Steps tab is used and sto
 release and links to its page if it is newer; download and install it from there.
 If GitHub refuses, the menu shows its reason (without sign-in GitHub allows 60 requests per hour per
 network address, which a shared company network can use up) and **Open releases page**. Apart from your
-own scripts, this is the app's only network request, and it is made only when you click.
+own scripts, this is the app's only external network request, and it is made only when you click.
+The optional CPI Helper receiver accepts browser traffic on loopback only; it never contacts a tenant.
 
 ## Coding agents (MCP)
 
@@ -221,11 +250,18 @@ server can access: [MCP server](mcp.md).
 ```sh
 java -jar cpiwb-groovy-v1.jar run --script scripts/enrich.groovy --in input.xml -H SenderSystem=ERP
 java -jar cpiwb-groovy-v2.jar test testdata/regression-project/tests
-cpiwb-xml xslt --xsl mappings/order.xsl --in input.xml -H SenderSystem=ERP -P Count=3:Integer
-cpiwb-xml validate --xsd schemas/order.xsd --in output.xml
-cpiwb-xml xpath --expr "//Item/@sku" --in input.xml --version 3.1
-cpiwb-xml test testdata/regression-project/tests        # exit code 1 if a case fails
+java -jar cpiwb-xml-he99.jar xslt --xsl mappings/order.xsl --in input.xml -H SenderSystem=ERP -P Count=3:Integer
+java -jar cpiwb-xml-he99.jar validate --xsd schemas/order.xsd --in output.xml
+java -jar cpiwb-xml-he99.jar xpath --expr "//Item/@sku" --in input.xml --version 3.1
+java -jar cpiwb-xml-he99.jar test testdata/regression-project/tests   # exit code 1 if a case fails
 ```
+
+These examples use the build-output jar names; release jars include `-<version>` before `.jar`.
+Native XML executables (`cpiwb-xml-he99`, `cpiwb-xml-he12`, `.exe` on Windows) take the same commands.
+Use `--project <dir>` to choose the resource root; otherwise it is inferred from the script/mapping.
+`--json` returns the full result with diagnostics instead of terminal summaries. Direct `run`/`xslt`
+commands do not have the shell's supervised timeout; use the app/MCP or a supervised `serve` process
+when running potentially non-terminating code.
 
 `-H` sets a header and `-P` an exchange property, as `name=value[:Type]`. The types are listed in
 [Test cases](test-cases.md). Each engine runs only the cases of its own kind and skips the others.

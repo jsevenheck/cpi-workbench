@@ -8,20 +8,21 @@ CPI Workbench simulates SAP Integration Suite (Cloud Integration) steps locally:
   the Groovy engines' Camel; XPath, filtering, splitting, gathering and JSON / XML / CSV conversion on the XML engines).
 * Message Mapping functions (Groovy custom functions with `MappingContext` and `Output`), run on their own.
 
-The UI is Tauri 2 + Svelte 5 + Monaco. Everything runs offline; the app never connects to a tenant.
+The UI is Tauri 2 + Svelte 5 + Monaco. The app never connects to a tenant. Its manual update check
+contacts GitHub; the opt-in CPI Helper receiver accepts loopback traffic. User scripts are not sandboxed.
 
 ## Commands
 
 ```sh
 mvn -f engine/pom.xml verify                    # all engine tests (Java 17+, Maven; a tenant and the app run 21)
 mvn -f engine/pom.xml package -DskipTests       # jars only
-mvn -f engine/pom.xml package -pl groovy-v1,groovy-v2 -am   # one module and its dependencies
+mvn -f engine/pom.xml package -pl groovy-v1,groovy-v2 -am   # both Groovy modules and dependencies
 java -jar engine/xml-he99/target/cpiwb-xml-he99.jar test testdata/regression-project/tests     # regression cases
 java -jar engine/xml-he12/target/cpiwb-xml-he12.jar test testdata/regression-project/tests
 java -jar engine/groovy-v1/target/cpiwb-groovy-v1.jar test testdata/regression-project/tests
 java -jar engine/groovy-v2/target/cpiwb-groovy-v2.jar test testdata/regression-project/tests
 npm --prefix app run check                      # Svelte/TypeScript checks
-npm --prefix app test                           # UI unit tests (formatters; Node 22.18+)
+npm --prefix app test                           # UI unit tests (Node 22.18+)
 npm --prefix app run build                      # UI bundle for browser mode and e2e
 CPIWB_REQUIRE_ENGINES=1 cargo test --manifest-path app/src-tauri/Cargo.toml   # shell ⇄ engines over stdio, MCP server (needs the UI bundle, engine builds; JAVA_HOME picks the JRE)
 node app/scripts/mcp-smoke.mjs app/src-tauri/target/debug/cpi-workbench testdata/regression-project   # MCP server as a client starts it
@@ -44,6 +45,9 @@ in `docs/building.md` (*Releasing*).
   `mcp/flow.rs` repeats the Flow Steps tab's calls (`app/src/lib/store.svelte.ts`), including the converter
   defaults; change both together. `mcp/reference.rs` builds its topics from `app/src/lib/completions.ts`,
   the clean-room platform classes and `docs/test-cases.md` / `docs/fidelity.md`; its test names what it expects.
+* CPI Helper hand-over: `app/src/lib/share.ts` parses messages, `receiver.svelte.ts` coordinates
+  confirmation/settings, and `app/src-tauri/src/receiver.rs` serves the opt-in loopback page.
+  Receiver imports must not execute code, including already-open code and pending Live callbacks.
 * `examples/demo-project`: the sample project users open in the app (no test cases).
 * `testdata/regression-project`: the project with test cases that CI, the e2e and the shell tests run.
 * `probes`: tenant probes, the simulator's baseline output and a tenant's results (`results-tenant/`).
@@ -75,3 +79,6 @@ in `docs/building.md` (*Releasing*).
 `docs/` holds the user guide, test-case format, fidelity table, status audit, architecture,
 build steps and the research plan. **Read `docs/` only when the task needs it.** Start at
 `docs/README.md`, which is a one-line-per-page index, and open just the page you need.
+Keep current usage in the guides, current coverage/gaps in `status.md`, evidence and pending work
+in `plan.md`, and release history in `CHANGELOG.md`. Do not duplicate test counts or leave completed
+proposals written as future features. License texts and `.trail/learnings/` are preserved records.

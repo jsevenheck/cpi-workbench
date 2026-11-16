@@ -1,7 +1,7 @@
 // Unit tests of the hand-over from CPI Helper's plugins: node --test tests/
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readShared, sharedSummary } from '../src/lib/share.ts';
+import { bodyWarning, readShared, sharedSummary } from '../src/lib/share.ts';
 
 /** The plugins' encoding: JSON, raw DEFLATE, URL-safe Base64 without padding. */
 async function encode(data: unknown): Promise<string> {
@@ -52,4 +52,21 @@ test('what cannot be read says why', async () => {
   await assert.rejects(readShared('{ "body": '), /not valid JSON/);
   await assert.rejects(readShared(await encode({ other: 1 })), /none of input, script/);
   await assert.rejects(readShared(await encode([1])), /expected an object/);
+});
+
+test('a body that starts like JSON and does not parse gets the cut-off warning; others none', () => {
+  const cut = bodyWarning('{"EmpJob": [{"userId": "107611"}, {"userId": "1080');
+  assert.match(cut, /^The body is not valid JSON \(.+\)\. It may have been cut off in the trace or on the way; steps that parse it may fail.$/);
+  assert.equal(bodyWarning('﻿  [1, 2]'), '');
+  assert.equal(bodyWarning('{"a": 1}'), '');
+  assert.equal(bodyWarning('plain text'), '');
+  assert.equal(bodyWarning(''), '');
+  // XML is checked with the web view's DOMParser, which Node lacks: no warning here rather than a wrong one.
+  assert.equal(bodyWarning('<EmpJob><EmpJob><userId>1'), '');
+});
+
+test('a link that unpacks to more than the limit is refused while it is unpacked', async () => {
+  const token = await encode({ input: { body: 'x'.repeat(200_000) } });
+  await assert.rejects(readShared(token, 100_000), /longer than 0.1 million characters unpacked/);
+  assert.equal((await readShared(token, 300_000)).body.length, 200_000);
 });

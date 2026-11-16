@@ -6,6 +6,21 @@ of its version.
 
 ## [Unreleased]
 
+### Added
+
+- **One click from CPI Helper into the desktop app.** Under **⚙**, *Receive links from CPI Helper* (off by default)
+  lets the app listen on this computer only (127.0.0.1, port 7778) for the link the GroovyDebugX and xsltDebugX
+  plugins open; the settings show the *Custom URL* to enter in each plugin. The app asks in a dialog before it
+  imports the message, and nothing runs by itself. See the [user guide](docs/user-guide.md#a-message-from-a-tenants-trace-cpi-helper).
+- **A cut-off body is pointed out**: a body imported from a link or as JSON that starts like XML or JSON and does
+  not parse gets a warning; a large traced body can arrive cut off before CPI Helper builds the link.
+
+### Changed
+
+- **Documentation refreshed:** current scope and verification gaps replace estimated completion
+  percentages and stale test counts; completed roadmap drafts are condensed, and build, security,
+  CPI Helper and platform-library guidance is aligned with the current implementation.
+
 ## [0.4.0] - 2026-11-14
 
 Workflow in the tabs: platform data as tables, a traced message from CPI Helper, XPath matches in the

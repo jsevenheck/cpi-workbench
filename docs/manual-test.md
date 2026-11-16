@@ -5,9 +5,10 @@ MCP server (`app/scripts/mcp-smoke.mjs`). It does not cover installing the app, 
 desktop window or a real MCP client. This page is the hand check for that, written for Windows; on
 macOS the steps are the same apart from section 1 and the paths.
 
-Sections 1–3 and 5 are required, 4 and 6 optional; about 1 to 1.5 hours. For each failure, note the
-step number, what you expected, what happened and the error text or a screenshot. Do not release
-while a required step fails.
+Sections 1–3 and 5 are required, 4 and 6 optional; about 1 to 1.5 hours. Tenant-only checks require
+CPI Helper and a test tenant; record them as not run when unavailable, rather than passed. For each
+failure, note the step, expected/actual behaviour and error text or screenshot. Do not release with
+a required failure. Keep dated results in the release/PR record, not in this reusable checklist.
 
 ## 0. Preparation
 
@@ -41,6 +42,8 @@ Do not install both at once.
 ## 2. App with the demo project (required)
 
 Open the copy of `examples/demo-project`. Clicking a file in `inputs/` loads it as the input body.
+For rows using `tests/…`, open the copy of `testdata/regression-project` instead; the demo has no tests.
+Opening Groovy scripts/cases waits for **Run** or **Ctrl+Enter** before the first execution.
 
 ### XSLT
 
@@ -66,12 +69,16 @@ The first run starts the Java engines and can take a few seconds.
 | 2.11 | Type `message.` in a script; also `messageLogFactory.` and Ctrl+Space | The Script API methods are listed. |
 | 2.11a | `scripts/mapping-functions.groovy`: open **Function**, choose `countPerContext(values)`; context 1 starts empty: **+ Value** `A`, **+ Value** `B`, then **+ Context** and `C` | Before any run, **Function** lists the functions under *Message Mapping function* and the left pane shows **Function arguments** with `values`; **Result** shows *Context 1* `2` and *Context 2* `1` (**Text**: `["2"]` and `["1"]`). |
 | 2.11b | **Function** `getHeader(headerName)`, `headerName` `SenderSystem` with that header set; then a name that is not set; then **null** | **Result** shows the header's value, then `null`. With **null** the run fails with a `NullPointerException` in line 7: once a header is set, Camel's case-insensitive header map takes no null name. Opening another script brings the **Body** tab back. |
-| 2.11c | **⚙** (bottom left) → **Check for updates** | The installed version is shown. Before the release: "This is the latest version (latest release: 0.3.1)"; with a newer release, **Open release page** opens it in the browser. If GitHub refuses (e.g. 403), the reason is shown and **Open releases page** opens the list. |
+| 2.11c | **⚙** (bottom left) → **Check for updates** | The installed version is shown and compared with the current latest GitHub release; with a newer release, **Open release page** opens it in the browser. If GitHub refuses (e.g. 403), the reason is shown and **Open releases page** opens the list. |
 | 2.11e | `tests/groovy-enrich-order/case.json`, run it; **Platform** tab: change *Target value* of the first value mapping; then **Save** | The output's `SoldTo` property follows the change at once, with a dot next to *Value mappings*; after **Save** the dot is gone and `platform/value-mappings.json` has the value. |
 | 2.11f | `tests/groovy-attachment/case.json`: **Attachments** tab; set *Content from* to *text*, name `delivery-note.txt`, content `Delivery DN-1` | The tab shows the case's file with its project path; with the text, the `DeliveryNote` header is `Delivery DN-1`. |
-| 2.11g | With CPI Helper on a tenant's iFlow page, trace on: send a Groovy step from the **GroovyDebugX** plugin (body, headers, properties, script); copy the opened tab's address; Groovy tab → **Import…** → paste | Body, headers, properties and the script arrive; the status line says what came and that the script has not run; **Run** runs it. Not tried yet (2026-11-13). |
+| 2.11g | With CPI Helper on a tenant's iFlow page, trace on: send a Groovy step from the **GroovyDebugX** plugin (body, headers, properties, script); copy the opened tab's address; Groovy tab → **Import…** → paste | Body, headers, properties and the script arrive; the status line says what came and that the script has not run; **Run** runs it. |
+| 2.11j | **⚙** → **Receive links from CPI Helper** on (port 7778); set the shown *Custom URL* in GroovyDebugX and xsltDebugX; send a Groovy step, then an XSLT step | The plugin's tab says "Sent. Confirm the import…"; the app comes to the front with a dialog naming the tab, the body's size and what it replaces; **Import** fills that tab, **Cancel** leaves it. A body cut off in the trace shows a warning in the dialog and, after the import, in the red bar. With the setting off, the tab shows the browser's error page. |
 | 2.11h | Without a tenant, the same path: XSLT tab → **Import…** → paste `http://localhost/#share/XYwxC8IwEIX_SrjZUlwlBhwcnBTbzTgc9sBikpZLIpXS_-6lm273vve-m2HyDnYK9Jk7YtV3ewtttbVg9CmRV_GVhRws1EbX68bARsEUXSpauZ-EgqPE2wwBPZWioSCw-UR5UkZvdHktjtcLLHchIw8jcerpz2wZH_SjeAwZXZUoJlGXLw` (a link in xsltDebugX's format with a body, one header and one property, no mapping) | The input body is `<Order id="T-1">…`, header `SenderSystem` = `ERP`, property `Trace` = `manual-test`; the mapping stays as it was. On macOS before 13.3 an error says the web view cannot unpack the link. |
 | 2.11i | `scripts/mapping-functions.groovy`, **Live** off: **Function** `getHeader`, run; then **Other name…**, type `setProperty`, fill both arguments, run | The result is the second argument, and the arguments stay filled after the run. |
+| 2.11k | Receiver on, script/mapping already run once, **Live** on; import only body/headers/properties | No automatic run, including a previously scheduled Live callback. The status asks for Ctrl+Enter. **Run** executes the existing code on the new message. |
+| 2.11l | Send another receiver link while one is being unpacked or confirmed; quickly toggle/change the receiver port | Only the newest undecided message is offered, with a replacement note. Settings settle on the latest choice; an occupied port reports an error, without silently choosing another. |
+| 2.11m | Import valid XML containing `<parsererror>`, then an XHTML `<h:parsererror>`; import cut-off XML and invalid JSON | Valid documents have no warning; malformed bodies warn but remain importable. Check Edge and Firefox in browser mode, and WKWebView on macOS when available. |
 | 2.11d | New script in 1.x with `log.logInfo(TimeZone.default.ID + ' ' + org.apache.commons.lang3.StringUtils.reverse('abc'))` in `processData`; then change `logInfo` to `info` | **Console** shows `[log.logInfo] Etc/UTC cba` with a note; with `info` the run fails with `MissingMethodException … ScriptLogger.info()`, as on a tenant. |
 
 ### XSD and XPath
@@ -142,7 +149,7 @@ Use a copy of `examples/demo-project`. Setup details: [MCP server](mcp.md).
 | 5.9 | *"Read C:\Windows\win.ini as bodyPath with evaluate_xpath."* | Refused with an error: the path is outside the project. |
 | 5.10 | Keep the app open and run something there meanwhile | Both work; the agent's runs do not appear in the app (by design). |
 | 5.11 | Claude Desktop with `--project` on the copy ([MCP server](mcp.md)), without a filesystem server: *"Look at inputs/order.xml and write an XSLT that maps it to the format of schemas/salesorder.xsd; try it and validate the result."* | The agent reads both files with `read_file`, runs `run_xslt` and `validate_xsd` until the output is valid, and shows the mapping; nothing is saved. |
-| 5.12 | *"Save it as mappings/agent-order.xsl."*, then the same again | Claude Desktop asks before `save_file`; the file appears in the app after **↻**. The second time the agent is told the file exists and asks whether to replace it. |
+| 5.12 | *"Save it as mappings/agent-order.xsl."*, then the same again | The client may ask before the writing tool; the file appears in the app after **↻**. The second time the agent is told the file exists and asks whether to replace it. |
 | 5.13 | *"Import the iFlow from <path of an exported .zip> and tell me what its Content Modifier does with a sample message."* | `import_iflow`, then `run_flow_step` on its step; the app shows the iFlow after **↻**. |
 | 5.14 | **+** → **develop_step** with a task | The agent follows the steps of the prompt (project, input, write, run, report). |
 

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { checkForUpdate, RELEASES_PAGE, type UpdateCheck } from '../lib/version';
+  import { customUrls, receiver, setReceiver } from '../lib/receiver.svelte';
 
   let open = $state(false);
   let version = $state('');
@@ -56,6 +57,19 @@
         <p>Version {check.latest} is available. Download and install it from its release page.</p>
         <button class="primary" onclick={() => check?.newer && openRelease(check.url)}>Open release page</button>
       {/if}
+      <hr />
+      <label class="cb"><input type="checkbox" checked={receiver.on}
+        onchange={(e) => setReceiver(e.currentTarget.checked, receiver.port)} /> Receive links from CPI Helper</label>
+      <label class="cb">Port <input class="port" type="number" min="1024" max="65535" value={receiver.port}
+        onchange={(e) => setReceiver(receiver.on, Number(e.currentTarget.value))} /></label>
+      {#if receiver.error}<p class="err">{receiver.error}</p>{/if}
+      {#if receiver.running}
+        <p>Custom URL in CPI Helper's plugin settings:</p>
+        <label>GroovyDebugX <input class="mono" readonly value={customUrls(receiver.port).groovy} onfocus={(e) => e.currentTarget.select()} /></label>
+        <label>xsltDebugX <input class="mono" readonly value={customUrls(receiver.port).xslt} onfocus={(e) => e.currentTarget.select()} /></label>
+      {/if}
+      <p class="hint">When on, the app listens on this computer only (127.0.0.1) for the link a plugin opens, and asks
+        before it imports the message. Nothing runs by itself.</p>
     </div>
   {/if}
 </div>
@@ -70,4 +84,9 @@
   p { margin: 0; }
   .hint { color: var(--muted); font-size: 11px; }
   .err { color: var(--err); white-space: pre-wrap; }
+  hr { border: none; border-top: 1px solid var(--border); margin: 2px 0; width: 100%; }
+  label { display: flex; flex-direction: column; gap: 2px; }
+  label.cb { flex-direction: row; align-items: center; gap: 6px; }
+  .port { width: 80px; }
+  input.mono { font-size: 11px; }
 </style>

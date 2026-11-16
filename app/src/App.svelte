@@ -10,6 +10,7 @@
   import FileView from './components/FileView.svelte';
   import SettingsMenu from './components/SettingsMenu.svelte';
   import { isDesktop } from './lib/engine';
+  import { initReceiver } from './lib/receiver.svelte';
   import { app, xslt, xpath, groovy, fileView, init, runXslt, runXsd, runXpath, runFlowStep, runGroovy, closeFileTab, importFromAddress, autoRunXslt, autoRunGroovy, onGroovyProfileChange } from './lib/store.svelte';
 
   onMount(async () => {
@@ -17,6 +18,8 @@
     // A link from CPI Helper that points here; another one into the open tab arrives as a hash change.
     await importFromAddress();
     window.addEventListener('hashchange', () => void importFromAddress());
+    // Desktop app: links from CPI Helper through the receiver, if it is turned on under ⚙.
+    await initReceiver();
     if (app.tool === 'xslt' && !xslt.result && hasKind('xslt')) autoRunXslt();
     if (app.tool === 'groovy' && !groovy.result && hasKind('groovy')) autoRunGroovy();
   });

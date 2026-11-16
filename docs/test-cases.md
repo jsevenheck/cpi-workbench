@@ -85,12 +85,13 @@ or `def void f(String[] a, Output output, MappingContext c)`, runs with `args` i
 * **Attachments**: `"attachments": [ { "file": "note.txt", "contentType": "text/plain" } ]` in
   `input`. An entry can hold `text` or `base64` instead of `file`, and an optional `name`
   (default: the file name). Files must lie inside the project.
-* **SOAP headers** (Script API v1 only, as in SAP's interface):
+* **SOAP headers** (documented in Script API v1; also offered by the probed v2 runtime):
   `"soapHeaders": [ { "name": "{urn:ns}Local", "value": "<Local xmlns=\"urn:ns\">…</Local>", "mustUnderstand": false } ]`.
   The result shows the headers the script sets.
 * **Libraries**: jars in the project's `lib/` folder and in an imported iFlow's
-  `src/main/resources/lib/` are on the script's class path. CPI's own extra libraries are not
-  known, so none are bundled ([plan](plan.md) F31).
+  `src/main/resources/lib/` are on the script's class path. The engines also bundle the libraries
+  identified by tenant fingerprints (commons-lang3 on both; Jackson and commons-codec on 1.x;
+  yaml/toml support on 2.x). Exact versions and exclusions: [Fidelity](fidelity.md).
 * **Java calls from XSLT**: `xmlns:x="java:java.lang.Math"` style calls (`x:max(1, 2)`,
   `x:new(…)`, instance methods with the object as first argument) work for JDK classes (the native
   engines: a fixed list of common ones). Classes from `lib/` jars are not available to XSLT.

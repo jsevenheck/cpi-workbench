@@ -2,15 +2,17 @@
 mod ascii_alias;
 mod engine;
 mod mcp;
+mod receiver;
 
 use engine::Engines;
 use serde_json::Value;
 use std::sync::Arc;
 use std::time::Duration;
-use tauri::{Manager, RunEvent, State};
+use tauri::{AppHandle, Emitter, Manager, RunEvent, State};
 
 struct AppState {
     engines: Arc<Engines>,
+    receiver: Arc<receiver::Receiver>,
 }
 
 /// Forwards one RPC call to the engine for `profile`.
@@ -64,6 +66,24 @@ fn open_release_page(url: String) -> Result<(), String> {
     Ok(())
 }
 
+/// Turns the receiver for CPI Helper's links on at `port`, or off (docs/plan.md W2b). A link that arrives
+/// goes to the UI, which asks before it imports it, and brings the window to the front. Off at once, on a
+/// worker thread: stopping waits for the port to be free.
+#[tauri::command]
+async fn receiver_set(app: AppHandle, state: State<'_, AppState>, port: Option<u16>) -> Result<(), String> {
+    let receiver = state.receiver.clone();
+    let deliver: receiver::Deliver = Arc::new(move |data| {
+        let _ = app.emit(receiver::EVENT, data);
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.unminimize();
+            let _ = window.set_focus();
+        }
+    });
+    tauri::async_runtime::spawn_blocking(move || receiver.set(port, deliver))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
 pub fn run() {
     let context = tauri::generate_context!();
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -73,7 +93,7 @@ pub fn run() {
     let engines = Arc::new(Engines::default());
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .manage(AppState { engines: engines.clone() })
+        .manage(AppState { engines: engines.clone(), receiver: Default::default() })
         .setup(move |app| {
             let resources = app.path().resource_dir().ok().map(engine::plain_path);
             let cache = app.path().app_cache_dir().ok().map(|d| d.join("cds"));
@@ -89,7 +109,7 @@ pub fn run() {
             });
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![engine_call, engine_profiles, open_release_page])
+        .invoke_handler(tauri::generate_handler![engine_call, engine_profiles, open_release_page, receiver_set])
         .build(context)
         .expect("error while building CPI Workbench");
     app.run(|handle, event| {

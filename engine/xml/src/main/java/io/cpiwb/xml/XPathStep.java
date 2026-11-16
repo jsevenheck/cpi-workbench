@@ -12,7 +12,9 @@ import net.sf.saxon.s9api.XPathCompiler;
 import net.sf.saxon.s9api.XPathSelector;
 import net.sf.saxon.s9api.XdmAtomicValue;
 import net.sf.saxon.s9api.XdmItem;
+import net.sf.saxon.s9api.Axis;
 import net.sf.saxon.s9api.XdmNode;
+import net.sf.saxon.s9api.XdmNodeKind;
 import net.sf.saxon.s9api.XdmValue;
 import org.w3c.dom.Document;
 import org.w3c.dom.Node;
@@ -20,12 +22,7 @@ import org.xml.sax.InputSource;
 
 import javax.xml.namespace.NamespaceContext;
 import javax.xml.parsers.DocumentBuilderFactory;
-import javax.xml.transform.OutputKeys;
-import javax.xml.transform.Transformer;
 import javax.xml.transform.TransformerException;
-import javax.xml.transform.TransformerFactory;
-import javax.xml.transform.dom.DOMSource;
-import javax.xml.transform.stream.StreamResult;
 import javax.xml.xpath.XPath;
 import javax.xml.xpath.XPathEvaluationResult;
 import javax.xml.xpath.XPathFactory;
@@ -119,14 +116,15 @@ public final class XPathStep {
         XPath xp = XPathFactory.newDefaultInstance().newXPath();
         xp.setNamespaceContext(namespaceContext(ns));
         XPathEvaluationResult<?> res = xp.evaluateExpression(expr, doc);
+        Map<Node, Integer> positions = new java.util.IdentityHashMap<>();
         switch (res.type()) {
             case NODESET:
                 for (Node n : (XPathNodes) res.value()) {
-                    items.add(describeDom(n));
+                    items.add(withPlace(describeDom(n), domPlace(n, positions)));
                 }
                 break;
             case NODE:
-                items.add(describeDom((Node) res.value()));
+                items.add(withPlace(describeDom((Node) res.value()), domPlace((Node) res.value(), positions)));
                 break;
             case NUMBER:
                 Object num = res.value();
@@ -147,6 +145,10 @@ public final class XPathStep {
         return new NamespaceContext() {
             @Override
             public String getNamespaceURI(String prefix) {
+                // The xml prefix is bound by definition (Namespaces in XML), as XPath 3.1 has it without a mapping.
+                if ("xml".equals(prefix) && !ns.containsKey(prefix)) {
+                    return javax.xml.XMLConstants.XML_NS_URI;
+                }
                 return ns.getOrDefault(prefix, "");
             }
 
@@ -163,13 +165,112 @@ public final class XPathStep {
         };
     }
 
+    // ---- where a node is in the input document, for the UI to mark it in the text ("at")
+    // {path: [1, 3, 2], name: "ns0:Item"} is the element that is the 2nd element child of the 3rd element child
+    // of the root element, with its name as written; an attribute adds {attribute: "sku"} as written, text,
+    // comments and processing instructions {text: true} on their parent element. Nodes of another document
+    // (doc()) and the document node get none.
+
+    private static Map<String, Object> withPlace(Map<String, Object> item, Map<String, Object> place) {
+        if (place != null) {
+            item.put("at", place);
+        }
+        return item;
+    }
+
+    /**
+     * The element's position among its parent's element children. Each parent's children are counted once per
+     * run, into {@code positions}: counting siblings for every node would be quadratic in a list of thousands.
+     */
+    private static int domPosition(Node e, Map<Node, Integer> positions) {
+        Integer known = positions.get(e);
+        if (known != null) {
+            return known;
+        }
+        Node parent = e.getParentNode();
+        int i = 0;
+        for (Node c = parent == null ? e : parent.getFirstChild(); c != null; c = c.getNextSibling()) {
+            if (c.getNodeType() == Node.ELEMENT_NODE) {
+                positions.put(c, ++i);
+            }
+            if (parent == null) {
+                break;
+            }
+        }
+        return positions.getOrDefault(e, 1);
+    }
+
+    private static Map<String, Object> domPlace(Node n, Map<Node, Integer> positions) {
+        Json.Obj at = Json.o();
+        if (n.getNodeType() == Node.ATTRIBUTE_NODE) {
+            at.with("attribute", n.getNodeName());
+            n = ((org.w3c.dom.Attr) n).getOwnerElement();
+        } else if (n.getNodeType() != Node.ELEMENT_NODE) {
+            at.with("text", true);
+            n = n.getParentNode();
+        }
+        if (n == null || n.getNodeType() != Node.ELEMENT_NODE) {
+            return null;
+        }
+        List<Integer> path = new ArrayList<>();
+        String name = n.getNodeName();
+        for (Node e = n; e != null && e.getNodeType() == Node.ELEMENT_NODE; e = e.getParentNode()) {
+            path.add(0, domPosition(e, positions));
+        }
+        return at.with("path", path).with("name", name);
+    }
+
+    /** As {@link #domPosition}, for Saxon's tree. */
+    private static int saxonPosition(XdmNode e, Map<XdmNode, Integer> positions) {
+        Integer known = positions.get(e);
+        if (known != null) {
+            return known;
+        }
+        XdmNode parent = e.getParent();
+        if (parent == null) {
+            return 1;
+        }
+        int i = 0;
+        for (Iterator<XdmNode> it = parent.axisIterator(Axis.CHILD); it.hasNext(); ) {
+            XdmNode c = it.next();
+            if (c.getNodeKind() == XdmNodeKind.ELEMENT) {
+                positions.put(c, ++i);
+            }
+        }
+        return positions.getOrDefault(e, 1);
+    }
+
+    private static Map<String, Object> saxonPlace(XdmNode n, XdmNode doc, Map<XdmNode, Integer> positions) {
+        if (!doc.equals(n.getRoot())) {
+            return null; // a node of another document (doc())
+        }
+        Json.Obj at = Json.o();
+        XdmNodeKind kind = n.getNodeKind();
+        if (kind == XdmNodeKind.NAMESPACE) {
+            return null; // in scope on an element, often declared on an ancestor: no single place in the text
+        }
+        if (kind == XdmNodeKind.ATTRIBUTE) {
+            at.with("attribute", n.getUnderlyingNode().getDisplayName());
+            n = n.getParent();
+        } else if (kind != XdmNodeKind.ELEMENT) {
+            at.with("text", true);
+            n = n.getParent();
+        }
+        if (n == null || n.getNodeKind() != XdmNodeKind.ELEMENT) {
+            return null;
+        }
+        List<Integer> path = new ArrayList<>();
+        String name = n.getUnderlyingNode().getDisplayName();
+        for (XdmNode e = n; e != null && e.getNodeKind() == XdmNodeKind.ELEMENT; e = e.getParent()) {
+            path.add(0, saxonPosition(e, positions));
+        }
+        return at.with("path", path).with("name", name);
+    }
+
     private static Map<String, Object> describeDom(Node n) throws Exception {
         if (n.getNodeType() == Node.ELEMENT_NODE || n.getNodeType() == Node.DOCUMENT_NODE) {
-            Transformer t = TransformerFactory.newDefaultInstance().newTransformer();
-            t.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "yes");
-            StringWriter w = new StringWriter();
-            t.transform(new DOMSource(n), new StreamResult(w));
-            return Json.o().with("kind", "element").with("name", n.getNodeName()).with("value", w.toString());
+            return Json.o().with("kind", "element").with("name", n.getNodeName())
+                    .with("value", io.cpiwb.core.DomXml.serialize(n));
         }
         return Json.o().with("kind", n.getNodeType() == Node.ATTRIBUTE_NODE ? "attribute" : "text")
                 .with("name", n.getNodeName()).with("value", n.getNodeValue());
@@ -191,6 +292,7 @@ public final class XPathStep {
             return String.valueOf(sel.effectiveBooleanValue());
         }
         XdmValue value = sel.evaluate();
+        Map<XdmNode, Integer> positions = new java.util.HashMap<>();
         for (XdmItem item : value) {
             if (item.isAtomicValue()) {
                 items.add(Json.o().with("kind", "atomic")
@@ -199,10 +301,10 @@ public final class XPathStep {
             } else if (item instanceof XdmNode) {
                 XdmNode node = (XdmNode) item;
                 String kind = node.getNodeKind().name().toLowerCase();
-                items.add(Json.o().with("kind", kind)
+                items.add(withPlace(Json.o().with("kind", kind)
                         .with("name", node.getNodeName() == null ? null : node.getNodeName().toString())
                         .with("value", "element".equals(kind) || "document".equals(kind)
-                                ? node.toString() : node.getStringValue()));
+                                ? node.toString() : node.getStringValue()), saxonPlace(node, doc, positions)));
             } else {
                 items.add(Json.o().with("kind", "item").with("value", item.toString()));
             }

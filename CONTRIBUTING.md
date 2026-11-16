@@ -22,11 +22,17 @@ welcome.
 mvn -f engine/pom.xml verify          # engine tests
 npm --prefix app run check            # Svelte/TypeScript checks
 npm --prefix app test                 # UI unit tests
+npm --prefix app run build            # catches Svelte compilation errors too
 ```
 
 When behaviour changes, update the tests, [`docs/fidelity.md`](docs/fidelity.md) and
 [`docs/status.md`](docs/status.md), and add a line under *Unreleased* in the
-[changelog](CHANGELOG.md).
+[changelog](CHANGELOG.md). If a probe's output changes, update its simulator baseline too.
+Run shell/MCP/receiver tests for Rust changes and browser e2e for UI workflows;
+[Building](docs/building.md) explains engine staging and the no-GraalVM override.
+
+Keep documentation about the current checkout distinct from release history and pending roadmap
+items. Preserve fidelity evidence and source IDs rather than deleting unanswered questions.
 
 ## Reporting a fidelity difference
 

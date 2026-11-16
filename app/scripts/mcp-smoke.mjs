@@ -49,7 +49,9 @@ check(init.result?.protocolVersion === '2025-11-25', 'initialize (2025-11-25)', 
 child.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
 
 const list = await request('tools/list', {});
-check(list.result?.tools?.length === 6, 'tools/list', list);
+check(list.result?.tools?.length === 10, 'tools/list', list);
+const prompts = await request('prompts/list', {});
+check(prompts.result?.prompts?.[0]?.name === 'develop_step', 'prompts/list', prompts);
 
 async function tool(name, args) {
   const r = await request('tools/call', { name, arguments: args, _meta: meta });
@@ -59,6 +61,11 @@ async function tool(name, args) {
 
 const info = await tool('project_info', {});
 check(info.runtimes.every((r) => r.installed), 'all runtimes installed', info.runtimes);
+
+const file = await tool('read_file', { path: 'cpi-workbench.json' });
+check(typeof file.content === 'string' && file.totalLines >= 0, 'read_file', file);
+const ref = await tool('reference', { topic: 'script-api' });
+check(ref.text.includes('getMappedValue'), 'reference (generated into the release build)', ref.text.slice(0, 200));
 
 const xslt = await tool('run_xslt', { runtime: 'both', body: '<a/>', headers: { h: 'hello' },
   mapping: "<xsl:stylesheet version='2.0' xmlns:xsl='http://www.w3.org/1999/XSL/Transform'><xsl:param name='h'/>"
@@ -74,6 +81,12 @@ const route = await tool('run_flow_step', { headers: { SenderId: 'ERP' }, step: 
   { name: 'ERP', expressionType: 'nonxml', condition: "${header.SenderId} = 'ERP'", default: false },
   { name: 'Other', expressionType: 'nonxml', condition: '', default: true }] } } });
 check(route.taken === 'ERP', 'run_flow_step (Router, Camel Simple)', route);
+
+const first = await tool('run_groovy', { runtime: 'groovy-1.x', body: 'abc', headers: { h: 'x' },
+  script: 'def processData(m) { m.setBody(m.getBody(String).toUpperCase()); m }' });
+const next = await tool('run_groovy', { runtime: 'groovy-2.x', messageFrom: first.runId,
+  script: "def processData(m) { m.setBody(m.getBody(String) + m.getHeaders()['h']); m }" });
+check(next.output?.body === 'ABCx', 'messageFrom passes a run on by its runId', next);
 
 clearTimeout(timer);
 child.stdin.end();

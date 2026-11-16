@@ -6,13 +6,19 @@
 //!   A request that carries `_meta["io.modelcontextprotocol/protocolVersion"]` is served statelessly
 //!   under 2026-07-28 (`server/discover`, `resultType`, caching hints); a client that opens with
 //!   `initialize` gets the negotiated legacy revision (2025-11-25 back to 2024-11-05).
-//! * Features: tools only, one per tab of the app (see `tools.rs`); the app's features lead and the
-//!   tools add none of their own. No resources, prompts, logging, sampling or roots.
+//! * Features: tools, one per tab of the app (see `tools.rs`), plus reading and saving project files,
+//!   importing an iFlow, results by runId (`runs.rs`) and a reference generated from the sources
+//!   (`files.rs`, `reference.rs`), so that an
+//!   agent without file access of its own (Claude Desktop) can work in the project; one prompt. No
+//!   resources, logging, sampling or roots.
 //! * Scope: one project folder (`--project`; default `CLAUDE_PROJECT_DIR`, else the working directory).
 //!   Files are read through the engines, which refuse paths outside the project. Groovy scripts run without a sandbox, as in
 //!   the app; docs/mcp.md says so.
 
+mod files;
 mod flow;
+mod reference;
+mod runs;
 mod tools;
 
 use crate::engine::{self, Engines};
@@ -44,16 +50,68 @@ const LIST_TTL_MS: u64 = 3_600_000;
 
 const INSTRUCTIONS: &str = "CPI Workbench simulates SAP Integration Suite (Cloud Integration) steps locally: \
 XSLT mappings (Saxon-HE 9.9 like CPI, or 12), Groovy scripts (Script API 1.x on Groovy 2.4, \
-2.x on Groovy 4, both on Camel 3.14), XSD validation, XPath and the flow steps Content Modifier, Filter, Router, \
-Splitter and Gather, as the tabs of the CPI Workbench app do. Paths are relative to the project folder: the tools \
-read bodies, mappings, scripts and schemas from it only, and XSD and XPath runs stay inside it. Groovy scripts, \
-and reflexive java: calls and fn:transform() in XSLT, run without a sandbox, with the user's rights. Call project_info first to see the project's files, iFlow steps and installed runtimes. The simulator \
-is not a tenant: messages starting with 'UnsupportedInSimulator' name behaviour it does not simulate, and \
-docs/fidelity.md in the CPI Workbench repository lists what is verified against CPI.";
+2.x on Groovy 4, both on Camel 3.14) and Message Mapping functions, XSD validation, XPath and the flow steps Content \
+Modifier, Filter, Router, Splitter, Gather and Converter, as the tabs of the CPI Workbench app do.\n\
+How to work: call project_info first (files, iFlow steps with their configuration, runtimes); read the input \
+message, the iFlow's scripts and mappings with read_file; write the step and run it with run_xslt, run_groovy, \
+validate_xsd, evaluate_xpath or run_flow_step, passing the source inline (mapping, script, schema, step) until the \
+result is right. A run that produces a message returns a runId: pass it as messageFrom to the next step instead \
+of copying the body (body, headers and properties flow on as in an iFlow; a Splitter's messages are runId/1, \
+runId/2, …; a Gather takes messagesFrom). Long bodies come back shortened; read_file with runId shows them whole, \
+save_file with contentFrom keeps one. Run on both runtimes (runtime: both) when the version matters. Show the user the result and, for flow steps, the configuration as they would enter \
+it in the iFlow. Save files with save_file only when the user wants them; the app shows them after a refresh. \
+reference explains the Script API, the platform/ data formats and what is verified against CPI.\n\
+Paths are relative to the project folder; the tools read and write inside it only. Groovy scripts, and reflexive \
+java: calls and fn:transform() in XSLT, run without a sandbox, with the user's rights. The simulator is not a \
+tenant: messages starting with 'UnsupportedInSimulator' name behaviour it does not simulate.";
+
+/// The prompts: a starting point the user picks in the client.
+fn prompt_definitions() -> Value {
+    json!([{
+        "name": "develop_step",
+        "title": "Develop a step on the simulator",
+        "description": "Build an XSLT mapping, Groovy script, XSD, XPath or flow step for a task and try it on the simulator.",
+        "arguments": [
+            { "name": "task", "description": "What the step should do, e.g. map the order to the S/4 format.", "required": true },
+            { "name": "iflow", "description": "The iFlow it belongs to (a folder under iflows/ or a step name).", "required": false },
+            { "name": "input", "description": "Project file with a sample input message.", "required": false },
+        ],
+    }])
+}
+
+fn get_prompt(params: &Value) -> Result<Value, (i64, String)> {
+    let name = params.get("name").and_then(Value::as_str).ok_or((INVALID_PARAMS, "prompts/get needs a prompt name".to_string()))?;
+    if name != "develop_step" {
+        return Err((INVALID_PARAMS, format!("Unknown prompt: {name}")));
+    }
+    let arg = |k: &str| params.get("arguments").and_then(|a| a.get(k)).and_then(Value::as_str).filter(|s| !s.trim().is_empty());
+    let task = arg("task").ok_or((INVALID_PARAMS, "Missing argument: task".to_string()))?;
+    let mut text = format!("Task: {task}\n");
+    if let Some(f) = arg("iflow") {
+        text.push_str(&format!("iFlow: {f}\n"));
+    }
+    if let Some(i) = arg("input") {
+        text.push_str(&format!("Sample input: {i}\n"));
+    }
+    text.push_str("\nUse the CPI Workbench tools:\n\
+1. project_info: the project's files, the iFlow's steps and the installed runtimes.\n\
+2. read_file: the sample input and the files of the steps around the one to build.\n\
+3. Pick the step type CPI would use and write it. For scripts or mapping functions, check reference script-api.\n\
+4. Run it on the simulator with the sample input and fix it until the output is right; try an edge case too \
+(empty or missing fields, several records). Pass a result to the next step with messageFrom and its runId.\n\
+5. Report the final source or configuration (as entered in the iFlow), the output it gave, and anything the \
+simulator does not cover (fidelity).\n\
+6. Ask before saving; then save_file into the project's folder for its kind.\n");
+    Ok(json!({ "description": "Develop a step on the simulator", "messages": [{ "role": "user", "content": { "type": "text", "text": text } }] }))
+}
 
 pub struct Server {
     engines: Arc<Engines>,
     project: Option<PathBuf>,
+    runs: runs::Runs,
+    /// Held from the check whether a file exists to the write: requests run in parallel (one thread each), and
+    /// without it two calls without `overwrite` could both find a path free and both write it.
+    writes: Mutex<()>,
 }
 
 /// Entry point for `cpi-workbench mcp [--project <folder>]`. Returns the process exit code.
@@ -219,17 +277,30 @@ fn server_info() -> Value {
     json!({ "name": "cpi-workbench", "title": "CPI Workbench", "version": env!("CARGO_PKG_VERSION") })
 }
 
+fn capabilities() -> Value {
+    json!({ "tools": {}, "prompts": {} })
+}
+
 fn supported_versions() -> Vec<&'static str> {
     std::iter::once(MODERN).chain(LEGACY.iter().copied()).collect()
 }
 
 impl Server {
     pub fn new(engines: Arc<Engines>, project: Option<PathBuf>) -> Self {
-        Server { engines, project }
+        Server { engines, project, runs: runs::Runs::default(), writes: Mutex::new(()) }
     }
 
     pub fn engines(&self) -> &Engines {
         &self.engines
+    }
+
+    pub fn runs(&self) -> &runs::Runs {
+        &self.runs
+    }
+
+    /// The lock save_file and import_iflow hold over "does it exist?" and the write.
+    pub fn write_lock(&self) -> std::sync::MutexGuard<'_, ()> {
+        self.writes.lock().unwrap_or_else(|e| e.into_inner())
     }
 
     pub fn project(&self) -> Option<&Path> {
@@ -259,7 +330,7 @@ impl Server {
             "ping" => Ok(json!({})),
             "server/discover" => Ok(json!({
                 "supportedVersions": supported_versions(),
-                "capabilities": { "tools": {} },
+                "capabilities": capabilities(),
                 "instructions": INSTRUCTIONS,
                 "ttlMs": LIST_TTL_MS,
                 "cacheScope": "public",
@@ -273,6 +344,15 @@ impl Server {
                 Ok(r)
             }
             "tools/call" => self.call_tool(params),
+            "prompts/list" => {
+                let mut r = json!({ "prompts": prompt_definitions() });
+                if modern {
+                    r["ttlMs"] = json!(LIST_TTL_MS);
+                    r["cacheScope"] = json!("public");
+                }
+                Ok(r)
+            }
+            "prompts/get" => get_prompt(params),
             _ => Err((METHOD_NOT_FOUND, format!("Method not found: {method}"))),
         };
         match result {
@@ -318,7 +398,7 @@ fn initialize(params: &Value) -> Value {
     let version = LEGACY.iter().find(|v| **v == asked).copied().unwrap_or(LEGACY[0]);
     json!({
         "protocolVersion": version,
-        "capabilities": { "tools": {} },
+        "capabilities": capabilities(),
         "serverInfo": server_info(),
         "instructions": INSTRUCTIONS,
     })

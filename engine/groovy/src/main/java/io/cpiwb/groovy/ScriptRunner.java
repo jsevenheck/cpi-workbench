@@ -25,17 +25,12 @@ import org.w3c.dom.Element;
 
 import javax.xml.namespace.QName;
 import javax.xml.stream.XMLStreamException;
-import javax.xml.transform.OutputKeys;
-import javax.xml.transform.Transformer;
 import javax.xml.transform.TransformerFactory;
-import javax.xml.transform.dom.DOMSource;
-import javax.xml.transform.stream.StreamResult;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.io.PrintStream;
 import java.io.Reader;
-import java.io.StringWriter;
 import java.lang.reflect.Method;
 import java.net.URL;
 import java.net.URLClassLoader;
@@ -240,6 +235,12 @@ public final class ScriptRunner {
         for (Object o : Json.arr(input, "attachments")) {
             if (o instanceof Map) {
                 Map<String, Object> m = (Map<String, Object>) o;
+                if (m.get("file") != null) {
+                    // The engine replaces {"file"} by the file's content while a project is open; left here, the
+                    // attachment would be empty without a word.
+                    throw new IllegalArgumentException("The attachment file " + m.get("file")
+                            + " can only be read with a project open: attachment files lie inside the project.");
+                }
                 String name = Json.str(m, "name", "attachment" + (out.size() + 1));
                 String type = Json.str(m, "contentType", "application/octet-stream");
                 byte[] data = m.get("base64") != null
@@ -266,11 +267,7 @@ public final class ScriptRunner {
             return null;
         }
         try {
-            Transformer t = TransformerFactory.newInstance().newTransformer();
-            t.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "yes");
-            StringWriter w = new StringWriter();
-            t.transform(new DOMSource(element), new StreamResult(w));
-            return w.toString();
+            return io.cpiwb.core.DomXml.serialize(element, TransformerFactory.newInstance());
         } catch (Exception e) {
             return element.toString();
         }

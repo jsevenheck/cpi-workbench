@@ -10,15 +10,9 @@ import org.xml.sax.InputSource;
 
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
-import javax.xml.transform.OutputKeys;
-import javax.xml.transform.Transformer;
-import javax.xml.transform.TransformerFactory;
-import javax.xml.transform.dom.DOMSource;
-import javax.xml.transform.stream.StreamResult;
 import javax.xml.xpath.XPathConstants;
 import javax.xml.xpath.XPathFactory;
 import java.io.ByteArrayInputStream;
-import java.io.StringWriter;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -286,10 +280,6 @@ public final class SplitStep {
 
     private static String serialize(Document doc) throws Exception {
         doc.normalizeDocument();
-        Transformer t = TransformerFactory.newDefaultInstance().newTransformer();
-        t.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "yes");
-        StringWriter w = new StringWriter();
-        t.transform(new DOMSource(doc), new StreamResult(w));
-        return w.toString();
+        return io.cpiwb.core.DomXml.serialize(doc);
     }
 }

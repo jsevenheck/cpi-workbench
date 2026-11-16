@@ -24,7 +24,7 @@
       {/if}
       <div class="btns">
         <button onclick={() => closeDialog(false)}>Cancel</button>
-        <button class="primary" bind:this={ok} onclick={() => closeDialog(true)}>OK</button>
+        <button class="primary" bind:this={ok} onclick={() => closeDialog(true)}>{dialog.okLabel}</button>
       </div>
     </div>
   </div>

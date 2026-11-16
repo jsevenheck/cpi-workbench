@@ -2,8 +2,10 @@ package io.cpiwb.core;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -115,7 +117,18 @@ public final class ProjectFiles {
         Path f = resolve(Json.str(p, "path", ""));
         Files.createDirectories(f.getParent());
         // XML that names its encoding is written in it, so the file stays what its declaration says.
-        Files.write(f, TextFiles.encode(Json.str(p, "content", "")));
+        byte[] content = TextFiles.encode(Json.str(p, "content", ""));
+        if (Json.bool(p, "createNew", false)) {
+            // Only when no file is there, checked by the file system as it creates it: another process writing
+            // the same path at the same time cannot be replaced.
+            try {
+                Files.write(f, content, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
+            } catch (FileAlreadyExistsException e) {
+                throw new IllegalArgumentException("exists already: " + Json.str(p, "path", ""));
+            }
+        } else {
+            Files.write(f, content);
+        }
         return Json.o().with("path", Json.str(p, "path", "")).with("saved", true);
     }
 
@@ -136,7 +149,8 @@ public final class ProjectFiles {
     /** Imports an exported iFlow zip into iflows/<name>/ and lists its script and XSLT steps. */
     public synchronized Map<String, Object> iflowImport(Map<String, Object> p) throws IOException {
         requireRoot();
-        Map<String, Object> r = IflowImport.importZip(Path.of(Json.str(p, "zip", "")), root, Json.str(p, "name", null));
+        Map<String, Object> r = IflowImport.importZip(Path.of(Json.str(p, "zip", "")), root, Json.str(p, "name", null),
+                Json.bool(p, "createNew", false));
         r.put("fileList", list());
         return r;
     }

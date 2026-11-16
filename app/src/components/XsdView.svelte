@@ -2,7 +2,7 @@
   import Gutter from './Gutter.svelte';
   import { paneSizes, paneColumns } from '../lib/split.svelte';
   import Editor from './Editor.svelte';
-  import { app, xsd, xslt, runXsd, saveSchema, saveSchemaAs, saveInput } from '../lib/store.svelte';
+  import { app, xsd, xslt, runXsd, saveSchema, saveSchemaAs, saveInput, closeInput, closeEditorFile } from '../lib/store.svelte';
 
   const panes = paneSizes('xsd', [1, 1]);
 
@@ -26,7 +26,7 @@
 <div class="two" style:grid-template-columns={paneColumns(panes.sizes)}>
   <section class="pane">
     <header>
-      <h2 title={app.inputPaths.xsd ?? ''}>XML document{#if app.inputPaths.xsd} <span class="from">· {app.inputPaths.xsd.split('/').pop()}</span>{/if}</h2>
+      <h2 title={app.inputPaths.xsd ?? ''}>XML document{#if app.inputPaths.xsd} <span class="from">· {app.inputPaths.xsd.split('/').pop()}</span><button class="close-file" onclick={() => closeInput('xsd')} title="Close the input file (it stays on disk)" aria-label="Close input file">×</button>{/if}</h2>
       <div class="spacer"></div>
       <button class="small" onclick={useXsltOutput} disabled={!xslt.result?.output} title="Validate the last XSLT output">Use XSLT output</button>
       <button class="small" onclick={useXsltInput}>Use XSLT input</button>
@@ -37,7 +37,9 @@
   <Gutter {panes} i={0} />
   <section class="pane">
     <header>
-      <h2>{xsd.schemaPath ?? 'schema.xsd (unsaved)'}{#if dirty}<span class="dirty">●</span>{/if}</h2>
+      <h2 title={xsd.casePath ? 'From test case ' + xsd.casePath : xsd.schemaPath ?? 'Unsaved schema'}>{xsd.schemaPath ?? 'schema.xsd (unsaved)'}{#if dirty}<span class="dirty">●</span>{/if}</h2>
+      {#if xsd.schemaPath || xsd.casePath || xsd.schema}<button class="close-file" onclick={() => closeEditorFile('xsd')}
+        title="Close this file (it stays on disk)" aria-label="Close file">×</button>{/if}
       <div class="spacer"></div>
       <button class="small" onclick={saveSchema} disabled={!app.project}>Save</button>
       <button class="small" onclick={saveSchemaAs} disabled={!app.project} title="Save under a new name; the open file stays as it is">Save as…</button>

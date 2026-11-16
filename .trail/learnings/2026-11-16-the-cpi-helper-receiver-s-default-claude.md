@@ -3,7 +3,7 @@ title: "The CPI Helper receiver's default port moved to 7790; a saved 7778 is le
 author: Claude
 date: 2026-11-16
 branch: claude/great-cannon-v2nd6h
-cost: { minutes: 30, tokens: 428738 }
+cost: { minutes: 35, tokens: 489708 }
 id: l-460c0a5b
 scope: repo
 status: active
@@ -31,6 +31,7 @@ touches:
 - `expect.ignore` (W6) is XPath 1.0 of the JDK in `core`, not Saxon: the Groovy engines have no Saxon, and a case should read the same on all four engines.
 - Prefixes come from `expect.namespaces`. This was not in the roadmap text; it came in because the JDK, without a namespace context, takes an unknown prefix for a name that matches nothing and says nothing. With the context an unknown prefix is an error.
 - A rule that cannot apply makes the case an error (not a list of strings, no XPath, a number or string result, the whole document, no expected body, a comparison as text). A rule that matches nothing is allowed, because the node may be optional; when the bodies differ, the message names the rules that matched nothing.
+- The sources for W4 were read on 2026-11-16 and are in the plan's ledger (F62, F63, S49, S50, Q-E1). Nothing of W4 is built: how a binary body is shown and passed on is the user's decision, and the probe for Q-E1 is not written.
 
 ## Tried and ruled out
 - Rewriting a saved 7778 to the new default: the hand-over is one way, the app cannot change the Custom URL in the extension, so the one-click path would break without a word. A saved 7778 also cannot be told apart from one the user chose.
@@ -40,6 +41,8 @@ touches:
 - The case's folder as `classname`: the user preferred the profile.
 - `Document.normalize()` after removing nodes: the text on both sides of a removed element stayed two text nodes, so `<a>x<t/>y</a>` without `t` did not equal `<a>xy</a>`. `normalizeDocument()` merges them.
 - A case in the regression project: its counts are known to CI, the shell tests and a learning; the rule is covered by the core tests instead.
+- Reading help.sap.com directly: its pages are rendered by scripts and come back empty. The same pages are in the public mirror `SAP-docs/btp-integration-suite` under `docs/ci/Development/` (a shallow git clone works; GitHub's API for that repository is not open to a session).
+- The SAP blog on ZIP and GZIP that the pages link: HTTP 403. The ZIP entry's name and GZIP details therefore stay open in Q-E1; do not fill them from search-result snippets.
 
 ## Watch out
 - Whether other common software uses 7790 was not checked.
@@ -61,3 +64,9 @@ In the code: `docs/building.md` (Shell tests, End-to-end tests), `app/e2e/*.mjs`
 - The rule is this tool's own; it imitates nothing in CPI.
 
 In the code: `TestRunner.check`, `TestRunner.compare` (five arguments) and `TestRunner.remove` in `engine/core`; tests `xmlCompareLeavesOutIgnoredNodes` and `aCaseWithIgnoreRunsAndAWrongRuleIsAnError` in `CoreTest`; `docs/test-cases.md`.
+- In an exported iFlow a Decoder step holds its scheme in the key `encoderType` too (`Base64 Decode`, `ZIP Decompress`); there is no `decoderType`.
+- The documentation writes the algorithms as `SHA512`, the one iFlow sample has `SHA-512`. Only that value and `canonicalizationMethod` = `none` were seen; the digest's filter key and the GZIP schemes were not.
+- The mirror's page *Define an Encoder* has an empty list of schemes.
+- The engine already reads a binary input body (`bodyBase64`); a step's output body is text only.
+
+In the code: `docs/plan.md` (F62, F63, S49, S50, Q-E1, W4); `SimExchange.fromJson` and `toJson` in `engine/core`.

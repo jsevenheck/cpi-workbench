@@ -276,6 +276,73 @@ class CoreTest {
         assertEquals(1, Cli.printTestResults(skipped, true, true));
     }
 
+    private static Map<String, Object> caseResult(String status, String name, int ms, String... messages) {
+        return Json.o().with("status", status).with("name", name).with("ms", ms).with("messages", List.of(messages));
+    }
+
+    @Test
+    void junitReportHasOneTestCasePerCase() throws Exception {
+        // A quote, markup, a line break, a control character and a lone surrogate: all of it may be quoted from an input.
+        String odd = "Expected <a x=\"1\"> & got\n\tline 2 \u0001 \uD83D end";
+        Map<String, Object> r = Json.o().with("results", List.of(
+                        caseResult("passed", "order & <invoice>", 1500),
+                        caseResult("failed", "wrong body", 12, odd, "second message"),
+                        caseResult("error", "broken", 3, "IOException: no such file"),
+                        caseResult("skipped", "other engine", 0, "Profile 'groovy-1.x' is handled by another engine"),
+                        caseResult("skipped", "no message", 0)))
+                .with("passed", 1).with("failed", 2).with("skipped", 2);
+        String xml = Cli.junitXml(r, "saxon-he-12");
+        assertFalse(xml.contains("\r"), "LF on every computer");
+        javax.xml.parsers.DocumentBuilderFactory f = javax.xml.parsers.DocumentBuilderFactory.newInstance();
+        org.w3c.dom.Element suite = f.newDocumentBuilder()
+                .parse(new java.io.ByteArrayInputStream(xml.getBytes(java.nio.charset.StandardCharsets.UTF_8))).getDocumentElement();
+        assertEquals("testsuite", suite.getTagName());
+        assertEquals("saxon-he-12", suite.getAttribute("name"));
+        assertEquals("5|1|1|2|1.515", String.join("|", suite.getAttribute("tests"), suite.getAttribute("failures"),
+                suite.getAttribute("errors"), suite.getAttribute("skipped"), suite.getAttribute("time")));
+        org.w3c.dom.NodeList cases = suite.getElementsByTagName("testcase");
+        assertEquals(5, cases.getLength());
+        org.w3c.dom.Element passed = (org.w3c.dom.Element) cases.item(0);
+        assertEquals("order & <invoice>", passed.getAttribute("name"));
+        assertEquals("saxon-he-12", passed.getAttribute("classname"));
+        assertEquals("1.500", passed.getAttribute("time"));
+        assertEquals(0, passed.getChildNodes().getLength());
+        org.w3c.dom.Element failure = (org.w3c.dom.Element) ((org.w3c.dom.Element) cases.item(1)).getElementsByTagName("failure").item(0);
+        // What XML 1.0 cannot hold is replaced; the line break and the tab survive in the attribute.
+        String readable = odd.replace('\u0001', '\uFFFD').replace('\uD83D', '\uFFFD');
+        assertEquals(readable, failure.getAttribute("message"));
+        assertEquals(readable + "\nsecond message", failure.getTextContent());
+        org.w3c.dom.Element error = (org.w3c.dom.Element) ((org.w3c.dom.Element) cases.item(2)).getElementsByTagName("error").item(0);
+        assertEquals("IOException: no such file", error.getAttribute("message"));
+        assertEquals("Profile 'groovy-1.x' is handled by another engine",
+                ((org.w3c.dom.Element) ((org.w3c.dom.Element) cases.item(3)).getElementsByTagName("skipped").item(0)).getAttribute("message"));
+        assertEquals("skipped", ((org.w3c.dom.Element) ((org.w3c.dom.Element) cases.item(4)).getElementsByTagName("skipped").item(0)).getAttribute("message"));
+        // A pair of surrogates is one character and stays.
+        assertEquals("\uD83D\uDE00", Cli.xml("\uD83D\uDE00", true));
+    }
+
+    @Test
+    void junitOptionWritesTheReportAndKeepsTheExitCode(@TempDir Path tmp) throws Exception {
+        Map<String, Object> ok = Json.o().with("results", List.of(caseResult("passed", "a", 1))).with("passed", 1).with("failed", 0).with("skipped", 0);
+        Map<String, Object> failed = Json.o().with("results", List.of(caseResult("failed", "a", 1, "Body differs")))
+                .with("passed", 0).with("failed", 1).with("skipped", 0);
+        Path report = tmp.resolve("new folder/report.xml");
+        assertEquals(0, Cli.testCommand(ok, new Cli.Args(new String[] {"test", "tests", "--junit", report.toString(), "--json"}), "groovy-1.x"));
+        assertTrue(Files.readString(report).contains("<testsuite name=\"groovy-1.x\" tests=\"1\" failures=\"0\""), Files.readString(report));
+        assertEquals(1, Cli.testCommand(failed, new Cli.Args(new String[] {"test", "--junit", report.toString()}), "groovy-1.x"));
+        assertTrue(Files.readString(report).contains("<failure message=\"Body differs\""), "a second run replaces the report");
+        // The file's name is not taken for the path of the cases.
+        assertNull(new Cli.Args(new String[] {"test", "--junit", report.toString()}).positional(1));
+        // No file named: not a report called "--json", and not silence.
+        assertEquals(2, Cli.testCommand(ok, new Cli.Args(new String[] {"test", "tests", "--junit"}), "groovy-1.x"));
+        assertEquals(2, Cli.testCommand(ok, new Cli.Args(new String[] {"test", "tests", "--junit", "--json"}), "groovy-1.x"));
+        assertFalse(Files.exists(Path.of("--json")));
+        // A report that cannot be written fails the command although every case passed.
+        assertEquals(1, Cli.testCommand(ok, new Cli.Args(new String[] {"test", "tests", "--junit", tmp.toString()}), "groovy-1.x"));
+        // Without the option nothing changes.
+        assertEquals(0, Cli.testCommand(ok, new Cli.Args(new String[] {"test", "tests"}), "groovy-1.x"));
+    }
+
     /** Browser mode: the supervising process starts the same engine again, marked as the one that serves. */
     @Test
     void relaunchCommandIsThisCommandLineAsWorker() {

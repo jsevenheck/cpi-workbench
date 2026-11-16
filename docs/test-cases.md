@@ -44,6 +44,17 @@ my-project/
   profile and skips the others; any other profile name is an error, on every engine.
 * `test <path>` exits with 1 when a case failed or when `<path>` holds no `case.json`. With
   `--fail-if-none` it also exits with 1 when this engine ran none of the cases (all were for other engines).
+* `test <path> --junit <file>` also writes the results as a JUnit XML report, for a CI system that shows test
+  results. Each engine writes its own report, so give each a file of its own:
+  `java -jar cpiwb-groovy-v1.jar test tests --junit reports/groovy-1.x.xml`.
+  * One `testsuite` named after the engine's profile, one `testcase` per case with the profile as `classname`.
+    A failed case is a `failure`, a case that could not run an `error`, a case of another engine `skipped`,
+    each with the case's messages.
+  * The output and the exit code stay as they are. A report that cannot be written is an error (exit code 1);
+    missing folders are created.
+  * JUnit XML has no official schema. The layout is Maven Surefire's (`testsuite` as the root), and the
+    reports validate against Surefire's published schema. They have not been tried with a CI reporter
+    (GitHub Actions, Jenkins, GitLab).
 * Files (bodies, mappings, expected output) are read as UTF-8, or in the encoding their XML declaration names.
 * Header and property types: `String`, `Integer`, `Long`, `Boolean`, `Double`, `Float`,
   `BigDecimal`, `Date` (ISO-8601), `byte[]` (Base64), `null`.

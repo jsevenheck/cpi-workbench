@@ -321,7 +321,7 @@ Plain, git-friendly files. The engines' `test` command (`cpiwb-xml test tests/`,
 | **3 — Groovy MVP** | Groovy 1.x and 2.x, typed headers/properties, MPL, API call log, console, diff | Done (0.1.0) |
 | **4 — Productivity** | Platform API mocks, lint, runtime comparison, iFlow-zip import, flow steps, MCP server | Done (0.1.0–0.3.0) |
 | **5 — Distribution** | Windows/macOS installers, engine jars for Java 17+, code signing and auto-update (§10.2) | Unsigned installers and manual update check built; signing and auto-update open |
-| **6 — Workflow** | What a review of other tools showed (§10.5): platform data in the Groovy tab, a traced message from CPI Helper, XPath comfort, Encoder / Decoder and Message Digest steps, JUnit output and compare rules for test cases, Value Mapping import, run history, examples, debugging | Planned (2026-11-13); W1 to W3 built (W2 with the desktop link, W2b) |
+| **6 — Workflow** | What a review of other tools showed (§10.5): platform data in the Groovy tab, a traced message from CPI Helper, XPath comfort, Encoder / Decoder and Message Digest steps, JUnit output and compare rules for test cases, Value Mapping import, run history, examples, debugging | Planned (2026-11-13); W1 to W3 and W5 built (W2 with the desktop link, W2b) |
 
 ### 10.1 MCP server for coding agents (built, 2026-11-01)
 
@@ -516,9 +516,12 @@ they are CPI steps, listed as not built in §10.4.*
   passed on is the design question of this item.
 * The Flow Steps tab and `mcp/flow.rs` together, the iFlow import, a row in `fidelity.md`, probe baselines.
 
-**W5. JUnit XML from the test command (S).** *Prompted by the CI focus of Figaf and cpictl.*
-`test --junit <file>` writes the report that GitHub Actions reporters, Jenkins and GitLab read: one test
-case per case, the cases of other engines as skipped. In `TestRunner` and `Cli`; documented in
+**W5. JUnit XML from the test command (built).** *Prompted by the CI focus of Figaf and cpictl.*
+`test --junit <file>` writes a report in Maven Surefire's layout: one suite per engine run (named after
+the profile, which is also each case's `classname`), one test case per case, the cases of other engines
+as skipped. Reports from all four engines validate against Surefire's published schema
+(`surefire-test-report.xsd`, checked with xmllint on 2026-11-16). Open: no CI reporter (GitHub Actions,
+Jenkins, GitLab) has read one yet, and CI does not use the option. In `Cli`; documented in
 [test cases](test-cases.md).
 
 **W6. Test cases: leave out values that change per run (S to M).** *Our own idea; no tool's page describes how

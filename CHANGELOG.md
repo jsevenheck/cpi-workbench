@@ -6,6 +6,13 @@ of its version.
 
 ## [Unreleased]
 
+### Added
+
+- **Test cases: a JUnit XML report.** `test <path> --junit <file>` on each engine also writes the results as a
+  JUnit XML report for a CI system: one test case per case, failed cases with their messages, the cases of other
+  engines as skipped. The output and the exit code stay as they are. The layout is Maven Surefire's; it has not
+  been tried with a CI reporter yet. See [test cases](docs/test-cases.md).
+
 ### Changed
 
 - **CPI Helper receiver: the default port is 7790**, no longer 7778. 7778 is where the Groovy 1.x engine of the

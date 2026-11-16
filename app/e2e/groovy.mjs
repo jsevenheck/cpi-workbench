@@ -502,6 +502,30 @@ await page.getByLabel('Value Type').selectOption('nodelist');
 await page.getByRole('button', { name: 'Run step' }).click();
 await page.locator('.res h3', { hasText: '1 item(s) selected' }).waitFor({ timeout: 10000 })
   .catch(() => fail('Filter did not select the one item with qty > 1'));
+// Message Digest: the header with the digest and the canonical form it is of; the body stays.
+await page.getByRole('tab', { name: 'Message Digest' }).click();
+await page.getByLabel('Digest Algorithm').selectOption('SHA256');
+await page.getByRole('button', { name: 'Run step' }).click();
+await page.locator('.res .row', { hasText: 'SAPMessageDigest' }).waitFor({ timeout: 10000 })
+  .catch(async () => fail('Message Digest: ' + (await page.locator('.res').innerText()).slice(0, 300)));
+if (!/^[A-Za-z0-9+/]{43}=$/.test(await page.locator('.res .row code').innerText())) fail('Message Digest: not a Base64 SHA-256 value');
+await page.locator('.res pre', { hasText: '<Order id="4711"' }).waitFor({ timeout: 5000 })
+  .catch(() => fail('Message Digest did not show the canonical form'));
+await page.getByLabel('Digest filter XPath').fill('/Order/Item');
+await page.getByRole('button', { name: 'Run step' }).click();
+await page.locator('.res .d.error', { hasText: 'UnsupportedInSimulator' }).waitFor({ timeout: 10000 })
+  .catch(() => fail('Message Digest: a filter that selects several nodes must be refused'));
+await page.getByLabel('Digest filter XPath').fill('');
+// Encoder: Base64 of the body; a scheme with a binary result is refused.
+await page.getByRole('tab', { name: 'Encoder' }).click();
+await page.getByRole('button', { name: 'Run step' }).click();
+await page.locator('.res pre', { hasText: /^(PD94|PE9y)[A-Za-z0-9+/=]+$/ }).waitFor({ timeout: 10000 })
+  .catch(async () => fail('Base64 Encode: ' + (await page.locator('.res').innerText()).slice(0, 300)));
+await page.getByLabel('Encoding Scheme').selectOption('zipCompress');
+await page.getByRole('button', { name: 'Run step' }).click();
+await page.locator('.res .d.error', { hasText: 'UnsupportedInSimulator' }).waitFor({ timeout: 10000 })
+  .catch(() => fail('ZIP Compress must be refused'));
+await page.getByLabel('Encoding Scheme').selectOption('base64Encode');
 // Converter: XML to JSON on the sample body, the result back as input, then JSON to XML.
 await page.getByRole('tab', { name: 'Converter' }).click();
 await page.getByLabel('Converter', { exact: true }).selectOption('xmlToJson');

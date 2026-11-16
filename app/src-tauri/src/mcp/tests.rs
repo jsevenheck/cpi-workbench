@@ -371,6 +371,19 @@ fn tools_run_on_the_engines() {
     // As in the tab, only a missing value gets the default; an empty one goes to the engine as it is.
     let empty = c.ok("run_flow_step", json!({ "body": order, "step": { "type": "filter", "config": { "expression": "/Order", "valueType": "" } } }));
     assert_eq!(empty["ok"], false, "{empty}");
+    // Encoder and Message Digest. The digest's header travels on with the message; keys left out take the tab's defaults.
+    let enc = c.ok("run_flow_step", json!({ "body": "<a/>", "step": { "type": "encoder", "config": {} } }));
+    assert_eq!(enc["body"], "PGEvPg==", "{enc}");
+    assert!(c.ok("run_flow_step", json!({ "body": "<a/>", "step": { "type": "encoder", "config": { "scheme": "zipCompress" } } }))
+        .to_string().contains("UnsupportedInSimulator"));
+    let dig = c.ok("run_flow_step", json!({ "body": "<a  y='2' x='1'/>", "headers": { "Keep": "1" },
+        "step": { "type": "messageDigest", "config": { "algorithm": "MD5", "targetHeader": "D" } } }));
+    assert_eq!(dig["canonical"], "<a x=\"1\" y=\"2\"></a>", "{dig}");
+    let after = c.ok("run_groovy", json!({ "messageFrom": dig["runId"],
+        "script": "def processData(m) { m.setBody(m.getHeaders()['Keep'] + '|' + m.getHeaders()['D'] + '|' + m.getBody(String)); m }" }));
+    assert_eq!(after["output"]["body"], format!("1|{}|<a  y='2' x='1'/>", dig["header"]["value"].as_str().unwrap()), "{after}");
+    assert!(c.err("run_flow_step", json!({ "body": "<a/>", "step": { "type": "messageDigest", "config": { "xpath": "/a" } } }))
+        .contains("filter, canonicalization, algorithm, targetHeader"));
     // A key the tab does not have is named, rather than ignored (tried on 2026-11-06 from Claude Desktop).
     let typo = c.err("run_flow_step", json!({ "body": order, "step": { "type": "splitter", "config": { "xpath": "/Order/Item" } } }));
     assert!(typo.contains("Unknown splitter config key(s): xpath") && typo.contains("expression"), "{typo}");

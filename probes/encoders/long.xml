@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Order id="4711">
+  <Customer>Müller &amp; Söhne GmbH</Customer>
+  <Item sku="M-100" qty="2">Schraube M4 × 20, verzinkt</Item>
+  <Item sku="M-200" qty="1">Unterlegscheibe Ø 4,3</Item>
+  <Note>Lieferung bis Freitag; bei Rückfragen bitte anrufen.</Note>
+</Order>

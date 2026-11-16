@@ -14,7 +14,7 @@ inspect its output, diagnostics and logs—without deploying to a tenant.
 | Groovy Script | **1.x: Groovy 2.4.21**, **2.x: Groovy 4.0.29**, both on **Camel 3.14.7 / Java 21**, with clean-room Script APIs, MPL, console and local platform mocks. |
 | Message Mapping functions | Groovy custom functions with `MappingContext`, per-context arguments and `Output`; not graphical `.mmap` execution. |
 | XSD / XPath | XML Schema 1.0 validation, XPath 3.1 or 1.0, highlighted matches and XPath at cursor. |
-| Flow Steps | Content Modifier, Filter, Router, General / Iterating Splitter, Gather and JSON ↔ XML / XML ↔ CSV converters. |
+| Flow Steps | Content Modifier, Filter, Router, General / Iterating Splitter, Gather, JSON ↔ XML / XML ↔ CSV converters, Base64 Encoder and Message Digest. |
 
 The project workflow includes iFlow-zip import, runtime comparison, Groovy migration hints,
 file-based CLI tests and a built-in [MCP server](docs/mcp.md) for coding agents. CPI Helper can hand

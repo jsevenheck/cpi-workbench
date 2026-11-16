@@ -3,7 +3,7 @@ title: "The CPI Helper receiver's default port moved to 7790; a saved 7778 is le
 author: Claude
 date: 2026-11-16
 branch: claude/great-cannon-v2nd6h
-cost: { minutes: 35, tokens: 489708 }
+cost: { minutes: 66, tokens: 749473 }
 id: l-460c0a5b
 scope: repo
 status: active
@@ -32,6 +32,10 @@ touches:
 - Prefixes come from `expect.namespaces`. This was not in the roadmap text; it came in because the JDK, without a namespace context, takes an unknown prefix for a name that matches nothing and says nothing. With the context an unknown prefix is an error.
 - A rule that cannot apply makes the case an error (not a list of strings, no XPath, a number or string result, the whole document, no expected body, a comparison as text). A rule that matches nothing is allowed, because the node may be optional; when the bodies differ, the message names the rules that matched nothing.
 - The sources for W4 were read on 2026-11-16 and are in the plan's ledger (F62, F63, S49, S50, Q-E1). Nothing of W4 is built: how a binary body is shown and passed on is the user's decision, and the probe for Q-E1 is not written.
+- The Message Digest step and the Encoder's Base64 Encode were built first (the user's choice on 2026-11-16: steps whose result is text or a header before those with a binary body). Decode, GZIP and ZIP wait for `bodyBase64` in a step's result.
+- Canonical XML comes from the JDK's public XML signature API (`XMLSignatureFactory`, a `CanonicalizationMethod` as transform) with a node set of the element, its attributes and everything below it. That gives the W3C's document-subset form: a filtered element keeps the namespaces in scope and, for Canonical XML, inherited xml: attributes.
+- What SAP does not document is refused or labelled, not guessed: a filter with several nodes or none, a filter with None, None hashing the body's bytes (assumption, with an info or warning).
+- A Decoder step in an imported iFlow is not listed, like other steps that are not simulated. A Message Digest whose iFlow has keys the import does not know gets a note, because the filter's key was never seen.
 
 ## Tried and ruled out
 - Rewriting a saved 7778 to the new default: the hand-over is one way, the app cannot change the Custom URL in the extension, so the one-click path would break without a word. A saved 7778 also cannot be told apart from one the user chose.
@@ -43,6 +47,9 @@ touches:
 - A case in the regression project: its counts are known to CI, the shell tests and a learning; the rule is covered by the core tests instead.
 - Reading help.sap.com directly: its pages are rendered by scripts and come back empty. The same pages are in the public mirror `SAP-docs/btp-integration-suite` under `docs/ci/Development/` (a shallow git clone works; GitHub's API for that repository is not open to a session).
 - The SAP blog on ZIP and GZIP that the pages link: HTTP 403. The ZIP entry's name and GZIP details therefore stay open in Q-E1; do not fill them from search-result snippets.
+- Apache Santuario as a dependency, or the JDK's internal canonicalizer classes: a new library with its own native-image needs, or classes the module does not export.
+- Copying the filtered element into a new document before canonicalizing: it loses the namespaces and xml: attributes the element inherits, which Canonical XML includes.
+- Taking the tracing agent's output as it is: it also rewrote the locales of resource bundles that were there and added Saxon classes that `saxon-generated` covers. Only the canonicalizer classes, the digest classes and the `xmlsecurity` bundle were kept.
 
 ## Watch out
 - Whether other common software uses 7790 was not checked.
@@ -70,3 +77,8 @@ In the code: `TestRunner.check`, `TestRunner.compare` (five arguments) and `Test
 - The engine already reads a binary input body (`bodyBase64`); a step's output body is text only.
 
 In the code: `docs/plan.md` (F62, F63, S49, S50, Q-E1, W4); `SimExchange.fromJson` and `toJson` in `engine/core`.
+- In a native image the canonicalization failed with "No handler installed" until the metadata was added; the JVM tests could not show it. The smoke workload now runs every canonicalization method.
+- GraalVM Community 21.0.2 for Linux unpacks into a scratch folder (about 290 MB) and builds one XML engine in about two minutes on 4 CPUs, so native behaviour can be checked in a cloud container. Windows and macOS still need CI.
+- In the Flow Steps tab the function that opens an imported step treats a type it does not know as a Splitter: every new step type needs its own branch there, and a row in the MCP server's config keys, its type list and `produced`.
+
+In the code: `DigestStep`, `EncoderStep` in `engine/xml`; `FlowSteps.of` in `engine/core`; `flow.encoder`, `flow.digest`, `openFlowStep` in `app/src/lib/store.svelte.ts`; `mcp/flow.rs`, `mcp/runs.rs`; `engine/native/workload.py`; `META-INF/native-image/io.cpiwb/cpiwb-xml-he*/`; `probes/encoders/`.

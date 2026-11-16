@@ -1,0 +1,13 @@
+{
+    "probeStep": "base64-encode",
+    "bodyClass": "java.lang.String",
+    "bodyLength": 4,
+    "bodyBase64": "WVdKag==",
+    "bodyText": "YWJj",
+    "headerNames": [
+        "ProbeStep"
+    ],
+    "headers": {
+        
+    }
+}

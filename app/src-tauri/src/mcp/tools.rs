@@ -144,9 +144,9 @@ holds the returned value or the output queue in the same form." })),
     let mut step = obj(vec![
         ("iflowStep", json!({ "type": "string", "description": "Name or id of a step that project_info lists under iflowSteps. Use iflowStep or step." })),
         ("iflow", json!({ "type": "string", "description": "The iFlow of iflowStep, when several iFlows have a step with that name or id." })),
-        ("step", json!({ "type": "object", "description": "A step given directly (as edited in the Flow Steps tab): {\"type\": \"contentModifier\"|\"filter\"|\"router\"|\"splitter\"|\"gather\"|\"converter\", \"config\": {...}}, config shaped as project_info shows it for iFlow steps.",
+        ("step", json!({ "type": "object", "description": "A step given directly (as edited in the Flow Steps tab): {\"type\": \"contentModifier\"|\"filter\"|\"router\"|\"splitter\"|\"gather\"|\"converter\"|\"encoder\"|\"messageDigest\", \"config\": {...}}, config shaped as project_info shows it for iFlow steps.",
             "properties": {
-                "type": { "type": "string", "enum": ["contentModifier", "filter", "router", "splitter", "gather", "converter"] },
+                "type": { "type": "string", "enum": ["contentModifier", "filter", "router", "splitter", "gather", "converter", "encoder", "messageDigest"] },
                 "config": { "type": "object", "description": "The tab's settings for the type (keys left out take the tab's defaults). \
 contentModifier: {headers: [row], properties: [row], bodyType: \"constant\"|\"expression\", body}, row = {action: \"Create\"|\"Delete\", name, \
 type: \"constant\"|\"header\"|\"property\"|\"xpath\"|\"expression\", value, datatype (e.g. \"java.lang.String\"), default}. \
@@ -158,7 +158,11 @@ converter: {conversion: \"jsonToXml\"|\"xmlToJson\"|\"xmlToCsv\"|\"csvToXml\"; J
 namespaceMapping ([{prefix, namespace}] or lines \"prefix = uri\"), addRootElement, rootElementName, rootNamespace (a prefix of namespaces), \
 suppressRoot, streaming, streamingElements: \"all\"|\"specific\", arrayPaths, outputEncoding; XML to CSV: sourcePath, fieldSeparator, \
 csvHeader: \"none\"|\"xml\", includeParent, parentPath, includeAttributes; CSV to XML: schema (project .xsd), targetPath, recordMarker, \
-fieldSeparator, firstLineHeader, headerMapping: \"xsd\"|\"csv\"}." } },
+fieldSeparator, firstLineHeader, headerMapping: \"xsd\"|\"csv\"}. \
+encoder: {scheme: \"base64Encode\"} (GZIP, ZIP and MIME Multipart are not simulated). \
+messageDigest: {filter (XPath 1.0 that selects one element; empty: the whole message), canonicalization: \"c14n10\"|\"c14n10Comments\"|\
+\"exclusive\"|\"exclusiveComments\"|\"c14n11\"|\"c14n11Comments\"|\"none\", algorithm: \"MD5\"|\"SHA1\"|\"SHA256\"|\"SHA384\"|\"SHA512\", \
+targetHeader}; the result has header {name, value}, the canonical text and the output message with the header." } },
             "required": ["type", "config"], "additionalProperties": false })),
         ("messages", json!({ "type": "array", "items": { "type": "string" },
             "description": "Gather only: the bodies to gather, e.g. the messages a splitter returned. Use messages or messagesFrom." })),
@@ -221,7 +225,8 @@ CPI, per step type, and what is not." })),
             "Evaluates an XPath on the body, like the XPath tab. Returns the value or the selected nodes.",
             xpath, &["expression"], Effect::ReadOnly),
         tool("run_flow_step", "Run a flow step",
-            "Runs a Content Modifier, Filter, Router, General or Iterating Splitter, Gather or converter (JSON/XML/CSV) step on a message, like the \
+            "Runs a Content Modifier, Filter, Router, General or Iterating Splitter, Gather, converter (JSON/XML/CSV), Encoder (Base64) or \
+             Message Digest step on a message, like the \
              Flow Steps tab, from an iFlow of the project or from a config given here. Returns the output message(s), or \
              for a Router each route's result and the route taken. For an iFlow's script, XSLT or XML Validator step, \
              use run_groovy, run_xslt or validate_xsd with the step's file, function and profile from project_info.",

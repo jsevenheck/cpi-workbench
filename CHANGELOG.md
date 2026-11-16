@@ -8,6 +8,15 @@ of its version.
 
 ### Added
 
+- **Flow Steps: Message Digest.** The message, or the one element a filter XPath selects, is written as canonical
+  XML (the six methods CPI offers, or *None*) and its digest (MD5 to SHA512) goes to a header, `SAPMessageDigest`
+  by default, as Base64 text. The result also shows the canonical form the digest is of. In the tab, in the MCP
+  server's `run_flow_step` (the header travels on with `messageFrom`) and from an imported iFlow. Not tried on a
+  tenant yet: *None* hashing the body's bytes is an assumption, and a filter that selects several nodes is refused.
+- **Flow Steps: Encoder with Base64 Encode.** The body's bytes as Base64 text, on one line; whether CPI wraps long
+  output is not verified yet, and the result says so. GZIP, ZIP and MIME Multipart are refused for now (their
+  result is binary), and there is no Decoder yet.
+
 - **Test cases: a JUnit XML report.** `test <path> --junit <file>` on each engine also writes the results as a
   JUnit XML report for a CI system: one test case per case, failed cases with their messages, the cases of other
   engines as skipped. The output and the exit code stay as they are. The layout is Maven Surefire's; it has not

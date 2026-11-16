@@ -8,7 +8,15 @@
 
   const panes = paneSizes('flow', [1, 1.2, 1]);
   const STEPS: [FlowStep, string][] = [['contentModifier', 'Content Modifier'], ['filter', 'Filter'], ['router', 'Router'],
-    ['splitter', 'Splitter'], ['gather', 'Gather'], ['converter', 'Converter']];
+    ['splitter', 'Splitter'], ['gather', 'Gather'], ['converter', 'Converter'], ['encoder', 'Encoder'], ['messageDigest', 'Message Digest']];
+  // SAP's encoding schemes; only the first is simulated (the others give a binary body).
+  const SCHEMES: [string, string][] = [['base64Encode', 'Base64 Encode'], ['gzipCompress', 'GZIP Compress'], ['zipCompress', 'ZIP Compress'],
+    ['mimeMultipartEncode', 'MIME Multipart Encode']];
+  // SAP's canonicalization methods, in its order.
+  const CANONICAL: [string, string][] = [['c14n10', 'Canonical XML Version 1.0'], ['c14n10Comments', 'Canonical XML with Comments Version 1.0'],
+    ['exclusive', 'Exclusive XML Canonicalization Version 1.0'], ['exclusiveComments', 'Exclusive XML Canonicalization with Comments Version 1.0'],
+    ['c14n11', 'XML Canonicalization Version 1.1'], ['c14n11Comments', 'XML Canonicalization with Comments Version 1.1'], ['none', 'None']];
+  const DIGESTS = ['MD5', 'SHA1', 'SHA256', 'SHA384', 'SHA512'];
   // SAP's JSON prefix separators.
   const SEPARATORS: [string, string][] = [[':', 'Colon (:)'], [',', 'Comma (,)'], ['.', 'Dot (.)'], ['|', 'Pipe (|)'], [';', 'Semicolon (;)'], [' ', 'Space']];
   // SAP: which Aggregation Algorithm each Incoming Format allows.
@@ -45,6 +53,8 @@
   let filtered = $derived(flow.filterResult);
   let gathered = $derived(flow.gatherResult);
   let converted = $derived(flow.converterResult);
+  let encoded = $derived(flow.encoderResult);
+  let digested = $derived(flow.digestResult);
   let conv = $derived(flow.converter.conversion);
 
   function useGroovyInput() {
@@ -151,6 +161,36 @@
           </select>
         </label>
         <p class="hint">XPath 3.1 on the body; the result becomes the new body. <code>function:simple('${'{'}property.x{'}'}')</code> takes the value from Camel Simple.</p>
+      {:else if flow.step === 'encoder'}
+        <label class="field">Encoding Scheme
+          <select bind:value={flow.encoder.scheme} aria-label="Encoding Scheme">
+            {#each SCHEMES as [id, label], i}<option value={id}>{label}{i ? ' (not simulated)' : ''}</option>{/each}
+            {#if !SCHEMES.some(([id]) => id === flow.encoder.scheme)}<option value={flow.encoder.scheme}>{flow.encoder.scheme} (not simulated)</option>{/if}
+          </select>
+        </label>
+        <p class="hint">Base64 Encode writes the body's bytes as Base64 text, on one line. Whether CPI wraps long output is not verified on a tenant.
+          GZIP, ZIP and MIME Multipart give a binary body and are not simulated yet.</p>
+      {:else if flow.step === 'messageDigest'}
+        <label class="field">Filter (XPath)
+          <input class="mono" bind:value={flow.digest.filter} aria-label="Digest filter XPath" placeholder="Empty: the whole message. /Order/Header" />
+        </label>
+        <label class="field">Canonicalization Method
+          <select bind:value={flow.digest.canonicalization} aria-label="Canonicalization Method">
+            {#each CANONICAL as [id, label]}<option value={id}>{label}</option>{/each}
+            {#if !CANONICAL.some(([id]) => id === flow.digest.canonicalization)}<option value={flow.digest.canonicalization}>{flow.digest.canonicalization || '(none given)'} (from the iFlow)</option>{/if}
+          </select>
+        </label>
+        <label class="field">Digest Algorithm
+          <select bind:value={flow.digest.algorithm} aria-label="Digest Algorithm">
+            {#each DIGESTS as a}<option value={a}>{a}</option>{/each}
+            {#if !DIGESTS.includes(flow.digest.algorithm)}<option value={flow.digest.algorithm}>{flow.digest.algorithm} (from the iFlow)</option>{/if}
+          </select>
+        </label>
+        <label class="field">Target Header Name
+          <input class="mono" bind:value={flow.digest.targetHeader} aria-label="Target Header Name" placeholder="SAPMessageDigest" />
+        </label>
+        <p class="hint">The message, or the one element the filter selects (XPath 1.0, prefixes from Namespaces), is written as canonical XML;
+          its digest goes to the header, Base64-encoded. The body stays. None hashes the body's bytes as they are, which is an assumption.</p>
       {:else if flow.step === 'gather'}
         <label class="field">Incoming Format
           <select value={flow.gather.messageType} onchange={(e) => setFormat(e.currentTarget.value)} aria-label="Incoming Format">
@@ -338,11 +378,22 @@
             <pre>{m.body}</pre>
           </div>
         {/each}
-      {:else if (flow.step === 'filter' && filtered) || (flow.step === 'gather' && gathered) || (flow.step === 'converter' && converted)}
-        {@const r = flow.step === 'filter' ? filtered : flow.step === 'gather' ? gathered : converted}
+      {:else if flow.step === 'messageDigest' && digested}
+        {#each digested.diagnostics as d}<div class="d {d.severity}">{d.message}</div>{/each}
+        {#if digested.ok}
+          <h3>Header <span class="muted" title={digested.engine}>· {flow.digest.algorithm}</span>
+            <button class="small" onclick={() => useAsFlowInput(digested.output.body, digested.output.headers, digested.output.properties)}>Use as input</button></h3>
+          <div class="row"><b>{digested.header.name}</b> = <code>{digested.header.value}</code></div>
+          {#if digested.canonical !== undefined}
+            <h3>Canonical form <span class="muted">· what the digest is of</span></h3>
+            <pre>{digested.canonical}</pre>
+          {/if}
+        {/if}
+      {:else if (flow.step === 'filter' && filtered) || (flow.step === 'gather' && gathered) || (flow.step === 'converter' && converted) || (flow.step === 'encoder' && encoded)}
+        {@const r = flow.step === 'filter' ? filtered : flow.step === 'gather' ? gathered : flow.step === 'encoder' ? encoded : converted}
         {#each r.diagnostics as d}<div class="d {d.severity}">{d.message}</div>{/each}
         {#if r.ok}
-          <h3>Output <span class="muted" title={r.engine}>{#if flow.step === 'converter'}{#if r.encoding}· {r.encoding}{/if}{:else}· {r.count ?? 1} {flow.step === 'filter' ? 'item(s) selected' : 'message(s) gathered'}{/if}</span>
+          <h3>Output <span class="muted" title={r.engine}>{#if flow.step === 'converter'}{#if r.encoding}· {r.encoding}{/if}{:else if flow.step === 'encoder'}· {r.body.length} characters{:else}· {r.count ?? 1} {flow.step === 'filter' ? 'item(s) selected' : 'message(s) gathered'}{/if}</span>
             <button class="small" onclick={() => useAsFlowInput(r.body)}>Use as input</button></h3>
           <pre>{r.body}</pre>
         {/if}
@@ -378,7 +429,7 @@
   .row .k { display: inline; }
   .muted { color: var(--muted); font-weight: 400; }
   pre { font-family: var(--mono); font-size: 12px; white-space: pre-wrap; word-break: break-word; margin: 4px 0; background: var(--surface); border: 1px solid var(--border-soft); border-radius: 4px; padding: 6px; }
-  code { font-family: var(--mono); }
+  code { font-family: var(--mono); overflow-wrap: anywhere; }
   .d { font-family: var(--mono); white-space: pre-wrap; padding: 3px 0; }
   .d.error { color: var(--err); }
   .d.warning { color: var(--warn); }

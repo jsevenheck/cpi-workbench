@@ -4,7 +4,7 @@
 
 Usage: workload.py <engine command...>   e.g.  workload.py java -jar cpiwb-xml-he99.jar
 Exits non-zero if a response does not look as expected."""
-import json, os, subprocess, sys, tempfile, time
+import base64, hashlib, json, os, subprocess, sys, tempfile, time
 
 XSL = """<xsl:stylesheet version="2.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
   xmlns:hci="http://sap.com/it/" xmlns:xs="http://www.w3.org/2001/XMLSchema" exclude-result-prefixes="hci xs">
@@ -133,6 +133,19 @@ def main():
         ("file.write", {"path": "schemas/x.xsd", "content": XSD}, lambda r: r["saved"]),
         ("convert.run", {"conversion": "csvToXml", "schema": "schemas/x.xsd", "targetPath": "x/i", "firstLineHeader": False,
                          "input": {"body": "1\n2"}}, lambda r: not r["ok"] and "no child elements" in json.dumps(r)),
+        # Encoder (Base64 Encode) and Message Digest: every canonicalization method, a filter, None, the project boundary.
+        ("encode.run", {"scheme": "base64Encode", "input": {"body": "<a/>"}}, lambda r: r["ok"] and r["body"] == "PGEvPg=="),
+        ("digest.run", {"canonicalization": "c14n10", "algorithm": "SHA256", "input": {"body": "<a  y='2' x='1'/>"}},
+         lambda r: r["ok"] and r["canonical"] == '<a x="1" y="2"></a>'
+         and r["header"]["value"] == base64.b64encode(hashlib.sha256(b'<a x="1" y="2"></a>').digest()).decode()),
+        *[("digest.run", {"canonicalization": m, "algorithm": a, "input": {"body": "<a><!--c--><b/></a>"}},
+           lambda r, m=m: r["ok"] and r["canonical"] == ("<a><!--c--><b></b></a>" if "Comments" in m else "<a><b></b></a>"))
+          for m, a in [("c14n10Comments", "MD5"), ("exclusive", "SHA1"), ("exclusiveComments", "SHA384"), ("c14n11", "SHA512"), ("c14n11Comments", "SHA512")]],
+        ("digest.run", {"filter": "/x/i[1]", "canonicalization": "exclusive", "targetHeader": "D", "input": {"body": BODY}},
+         lambda r: r["ok"] and r["canonical"].startswith("<i ") and r["header"]["name"] == "D"),
+        ("digest.run", {"canonicalization": "none", "algorithm": "MD5", "input": {"body": "abc"}},
+         lambda r: r["ok"] and r["header"]["value"] == "kAFQmDzST7DWlj99KOF/cg=="),
+        ("digest.run", {"input": {"body": entity_doc}}, no_leak),
         ("xpath.eval", {"expression": "string(/r)", "version": "1.0", "input": {"body": entity_doc}}, no_leak),
         ("xpath.eval", {"expression": "string(/r)", "version": "3.1", "input": {"body": entity_doc}}, no_leak),
         ("xpath.eval", {"expression": f"unparsed-text('{secret_uri}')", "version": "3.1", "input": {"body": "<a/>"}}, no_leak),

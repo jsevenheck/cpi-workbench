@@ -88,7 +88,8 @@ Download the installer for your platform from the
 ### Flow Steps
 
 * **Flow Steps** runs a **Content Modifier**, **Filter**, **Router**, **General / Iterating Splitter**,
-  **Gather** or **Converter** on an input message (body, headers, properties, namespace mapping):
+  **Gather**, **Converter**, **Encoder** or **Message Digest** on an input message (body, headers,
+  properties, namespace mapping):
   * Content Modifier: header and property rows with their source types and data types, and the
     message body; the result shows each row's value and the output message.
   * Router: routes in order, XML (XPath) or Non-XML (Camel Simple, with CPI's `=`, `and`, `or` and
@@ -99,6 +100,17 @@ Download the installer for your platform from the
   * Converter: JSON to XML, XML to JSON (namespace mapping, root element options, streaming), XML to CSV
     and CSV to XML (with an XSD from the project), with the settings of CPI's converter steps. *Use as
     input* chains them with the other steps, e.g. JSON to XML, then a Router.
+  * Encoder: *Base64 Encode* writes the body's bytes as Base64 text. The text is one line; whether CPI
+    wraps long output is not verified on a tenant, and the result says so. *GZIP Compress*, *ZIP Compress*
+    and *MIME Multipart Encode* give a binary body and are not simulated yet: the step fails with
+    `UnsupportedInSimulator`. There is no Decoder step yet.
+  * Message Digest: the message, or the one element a *Filter (XPath)* selects, is written as canonical
+    XML (the six methods CPI offers, or *None*), and its digest (MD5, SHA1, SHA256, SHA384, SHA512) goes
+    to the *Target Header Name* as Base64 text; the body stays. The result shows the header and the
+    canonical form the digest is of, which is what to look at when two messages you took for equal have
+    different digests. The filter is XPath 1.0 with the prefixes of the Namespaces tab. Not known from
+    SAP's documentation, and therefore refused or marked as an assumption: a filter that selects several
+    nodes or none, a filter together with *None*, and what *None* hashes (here: the body's bytes as they are).
   * Gather: Combine (SAP's multi-mapping format), Combine at XPath or Concatenate. The messages are on
     the left as *Body 1*, *Body 2*, …: from the splitter's *Gather* button, *From Splitter result*, or `+`
     for the current input body. Gather combines bodies only (SAP does not aggregate headers and properties),
@@ -111,7 +123,8 @@ Download the installer for your platform from the
   resolver provides them ([Fidelity](fidelity.md), F39).
 
   Camel Simple and the Content Modifier run on Camel 3.14.7, as on a tenant for both script versions
-  (tenants still on software 6.x / 5.x run Camel 2 and are not covered). XPath and the converters run on
+  (tenants still on software 6.x / 5.x run Camel 2 and are not covered). XPath, the converters, the Encoder and the Message
+  Digest run on
   an installed XML engine (Saxon-HE 9.9 by default, otherwise 12). See [Fidelity](fidelity.md#flow-steps-content-modifier-filter-router-splitter-gather-converter).
 ### iFlow import
 

@@ -323,7 +323,7 @@ Plain, git-friendly files. The engines' `test` command (`cpiwb-xml test tests/`,
 | **3 — Groovy MVP** | Groovy 1.x and 2.x, typed headers/properties, MPL, API call log, console, diff | Done (0.1.0) |
 | **4 — Productivity** | Platform API mocks, lint, runtime comparison, iFlow-zip import, flow steps, MCP server | Done (0.1.0–0.3.0) |
 | **5 — Distribution** | Windows/macOS installers, engine jars for Java 17+, code signing and auto-update (§10.2) | Unsigned installers and manual update check built; signing and auto-update open |
-| **6 — Workflow** | What a review of other tools showed (§10.5): platform data in the Groovy tab, a traced message from CPI Helper, XPath comfort, Encoder / Decoder and Message Digest steps, JUnit output and compare rules for test cases, Value Mapping import, run history, examples, debugging | Planned (2026-11-13); W1 to W3, W5 and W6 (XML) built (W2 with the desktop link, W2b) |
+| **6 — Workflow** | What a review of other tools showed (§10.5): platform data in the Groovy tab, a traced message from CPI Helper, XPath comfort, Encoder / Decoder and Message Digest steps, JUnit output and compare rules for test cases, Value Mapping import, run history, examples, debugging | Planned (2026-11-13); W1 to W3, W5, W6 (XML) and the first part of W4 (Message Digest, Base64 Encode) built (W2 with the desktop link, W2b) |
 
 ### 10.1 MCP server for coding agents (built, 2026-11-01)
 
@@ -434,8 +434,8 @@ and `run_flow_step` cover it. The engine class is `ConverterStep` in the XML eng
 its JSON reader keeps member order, duplicates and number text). Rules come from SAP's documentation (F47,
 S30), the iFlow keys from public iFlows (F46). Not built, from SAP's list of message transformers: EDI ↔ XML
 and the EDI Extractor (they need EDI schemas), Encoder / Decoder (Base64, GZIP, ZIP, MIME Multipart), XML
-Modifier and Message Digest; they can follow when needed (Encoder / Decoder and Message Digest are
-planned, §10.5 W4).
+Modifier; they can follow when needed. Message Digest and the Encoder's Base64 Encode are built, the rest
+of Encoder / Decoder is planned (§10.5 W4).
 
 ### 10.5 Workflow roadmap
 
@@ -512,7 +512,15 @@ fidelity evidence, status updates and changelog entries. The following are propo
 they are CPI steps, listed as not built in §10.4.*
 * First the sources, as for the converters: SAP's documentation of each step, the iFlow keys from public
   iFlows (as F46), and a probe for what the documentation leaves open (Q-E1). Read on 2026-11-16: the
-  documentation (F63) and the keys (F62). The probe is not written yet, and nothing is built.
+  documentation (F63) and the keys (F62). The probe is prepared (`probes/encoders/`, step 9 of its README)
+  and not run yet.
+* **Built first (2026-11-16), because their result is text or a header:** Message Digest and the Encoder's
+  Base64 Encode, in the XML engines (`DigestStep`, `EncoderStep`), the Flow Steps tab, `run_flow_step` and
+  the iFlow import. Canonicalization uses the JDK's XML signature API with a node set of the element and
+  everything below it; a native image needs the canonicalizer classes and a resource bundle in its
+  metadata, which the smoke workload now covers. Assumptions and refusals are in `fidelity.md`.
+* **Still to build:** Base64 Decode, GZIP and ZIP in both directions, with `bodyBase64` in a step's result,
+  "binary, n bytes" and Save in the tab, and bytes passed on by `runId`.
 * Base64 encode and decode, GZIP and ZIP compress and decompress, Message Digest. MIME Multipart, EDI and the
   XML Modifier stay out.
 * Compressed bodies are bytes, and bodies travel as text through JSON-RPC; how a binary result is shown and
@@ -639,7 +647,7 @@ writes, SUPPRESS in a mapping function's input).
 | Q-C1 | Converters: compact or indented output, the XML declaration, CSV line ends and quoting, an unmapped JSON prefix without namespace mapping (F47), the XML to JSON namespace table's cell order | Answered for the probes' cases (F54–F57); open: the XML to JSON namespace table's cell order, `\r\n` or `\n` in CSV | Save a response with `curl --output` |
 | Q-F1 | Gather's Combine with a body that is not XML (JSON or plain text after a script): failure, the text as it is (as character data in the wrapper, malformed only where the text is, e.g. `a & b`), or another form. SAP documents XML only and shows no such case | Open; the simulator keeps the text and warns | `probes/gather/` (probes/README.md, step 8) |
 | Q-P1 | Partner Directory / Keystore / Secure Store edge cases: missing parameter, unknown partner, unknown keystore alias (null or exception, which message) | Answered (F52) | — |
-| Q-E1 | Encoder, Decoder and Message Digest, what F62 and F63 leave open. Base64: whether long output is wrapped (and with which line end), what the decoder does with line breaks and with invalid input. GZIP: the header fields (time, name), so whether output bytes can be compared at all. ZIP: the entry's name (`CamelFileName`, the message id?), and a decompress of an archive with several entries. Digest: what *None* hashes (the body's bytes as they are?), a body that is not XML, a filter that selects several nodes or none, the header's type; the iFlow keys of the filter and of the GZIP schemes | Open (§10.5 W4); the settings and the digest's header are documented (F63) | A probe iFlow per step; an exported sample for the keys |
+| Q-E1 | Encoder, Decoder and Message Digest, what F62 and F63 leave open. Base64: whether long output is wrapped (and with which line end), what the decoder does with line breaks and with invalid input. GZIP: the header fields (time, name), so whether output bytes can be compared at all. ZIP: the entry's name (`CamelFileName`, the message id?), and a decompress of an archive with several entries. Digest: what *None* hashes (the body's bytes as they are?), a body that is not XML, a filter that selects several nodes or none, the header's type; the iFlow keys of the filter and of the GZIP schemes | Open (§10.5 W4); the settings and the digest's header are documented (F63). Probe prepared, not run | `probes/encoders/` (step 9 of the probes' README); the probe iFlow's export for the keys |
 | Q-VM1 | Format of an exported Value Mapping artifact | Open (§10.5 W7) | Export one sample, or read one from SAP's public sample packages |
 | Q-D1 | Whether an IDE's breakpoints bind to a script that an engine jar runs under the JDWP agent | Open (§10.5 W10) | Try it with IntelliJ and VS Code on `cpiwb-groovy-v1.jar run` |
 

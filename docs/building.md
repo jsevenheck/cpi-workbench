@@ -129,7 +129,14 @@ the changelog has no section for it. A version with a suffix (`0.2.0-rc.1`) beco
 
 ## Native image metadata
 
-When a Saxon feature fails only in the native build, re-record the reachability metadata:
+When a Saxon or JDK feature fails only in the native build, re-record the reachability metadata (the Message
+Digest's XML canonicalization did: "No handler installed" until the JDK's canonicalizer classes and their
+resource bundle were in it):
 
 1. Run `workload.py` with `-agentlib:native-image-agent=config-merge-dir=engine/xml-heXX/src/main/resources/META-INF/native-image/io.cpiwb/cpiwb-xml-heXX`.
 2. Regenerate `saxon-generated/reflect-config.json` with `engine/native/GenReflect.java`.
+
+The agent also rewrites entries that were there (the locales of resource bundles) and adds Saxon classes that
+`saxon-generated` covers. Keep what the failing feature needs and leave the rest as committed; then build the
+native engines and run `workload.py` on them. GraalVM Community 21 for Linux unpacks into any folder, and one
+engine builds in about two minutes, so this does not have to wait for CI.

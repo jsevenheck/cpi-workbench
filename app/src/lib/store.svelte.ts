@@ -68,7 +68,7 @@ export interface IflowStep {
   /** Message Mapping steps: the Groovy scripts its .mmap uses (the mapping itself is not simulated). */
   scripts?: string[];
   note?: string;
-  /** Flow step settings (Content Modifier, Filter, Router, Splitter, Gather) as the iFlow stores them. */
+  /** Flow step settings (Content Modifier, Filter, Router, Splitter, Gather, Converter, Encoder, Message Digest) as the iFlow stores them. */
   config?: any;
   componentVersion?: string;
   file?: string;
@@ -228,7 +228,7 @@ export const xpath = $state({
   running: false,
 });
 
-export type FlowStep = 'contentModifier' | 'filter' | 'router' | 'splitter' | 'gather' | 'converter';
+export type FlowStep = 'contentModifier' | 'filter' | 'router' | 'splitter' | 'gather' | 'converter' | 'encoder' | 'messageDigest';
 
 /** A Content Modifier row in the iFlow's encoding (type: constant, header, property, xpath, expression, ...). */
 export interface CmRow {
@@ -303,12 +303,18 @@ export const flow = $state({
   /** The messages to gather: a splitter's result or bodies added by hand. */
   gather: { messageType: 'sameXml', algorithm: 'combine', sourceXPath: '', targetXPath: '', messages: [] as string[] },
   converter: converterDefaults(),
+  /** Encoder: only Base64 Encode is simulated; an imported step keeps its scheme and the run says so. */
+  encoder: { scheme: 'base64Encode' },
+  /** Message Digest. The MCP server uses the same defaults (`message_digest` in `mcp/flow.rs`); change both together. */
+  digest: { filter: '', canonicalization: 'c14n10', algorithm: 'SHA512', targetHeader: 'SAPMessageDigest' },
   cmResult: null as any,
   routerResult: null as null | { routes: RouteResult[]; taken: string; diagnostics: string[] },
   splitResult: null as any,
   filterResult: null as any,
   gatherResult: null as any,
   converterResult: null as any,
+  encoderResult: null as any,
+  digestResult: null as any,
   running: false,
 });
 
@@ -1557,8 +1563,9 @@ async function simpleEval(run: FlowRun, expression: string, mode: 'condition' | 
 // A run's result goes to the step it was started for, and only if no newer run or newly opened step came since.
 let flowSeq = 0;
 const flowResultKey = { contentModifier: 'cmResult', filter: 'filterResult', router: 'routerResult', splitter: 'splitResult', gather: 'gatherResult',
-  converter: 'converterResult' } as const;
-const flowConfigKey = { contentModifier: 'cm', filter: 'filter', router: 'router', splitter: 'splitter', gather: 'gather', converter: 'converter' } as const;
+  converter: 'converterResult', encoder: 'encoderResult', messageDigest: 'digestResult' } as const;
+const flowConfigKey = { contentModifier: 'cm', filter: 'filter', router: 'router', splitter: 'splitter', gather: 'gather', converter: 'converter',
+  encoder: 'encoder', messageDigest: 'digest' } as const;
 
 export async function runFlowStep() {
   const seq = ++flowSeq;
@@ -1573,6 +1580,8 @@ export async function runFlowStep() {
       : step === 'router' ? await runRouter(run, config)
       : step === 'splitter' ? await runSplitter(run, config)
       : step === 'converter' ? await runConverter(run, config)
+      : step === 'encoder' ? await call('encode.run', { scheme: config.scheme, input: run.input }, run.xml)
+      : step === 'messageDigest' ? await call('digest.run', { ...config, namespaces: run.namespaces, input: run.input }, run.xml)
       : await runGather(run, config);
     if (seq === flowSeq) flow[flowResultKey[step]] = r;
   } catch (e) {
@@ -1715,6 +1724,10 @@ function openFlowStep(step: IflowStep) {
     flow.converter = { ...converterDefaults(), ...c,
       namespaceMapping: Array.isArray(c.namespaceMapping) ? c.namespaceMapping.map((m: any) => `${m.prefix} = ${m.namespace}`).join('\n') : c.namespaceMapping ?? '',
       arrayPaths: Array.isArray(c.arrayPaths) ? c.arrayPaths.join('\n') : c.arrayPaths ?? '' };
+  } else if (step.type === 'encoder') {
+    flow.encoder = { scheme: c.scheme ?? '' };
+  } else if (step.type === 'messageDigest') {
+    flow.digest = { filter: c.filter ?? '', canonicalization: c.canonicalization ?? '', algorithm: c.algorithm ?? '', targetHeader: c.targetHeader ?? '' };
   } else if (step.type === 'gather') {
     // The messages stay: they come from the splitter, not from the iFlow.
     flow.gather = { ...flow.gather, messageType: c.messageType ?? 'sameXml', algorithm: c.algorithm ?? 'combine',
@@ -1731,7 +1744,7 @@ function openFlowStep(step: IflowStep) {
   flowSeq++;
   flow.running = false;
   app.tool = 'flow';
-  app.status = `Loaded ${step.name || step.id} from ${step.iflow}`;
+  app.status = `Loaded ${step.name || step.id} from ${step.iflow}` + (step.note ? `. ${step.note}` : '');
 }
 
 export async function formatXml(text: string): Promise<string> {

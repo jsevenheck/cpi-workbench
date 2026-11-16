@@ -152,7 +152,8 @@ pub fn produced(tool: &str, input: &Message, result: &Value) -> Produced {
         // The XML Validator and the Router pass the message on unchanged.
         "validate_xsd" => p.main = Some(input.clone()),
         "run_flow_step" => match result["step"]["type"].as_str().unwrap_or_default() {
-            "contentModifier" => p.main = Message::from_output(&result["output"]),
+            // The Message Digest's output is the input with its header.
+            "contentModifier" | "messageDigest" => p.main = Message::from_output(&result["output"]),
             "router" => p.main = Some(input.clone()),
             "splitter" => {
                 for (i, m) in result["messages"].as_array().into_iter().flatten().enumerate() {

@@ -13,6 +13,7 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -175,5 +176,34 @@ class IflowImportTest {
         assertEquals("mine", Files.readString(project.resolve("iflows/f/a.txt")));
         IflowImport.importZip(zip, project, "f", false);
         assertEquals("x", Files.readString(project.resolve("iflows/f/a.txt")));
+    }
+
+    /** Encoder and Message Digest, with the keys of the public iFlows of plan F62. */
+    @Test
+    void encoderAndMessageDigestStepsAreRead() throws Exception {
+        org.w3c.dom.Element act = javax.xml.parsers.DocumentBuilderFactory.newDefaultInstance().newDocumentBuilder().newDocument().createElement("callActivity");
+        act.setAttribute("id", "CallActivity_1");
+        act.setAttribute("name", "Step");
+        java.util.Properties params = new java.util.Properties();
+        params.setProperty("Header", "MyDigest");
+        Map<String, Object> zip = FlowSteps.of(act, Map.of("activityType", "Encoder", "encoderType", "ZIP Compress"), params);
+        assertEquals("encoder", zip.get("type"));
+        assertEquals("zipCompress", Json.obj(zip, "config").get("scheme"));
+        assertEquals("base64Encode", Json.obj(FlowSteps.of(act, Map.of("activityType", "Encoder", "encoderType", "Base64 Encode"), params), "config").get("scheme"));
+        // A Decoder keeps its scheme in encoderType as well; it is not simulated, so it is not a flow step.
+        assertNull(FlowSteps.of(act, Map.of("activityType", "Decoder", "encoderType", "Base64 Decode"), params));
+
+        Map<String, String> seen = Map.of("activityType", "MessageDigest", "componentVersion", "1.1", "canonicalizationMethod", "none",
+                "digestAlgorithm", "SHA-512", "targetHeader", "{{Header}}", "cmdVariantUri", "ctype::FlowstepVariant/cname::MessageDigest/version::1.1.1");
+        Map<String, Object> digest = FlowSteps.of(act, seen, params);
+        assertEquals("messageDigest", digest.get("type"));
+        assertEquals("{\"filter\":\"\",\"canonicalization\":\"none\",\"algorithm\":\"SHA-512\",\"targetHeader\":\"MyDigest\"}", Json.write(digest.get("config")));
+        assertNull(digest.get("note"));
+        // A key the one sample did not have may be the filter: the step says what it did not read.
+        Map<String, String> more = new java.util.TreeMap<>(seen);
+        more.put("xpathFilter", "/a/b");
+        more.put("empty", " ");
+        String note = (String) FlowSteps.of(act, more, params).get("note");
+        assertTrue(note.contains("does not read: xpathFilter.") && note.contains("F62"), note);
     }
 }

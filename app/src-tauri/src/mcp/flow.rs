@@ -1,7 +1,7 @@
 //! Flow steps for the MCP server. The Flow Steps tab leads (`app/src/lib/store.svelte.ts`, section "flow steps");
 //! this follows it call for call, so that both give the same result. Change the tab first, then this:
-//! * XPath (Content Modifier rows, XML Router conditions, Filter, Splitter, Gather) and the converters run on the
-//!   XML engine, 9.9 when installed; headers and properties are XPath variables (F39).
+//! * XPath (Content Modifier rows, XML Router conditions, Filter, Splitter, Gather), the converters, the Encoder
+//!   and the Message Digest run on the XML engine, 9.9 when installed; headers and properties are XPath variables (F39).
 //! * Camel Simple and the Content Modifier run on the Camel of a Groovy engine.
 
 use super::tools::{self, engine_call, str_arg, Args};
@@ -59,11 +59,18 @@ pub fn run(server: &Server, args: &Args) -> Result<Value, String> {
         "splitter" => splitter(&ctx, &config)?,
         "gather" => gather(&ctx, &config, args)?,
         "converter" => converter(&ctx, &config)?,
+        "encoder" => engine_call(ctx.server, ctx.xml, "encode.run", json!({
+            "scheme": or(&config, "scheme", "base64Encode"), "input": ctx.input }))?,
+        "messageDigest" => message_digest(&ctx, &config)?,
         "" => return Err("The step has no type.".into()),
         other => return Err(format!("UnsupportedInSimulator: the step type '{other}' (simulated: contentModifier, filter, \
-            router, splitter, gather, converter).")),
+            router, splitter, gather, converter, encoder, messageDigest).")),
     };
     result["step"] = json!({ "type": kind, "name": step.get("name"), "config": config });
+    // What the import could not read from the iFlow (a Message Digest's filter, F62).
+    if let Some(note) = step.get("note").filter(|n| n.is_string()) {
+        result["step"]["note"] = note.clone();
+    }
     Ok(result)
 }
 
@@ -76,6 +83,8 @@ fn config_keys(kind: &str) -> Option<&'static [&'static str]> {
         "splitter" => &["splitter", "expressionType", "expression", "grouping", "streaming"],
         "gather" => &["messageType", "algorithm", "sourceXPath", "targetXPath"],
         "converter" => &CONVERTER_KEYS,
+        "encoder" => &["scheme"],
+        "messageDigest" => &["filter", "canonicalization", "algorithm", "targetHeader"],
         _ => return None,
     })
 }
@@ -287,6 +296,15 @@ fn gather(ctx: &Ctx, config: &Value, args: &Args) -> Result<Value, String> {
         "messageType": or(config, "messageType", "sameXml"), "algorithm": or(config, "algorithm", "combine"),
         "sourceXPath": s(config, "sourceXPath"), "targetXPath": s(config, "targetXPath"),
         "namespaces": ctx.namespaces, "messages": messages,
+    }))
+}
+
+/// Message Digest; keys the config leaves out take the tab's defaults (`flow.digest` in `store.svelte.ts`).
+fn message_digest(ctx: &Ctx, config: &Value) -> Result<Value, String> {
+    engine_call(ctx.server, ctx.xml, "digest.run", json!({
+        "filter": s(config, "filter"), "canonicalization": or(config, "canonicalization", "c14n10"),
+        "algorithm": or(config, "algorithm", "SHA512"), "targetHeader": or(config, "targetHeader", "SAPMessageDigest"),
+        "namespaces": ctx.namespaces, "input": ctx.input,
     }))
 }
 

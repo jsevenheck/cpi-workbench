@@ -103,6 +103,8 @@ The first run starts the Java engines and can take a few seconds.
 | 2.21 | Switch between steps and tabs | Each step keeps its settings and last result. |
 | 2.22a | **Converter**: XML to JSON on `inputs/order.xml`, *Use as input*, then JSON to XML | JSON with `@` attributes, then XML like the input (without indentation). |
 | 2.22b | **Converter**: XML to CSV on `inputs/order.xml`, path `/Order/Items/Item`, *Include Attribute Values* | A header line and one line per item. |
+| 2.22c | **Message Digest** on `inputs/order.xml` with the defaults; then change the body's attribute order or indentation inside a tag and run again; then *None* | The header `SAPMessageDigest` with a Base64 value and the canonical form; the same digest after the change; with *None* another digest and a note that this is an assumption. |
+| 2.22d | **Encoder**: *Base64 Encode* on `inputs/order.xml`; then *ZIP Compress* | Base64 text on one line with a warning that CPI's line wrapping is not verified; ZIP fails with `UnsupportedInSimulator`. |
 | 2.23 | Start a step and change the body or its settings at once | The result belongs to the state at the start; the change applies to the next run. |
 
 ### Editor and files

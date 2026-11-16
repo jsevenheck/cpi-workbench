@@ -5,7 +5,7 @@
 | Path | What |
 |---|---|
 | `engine/core` | Shared Java code (built for Java 17, run on 21): JSON, JSON-RPC server (stdio and HTTP), project files and path checks, iFlow import, test runner. |
-| `engine/xml`, `engine/xml-he99`, `engine/xml-he12` | CPI XSLT step, XSD validation, XPath, the XPath-based flow steps (Filter, Splitter, Gather) and the converters. The same sources are built against Saxon-HE 9.9.1-8 and 12.9. |
+| `engine/xml`, `engine/xml-he99`, `engine/xml-he12` | CPI XSLT step, XSD validation, XPath, the XPath-based flow steps (Filter, Splitter, Gather), the converters, the Encoder and the Message Digest (XML canonicalization of the JDK). The same sources are built against Saxon-HE 9.9.1-8 and 12.9. |
 | `engine/native` | GraalVM native-image build (`build-native.sh`), reflection metadata generator, workload smoke test. |
 | `engine/groovy`, `engine/groovy-v1`, `engine/groovy-v2` | Groovy engines: shared runner, clean-room `com.sap.*` API (`src/api-common` with the Script API v1, `src/api-v2`), and the two builds with their entry points (Groovy 2.4.21 and Groovy 4.0.29, both on Camel 3.14.7 like a tenant). `build-jre.sh` trims the Java 21 runtime. |
 | `app/` | Svelte 5 + Monaco UI (`src/`), Tauri 2 shell (`src-tauri/`, with the MCP server in `src/mcp/`), browser e2e tests (`e2e/`). |

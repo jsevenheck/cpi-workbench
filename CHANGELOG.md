@@ -6,6 +6,13 @@ of its version.
 
 ## [Unreleased]
 
+### Changed
+
+- **CPI Helper receiver: the default port is 7790**, no longer 7778. 7778 is where the Groovy 1.x engine of the
+  browser mode listens (and the Groovy engines' `--http` default), so the two could not run side by side. If you
+  turned the receiver on in 0.4.0, it stays on 7778 and the *Custom URL* in the plugins keeps working; to move,
+  set the port under **⚙** and enter the new *Custom URL* in both plugins.
+
 ## [0.4.0] - 2026-11-16
 
 Workflow in the tabs: platform data as tables, a traced message from CPI Helper (pasted, or with one click

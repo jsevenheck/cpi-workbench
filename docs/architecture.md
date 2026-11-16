@@ -55,7 +55,7 @@ add no function of their own.
 ## CPI Helper receiver
 
 The desktop receiver is separate from the engines' HTTP servers and is **off by default**.
-`app/src-tauri/src/receiver.rs` binds `127.0.0.1` at the configured port (default 7778). Its page
+`app/src-tauri/src/receiver.rs` binds `127.0.0.1` at the configured port (default 7790; 7778 up to 0.4.0, which is the Groovy engines' `--http` default). Its page
 reads `#share/<data>` and POSTs the token to `/message` on the same origin. Host/Origin checks,
 16 KiB request headers, an 8 MiB POST limit, at most four active handlers and a 15-second read
 deadline bound HTTP input. Stopping prevents old handlers from delivering more messages.

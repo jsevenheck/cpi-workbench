@@ -1,7 +1,8 @@
 // Unit tests of the hand-over from CPI Helper's plugins: node --test tests/
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { bodyWarning, readShared, sharedSummary } from '../src/lib/share.ts';
+import { readFileSync } from 'node:fs';
+import { bodyWarning, readShared, RECEIVER_DEFAULT_PORT, sharedSummary } from '../src/lib/share.ts';
 
 /** The plugins' encoding: JSON, raw DEFLATE, URL-safe Base64 without padding. */
 async function encode(data: unknown): Promise<string> {
@@ -69,4 +70,11 @@ test('a link that unpacks to more than the limit is refused while it is unpacked
   const token = await encode({ input: { body: 'x'.repeat(200_000) } });
   await assert.rejects(readShared(token, 100_000), /longer than 0.1 million characters unpacked/);
   assert.equal((await readShared(token, 300_000)).body.length, 200_000);
+});
+
+test("the receiver's default port is not a browser-mode engine's, and the user guide names it", () => {
+  // 7777 to 7780: docs/building.md, app/e2e and build.yml start the engines there; 7778 is also the Groovy engines' --http default.
+  assert.ok(![7777, 7778, 7779, 7780].includes(RECEIVER_DEFAULT_PORT), String(RECEIVER_DEFAULT_PORT));
+  const guide = readFileSync(new URL('../../docs/user-guide.md', import.meta.url), 'utf8');
+  assert.ok(guide.includes(`\`http://127.0.0.1:${RECEIVER_DEFAULT_PORT}/#share/\` for GroovyDebugX`), 'user guide: Custom URL');
 });

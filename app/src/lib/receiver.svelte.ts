@@ -5,15 +5,14 @@
  */
 import { isDesktop } from './engine';
 import { app, closeDialog, confirm, dialog, importMessage } from './store.svelte';
-import { bodyWarning, readShared, sharedSummary, type SharedMessage } from './share';
+import { bodyWarning, readShared, RECEIVER_DEFAULT_PORT, sharedSummary, type SharedMessage } from './share';
 
-export const DEFAULT_PORT = 7778;
 const KEY = 'cpiwb.receiver';
 
 export const receiver = $state({
   /** The user's choice, kept across starts. */
   on: false,
-  port: DEFAULT_PORT,
+  port: RECEIVER_DEFAULT_PORT,
   /** Listening now. */
   running: false,
   error: '',

@@ -474,7 +474,8 @@ hand over JSON as raw DEFLATE plus Base64url (S47). `share.ts` reads pasted link
 `#share/` links. Imported code waits for a manual run. Tenant messages were imported on Windows
 on 2026-11-16; a large XSLT body was already cut off upstream (Q-T3). Desktop receiver: W2b.
 
-**W2b. Desktop receiver (built, 0.4.0).** Opt-in `127.0.0.1` HTTP page, port 7778 by default,
+**W2b. Desktop receiver (built, 0.4.0).** Opt-in `127.0.0.1` HTTP page, port 7778 by default in 0.4.0
+(7790 after it: 7778 is the Groovy engines' `--http` default and the Groovy 1.x port of the browser mode),
 with a same-origin POST of the fragment data. The UI shows the destination, body size, supplied parts
 and replacements before import; any browser page may open a link, so it does not authenticate CPI
 Helper as the sender. The newest undecided message wins. Receiver imports disarm both incoming and

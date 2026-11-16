@@ -169,8 +169,8 @@ data and puts it into a link; the app only reads that link. CPI Helper is option
 message you write as JSON just as well.
 
 * **Desktop app, one click:** under **⚙** turn on *Receive links from CPI Helper*; the app then listens on this
-  computer only (127.0.0.1, port 7778 unless you change it) and shows the *Custom URL* for each plugin:
-  `http://127.0.0.1:7778/#share/` for GroovyDebugX, `http://127.0.0.1:7778/` for xsltDebugX. Enter it in
+  computer only (127.0.0.1, port 7790 unless you change it) and shows the *Custom URL* for each plugin:
+  `http://127.0.0.1:7790/#share/` for GroovyDebugX, `http://127.0.0.1:7790/` for xsltDebugX. Enter it in
   CPI Helper's plugin settings. When you send a step, the plugin's tab hands the message to the app and says so,
   and the app asks before it imports it: the dialog names the tab, the body's size and what it replaces. Any web
   page can open such a link, so the dialog does not claim it came from CPI Helper; check what it shows. If the

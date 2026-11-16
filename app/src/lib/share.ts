@@ -15,6 +15,13 @@
  */
 import type { Row } from './types';
 
+/**
+ * The desktop receiver's port until the user chooses one (`receiver.svelte.ts`). Not 7777 to 7780: the engines
+ * of the browser mode and the e2e tests listen there, and 7778, the default up to 0.4.0, is the Groovy
+ * engines' own `--http` default. A setting saved with 7778 stays as it is.
+ */
+export const RECEIVER_DEFAULT_PORT = 7790;
+
 export interface SharedMessage {
   /** The tab the message is for; 'message' when the text names no step (plain {body, headers, properties}). */
   kind: 'groovy' | 'xslt' | 'message';

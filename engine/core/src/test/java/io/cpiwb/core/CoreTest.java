@@ -267,6 +267,80 @@ class CoreTest {
     }
 
     @Test
+    void xmlCompareLeavesOutIgnoredNodes() {
+        String expected = "<o><id>1</id><t ts=\"a\">x</t></o>";
+        String actual = "<o><id>2</id><t ts=\"b\">x</t></o>";
+        assertTrue(TestRunner.compare(expected, actual, "xml").contains("expected text '1'"));
+        assertTrue(TestRunner.compare(expected, actual, "xml", List.of("//id"), Map.of()).contains("attributes differ"), "only what is named");
+        assertNull(TestRunner.compare(expected, actual, "xml", List.of("//id", "//t/@ts"), Map.of()));
+        assertNull(TestRunner.compare(expected, actual, "xml", List.of("//id/text()", "o/t/@ts"), Map.of()));
+        // On one side only, and an element whose ancestor an earlier rule removed.
+        assertNull(TestRunner.compare("<o><t>x</t></o>", "<o><h><id>2</id></h><t>x</t></o>", "xml", List.of("//h", "//id"), Map.of()));
+        // Mixed content: the text around a removed element is one text again.
+        assertNull(TestRunner.compare("<a>x<t/>y</a>", "<a>xy</a>", "xml", List.of("//t"), Map.of()));
+        // What is left still has to match.
+        assertTrue(TestRunner.compare("<o><id>1</id><v>a</v></o>", "<o><id>2</id><v>b</v></o>", "xml", List.of("//id"), Map.of()).contains("expected text 'a'"));
+
+        // XPath 1.0: a plain name does not match in a namespace, and the difference says so.
+        String ns = "<o xmlns=\"urn:x\"><Created>%s</Created></o>";
+        String diff = TestRunner.compare(ns.formatted("1"), ns.formatted("2"), "xml", List.of("//Created"), Map.of());
+        assertTrue(diff.contains("expected text '1'") && diff.contains("expect.ignore matched no node: //Created"), diff);
+        assertNull(TestRunner.compare(ns.formatted("1"), ns.formatted("2"), "xml", List.of("//*[local-name()='Created']"), Map.of()));
+        assertNull(TestRunner.compare(ns.formatted("1"), ns.formatted("2"), "xml", List.of("//x:Created"), Map.of("x", "urn:x")));
+        assertNull(TestRunner.compare("<o xml:lang=\"de\"/>", "<o xml:lang=\"en\"/>", "xml", List.of("//@xml:lang"), Map.of()));
+        // A rule that matches nothing is not an error while the rest is equal (the node may be optional).
+        assertNull(TestRunner.compare("<o/>", "<o/>", "xml", List.of("//Created"), Map.of()));
+
+        for (String bad : List.of("//id[", "count(//id)", "'text'", "//p:id", "/", "/*", "//id | /o")) {
+            IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+                    () -> TestRunner.compare(expected, actual, "xml", List.of(bad), Map.of()), bad);
+            assertTrue(e.getMessage().startsWith("expect.ignore '" + bad + "'"), e.getMessage());
+        }
+    }
+
+    @Test
+    void aCaseWithIgnoreRunsAndAWrongRuleIsAnError(@TempDir Path tmp) throws Exception {
+        String[] body = {"<o><id>2</id><v>a</v></o>"};
+        RpcHandler step = new RpcHandler() {
+            @Override
+            public Object call(String method, Map<String, Object> params) {
+                return Json.o().with("ok", true).with("output", Json.o().with("body", body[0]));
+            }
+
+            @Override
+            public Map<String, Object> describe() {
+                return Map.of();
+            }
+        };
+        TestRunner runner = new TestRunner(step, null).register("xslt", (tc, dir, root, params) -> "xslt.run");
+        String c = "{\"step\":\"xslt\",\"expect\":{\"body\":\"<o><id>1</id><v>a</v></o>\"%s}}";
+        Path file = tmp.resolve("case.json");
+        Files.writeString(file, c.formatted(""));
+        assertEquals("failed", runner.run(file).status);
+        Files.writeString(file, c.formatted(",\"ignore\":[\"//id\"]"));
+        TestRunner.CaseResult ok = runner.run(file);
+        assertEquals("passed", ok.status, ok.messages.toString());
+        // Rules that cannot apply: not a list of strings, a comparison as text, no expected body, no XPath.
+        for (String wrong : List.of(",\"ignore\":\"//id\"", ",\"ignore\":[1]", ",\"ignore\":[\"//id\"],\"compare\":\"text\"", ",\"ignore\":[\"//id[\"]")) {
+            Files.writeString(file, c.formatted(wrong));
+            TestRunner.CaseResult r = runner.run(file);
+            assertEquals("error", r.status, wrong);
+            assertTrue(r.messages.get(0).contains("expect.ignore"), r.messages.toString());
+        }
+        Files.writeString(file, "{\"step\":\"xslt\",\"expect\":{\"ignore\":[\"//id\"]}}");
+        assertEquals("error", runner.run(file).status);
+        // A prefix is bound by expect.namespaces, and unknown without it.
+        body[0] = "<o xmlns='urn:n'><id>2</id></o>";
+        String n = "{\"step\":\"xslt\",\"expect\":{\"body\":\"<o xmlns='urn:n'><id>1</id></o>\",\"ignore\":[\"//n:id\"]%s}}";
+        Files.writeString(file, n.formatted(",\"namespaces\":{\"n\":\"urn:n\"}"));
+        assertEquals("passed", runner.run(file).status, runner.run(file).messages.toString());
+        Files.writeString(file, n.formatted(""));
+        TestRunner.CaseResult unbound = runner.run(file);
+        assertEquals("error", unbound.status);
+        assertTrue(unbound.messages.get(0).contains("the prefix 'n' is not in expect.namespaces"), unbound.messages.toString());
+    }
+
+    @Test
     void testRunExitCodes() {
         Map<String, Object> none = Json.o().with("results", List.of()).with("passed", 0).with("failed", 0).with("skipped", 0);
         assertEquals(1, Cli.printTestResults(none, true, false));

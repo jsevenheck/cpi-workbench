@@ -3,7 +3,7 @@ title: "The CPI Helper receiver's default port moved to 7790; a saved 7778 is le
 author: Claude
 date: 2026-11-16
 branch: claude/great-cannon-v2nd6h
-cost: { minutes: 21, tokens: 344191 }
+cost: { minutes: 30, tokens: 428738 }
 id: l-460c0a5b
 scope: repo
 status: active
@@ -28,6 +28,9 @@ touches:
 - JUnit XML has no official schema. The layout is Maven Surefire's (root `testsuite`), because its schema is published and can be checked: reports from all four engines, with failed, broken and skipped cases, validate against `surefire-test-report.xsd` with xmllint.
 - The XML is written by hand, not through the DOM helper: a message may quote any input, and characters XML 1.0 cannot hold (control characters, a lone surrogate) must become U+FFFD first, which the JDK serializer does not do. It also needs nothing new in the native images.
 - All checks before a push ran in a Linux cloud container on 2026-11-16 (Java 21, Node 22, cargo present): `mvn verify`, the regression cases on the four jars, `npm ci` then check, test and build, both browser e2e tests, `cargo test` with the TAURI_CONFIG override, and the MCP smoke test.
+- `expect.ignore` (W6) is XPath 1.0 of the JDK in `core`, not Saxon: the Groovy engines have no Saxon, and a case should read the same on all four engines.
+- Prefixes come from `expect.namespaces`. This was not in the roadmap text; it came in because the JDK, without a namespace context, takes an unknown prefix for a name that matches nothing and says nothing. With the context an unknown prefix is an error.
+- A rule that cannot apply makes the case an error (not a list of strings, no XPath, a number or string result, the whole document, no expected body, a comparison as text). A rule that matches nothing is allowed, because the node may be optional; when the bodies differ, the message names the rules that matched nothing.
 
 ## Tried and ruled out
 - Rewriting a saved 7778 to the new default: the hand-over is one way, the app cannot change the Custom URL in the extension, so the one-click path would break without a word. A saved 7778 also cannot be told apart from one the user chose.
@@ -35,6 +38,8 @@ touches:
 - A hint under the settings while the port is 7778: the bind error already says "Port 7778 cannot be used … Choose another port" when the conflict happens.
 - Using the option in CI (`build.yml`): the user said not for now.
 - The case's folder as `classname`: the user preferred the profile.
+- `Document.normalize()` after removing nodes: the text on both sides of a removed element stayed two text nodes, so `<a>x<t/>y</a>` without `t` did not equal `<a>xy</a>`. `normalizeDocument()` merges them.
+- A case in the regression project: its counts are known to CI, the shell tests and a learning; the rule is covered by the core tests instead.
 
 ## Watch out
 - Whether other common software uses 7790 was not checked.
@@ -52,3 +57,7 @@ In the code: `Cli.testCommand`, `Cli.junitXml`, `Cli.xml` in `engine/core`; both
 - Stop the four `serve --http 777x` engines after the e2e tests, or the next start fails to bind.
 
 In the code: `docs/building.md` (Shell tests, End-to-end tests), `app/e2e/*.mjs`, `app/scripts/mcp-smoke.mjs`.
+- JSON bodies have no such rule yet.
+- The rule is this tool's own; it imitates nothing in CPI.
+
+In the code: `TestRunner.check`, `TestRunner.compare` (five arguments) and `TestRunner.remove` in `engine/core`; tests `xmlCompareLeavesOutIgnoredNodes` and `aCaseWithIgnoreRunsAndAWrongRuleIsAnError` in `CoreTest`; `docs/test-cases.md`.

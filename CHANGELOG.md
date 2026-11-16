@@ -12,6 +12,10 @@ of its version.
   JUnit XML report for a CI system: one test case per case, failed cases with their messages, the cases of other
   engines as skipped. The output and the exit code stay as they are. The layout is Maven Surefire's; it has not
   been tried with a CI reporter yet. See [test cases](docs/test-cases.md).
+- **Test cases: leave out values that change with every run.** `expect.ignore` lists XPath expressions (XPath 1.0)
+  whose nodes are removed from the expected and the actual body before they are compared as `xml`: a timestamp, a
+  generated id. `expect.namespaces` binds the prefixes the expressions use. A rule that cannot apply (no XPath,
+  an unknown prefix, a comparison as text) makes the case an error. XML bodies only.
 
 ### Changed
 

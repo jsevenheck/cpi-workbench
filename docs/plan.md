@@ -321,7 +321,7 @@ Plain, git-friendly files. The engines' `test` command (`cpiwb-xml test tests/`,
 | **3 — Groovy MVP** | Groovy 1.x and 2.x, typed headers/properties, MPL, API call log, console, diff | Done (0.1.0) |
 | **4 — Productivity** | Platform API mocks, lint, runtime comparison, iFlow-zip import, flow steps, MCP server | Done (0.1.0–0.3.0) |
 | **5 — Distribution** | Windows/macOS installers, engine jars for Java 17+, code signing and auto-update (§10.2) | Unsigned installers and manual update check built; signing and auto-update open |
-| **6 — Workflow** | What a review of other tools showed (§10.5): platform data in the Groovy tab, a traced message from CPI Helper, XPath comfort, Encoder / Decoder and Message Digest steps, JUnit output and compare rules for test cases, Value Mapping import, run history, examples, debugging | Planned (2026-11-13); W1 to W3 and W5 built (W2 with the desktop link, W2b) |
+| **6 — Workflow** | What a review of other tools showed (§10.5): platform data in the Groovy tab, a traced message from CPI Helper, XPath comfort, Encoder / Decoder and Message Digest steps, JUnit output and compare rules for test cases, Value Mapping import, run history, examples, debugging | Planned (2026-11-13); W1 to W3, W5 and W6 (XML) built (W2 with the desktop link, W2b) |
 
 ### 10.1 MCP server for coding agents (built, 2026-11-01)
 
@@ -524,11 +524,13 @@ as skipped. Reports from all four engines validate against Surefire's published 
 Jenkins, GitLab) has read one yet, and CI does not use the option. In `Cli`; documented in
 [test cases](test-cases.md).
 
-**W6. Test cases: leave out values that change per run (S to M).** *Our own idea; no tool's page describes how
-it compares.*
-`compare` knows `xml`, `text` and `trimmed`; headers and properties are checked only when named. New:
-`expect.ignore`, a list of XPaths whose nodes are removed from both sides before an `xml` comparison
-(timestamps, generated ids). JSON bodies can follow.
+**W6. Test cases: leave out values that change per run (built for XML).** *Our own idea; no tool's page
+describes how it compares.*
+`compare` knows `xml`, `text` and `trimmed`; headers and properties are checked only when named.
+`expect.ignore` is a list of XPaths whose nodes are removed from both sides before an `xml` comparison
+(timestamps, generated ids). XPath 1.0 of the JDK, because `core` has no Saxon and a case should read the
+same on all four engines; prefixes come from `expect.namespaces`. A rule that cannot apply makes the case
+an error. Open: JSON bodies.
 
 **W7. Import a Value Mapping artifact (S to M).** *Seen in SAP CPI Groovy Script.*
 An exported Value Mapping artifact (zip) becomes rows of `platform/value-mappings.json`, next to the iFlow

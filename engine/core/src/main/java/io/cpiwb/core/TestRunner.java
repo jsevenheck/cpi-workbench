@@ -6,12 +6,20 @@ import org.w3c.dom.NodeList;
 
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.XMLConstants;
+import javax.xml.namespace.NamespaceContext;
+import javax.xml.xpath.XPath;
+import javax.xml.xpath.XPathConstants;
+import javax.xml.xpath.XPathExpressionException;
+import javax.xml.xpath.XPathFactory;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -162,11 +170,22 @@ public final class TestRunner {
                 msgs.add("Expected an error containing '" + needle + "'");
             }
         }
+        String mode = Json.str(expect, "compare", "xml");
+        List<String> ignore = new ArrayList<>();
+        if (expect.get("ignore") != null) {
+            // A rule that cannot apply is a mistake in the case, not a rule to skip.
+            if (!(expect.get("ignore") instanceof List<?> l) || !l.stream().allMatch(String.class::isInstance)) {
+                throw new IllegalArgumentException("expect.ignore must be a list of XPath expressions");
+            } else if (!expect.containsKey("body") || !"xml".equals(mode)) {
+                throw new IllegalArgumentException("expect.ignore needs expect.body and \"compare\": \"xml\"");
+            }
+            l.forEach(x -> ignore.add((String) x));
+        }
         if (expect.containsKey("body")) {
             String expected = readText(expect.get("body"), dir);
             String actual = Json.str(Json.obj(result, "output"), "body", "");
-            String mode = Json.str(expect, "compare", "xml");
-            String diff = compare(expected, actual, mode);
+            Map<String, Object> namespaces = Json.obj(expect, "namespaces");
+            String diff = compare(expected, actual, mode, ignore, namespaces == null ? Map.of() : namespaces);
             if (diff != null) {
                 msgs.add("Body differs (" + mode + "): " + diff);
             }
@@ -257,22 +276,94 @@ public final class TestRunner {
 
     /** Returns null if equal, otherwise a short description of the first difference. */
     public static String compare(String expected, String actual, String mode) {
+        return compare(expected, actual, mode, List.of(), Map.of());
+    }
+
+    /**
+     * As {@link #compare(String, String, String)}; for {@code xml}, the nodes each XPath in {@code ignore}
+     * selects are removed from both documents first (values that change per run: timestamps, generated ids).
+     * XPath 1.0 of the JDK, so that every engine reads a case the same way; {@code namespaces} maps the
+     * prefixes the expressions use to URIs.
+     *
+     * @throws IllegalArgumentException for an expression that is no XPath, uses a prefix that is not in
+     *         {@code namespaces}, selects no nodes (a number, a string) or selects the whole document
+     */
+    public static String compare(String expected, String actual, String mode, List<String> ignore, Map<String, Object> namespaces) {
         if ("text".equals(mode)) {
             return expected.equals(actual) ? null : firstLineDiff(expected, actual);
         }
         if ("trimmed".equals(mode)) {
             return expected.strip().equals(actual.strip()) ? null : firstLineDiff(expected.strip(), actual.strip());
         }
+        Document e;
+        Document a;
         try {
-            Document e = parseNormalized(expected);
-            Document a = parseNormalized(actual);
-            if (e.isEqualNode(a)) {
-                return null;
-            }
-            return describeNodeDiff(e.getDocumentElement(), a.getDocumentElement(), "/");
+            e = parseNormalized(expected);
+            a = parseNormalized(actual);
         } catch (Exception ex) {
             return "cannot compare as XML (" + ex.getMessage() + "); use \"compare\": \"text\"";
         }
+        List<String> unmatched = new ArrayList<>();
+        for (String xpath : ignore) {
+            if (remove(e, xpath, namespaces) + remove(a, xpath, namespaces) == 0) {
+                unmatched.add(xpath);
+            }
+        }
+        if (e.isEqualNode(a)) {
+            return null;
+        }
+        String diff = describeNodeDiff(e.getDocumentElement(), a.getDocumentElement(), "/");
+        // The usual cause: a name without a prefix does not match an element that is in a namespace.
+        return unmatched.isEmpty() ? diff : diff + " (expect.ignore matched no node: " + String.join(", ", unmatched) + ")";
+    }
+
+    /** Removes the nodes {@code xpath} selects and returns how many it selected. */
+    private static int remove(Document d, String xpath, Map<String, Object> namespaces) {
+        NodeList nodes;
+        try {
+            XPath xp = XPathFactory.newDefaultInstance().newXPath();
+            // Without a context the JDK takes an unknown prefix for a name that matches nothing, without a word.
+            xp.setNamespaceContext(new NamespaceContext() {
+                @Override
+                public String getNamespaceURI(String prefix) {
+                    Object uri = prefix.isEmpty() ? "" : "xml".equals(prefix) ? XMLConstants.XML_NS_URI : namespaces.get(prefix);
+                    if (uri == null) {
+                        throw new IllegalArgumentException("the prefix '" + prefix + "' is not in expect.namespaces");
+                    }
+                    return uri.toString();
+                }
+
+                @Override
+                public String getPrefix(String uri) {
+                    return null;
+                }
+
+                @Override
+                public Iterator<String> getPrefixes(String uri) {
+                    return Collections.emptyIterator();
+                }
+            });
+            nodes = (NodeList) xp.evaluate(xpath, d, XPathConstants.NODESET);
+        } catch (XPathExpressionException | RuntimeException ex) {
+            // No XPath 1.0, not a node set (a number, a string), or an unknown prefix: the cause says which.
+            throw new IllegalArgumentException("expect.ignore '" + xpath + "': " + (ex.getCause() != null ? ex.getCause().getMessage() : ex.getMessage()));
+        }
+        for (int i = 0; i < nodes.getLength(); i++) {
+            Node n = nodes.item(i);
+            if (n == d || n == d.getDocumentElement()) {
+                throw new IllegalArgumentException("expect.ignore '" + xpath + "' selects the whole document; nothing would be compared");
+            } else if (n instanceof org.w3c.dom.Attr attr && attr.getOwnerElement() != null) {
+                attr.getOwnerElement().removeAttributeNode(attr);
+            } else if (n.getParentNode() != null) {
+                n.getParentNode().removeChild(n);
+            } else {
+                throw new IllegalArgumentException("expect.ignore '" + xpath + "' selects a node that cannot be removed (" + n.getNodeName() + ")");
+            }
+        }
+        // Text on both sides of a removed element becomes one text node, as in a document that never had the element.
+        // normalizeDocument(), as after parsing: normalize() left the two text nodes apart here.
+        d.normalizeDocument();
+        return nodes.getLength();
     }
 
     private static Document parseNormalized(String xml) throws Exception {

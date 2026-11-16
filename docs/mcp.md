@@ -92,7 +92,7 @@ agent without file access of its own what the app's file tree and **Import iFlow
 | `evaluate_xpath` | XPath (1.0 or 3.1, with namespaces). A node of the body also says where it is (`at`: the element positions from the root, its name, an attribute's name). |
 | `run_flow_step` | Flow Steps: a Content Modifier, Filter, Router, Splitter, Gather, converter (JSON ↔ XML, XML ↔ CSV), Encoder, Decoder (Base64, GZIP, ZIP) or Message Digest step from an iFlow (`iflowStep`: name or id, with `iflow` when several iFlows share it) or from a configuration (`step`). |
 | `save_file` | **Save as…**: writes a file (`content`, bytes as `contentBase64`, or a run's output with `contentFrom`, binary or not) into the project, creating folders. An existing file is replaced only with `overwrite: true`. |
-| `import_iflow` | **Import iFlow**: an iFlow exported from the tenant (`.zip`, any path) into `iflows/<name>/`; returns its steps. An existing folder is replaced only with `overwrite: true`. |
+| `import_iflow` | **Import iFlow**: an iFlow, Value Mapping or integration package exported from the tenant (`.zip`, any path): iFlows into `iflows/<name>/`, value mappings into `platform/value-mappings.json`; returns `kind`, the imported iFlows' steps, `valueMappings` and `skipped`. An existing folder or value mapping is replaced only with `overwrite: true`. |
 | `reference` | No tab: what the simulator offers, generated from its sources. `script-api`: the Script API, Message Mapping and platform service methods; `platform`: the formats of the `platform/` files; `fidelity`: [Fidelity](fidelity.md). |
 
 Without `runtime`, a tool uses the app's default (Saxon-HE 9.9; Groovy from the script's imports), or the

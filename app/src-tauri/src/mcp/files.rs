@@ -194,26 +194,28 @@ pub fn import_iflow(server: &Server, args: &Args) -> Result<Value, String> {
     // The export usually lies outside the project (Downloads); a relative path is inside the project.
     let zip = if Path::new(zip_arg).is_absolute() { PathBuf::from(zip_arg) } else { project.join(zip_arg) };
     if !zip.is_file() {
-        return Err(format!("No file at {}. Give the path of an iFlow exported from the tenant as a .zip.", zip.display()));
+        return Err(format!("No file at {}. Give the path of an iFlow, Value Mapping or integration package exported from the tenant as a .zip.", zip.display()));
     }
     let name = str_arg(args, "name");
     let folder = iflow_folder(&zip, name);
     if folder.is_empty() || folder == "." || folder == ".." {
         return Err("Give the iFlow a name of letters, digits, '.', '_' or '-'.".into());
     }
-    let target = project.join("iflows").join(&folder);
     let overwrite = args.get("overwrite").and_then(Value::as_bool).unwrap_or(false);
-    let exists_msg = || format!("iflows/{folder} exists already. Give another name, or overwrite: true to replace its files.");
     let _write = server.write_lock();
-    if target.exists() && !overwrite {
-        return Err(exists_msg());
-    }
-    // createNew: the engine creates the folder only if none is there (another MCP server, past this lock).
+    // The engine tells an iFlow, a Value Mapping and a package export apart. createNew: it writes nothing when a
+    // folder or value mapping it would write exists (another MCP server, past this lock).
     let r = engine_call(server, file_runtime(server)?, "iflow.import",
         json!({ "zip": zip.to_string_lossy(), "name": folder, "createNew": !overwrite }))
-        .map_err(|e| if e.contains("exists already") { exists_msg() } else { e })?;
-    let steps: Vec<Value> = r["steps"].as_array().into_iter().flatten().filter(|s| s["iflow"] == folder.as_str()).cloned().collect();
-    Ok(json!({ "imported": r["imported"], "files": r["files"], "steps": steps }))
+        .map_err(|e| if e.contains("exists already") {
+            format!("{e}. Give another name, or overwrite: true to replace what is there.")
+        } else { e })?;
+    let folders: Vec<String> = r["iflows"].as_array().into_iter().flatten()
+        .filter_map(|f| f.as_str().map(|f| f.trim_start_matches("iflows/").to_string())).collect();
+    let steps: Vec<Value> = r["steps"].as_array().into_iter().flatten()
+        .filter(|s| s["iflow"].as_str().is_some_and(|i| folders.iter().any(|f| f == i))).cloned().collect();
+    Ok(json!({ "kind": r["kind"], "imported": r["imported"], "files": r["files"], "steps": steps,
+        "valueMappings": r["valueMappings"], "skipped": r["skipped"] }))
 }
 
 #[cfg(test)]

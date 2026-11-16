@@ -109,6 +109,9 @@ Labels follow the REA evidence rules (see §4): **Observed** = read in a source 
 | F62 | Encoder, Decoder and Message Digest steps in exported iFlows: `activityType` `Encoder` with `encoderType` = `Base64 Encode` or `ZIP Compress`; `activityType` `Decoder`, whose scheme is also in the key `encoderType` (`Base64 Decode`, `ZIP Decompress`); `activityType` `MessageDigest` with `digestAlgorithm` (`SHA-512`), `canonicalizationMethod` (`none`) and `targetHeader` (`SAPMessageDigest`). `cmdVariantUri` repeats the scheme (`cname::ZIP Compress`). Not seen: the GZIP schemes, the digest's filter XPath and its namespace mapping, any other value of `digestAlgorithm` and `canonicalizationMethod`, the MIME Multipart variants → Q-E1 | Observed (8 steps in 3 public iFlows on GitHub, 2026-11-16) | S50 |
 | F63 | SAP's documentation of the three steps. Decoder: *Base64 Decode*, *GZIP Decompress*, *ZIP Decompress*, no settings. Encoder: the page's list of schemes is empty in the mirror; its example encodes `<message>`, CR LF, tab, `Input for encoder`, CR LF, `</message>`, CR LF to `PG1lc3NhZ2U+DQoJSW5wdXQgZm9yIGVuY29kZXINCjwvbWVzc2FnZT4NCg==`, plain Base64 of those bytes (60 characters, too short to show whether long output is wrapped). Message Digest: "can only process XML content"; the message is turned into canonical XML, the digest of that goes to a header and "the original message remains unchanged"; *Filter (XPath)* is optional, with a prefix namespace mapping; canonicalization is Canonical XML 1.0, Exclusive 1.0 or 1.1, each with or without comments, or *None*; algorithms MD5, SHA1, SHA256, SHA384, SHA512 (default SHA512); *Target Header Name* defaults to `SAPMessageDigest` and holds the Base64-encoded digest. The SAP blog on ZIP and GZIP that the pages link could not be opened (HTTP 403); nothing here rests on it. What the pages leave open → Q-E1 | Observed (SAP docs) | S49 |
 | F64 | Camel 3.14.7's data formats for Base64, GZIP and ZIP with their defaults, read in their source. camel-base64: encoding writes lines of 76 characters, each ended by CR LF, the last one too (commons-codec's chunked Base64); decoding is lenient: characters outside the alphabet are skipped (`-` and `_` count as Base64), the text ends at the first `=`, an incomplete last group gives the bits it has, nothing is an error. camel-zip-deflater (GZIP): a GZIP stream without a file name, time 0 and operating system 255 in its header. camel-zipfile: compressing writes one entry named after the file name part of `CamelFileName`, else after the message id, and sets `CamelFileName` to that name with `.zip`; decompressing (without an iterator) takes the first entry as the body and its name as `CamelFileName`, and fails with "Zip file has more than 1 entry." when there is a second. A scratch run against commons-codec 1.16.1 and commons-compress 1.26.1 gave the same bytes as the simulator for 401 random inputs (Base64 Encode, GZIP) and 20,000 dirty Base64 texts. **Whether CPI's Encoder and Decoder are these data formats is not known** → Q-E1 | Read (Camel source) | S51 |
+| F65 | An exported Value Mapping artifact (zip): `value_mapping.xml` with `<vm version="2.0">`, one `<group id>` per set of equivalent values, one `<entry>` per side with `<agency>`, `<schema>` and `<value>`; an entry may carry `isDefault="true"`. Next to it `META-INF/MANIFEST.MF` (`SAP-BundleType: ValueMapping`), `.project` and `metainfo.prop` (`source=`, `target=`). Seen: two agencies per artifact, one schema each, defaults on entries whose value repeats in other groups | Observed (one export, 2026-11-16) | — |
+| F66 | An exported integration package (zip): `resources.cnt`, Base64 of JSON with `resources` (`id`, `resourceType`, `name`, `uniqueId`, …) and `relations`; one `<id>_content` per resource, itself the artifact's export zip; `contentmetadata.md` (Base64 properties), `hash`, `ExportInformation.info`. Types seen: `ContentPackage` (the package, no content to import), `IFlow`, `ScriptCollection`, `ValueMapping`, `RESTAPIProvider`. A Script step whose script lives in a script collection has the key `scriptBundleId` = the collection's `uniqueId`, and the iFlow's manifest a `Require-Capability: scriptcollection.<id>` | Observed (one export, 2026-11-16) | — |
+| F67 | A Groovy script run by `cpiwb-groovy-v1.jar run` or `cpiwb-groovy-v2.jar run` under `-agentlib:jdwp` (SapMachine 25, Windows): jdb's `stop at <class>:<line>` binds in `processData` and stops there, with `message` and the local variables readable. The class is the file name made a Java name (`enrich-order.groovy` → `enrich_order`, source name `enrich_order.groovy`), so a debugger that maps by file name needs a file name that is a Java name. IntelliJ and VS Code not tried → Q-D1 | Observed (simulator, 2026-11-16) | — |
 
 ---
 
@@ -538,26 +541,30 @@ describes how it compares.*
 `expect.ignore` is a list of XPaths whose nodes are removed from both sides before an `xml` comparison
 (timestamps, generated ids). XPath 1.0 of the JDK, because `core` has no Saxon and a case should read the
 same on all four engines; prefixes come from `expect.namespaces`. A rule that cannot apply makes the case
-an error. Open: JSON bodies.
+an error. JSON bodies: `"compare": "json"` with JSON Pointers (a `*` segment for every member or element).
 
-**W7. Import a Value Mapping artifact (S to M).** *Seen in SAP CPI Groovy Script.*
-An exported Value Mapping artifact (zip) becomes rows of `platform/value-mappings.json`, next to the iFlow
-import in `IflowImport`, with its path checks. The export format is not documented (Q-VM1); it is read from a
-sample first, best effort as the iFlow import is.
+**W7. Import a Value Mapping artifact (S to M). Built.** *Seen in SAP CPI Groovy Script.*
+*Import iFlow* (and `import_iflow`) tells the export apart by its entries (`ArtifactImport`): an iFlow as before;
+a Value Mapping (F65) becomes rows of `platform/value-mappings.json`, one per direction, rows towards a default
+first (S52); an integration package (F66) brings each iFlow, script collection, REST API provider and message
+mapping into `iflows/<id>/` and its value mappings into the table, and lists other types as skipped. A script
+step that names a script collection (`scriptBundleId`) finds its file in that collection's folder. Rows of the
+same agency and identifier pairs are replaced; the formats are read from one export each, best effort.
 
-**W8. Run history (S to M).** *Seen in Contiva.* The last runs of a tab in this session (time, status, output)
-and *Compare with the previous run* through the existing comparison view. In memory only.
+**W8. Run history (S to M). Built for the XSLT and Groovy tabs.** *Seen in Contiva.* The output tab *History*
+holds the last 20 runs of the tab in this session (time, file, runtime, status, output); *Compare with the previous
+run* and *Compare* on a row use the comparison view. In memory only. Flow Steps and XPath have no history yet.
 
-**W9. Examples without a project (S).** *Seen in XSLTDebugX and GrooveBox.* An *Examples* menu loads a mapping
-or script with its input into the editors. The installers do not ship `examples/demo-project` today, so the
-examples have to be bundled.
+**W9. Examples without a project (S). Built.** *Seen in XSLTDebugX and GrooveBox.* *Examples…* in the sidebar
+(no project open) loads a mapping or script with its input into the editors. Three files of
+`examples/demo-project` are bundled with the UI (`app/src/lib/examples.ts`); those that need other project files
+(`xsl:include`, `platform/`) are left out.
 
 **W10. Debugging Groovy with breakpoints (spike S; a debugger in the app: L, not planned).** *Seen in SAP CPI
 Groovy Script.*
-* Stage 1: a documented way to attach IntelliJ or VS Code to an engine jar started with the JDWP agent
-  (`java -agentlib:jdwp=… -jar cpiwb-groovy-v1.jar run --script …`). Whether breakpoints bind to the script
-  file is open (Q-D1). It needs a full JDK: the app's trimmed JRE (`engine/groovy/build-jre.sh`) has no
-  `jdk.jdwp.agent` module.
+* Stage 1, done: `docs/debugging.md` shows how to start an engine jar with the JDWP agent and attach jdb,
+  IntelliJ or VS Code. With jdb, breakpoints bind on both jars (F67); the IDEs are not tried yet (Q-D1). It needs
+  a full JDK: the app's trimmed JRE (`engine/groovy/build-jre.sh`) has no `jdk.jdwp.agent` module.
 * Stage 2, breakpoints in the app's editor, only if users ask for it.
 
 #### To decide before any work
@@ -645,8 +652,8 @@ writes, SUPPRESS in a mapping function's input).
 | Q-F1 | Gather's Combine with a body that is not XML (JSON or plain text after a script): failure, the text as it is (as character data in the wrapper, malformed only where the text is, e.g. `a & b`), or another form. SAP documents XML only and shows no such case | Open; the simulator keeps the text and warns | `probes/gather/` (probes/README.md, step 8) |
 | Q-P1 | Partner Directory / Keystore / Secure Store edge cases: missing parameter, unknown partner, unknown keystore alias (null or exception, which message) | Answered (F52) | — |
 | Q-E1 | Encoder, Decoder and Message Digest, what F62 and F63 leave open. Base64: whether long output is wrapped (and with which line end), what the decoder does with line breaks and with invalid input. GZIP: the header fields (time, name), so whether output bytes can be compared at all. ZIP: the entry's name (`CamelFileName`, the message id?), and a decompress of an archive with several entries. Digest: what *None* hashes (the body's bytes as they are?), a body that is not XML, a filter that selects several nodes or none, the header's type; the iFlow keys of the filter and of the GZIP schemes | Open (§10.5 W4); the settings and the digest's header are documented (F63); the simulator follows Camel's data formats (F64). Probe prepared, not run | `probes/encoders/` (step 9 of the probes' README); the probe iFlow's export for the keys |
-| Q-VM1 | Format of an exported Value Mapping artifact | Open (§10.5 W7) | Export one sample, or read one from SAP's public sample packages |
-| Q-D1 | Whether an IDE's breakpoints bind to a script that an engine jar runs under the JDWP agent | Open (§10.5 W10) | Try it with IntelliJ and VS Code on `cpiwb-groovy-v1.jar run` |
+| Q-VM1 | Format of an exported Value Mapping artifact | Answered (F65, F66): read from one export of a Value Mapping and one of a package. Which value `getMappedValue` returns for a repeated value without a default is not known (the import takes the first group in the file) | — |
+| Q-D1 | Whether an IDE's breakpoints bind to a script that an engine jar runs under the JDWP agent | Partly answered (F67): jdb binds by class name on both jars; IntelliJ and VS Code not tried | Try it with IntelliJ and VS Code on `cpiwb-groovy-v1.jar run` |
 
 ## Sources
 
@@ -706,3 +713,4 @@ writes, SUPPRESS in a mapping function's input).
 - S49 SAP-docs Integration Suite documentation (S25 mirror, commit 147acb7 of 2026-10-22), read on 2026-11-16: *Define an Encoder*, *Define a Decoder*, *Define Message Digest*, *Simple Integration Flow Using a Message Digest Step*, *Use the Base64 Encoder*, *Use the Base64 Decoder*. help.sap.com renders these pages with scripts and could not be read directly.
 - S50 Public iFlows on GitHub with Encoder, Decoder and Message Digest steps (code search `encoderType` and `MessageDigest canonicalizationMethod` in `.iflw` files, 2026-11-16), read for property names only: `alee536/CPI-iFlows` (Encoder and Decoder), `stevedpedersen/cpilint` (IF_LINT_NAMES), `nesun3/sap-cloud-integration-artifacts` (Zip Spliting).
 - S51 Apache Camel 3.14.7 source, read on 2026-11-16 for the defaults of the data formats behind Base64, GZIP and ZIP: `components/camel-base64` (`Base64DataFormat`), `components/camel-zip-deflater` (`GzipDeflaterDataFormat`), `components/camel-zipfile` (`ZipFileDataFormat`); no code taken: https://github.com/apache/camel/tree/camel-3.14.7/components
+- S52 SAP Help, *Integration Suite*, mirrored in SAP-docs/btp-integration-suite (commit 147acb7, 2026-10-22), read on 2026-11-16: `editing-value-mapping-6c8847f.md` (a value mapping is a bi-directional lookup table; when target values repeat for different source values, defaults are generated and can be changed in the *Default Values* tab).

@@ -1,9 +1,10 @@
 <script lang="ts">
   const KIND: Record<string, string> = { groovy: 'G', xslt: 'X', xsd: 'V', mmap: 'M', contentModifier: 'C', filter: 'F', router: 'R', splitter: 'S', gather: 'A', converter: 'T', encoder: 'E', decoder: 'E', messageDigest: 'D' };
   const LABEL: Record<string, string> = { mmap: 'Message Mapping', converter: 'Converter', contentModifier: 'Content Modifier', filter: 'Filter', router: 'Router', splitter: 'Splitter', gather: 'Gather', encoder: 'Encoder', decoder: 'Decoder', messageDigest: 'Message Digest' };
+  import { EXAMPLES } from '../lib/examples';
   import { isDesktop, pickFolder, pickZip } from '../lib/engine';
   import { app, open, closeProject, openFile, mayDiscard, mayOverwrite, freePath, refreshFiles, writeFile, ask, xslt, xsd, groovy, SAMPLE_GROOVY_V1, SAMPLE_GROOVY_V2,
-    importIflow, openIflowStep, loadIflowSteps, deleteFile, copyFile, useAsInput, fileView } from '../lib/store.svelte';
+    importIflow, loadExample, openIflowStep, loadIflowSteps, deleteFile, copyFile, useAsInput, fileView } from '../lib/store.svelte';
 
   let dirInput = $state('');
   let filter = $state('');
@@ -32,7 +33,7 @@
 
   async function importZip() {
     try {
-      const zip = isDesktop ? await pickZip() : (await ask('Path of the exported iFlow (.zip)', ''))?.value;
+      const zip = isDesktop ? await pickZip() : (await ask('Path of the exported iFlow, Value Mapping or package (.zip)', ''))?.value;
       if (zip) await importIflow(zip);
     } catch (e) {
       app.error = (e as Error).message;
@@ -102,7 +103,7 @@
         <button class="small" onclick={() => newFile('xsl')}>+ Mapping</button>
         <button class="small" onclick={() => newFile('xsd')}>+ Schema</button>
         <button class="small" onclick={() => newFile('groovy')}>+ Script</button>
-        <button class="small" onclick={importZip} title="Import an iFlow exported from Integration Suite (zip)">Import iFlow</button>
+        <button class="small" onclick={importZip} title="Import an iFlow, a Value Mapping or a whole integration package exported from Integration Suite (zip)">Import iFlow</button>
         <button class="small" onclick={initProject} title="Create mappings/, schemas/, tests/ and cpi-workbench.json">Init</button>
         <button class="small" onclick={() => void closeProject()} title="Close project">✕</button>
       </div>
@@ -113,7 +114,11 @@
         <input class="mono" placeholder="/path/to/project" bind:value={dirInput} onkeydown={(e) => e.key === 'Enter' && openDialog()} aria-label="Project folder" />
       {/if}
       <button class="primary" onclick={openDialog}>{isDesktop ? 'Open folder…' : 'Open'}</button>
-      <p class="muted small">Without a project you can still try mappings in the editor.</p>
+      <p class="muted small">Without a project you can still try mappings in the editor, or load an example:</p>
+      <select class="examples" aria-label="Examples" value="" onchange={(e) => { const t = e.currentTarget; void loadExample(t.value); t.value = ''; }}>
+        <option value="" disabled>Examples…</option>
+        {#each EXAMPLES as ex}<option value={ex.id}>{ex.title}</option>{/each}
+      </select>
     {/if}
   </div>
   {#if app.project && app.iflowSteps.length}
@@ -168,6 +173,7 @@
   .filter, .proj input { width: 100%; box-sizing: border-box; }
   .muted { color: var(--muted); font-size: 12px; margin: 0; }
   .small { font-size: 11px; }
+  .examples { width: 100%; margin-top: 4px; }
   .pad { padding: 10px; }
   .tree { overflow: auto; flex: 1; padding: 4px 0; }
   .group { display: block; width: 100%; text-align: left; border: none; background: none; color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; padding: 6px 10px 2px; cursor: pointer; }

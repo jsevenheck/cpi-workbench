@@ -192,9 +192,9 @@ schemas/*.xsd, inputs/*.xml|json|csv, platform/*.json. Folders are created.")),
         ("overwrite", json!({ "type": "boolean", "default": false, "description": "Replace an existing file. Without it, an existing file is an error." })),
     ]);
     let import = obj(vec![
-        ("zip", path("The iFlow exported from the tenant (.zip): an absolute path, or a path inside the project.")),
-        ("name", path("Folder name under iflows/; default: the zip's file name.")),
-        ("overwrite", json!({ "type": "boolean", "default": false, "description": "Import into an existing iflows/ folder, replacing its files." })),
+        ("zip", path("The iFlow, Value Mapping or integration package exported from the tenant (.zip): an absolute path, or a path inside the project.")),
+        ("name", path("Folder name under iflows/ for an iFlow; default: the zip's file name. A package's artifacts keep their ids.")),
+        ("overwrite", json!({ "type": "boolean", "default": false, "description": "Import into existing iflows/ folders, replacing their files, and replace value mappings of the same agencies and identifiers." })),
     ]);
     let reference = obj(vec![
         ("topic", json!({ "type": "string", "enum": reference::TOPICS, "description": "script-api: the Script API, \
@@ -240,9 +240,11 @@ CPI, per step type, and what is not." })),
              wants to keep; the app shows it after ↻ in its file tree. Save only what the user asked for. An existing file \
              is replaced only with overwrite: true.",
             save, &["path"], Effect::WritesProject),
-        tool("import_iflow", "Import an iFlow",
-            "Imports an iFlow exported from the tenant (.zip) into iflows/<name>/, as the app's Import iFlow does. \
-             Returns its steps; their files open with read_file and run with the tools above.",
+        tool("import_iflow", "Import an iFlow, Value Mapping or package",
+            "Imports what the tenant exports as a .zip, as the app's Import does: an iFlow into iflows/<name>/; a Value \
+             Mapping as rows of platform/value-mappings.json (both directions); an integration package with each of its \
+             iFlows, script collections and value mappings (other artifact types are listed as skipped). Returns the \
+             imported iFlows' steps; their files open with read_file and run with the tools above.",
             import, &["zip"], Effect::WritesProject),
         tool("reference", "Simulator reference",
             "What the simulator offers, generated from its sources: the Script API (script-api), the platform/ data formats \

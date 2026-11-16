@@ -40,6 +40,19 @@ if (await compare.isEnabled()) {
   console.log('note: saxon-he-12 engine not running, comparison not tested');
 }
 
+// 1c) A bundled example loads without a project and runs; the History tab compares it with the sample's run.
+await page.getByLabel('Examples').selectOption('xslt-batch');
+await page.locator('section.output .view-lines', { hasText: 'SalesOrderBatch' }).waitFor({ timeout: 15000 })
+  .catch(async () => fail('the example did not run: ' + (await page.locator('section.output').innerText()).slice(0, 300)));
+await page.getByRole('tab', { name: /^History/ }).click();
+const historyRows = await page.locator('section.output .history tbody tr').count();
+if (historyRows < 2) fail('History lists ' + historyRows + ' runs, expected the sample and the example');
+await page.getByRole('button', { name: 'Compare with the previous run' }).click();
+await page.locator('section.output .history .compare h3', { hasText: 'Body' }).waitFor({ timeout: 5000 })
+  .catch(async () => fail('no comparison with the previous run: ' + (await page.locator('section.output').innerText()).slice(0, 300)));
+if (shots) await page.screenshot({ path: path.join(shots, '1c-history.png') });
+await page.getByRole('tab', { name: /^Body/ }).nth(1).click();
+
 // 2) A compile error shows up with its line.
 await page.locator('section.mapping .view-lines').click({ position: { x: 40, y: 10 } }); // the element is as wide as the longest line
 await page.keyboard.press('Control+End');

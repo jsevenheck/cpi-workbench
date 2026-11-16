@@ -7,6 +7,11 @@ Download the installer for your platform from the
 [Installing](install.md)), install it and open a project folder. Any folder works; **Init** adds `mappings/`, `schemas/`,
 `scripts/`, `tests/` and example files in `platform/`.
 
+Without a project, **Examples…** in the sidebar loads a mapping or script of the demo project with its input
+into the editors (an XSLT 3.0 mapping, a Groovy 2.x script for an XML and one for a JSON body). The examples
+come with the app; **Save** asks where to keep them, once a project is open. As with a file, a script waits for
+**Run** or **Ctrl+Enter**.
+
 ### Files and editors
 
 * Open a `.xsl` or `.groovy` file in the tree and enter the input body, headers and properties on the left.
@@ -67,6 +72,11 @@ Download the installer for your platform from the
 * **Compare** also runs the input on the other runtime of the same kind (Saxon-HE 9.9 ↔ 12,
   Groovy Script 1.x ↔ 2.x) and lists what differs: status, headers, properties and a body diff.
   This helps before you move a script from 1.x to 2.x.
+* **History** (XSLT and Groovy output) lists the tab's last 20 runs of this session: time, file (and a
+  script's function), runtime and status. *Compare with the previous run*, or *Compare* on any run, shows
+  what differs from the result shown now, as **Compare** does. A run with the same outcome as the one
+  before only updates its time, so live runs while you type do not crowd the list. The history is kept in
+  memory and is gone when the app closes.
 * Test cases (see [Test cases](test-cases.md)) are written by hand and run from the command line;
   the app has no test runner. Opening a `case.json` loads the case into its editor view. A Groovy
   case's attachments and SOAP headers open in the input's **Attachments** and **SOAP** tabs; its
@@ -139,6 +149,14 @@ Download the installer for your platform from the
   **Message Mapping** step (**M**) is not simulated; clicking it opens the first Groovy script its
   `.mmap` uses, with its first mapping function. The `.iflw` format is not publicly documented, so
   it is read generically (best effort).
+* The same button takes an exported **Value Mapping**: its groups become rows of
+  `platform/value-mappings.json` in both directions (*Platform* → *Value Mappings*), replacing rows of
+  the same agencies and identifiers. A value that maps to several values gets the one marked default;
+  without a default the first group in the file is taken, and the status line says so.
+* It also takes a whole **integration package** export: each iFlow, script collection, REST API provider
+  and message mapping goes to `iflows/<its id>/`, its value mappings into the table, other artifact types
+  are named as skipped. A Groovy step whose script is in a script collection opens the script from that
+  collection's folder.
 ### Groovy completions and Message Mapping functions
 
 * **Completions** in Groovy scripts: after `message.` (or a variable declared as `Message`),

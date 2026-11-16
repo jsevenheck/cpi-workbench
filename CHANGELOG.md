@@ -8,6 +8,18 @@ of its version.
 
 ### Added
 
+- **Import of Value Mappings and integration packages.** *Import iFlow* (and the MCP server's `import_iflow`) also
+  takes an exported Value Mapping, whose groups become rows of `platform/value-mappings.json` in both directions
+  (the value marked default first), and a whole package export with its iFlows, script collections and value
+  mappings. A Groovy step whose script is in a script collection finds it in that collection's folder.
+- **Examples without a project.** *Examples…* in the sidebar loads a mapping or script of the demo project with
+  its input; they come with the app.
+- **Debugging Groovy scripts.** `docs/debugging.md` shows how to stop a script at a breakpoint: an engine jar
+  under Java's debug agent, with jdb, IntelliJ or VS Code attached.
+- **Run history.** The XSLT and Groovy output has a *History* tab with the last runs of this session and
+  *Compare with the previous run* (body, headers, properties), in memory only.
+- **Test cases: `"compare": "json"`.** Compares JSON bodies as values (member order and formatting do not count),
+  and `expect.ignore` takes JSON Pointers there (`/order/items/*/uuid`).
 - **Flow Steps: Message Digest.** The message, or the one element a filter XPath selects, is written as canonical
   XML (the six methods CPI offers, or *None*) and its digest (MD5 to SHA512) goes to a header, `SAPMessageDigest`
   by default, as Base64 text. The result also shows the canonical form the digest is of. In the tab, in the MCP

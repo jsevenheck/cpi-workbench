@@ -584,6 +584,17 @@ fn files_are_read_saved_and_imported_inside_the_project() {
     assert!(c.err("import_iflow", json!({ "zip": zip.to_string_lossy(), "name": "Order Sync" })).contains("exists already"));
     c.ok("import_iflow", json!({ "zip": zip.to_string_lossy(), "name": "Order Sync", "overwrite": true }));
     assert!(c.err("import_iflow", json!({ "zip": "missing.zip" })).contains("No file"));
+    // A Value Mapping export becomes rows of the platform table, both ways (made-up values).
+    let vm_zip = std::env::temp_dir().join(format!("cpiwb-mcp-vm-{}.zip", std::process::id()));
+    std::fs::write(&vm_zip, stored_zip(&[("value_mapping.xml", "<vm version=\"2.0\"><group id=\"g\"><entry><agency>Red</agency>\
+        <schema>Role</schema><value>R1</value></entry><entry><agency>Blue</agency><schema>Role</schema><value>B1</value></entry></group></vm>")])).unwrap();
+    let vm = c.ok("import_iflow", json!({ "zip": vm_zip.to_string_lossy() }));
+    assert_eq!(vm["kind"], "valueMapping", "{vm}");
+    assert_eq!(vm["valueMappings"][0]["rows"], 2, "{vm}");
+    assert!(vm["steps"].as_array().unwrap().is_empty());
+    assert!(c.err("import_iflow", json!({ "zip": vm_zip.to_string_lossy() })).contains("exists already"));
+    assert!(std::fs::read_to_string(dir.join("platform/value-mappings.json")).unwrap().contains("\"targetValue\":\"R1\""));
+    let _ = std::fs::remove_file(&vm_zip);
     let info = c.ok("project_info", json!({}));
     assert!(info["iflowSteps"].as_array().unwrap().iter().any(|s| s["iflow"] == "Order_Sync"));
 

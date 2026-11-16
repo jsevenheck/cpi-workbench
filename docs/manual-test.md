@@ -49,6 +49,7 @@ Opening Groovy scripts/cases waits for **Run** or **Ctrl+Enter** before the firs
 
 | # | Step | Expected |
 |---|---|---|
+| 2.0 | Before opening the project: **Examples…** → each entry | The XSLT example runs on its input at once; a Groovy example loads its script and input and runs on Ctrl+Enter, on 2.x. |
 | 2.1 | `mappings/orders-to-batch.xsl`, input `inputs/orders.xml` | Output appears (live or Ctrl+Enter) and matches `inputs/order-batch.xml`. |
 | 2.2 | `mappings/order-to-salesorder.xsl`, input `inputs/order.xml`, header `SenderSystem`, property `CustomerGroup` | The output uses both values; **Parameters** shows them bound from header and property. |
 | 2.3 | **Compare** | Runs on Saxon-HE 9.9 and 12 and lists the differences, or none. |
@@ -66,6 +67,7 @@ The first run starts the Java engines and can take a few seconds.
 | 2.8 | `scripts/validate-order-batch-json.groovy`, input `inputs/order-batch.json` | Runs with the JSON body. |
 | 2.9 | `scripts/route-by-partner.groovy`, input `inputs/order.xml`, header `SalesChannel` = `web-eu` | Reads the Partner Directory. |
 | 2.10 | **Compare** on a script | Runs on 1.x and 2.x. |
+| 2.10b | Run a mapping, change it so the output differs, run again; output tab **History**, *Compare with the previous run* | Two runs with time, file, runtime and status; the comparison names the body and header differences between the shown result and the earlier run. Running the unchanged mapping again adds no row. |
 | 2.11 | Type `message.` in a script; also `messageLogFactory.` and Ctrl+Space | The Script API methods are listed. |
 | 2.11a | `scripts/mapping-functions.groovy`: open **Function**, choose `countPerContext(values)`; context 1 starts empty: **+ Value** `A`, **+ Value** `B`, then **+ Context** and `C` | Before any run, **Function** lists the functions under *Message Mapping function* and the left pane shows **Function arguments** with `values`; **Result** shows *Context 1* `2` and *Context 2* `1` (**Text**: `["2"]` and `["1"]`). |
 | 2.11b | **Function** `getHeader(headerName)`, `headerName` `SenderSystem` with that header set; then a name that is not set; then **null** | **Result** shows the header's value, then `null`. With **null** the run fails with a `NullPointerException` in line 7: once a header is set, Camel's case-insensitive header map takes no null name. Opening another script brings the **Body** tab back. |
@@ -121,6 +123,7 @@ The first run starts the Java engines and can take a few seconds.
 | # | Step | Expected |
 |---|---|---|
 | 3.1 | **Import iFlow** with the ZIP from section 0 | Unpacked into `iflows/`; lists the Groovy, XSLT, XML Validator, Content Modifier, Filter, Router, Splitter, Gather, Message Mapping (**M**) and converter (**T**) steps. |
+| 3.1b | **Import iFlow** with an exported Value Mapping, then with an exported integration package that has an iFlow using a script collection | The status names the value mapping rows; *Platform* → *Value Mappings* shows both directions. The package's iFlows and collections are under `iflows/`, other types are named as skipped, and the collection's script opens from the iFlow's Groovy step. |
 | 3.2 | Click a Groovy or XSLT step | The file opens with the step's function name and script version. |
 | 3.3 | Click the Content Modifier, Filter, Gather and *JSON to XML* | They open in Flow Steps with their settings; `{{parameters}}` come from `parameters.prop` (the converter's root element `Orders`). |
 | 3.3a | Click *Map order* (**M**) | Its script `lookup.gsh` opens with the mapping function `getHeader`. |

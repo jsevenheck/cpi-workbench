@@ -7,12 +7,17 @@
 
   type Result = XsltResult | GroovyResult;
 
-  let { profile, result, compare, language = 'xml' }: {
+  let { profile, result, compare, language = 'xml', kind = 'runtime', labelA, labelB }: {
     profile: Profile;
     result: Result | null;
     compare: CompareRun<Result> | null;
     language?: string;
+    /** What the two sides are: the same run on two runtimes, or two runs of the tab (its history). */
+    kind?: 'runtime' | 'run';
+    labelA?: string;
+    labelB?: string;
   } = $props();
+  let one = $derived(kind === 'run' ? 'run' : 'runtime');
 
   interface Side {
     label: string;
@@ -29,8 +34,8 @@
     return r?.diagnostics.find((d) => d.severity === 'error')?.message ?? '';
   }
 
-  let a = $derived<Side>({ label: label(profile), result, error: '' });
-  let b = $derived<Side | null>(compare ? { label: label(compare.profile), result: compare.result, error: compare.error } : null);
+  let a = $derived<Side>({ label: labelA ?? label(profile), result, error: '' });
+  let b = $derived<Side | null>(compare ? { label: labelB ?? label(compare.profile), result: compare.result, error: compare.error } : null);
 
   interface Diff {
     name: string;
@@ -89,9 +94,9 @@
         {/each}
       </div>
       {#if !bothOk}
-        <p class="hint">{a.result?.ok || b.result?.ok ? 'Only one runtime succeeded' : 'Both runtimes failed'}; output is not compared.</p>
+        <p class="hint">{a.result?.ok || b.result?.ok ? `Only one ${one} succeeded` : `Both ${one}s failed`}; output is not compared.</p>
       {:else if same}
-        <p class="same">Same result on both runtimes: {mappingA ? 'function result' : 'body'}, headers and properties are identical.</p>
+        <p class="same">Same result on both {one}s: {mappingA ? 'function result' : 'body'}, headers and properties are identical.</p>
       {:else}
         {#if mappingA !== mappingB}
           <h3>Function result that differs</h3>
@@ -120,7 +125,7 @@
     </div>
     {#if bothOk && a.result?.output && b.result?.output && bodiesDiffer}
       <div class="diff">
-        <Editor value={b.result.output.body} original={a.result.output.body} {language} readOnly label="Body difference between runtimes" />
+        <Editor value={b.result.output.body} original={a.result.output.body} {language} readOnly label={`Body difference between ${one}s`} />
       </div>
     {/if}
   {/if}

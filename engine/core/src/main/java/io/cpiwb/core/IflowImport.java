@@ -44,6 +44,19 @@ public final class IflowImport {
      * checks that as it creates the folder, so of two imports to the same name at once, one fails.
      */
     public static Map<String, Object> importZip(Path zip, Path projectRoot, String name, boolean createNew) throws IOException {
+        Extracted x = extract(zip, projectRoot, name, createNew);
+        Map<String, Object> r = steps(projectRoot);
+        r.put("imported", x.folder());
+        r.put("files", x.files());
+        return r;
+    }
+
+    /** A folder under iflows/ (relative to the project) and the number of files written into it. */
+    record Extracted(String folder, int files) {
+    }
+
+    /** Unpacks {@code zip} into {@code iflows/<name>/}, the zip's name without {@code .zip} when none is given. */
+    static Extracted extract(Path zip, Path projectRoot, String name, boolean createNew) throws IOException {
         if (!Files.isRegularFile(zip)) {
             throw new IllegalArgumentException("Not a file: " + zip);
         }
@@ -85,10 +98,7 @@ public final class IflowImport {
                 files++;
             }
         }
-        Map<String, Object> r = steps(projectRoot);
-        r.put("imported", projectRoot.relativize(target).toString().replace('\\', '/'));
-        r.put("files", files);
-        return r;
+        return new Extracted(projectRoot.relativize(target).toString().replace('\\', '/'), files);
     }
 
     /** The current entry, failing as soon as the archive's unpacked size passes the limit. */
@@ -186,6 +196,21 @@ public final class IflowImport {
                 }
             }
             Path resolved = file == null ? null : resolve(flowRoot, file);
+            // A script of a script collection: scriptBundleId names the collection (plan F66). A package import
+            // puts the collection into iflows/<its id>/, next to the iFlow.
+            String bundle = props.getOrDefault("scriptBundleId", "").trim();
+            String bundleNote = null;
+            if (resolved == null && file != null && !bundle.isEmpty()) {
+                Path collection = flowRoot.getParent().resolve(bundle.replaceAll("[^A-Za-z0-9._-]+", "_")).normalize();
+                if (collection.getParent().equals(flowRoot.getParent()) && Files.isDirectory(collection)
+                        && ProjectPaths.inside(projectRoot, collection)) {
+                    resolved = resolve(collection, file);
+                }
+                if (resolved == null) {
+                    bundleNote = "The script is in the script collection " + bundle + ", which is not in the project: "
+                            + "import the package export, or the collection, too.";
+                }
+            }
             Json.Obj step = Json.o()
                     .with("iflow", flowRoot.getFileName().toString())
                     .with("id", act.getAttribute("id"))
@@ -194,7 +219,7 @@ public final class IflowImport {
                     .with("componentVersion", props.get("componentVersion"))
                     .with("file", resolved == null ? file : projectRoot.relativize(resolved).toString().replace('\\', '/'))
                     .with("fileFound", resolved != null);
-            String note = note(type, props, file);
+            String note = bundleNote != null ? bundleNote : note(type, props, file);
             if (note != null) {
                 step.with("note", note);
             }

@@ -4,6 +4,7 @@
   import Editor from './Editor.svelte';
   import KeyValueTable from './KeyValueTable.svelte';
   import CompareView from './CompareView.svelte';
+  import HistoryView from './HistoryView.svelte';
   import { app, xslt, runXslt, autoRunXslt, saveMapping, saveMappingAs, formatXml, otherProfile, saveInput, askImportMessage, closeInput, closeEditorFile } from '../lib/store.svelte';
   import { reindentXml } from '../lib/indent';
   import { languageFor } from '../lib/monaco';
@@ -12,7 +13,7 @@
   const panes = paneSizes('xslt', [1, 1.3, 1.1]);
 
   let inputTab = $state<'body' | 'headers' | 'properties'>('body');
-  let outputTab = $state<'body' | 'headers' | 'properties' | 'parameters' | 'console' | 'compare'>('body');
+  let outputTab = $state<'body' | 'headers' | 'properties' | 'parameters' | 'console' | 'compare' | 'history'>('body');
   let showDiff = $state(false);
   let mappingEditor: Editor | undefined = $state();
 
@@ -128,6 +129,7 @@
         <button role="tab" class:active={outputTab === 'parameters'} onclick={() => (outputTab = 'parameters')}>Parameters</button>
         <button role="tab" class:active={outputTab === 'console'} onclick={() => (outputTab = 'console')}>Console{#if consoleCount}<span class="count" class:err={errors.length > 0}>{consoleCount}</span>{/if}</button>
         {#if xslt.compareOn}<button role="tab" class:active={outputTab === 'compare'} onclick={() => (outputTab = 'compare')}>Compare</button>{/if}
+        <button role="tab" class:active={outputTab === 'history'} onclick={() => (outputTab = 'history')} title="The last runs of this tab in this session">History{#if xslt.history.length}<span class="count">{xslt.history.length}</span>{/if}</button>
       </div>
       <button class="small" class:on={xslt.compareOn} onclick={toggleCompare} disabled={!other && !xslt.compareOn}
         title={other ? 'Also run on ' + other + ' and show the differences' : 'No second XSLT runtime available'}>{xslt.compareOn ? 'Comparing' : 'Compare'}</button>
@@ -136,7 +138,9 @@
       {/if}
     </header>
     <div class="body">
-      {#if !result}
+      {#if outputTab === 'history'}
+        <HistoryView history={xslt.history} {result} resultAt={xslt.resultAt} profile={app.profile} language={outLanguage} />
+      {:else if !result}
         <p class="hint">Press <kbd>Ctrl</kbd>+<kbd>Enter</kbd> or <b>Run</b>. With <b>Live</b> on, every change re-runs the mapping.</p>
       {:else if outputTab === 'compare'}
         <CompareView profile={app.profile} {result} compare={xslt.compare} language={outLanguage} />

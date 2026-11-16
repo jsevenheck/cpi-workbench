@@ -175,9 +175,9 @@ public final class TestRunner {
         if (expect.get("ignore") != null) {
             // A rule that cannot apply is a mistake in the case, not a rule to skip.
             if (!(expect.get("ignore") instanceof List<?> l) || !l.stream().allMatch(String.class::isInstance)) {
-                throw new IllegalArgumentException("expect.ignore must be a list of XPath expressions");
-            } else if (!expect.containsKey("body") || !"xml".equals(mode)) {
-                throw new IllegalArgumentException("expect.ignore needs expect.body and \"compare\": \"xml\"");
+                throw new IllegalArgumentException("expect.ignore must be a list of XPath expressions (JSON Pointers with \"compare\": \"json\")");
+            } else if (!expect.containsKey("body") || !("xml".equals(mode) || "json".equals(mode))) {
+                throw new IllegalArgumentException("expect.ignore needs expect.body and \"compare\": \"xml\" or \"json\"");
             }
             l.forEach(x -> ignore.add((String) x));
         }
@@ -280,7 +280,7 @@ public final class TestRunner {
     }
 
     /**
-     * As {@link #compare(String, String, String)}; for {@code xml}, the nodes each XPath in {@code ignore}
+     * As {@link #compare(String, String, String)}; for {@code json}, see {@link JsonCompare}. For {@code xml}, the nodes each XPath in {@code ignore}
      * selects are removed from both documents first (values that change per run: timestamps, generated ids).
      * XPath 1.0 of the JDK, so that every engine reads a case the same way; {@code namespaces} maps the
      * prefixes the expressions use to URIs.
@@ -294,6 +294,9 @@ public final class TestRunner {
         }
         if ("trimmed".equals(mode)) {
             return expected.strip().equals(actual.strip()) ? null : firstLineDiff(expected.strip(), actual.strip());
+        }
+        if ("json".equals(mode)) {
+            return JsonCompare.compare(expected, actual, ignore);
         }
         Document e;
         Document a;

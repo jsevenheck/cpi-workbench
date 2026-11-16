@@ -1,3 +1,5 @@
+import { EXAMPLES } from './examples';
+import { addRun, type HistoryEntry } from './history';
 import { call, openProject, closeProject as closeEngineProject, availableProfiles, DEFAULT_PROFILE, type Profile, type ProfileInfo } from './engine';
 import type { Diagnostic, FileEntry, GroovyResult, Row, XsltResult } from './types';
 import { argText, mappingArgs } from './queue';
@@ -94,6 +96,9 @@ export const xslt = $state({
   casePath: null as string | null,
   compareOn: false,
   compare: null as CompareRun<XsltResult> | null,
+  /** The tab's last runs in this session (in memory only), and the time of the one shown. */
+  history: [] as HistoryEntry<XsltResult>[],
+  resultAt: null as number | null,
 });
 
 /**
@@ -195,6 +200,8 @@ export const groovy = $state({
   casePlatform: null as Record<string, unknown> | null,
   compareOn: false,
   compare: null as CompareRun<GroovyResult> | null,
+  history: [] as HistoryEntry<GroovyResult>[],
+  resultAt: null as number | null,
   /** A Message Mapping function, known from the last run of this function; null for processData(message). */
   mapping: null as { function: string; parameters: string[] } | null,
   /** The open script's Message Mapping functions (signatures), from its last run that compiled. */
@@ -479,6 +486,44 @@ function importGroovy(m: SharedMessage, rerun: boolean) {
   }
 }
 
+/**
+ * Loads a bundled example (lib/examples.ts) into its tab, without a path: Save asks for one. The mapping runs as
+ * one opened from a file would; a script waits for Ctrl+Enter, as a script opened from a file does.
+ */
+export async function loadExample(id: string) {
+  const ex = EXAMPLES.find((e) => e.id === id);
+  if (!ex || !(await mayDiscard(ex.tool))) return;
+  app.error = '';
+  if (ex.tool === 'xslt') {
+    xslt.mappingPath = xslt.casePath = null;
+    xslt.mapping = ex.source;
+    xslt.savedMapping = '';
+    xslt.body = ex.body;
+    delete app.inputPaths.xslt;
+    app.tool = 'xslt';
+    disarmXslt('the example');
+    app.status = `Loaded the example ${ex.path} with its input. Save asks where to keep it.`;
+    rerunIfLive('xslt');
+    return;
+  }
+  rememberScript();
+  groovy.scriptPath = groovy.casePath = null;
+  groovy.casePlatform = null;
+  groovy.script = ex.source;
+  groovy.savedScript = '';
+  groovy.functionName = 'processData';
+  groovy.mapping = null;
+  groovy.functions = [];
+  groovy.stepFunction = null;
+  groovy.args = [];
+  forgetGroovyRun();
+  groovy.body = ex.body;
+  delete app.inputPaths.groovy;
+  if (ex.profile && hasProfile(ex.profile)) app.groovyProfile = ex.profile;
+  app.tool = 'groovy';
+  disarmGroovy('the example ' + ex.path);
+}
+
 function importXslt(m: SharedMessage, rerun: boolean) {
   if (m.source !== '') {
     xslt.mappingPath = xslt.casePath = null;
@@ -739,11 +784,31 @@ export async function loadIflowSteps() {
   }
 }
 
+/** Imports an exported iFlow, Value Mapping or integration package (the engine tells them apart). */
 export async function importIflow(zip: string) {
   const r = await call('iflow.import', { zip });
   if (app.project) app.project.files = r.fileList;
   app.iflowSteps = r.steps;
-  app.status = `Imported ${r.imported} (${r.files} files, ${r.steps.length} steps found)`;
+  const vms: { rows: number; replaced: number; notes: string[] }[] = r.valueMappings ?? [];
+  const skipped: { name: string; type: string; reason: string }[] = r.skipped ?? [];
+  const parts: string[] = [];
+  if (r.iflows?.length) parts.push(`${r.files} files, ${r.steps.length} steps found`);
+  if (vms.length) {
+    const rows = vms.reduce((n, v) => n + v.rows, 0);
+    const replaced = vms.reduce((n, v) => n + v.replaced, 0);
+    parts.push(`${rows} value mapping rows` + (replaced ? `, ${replaced} replaced` : ''));
+  }
+  if (skipped.length) parts.push(`skipped: ${skipped.map((s) => `${s.name} (${s.type}, ${s.reason})`).join(', ')}`);
+  const notes = vms.flatMap((v) => v.notes);
+  app.status = `Imported ${r.imported} (${parts.join('; ')})` + (notes.length ? `. ${notes.join(' ')}` : '');
+  if (vms.length) {
+    // Unsaved edits of the table stay, and saving them would write over the imported rows.
+    if (platformDirty('valueMappings')) {
+      app.error = 'The import changed platform/value-mappings.json, but the Value Mappings table has unsaved changes: '
+        + 'saving them replaces the imported rows. Discard them to see the imported rows.';
+    }
+    await loadPlatform();
+  }
 }
 
 /** Opens the file of an imported iFlow step with the step's settings (function, script version). */
@@ -1428,6 +1493,8 @@ export async function runXslt() {
     if (seq === runSeq) {
       xslt.result = r;
       xslt.compare = c;
+      xslt.resultAt = Date.now();
+      xslt.history = addRun(xslt.history, { at: xslt.resultAt, profile: app.profile, what: xslt.mappingPath ?? 'mapping.xsl', result: r });
     }
   } catch (e) {
     if (seq === runSeq) fail(e);
@@ -1476,6 +1543,9 @@ export async function runGroovy() {
     if (seq === groovySeq) {
       groovy.result = r;
       groovy.compare = c;
+      groovy.resultAt = Date.now();
+      groovy.history = addRun(groovy.history, { at: groovy.resultAt, profile: app.groovyProfile,
+        what: `${groovy.scriptPath ?? 'script.groovy'} · ${r.mapping?.function ?? params.function}`, result: r });
       const pick = pickMappingFunction;
       pickMappingFunction = false;
       if (pick && !r.ok && r.failedPhase === 'compile' && r.functions?.length && !r.mapping) {

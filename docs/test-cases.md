@@ -59,7 +59,8 @@ my-project/
 * Header and property types: `String`, `Integer`, `Long`, `Boolean`, `Double`, `Float`,
   `BigDecimal`, `Date` (ISO-8601), `byte[]` (Base64), `null`.
 * `body` is a string, `{ "file": "…" }` or `{ "text": "…" }`. Paths are relative to the case folder.
-* `compare` is `xml` (ignores formatting and namespace declarations), `text` or `trimmed`.
+* `compare` is `xml` (ignores formatting and namespace declarations), `json` (ignores formatting and the order of
+  an object's members; `1` equals `1.0`; arrays keep their order), `text` or `trimmed`.
 * `expect.ignore` leaves out what changes with every run (a timestamp, a generated id): a list of XPath
   expressions whose nodes (elements, attributes, text) are removed from the expected and from the actual body
   before they are compared as `xml`:
@@ -70,8 +71,11 @@ my-project/
   * An expression that matches nothing is not an error by itself (the node may be optional); when the bodies
     differ, the message names the expressions that matched nothing.
   * The case is an error when `ignore` is no list of XPath expressions, uses an unknown prefix, selects the
-    whole document, or stands without `expect.body` or with another `compare` than `xml`.
-  * This is CPI Workbench's own rule for its test cases; it imitates nothing in CPI. JSON bodies have no such rule yet.
+    whole document, or stands without `expect.body` or with another `compare` than `xml` or `json`.
+  * With `"compare": "json"` the rules are JSON Pointers (RFC 6901) instead of XPaths, and a segment `*` stands
+    for every member or element: `"ignore": ["/order/createdAt", "/order/items/*/uuid"]`. A rule that does not
+    start with `/` is an error; one that matches nothing is named when the bodies differ, as above.
+  * This is CPI Workbench's own rule for its test cases; it imitates nothing in CPI.
 * `expect.ok: false` asserts that the mapping or script fails.
 
 ### Message Mapping functions

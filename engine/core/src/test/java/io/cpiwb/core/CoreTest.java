@@ -12,6 +12,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -338,6 +339,29 @@ class CoreTest {
         TestRunner.CaseResult unbound = runner.run(file);
         assertEquals("error", unbound.status);
         assertTrue(unbound.messages.get(0).contains("the prefix 'n' is not in expect.namespaces"), unbound.messages.toString());
+    }
+
+    @Test
+    void jsonCompareIgnoresMemberOrderAndLeavesOutPointers() {
+        assertNull(TestRunner.compare("{\"a\":1,\"b\":[1,2]}", "{ \"b\": [1, 2.0], \"a\": 1 }", "json"));
+        assertEquals("at /b/1: expected 2 but was 3", TestRunner.compare("{\"a\":1,\"b\":[1,2]}", "{\"a\":1,\"b\":[1,3]}", "json"));
+        assertEquals("at /a: expected \"x\" but the member is missing", TestRunner.compare("{\"a\":\"x\"}", "{}", "json"));
+        assertEquals("at /z: unexpected member true", TestRunner.compare("{}", "{\"z\":true}", "json"));
+        assertEquals("at /: expected 1 elements but there are 2", TestRunner.compare("[1]", "[1,2]", "json"));
+        assertEquals("at /a~1b: expected null but was 0", TestRunner.compare("{\"a/b\":null}", "{\"a/b\":0}", "json"));
+        assertTrue(TestRunner.compare("{", "{}", "json").startsWith("cannot compare as JSON"));
+
+        String expected = "{\"order\":{\"id\":\"1\",\"createdAt\":\"2026-01-01\",\"items\":[{\"uuid\":\"a\",\"n\":1},{\"uuid\":\"b\",\"n\":2}]}}";
+        String actual = "{\"order\":{\"id\":\"1\",\"createdAt\":\"2026-11-16\",\"items\":[{\"uuid\":\"x\",\"n\":1},{\"uuid\":\"y\",\"n\":2}]}}";
+        assertNotNull(TestRunner.compare(expected, actual, "json"));
+        assertNull(TestRunner.compare(expected, actual, "json", List.of("/order/createdAt", "/order/items/*/uuid"), Map.of()));
+        String diff = TestRunner.compare(expected, actual, "json", List.of("/order/created", "/order/items/*/uuid"), Map.of());
+        assertTrue(diff.startsWith("at /order/createdAt") && diff.contains("expect.ignore matched nothing: /order/created"), diff);
+        for (String bad : List.of("", "order/id")) {
+            IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+                    () -> TestRunner.compare(expected, actual, "json", List.of(bad), Map.of()));
+            assertTrue(e.getMessage().startsWith("expect.ignore '" + bad + "'"), e.getMessage());
+        }
     }
 
     @Test

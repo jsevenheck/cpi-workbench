@@ -154,10 +154,10 @@ public final class ProjectFiles {
         return Json.o().with("deleted", true);
     }
 
-    /** Imports an exported iFlow zip into iflows/<name>/ and lists its script and XSLT steps. */
-    public synchronized Map<String, Object> iflowImport(Map<String, Object> p) throws IOException {
+    /** Imports an exported iFlow, Value Mapping or integration package (ArtifactImport) and lists the steps. */
+    public synchronized Map<String, Object> iflowImport(Map<String, Object> p) throws Exception {
         requireRoot();
-        Map<String, Object> r = IflowImport.importZip(Path.of(Json.str(p, "zip", "")), root, Json.str(p, "name", null),
+        Map<String, Object> r = ArtifactImport.importZip(Path.of(Json.str(p, "zip", "")), root, Json.str(p, "name", null),
                 Json.bool(p, "createNew", false));
         r.put("fileList", list());
         return r;

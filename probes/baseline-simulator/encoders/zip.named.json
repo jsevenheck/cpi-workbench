@@ -1,0 +1,17 @@
+{
+    "probeStep": "zip",
+    "bodyClass": "[B",
+    "bodyLength": 368,
+    "bodyBase64": "UEsDBBQACAgIAMpocF0AAAAAAAAAAAAAAAAJAAAAb3JkZXIueG1sZdBNTsMwEAXgfU4x8oJV2/wQCaTa7gKpgERAou0BnGTiWIkdcGwEXAROwqq7XAyniwqJ9Ztv5mno5l338IZ2VINhJF0lBNBUQ62MZOSw3y6vyYZH9MnWaEHVjORXaUp4BEBv/OgGjZYX07HvQ3wh9MsadtNPaxBudXlH4/PMDO4dahg7z0ixTJNw6dV9MJIRvqtaK3yJUOQwfUGWLOZKn8p0jsaz+sezMw9lDsah7VGOVYsqbJm+IV9c/pGPg0P+oLBB642EUo2wtaickGsoUcHzdKy6xgqJJoTOIQhjfYNmReOTjWh8+gCPfgFQSwcIgLfofuwAAAAxAQAAUEsBAhQAFAAICAgAymhwXYC36H7sAAAAMQEAAAkAAAAAAAAAAAAAAAAAAAAAAG9yZGVyLnhtbFBLBQYAAAAAAQABADcAAAAjAQAAAAA=",
+    "bodyText": null,
+    "headerNames": [
+        "CamelFileName",
+        "ProbeStep"
+    ],
+    "headers": {
+        "CamelFileName": {
+            "value": "order.xml.zip",
+            "type": "java.lang.String"
+        }
+    }
+}

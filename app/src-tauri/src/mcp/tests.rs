@@ -166,7 +166,7 @@ fn wrong_arguments_are_tool_errors() {
     assert!(call(json!({ "expression": "/a", "bodyPath": "x.xml" })).contains("No project is open"));
     assert!(call_tool("read_file", json!({ "path": "a.xml", "startLine": 0 })).contains("startLine"));
     assert!(call_tool("save_file", json!({ "path": "a.xml", "content": "x", "overwrite": "yes" })).contains("type boolean"));
-    assert!(call_tool("save_file", json!({ "path": "a.xml" })).contains("Give content, or contentFrom"));
+    assert!(call_tool("save_file", json!({ "path": "a.xml" })).contains("Give one of content, contentBase64"));
     assert!(call_tool("reference", json!({ "topic": "groovy" })).contains("must be one of"));
     assert!(call_tool("read_file", json!({ "path": "a.xml" })).contains("No project is open"));
 }
@@ -373,9 +373,29 @@ fn tools_run_on_the_engines() {
     assert_eq!(empty["ok"], false, "{empty}");
     // Encoder and Message Digest. The digest's header travels on with the message; keys left out take the tab's defaults.
     let enc = c.ok("run_flow_step", json!({ "body": "<a/>", "step": { "type": "encoder", "config": {} } }));
-    assert_eq!(enc["body"], "PGEvPg==", "{enc}");
-    assert!(c.ok("run_flow_step", json!({ "body": "<a/>", "step": { "type": "encoder", "config": { "scheme": "zipCompress" } } }))
+    assert_eq!(enc["body"], "PGEvPg==\r\n", "{enc}");
+    assert!(c.ok("run_flow_step", json!({ "body": "<a/>", "step": { "type": "encoder", "config": { "scheme": "mimeMultipartEncode" } } }))
         .to_string().contains("UnsupportedInSimulator"));
+    // A binary result travels on as bytes: by runId to a Decoder, into a file and from it as bodyPath.
+    let gz = c.ok("run_flow_step", json!({ "body": "<a/>", "step": { "type": "encoder", "config": { "scheme": "gzipCompress" } } }));
+    assert_eq!(gz["binary"], true, "{gz}");
+    let gunzip = c.ok("run_flow_step", json!({ "messageFrom": gz["runId"], "step": { "type": "decoder", "config": { "scheme": "gzipDecompress" } } }));
+    assert_eq!(gunzip["body"], "<a/>", "{gunzip}");
+    let zip = c.ok("run_flow_step", json!({ "body": "<a/>", "headers": { "CamelFileName": "in/a.xml" },
+        "step": { "type": "encoder", "config": { "scheme": "zipCompress" } } }));
+    assert!(zip["output"]["headers"].to_string().contains("a.xml.zip"), "{zip}");
+    c.ok("save_file", json!({ "path": "inputs/a.zip", "contentFrom": zip["runId"] }));
+    let bytes = c.ok("read_file", json!({ "path": "inputs/a.zip", "binary": true }));
+    assert!(bytes["contentBase64"].as_str().unwrap().starts_with("UEsDB"), "{bytes}");
+    assert!(c.err("read_file", json!({ "path": "inputs/a.zip" })).contains("binary: true"));
+    assert_eq!(c.ok("read_file", json!({ "runId": zip["runId"] }))["contentBase64"], bytes["contentBase64"]);
+    let unzip = c.ok("run_flow_step", json!({ "bodyPath": "inputs/a.zip", "step": { "type": "decoder", "config": { "scheme": "zipDecompress" } } }));
+    assert_eq!(unzip["body"], "<a/>", "{unzip}");
+    assert!(unzip["output"]["headers"].to_string().contains("\"a.xml\""), "{unzip}");
+    c.ok("save_file", json!({ "path": "inputs/b.gz", "contentBase64": "H4sIAAAAAAAC/7NJ0rfjAgCsbt2hBQAAAA==" }));
+    let b = c.ok("run_flow_step", json!({ "bodyPath": "inputs/b.gz", "step": { "type": "decoder", "config": { "scheme": "gzipDecompress" } } }));
+    assert_eq!(b["body"], "<b/>\n", "{b}");
+    assert!(c.err("save_file", json!({ "path": "inputs/c.txt", "content": "x", "contentBase64": "eA==" })).contains("one of"));
     let dig = c.ok("run_flow_step", json!({ "body": "<a  y='2' x='1'/>", "headers": { "Keep": "1" },
         "step": { "type": "messageDigest", "config": { "algorithm": "MD5", "targetHeader": "D" } } }));
     assert_eq!(dig["canonical"], "<a x=\"1\" y=\"2\"></a>", "{dig}");

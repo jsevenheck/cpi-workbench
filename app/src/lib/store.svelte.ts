@@ -228,7 +228,7 @@ export const xpath = $state({
   running: false,
 });
 
-export type FlowStep = 'contentModifier' | 'filter' | 'router' | 'splitter' | 'gather' | 'converter' | 'encoder' | 'messageDigest';
+export type FlowStep = 'contentModifier' | 'filter' | 'router' | 'splitter' | 'gather' | 'converter' | 'encoder' | 'decoder' | 'messageDigest';
 
 /** A Content Modifier row in the iFlow's encoding (type: constant, header, property, xpath, expression, ...). */
 export interface CmRow {
@@ -280,6 +280,11 @@ export const flow = $state({
   /** The iFlow step each step's settings came from, if any. */
   sources: {} as Partial<Record<FlowStep, string>>,
   body: SAMPLE_INPUT,
+  /**
+   * A body that is no text (a .zip or .gz from the project, an Encoder's GZIP or ZIP result): its bytes as Base64.
+   * While set, it is the input body and `body` is not used; whatever sets `body` clears it.
+   */
+  binary: null as null | { base64: string; size: number },
   headers: [{ name: 'SenderId', value: 'ERP_100', type: 'String' }] as Row[],
   properties: [] as Row[],
   cm: {
@@ -303,8 +308,9 @@ export const flow = $state({
   /** The messages to gather: a splitter's result or bodies added by hand. */
   gather: { messageType: 'sameXml', algorithm: 'combine', sourceXPath: '', targetXPath: '', messages: [] as string[] },
   converter: converterDefaults(),
-  /** Encoder: only Base64 Encode is simulated; an imported step keeps its scheme and the run says so. */
+  /** Encoder and Decoder. The MCP server uses the same defaults (`mcp/flow.rs`); an imported step keeps its scheme. */
   encoder: { scheme: 'base64Encode' },
+  decoder: { scheme: 'base64Decode' },
   /** Message Digest. The MCP server uses the same defaults (`message_digest` in `mcp/flow.rs`); change both together. */
   digest: { filter: '', canonicalization: 'c14n10', algorithm: 'SHA512', targetHeader: 'SAPMessageDigest' },
   cmResult: null as any,
@@ -314,6 +320,7 @@ export const flow = $state({
   gatherResult: null as any,
   converterResult: null as any,
   encoderResult: null as any,
+  decoderResult: null as any,
   digestResult: null as any,
   running: false,
 });
@@ -409,7 +416,7 @@ export async function importMessage(pasted: string | SharedMessage, options: Imp
       if (m.body !== '') {
         if (tool === 'xsd') xsd.body = m.body;
         else if (tool === 'xpath') xpath.body = m.body;
-        else flow.body = m.body;
+        else setFlowBody(m.body);
         delete app.inputPaths[tool];
       }
       if (tool === 'flow') {
@@ -772,6 +779,11 @@ export async function writeFile(path: string, content: string) {
   await call('file.write', { path, content });
 }
 
+/** Writes bytes given as Base64 (a body that is no text). */
+export async function writeBytes(path: string, base64: string) {
+  await call('file.write', { path, contentBase64: base64 });
+}
+
 /** The editor a file opens in, or null for inputs (they replace the input body, not an editor). */
 function editorFor(path: string): Editor | null {
   const lower = path.toLowerCase();
@@ -858,7 +870,8 @@ export async function openFile(path: string, opts: OpenOptions = {}) {
     // take the file's content if it changed on disk while the editor has no unsaved changes.
     if (!opts.functionName && !opts.profile && isOpenInItsTab(path)) return await reopen(path);
     if (!opts.discardChecked && !(await mayDiscard(editorFor(path)))) return;
-    const content = await readFile(path);
+    const content = path.startsWith('inputs/') ? await readInputFile(path) : await readFile(path);
+    if (content === null) return await setBinaryInput(path);
     if (lower.endsWith('.xsl') || lower.endsWith('.xslt')) {
       xslt.mappingPath = path;
       xslt.mapping = content;
@@ -1018,8 +1031,9 @@ export function closeInput(tool: StepTool) {
   } else if (tool === 'flow') {
     flowSeq++;
     flow.running = false;
-    flow.body = '';
+    setFlowBody('');
     flow.cmResult = flow.routerResult = flow.splitResult = flow.filterResult = flow.gatherResult = flow.converterResult = null;
+    flow.encoderResult = flow.decoderResult = flow.digestResult = null;
   } else if (tool === 'groovy') {
     forgetGroovyRun();
     groovy.body = '';
@@ -1063,6 +1077,8 @@ function stepBody(tool: StepTool) {
 }
 
 function setInput(path: string, content: string) {
+  // Text with a NUL character is no text the editors can hold (an archive that happens to be valid UTF-8).
+  if (content.includes('\0')) return void setBinaryInput(path).catch(fail);
   // XSLT, XSD and XPath read XML only; a JSON body can only feed a Groovy script (or the Flow Steps, on the same engine).
   const json = /\.json$/i.test(path) || /^\s*[[{]/.test(content);
   if (json && !app.profiles.some((p) => p.kind === 'groovy' && p.available)) {
@@ -1072,7 +1088,7 @@ function setInput(path: string, content: string) {
   const tool: StepTool = json && app.stepTool !== 'flow' ? 'groovy' : app.stepTool;
   if (tool === 'xsd') xsd.body = content;
   else if (tool === 'xpath') xpath.body = content;
-  else if (tool === 'flow') flow.body = content;
+  else if (tool === 'flow') setFlowBody(content);
   else if (tool === 'groovy') groovy.body = content;
   else xslt.body = content;
   app.inputPaths[tool] = path;
@@ -1084,10 +1100,38 @@ function setInput(path: string, content: string) {
 /** Loads any file as the input body of the current step tool. */
 export async function useAsInput(path: string) {
   try {
-    setInput(path, await readFile(path));
+    const content = await readInputFile(path);
+    if (content === null) await setBinaryInput(path);
+    else setInput(path, content);
   } catch (e) {
     fail(e);
   }
+}
+
+/** A file's text, or null when it is no text: the engine refuses to decode it. */
+async function readInputFile(path: string): Promise<string | null> {
+  try {
+    return await readFile(path);
+  } catch (e) {
+    if (String((e as Error)?.message ?? e).includes('cannot be read as text')) return null;
+    throw e;
+  }
+}
+
+/** A file that is no text (an archive for a Decoder) as the Flow Steps' input: the only steps that take bytes. */
+async function setBinaryInput(path: string) {
+  const r = await call('file.read', { path, binary: true });
+  flow.body = '';
+  flow.binary = { base64: r.contentBase64, size: r.size };
+  app.inputPaths.flow = path;
+  app.tool = 'flow';
+  app.status = `Loaded ${path} as a binary input body (${r.size} bytes) in Flow Steps; a Decoder reads it.`;
+}
+
+/** The Flow Steps' input body as text; a binary body set before is dropped. */
+function setFlowBody(body: string) {
+  flow.body = body;
+  flow.binary = null;
 }
 
 /** Saves the input body of the current step tool under inputs/, so it survives opening other files. */
@@ -1097,12 +1141,14 @@ export async function saveInput() {
     return;
   }
   const body = stepBody(app.stepTool);
-  const ext = /^\s*[[{]/.test(body) ? 'json' : /^\s*</.test(body) ? 'xml' : 'txt';
+  const bytes = app.stepTool === 'flow' ? flow.binary : null;
+  const ext = bytes ? 'bin' : /^\s*[[{]/.test(body) ? 'json' : /^\s*</.test(body) ? 'xml' : 'txt';
   const r = await ask('Save input body as (path inside the project)', `inputs/input.${ext}`);
   if (!r) return;
   try {
     if (!(await mayOverwrite(r.value))) return;
-    await writeFile(r.value, body);
+    if (bytes) await writeBytes(r.value, bytes.base64);
+    else await writeFile(r.value, body);
     app.inputPaths[app.stepTool] = r.value;
     app.status = 'Saved input as ' + r.value;
     await refreshFiles();
@@ -1533,7 +1579,9 @@ function flowXmlProfile(): Profile {
 }
 
 function flowInput() {
-  return { body: flow.body, headers: clean(flow.headers), properties: clean(flow.properties) };
+  const rows = { headers: clean(flow.headers), properties: clean(flow.properties) };
+  // The engines take bytes as bodyBase64 (SimExchange.fromJson).
+  return flow.binary ? { bodyBase64: flow.binary.base64, ...rows } : { body: flow.body, ...rows };
 }
 
 /**
@@ -1563,9 +1611,9 @@ async function simpleEval(run: FlowRun, expression: string, mode: 'condition' | 
 // A run's result goes to the step it was started for, and only if no newer run or newly opened step came since.
 let flowSeq = 0;
 const flowResultKey = { contentModifier: 'cmResult', filter: 'filterResult', router: 'routerResult', splitter: 'splitResult', gather: 'gatherResult',
-  converter: 'converterResult', encoder: 'encoderResult', messageDigest: 'digestResult' } as const;
+  converter: 'converterResult', encoder: 'encoderResult', decoder: 'decoderResult', messageDigest: 'digestResult' } as const;
 const flowConfigKey = { contentModifier: 'cm', filter: 'filter', router: 'router', splitter: 'splitter', gather: 'gather', converter: 'converter',
-  encoder: 'encoder', messageDigest: 'digest' } as const;
+  encoder: 'encoder', decoder: 'decoder', messageDigest: 'digest' } as const;
 
 export async function runFlowStep() {
   const seq = ++flowSeq;
@@ -1581,6 +1629,7 @@ export async function runFlowStep() {
       : step === 'splitter' ? await runSplitter(run, config)
       : step === 'converter' ? await runConverter(run, config)
       : step === 'encoder' ? await call('encode.run', { scheme: config.scheme, input: run.input }, run.xml)
+      : step === 'decoder' ? await call('decode.run', { scheme: config.scheme, input: run.input }, run.xml)
       : step === 'messageDigest' ? await call('digest.run', { ...config, namespaces: run.namespaces, input: run.input }, run.xml)
       : await runGather(run, config);
     if (seq === flowSeq) flow[flowResultKey[step]] = r;
@@ -1604,7 +1653,7 @@ async function runContentModifier(run: FlowRun, cm: typeof flow.cm) {
       if (r.action === 'Create' && r.type === 'xpath') {
         if (r.value.includes('$') && (pending.headers.length || pending.properties.length)) {
           const s = await call('contentModifier.run', { ...pending, bodyType: 'constant', body: '', input: state }, run.camel);
-          if (s.ok) state = { body: input.body, headers: s.output.headers, properties: s.output.properties };
+          if (s.ok) state = { ...input, headers: s.output.headers, properties: s.output.properties };
           pending = { headers: [], properties: [] };
         }
         try {
@@ -1661,7 +1710,8 @@ async function runSplitter(run: FlowRun, s: typeof flow.splitter) {
   const resolve = async (v: string) => (v.includes('${') ? (await simpleEval(run, v, 'expression')).value ?? '' : v);
   return await call('split.run', {
     splitter: s.splitter, expressionType: s.expressionType, expression: await resolve(s.expression),
-    grouping: await resolve(String(s.grouping ?? '')), streaming: s.streaming, namespaces: run.namespaces, input: { body: run.input.body },
+    grouping: await resolve(String(s.grouping ?? '')), streaming: s.streaming, namespaces: run.namespaces,
+    input: 'bodyBase64' in run.input ? { bodyBase64: run.input.bodyBase64 } : { body: run.input.body },
   }, run.xml);
 }
 
@@ -1699,9 +1749,16 @@ export function gatherSplitResult() {
   flow.step = 'gather';
 }
 
-/** A result message becomes the next input, to try steps one after another. */
-export function useAsFlowInput(body: string, headers?: Row[], properties?: Row[]) {
-  flow.body = body;
+/**
+ * A result message becomes the next input, to try steps one after another. A result that is no text (an Encoder's
+ * GZIP or ZIP) comes as `{ bodyBase64, bodySize }`.
+ */
+export function useAsFlowInput(body: string | { bodyBase64: string; bodySize: number }, headers?: Row[], properties?: Row[]) {
+  if (typeof body === 'string') setFlowBody(body);
+  else {
+    flow.body = '';
+    flow.binary = { base64: body.bodyBase64, size: body.bodySize };
+  }
   if (headers) flow.headers = headers.map((r) => ({ ...r }));
   if (properties) flow.properties = properties.map((r) => ({ ...r }));
   delete app.inputPaths.flow;
@@ -1726,6 +1783,8 @@ function openFlowStep(step: IflowStep) {
       arrayPaths: Array.isArray(c.arrayPaths) ? c.arrayPaths.join('\n') : c.arrayPaths ?? '' };
   } else if (step.type === 'encoder') {
     flow.encoder = { scheme: c.scheme ?? '' };
+  } else if (step.type === 'decoder') {
+    flow.decoder = { scheme: c.scheme ?? '' };
   } else if (step.type === 'messageDigest') {
     flow.digest = { filter: c.filter ?? '', canonicalization: c.canonicalization ?? '', algorithm: c.algorithm ?? '', targetHeader: c.targetHeader ?? '' };
   } else if (step.type === 'gather') {

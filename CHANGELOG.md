@@ -13,9 +13,15 @@ of its version.
   by default, as Base64 text. The result also shows the canonical form the digest is of. In the tab, in the MCP
   server's `run_flow_step` (the header travels on with `messageFrom`) and from an imported iFlow. Not tried on a
   tenant yet: *None* hashing the body's bytes is an assumption, and a filter that selects several nodes is refused.
-- **Flow Steps: Encoder with Base64 Encode.** The body's bytes as Base64 text, on one line; whether CPI wraps long
-  output is not verified yet, and the result says so. GZIP, ZIP and MIME Multipart are refused for now (their
-  result is binary), and there is no Decoder yet.
+- **Flow Steps: Encoder and Decoder.** Base64, GZIP and ZIP in both directions, as Camel 3.14.7's data formats do
+  them with their defaults (Base64 in lines of 76 characters with CR LF; ZIP's entry named after `CamelFileName`).
+  That CPI's steps behave the same is not verified on a tenant yet, and the result says so. MIME Multipart is not
+  simulated.
+- **Flow Steps: binary bodies.** A result that is no text (GZIP, ZIP) shows its size and a hex dump; *Use as input*
+  passes the bytes to the next step and *Save…* writes them to a file. A `.zip` or `.gz` file of the project opens
+  as a binary input body. The MCP server passes such a body on by `runId` and as `bodyPath`, `read_file` returns
+  bytes with `binary: true` and `save_file` writes them (`contentBase64`, or `contentFrom` a binary run). A Groovy
+  script gets a body that is no text as `byte[]` instead of garbled text.
 
 - **Test cases: a JUnit XML report.** `test <path> --junit <file>` on each engine also writes the results as a
   JUnit XML report for a CI system: one test case per case, failed cases with their messages, the cases of other

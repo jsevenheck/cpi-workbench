@@ -4,7 +4,7 @@
 
 Usage: workload.py <engine command...>   e.g.  workload.py java -jar cpiwb-xml-he99.jar
 Exits non-zero if a response does not look as expected."""
-import base64, hashlib, json, os, subprocess, sys, tempfile, time
+import base64, gzip, hashlib, io, json, os, subprocess, sys, tempfile, time, zipfile
 
 XSL = """<xsl:stylesheet version="2.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
   xmlns:hci="http://sap.com/it/" xmlns:xs="http://www.w3.org/2001/XMLSchema" exclude-result-prefixes="hci xs">
@@ -50,6 +50,25 @@ COVER = r"""<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/
 </xsl:stylesheet>"""
 
 BODY = '<x><i g="a" v="1"/><i g="b" v="2"/><i g="a" v="3"/></x>'
+
+
+def zip_of(entries):
+    """A ZIP archive, as Base64, with the given (name, bytes) entries."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        for name, data in entries:
+            z.writestr(name, data)
+    return base64.b64encode(buf.getvalue()).decode()
+
+
+def unzip(b64):
+    with zipfile.ZipFile(io.BytesIO(base64.b64decode(b64))) as z:
+        return [(i.filename, z.read(i)) for i in z.infolist()]
+
+
+ZIP_ONE = zip_of([("a.xml", b"<a/>")])
+ZIP_TWO = zip_of([("a.xml", b"<a/>"), ("b.xml", b"<b/>")])
+
 
 def main():
     cmd = sys.argv[1:]
@@ -133,8 +152,24 @@ def main():
         ("file.write", {"path": "schemas/x.xsd", "content": XSD}, lambda r: r["saved"]),
         ("convert.run", {"conversion": "csvToXml", "schema": "schemas/x.xsd", "targetPath": "x/i", "firstLineHeader": False,
                          "input": {"body": "1\n2"}}, lambda r: not r["ok"] and "no child elements" in json.dumps(r)),
-        # Encoder (Base64 Encode) and Message Digest: every canonicalization method, a filter, None, the project boundary.
-        ("encode.run", {"scheme": "base64Encode", "input": {"body": "<a/>"}}, lambda r: r["ok"] and r["body"] == "PGEvPg=="),
+        # Encoder and Decoder (Base64, GZIP, ZIP; binary results as bodyBase64) and Message Digest: every
+        # canonicalization method, a filter, None, the project boundary.
+        ("encode.run", {"scheme": "base64Encode", "input": {"body": "<a/>"}}, lambda r: r["ok"] and r["body"] == "PGEvPg==\r\n"),
+        ("decode.run", {"scheme": "base64Decode", "input": {"body": "PGEv\r\nPg=="}}, lambda r: r["ok"] and r["body"] == "<a/>"),
+        ("encode.run", {"scheme": "gzipCompress", "input": {"body": "<a/>"}},
+         lambda r: r["ok"] and r["binary"] and gzip.decompress(base64.b64decode(r["output"]["bodyBase64"])) == b"<a/>"),
+        ("decode.run", {"scheme": "gzipDecompress", "input": {"bodyBase64": base64.b64encode(gzip.compress(b"<a/>")).decode()}},
+         lambda r: r["ok"] and r["body"] == "<a/>"),
+        ("encode.run", {"scheme": "zipCompress", "input": {"body": "<a/>", "headers": [{"name": "CamelFileName", "value": "in/a.xml"}]}},
+         lambda r: r["ok"] and r["binary"] and unzip(r["output"]["bodyBase64"]) == [("a.xml", b"<a/>")]),
+        ("decode.run", {"scheme": "zipDecompress", "input": {"bodyBase64": ZIP_ONE}},
+         lambda r: r["ok"] and r["body"] == "<a/>"
+         and any(h["name"] == "CamelFileName" and h["value"] == "a.xml" for h in r["output"]["headers"])),
+        ("decode.run", {"scheme": "zipDecompress", "input": {"bodyBase64": ZIP_TWO}},
+         lambda r: not r["ok"] and "more than 1 entry" in json.dumps(r)),
+        ("file.write", {"path": "inputs/a.gz", "contentBase64": base64.b64encode(gzip.compress(b"<a/>")).decode()}, lambda r: r["saved"]),
+        ("file.read", {"path": "inputs/a.gz", "binary": True},
+         lambda r: gzip.decompress(base64.b64decode(r["contentBase64"])) == b"<a/>"),
         ("digest.run", {"canonicalization": "c14n10", "algorithm": "SHA256", "input": {"body": "<a  y='2' x='1'/>"}},
          lambda r: r["ok"] and r["canonical"] == '<a x="1" y="2"></a>'
          and r["header"]["value"] == base64.b64encode(hashlib.sha256(b'<a x="1" y="2"></a>').digest()).decode()),

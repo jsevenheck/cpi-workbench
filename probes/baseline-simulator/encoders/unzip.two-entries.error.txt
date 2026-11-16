@@ -1,0 +1,1 @@
+Zip file has more than 1 entry. (Camel's message; the ZIP Splitter is the step for such an archive, and it is not simulated.)

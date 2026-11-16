@@ -85,13 +85,13 @@ agent without file access of its own what the app's file tree and **Import iFlow
 | Tool | Tab in the app |
 |---|---|
 | `project_info` | The project: its files, the steps of the iFlows under `iflows/` (flow steps with their configuration; script, XSLT and XML Validator steps with file, function and runtime) and the installed runtimes. |
-| `read_file` | Opening a file: the text of a project file, long files in parts (`startLine`, `maxLines`), text in one long line by characters (`startChar`); with `runId`, the whole output body of a run. |
+| `read_file` | Opening a file: the text of a project file, long files in parts (`startLine`, `maxLines`), text in one long line by characters (`startChar`); a file that is no text with `binary: true` (as `contentBase64`); with `runId`, the whole output body of a run (a binary one as `contentBase64`). |
 | `run_xslt` | XSLT (`mappingPath` or `mapping`). `runtime: "both"` runs Saxon-HE 9.9 and 12, as the runtime comparison does. |
 | `run_groovy` | Groovy, with the Script API and the project's `platform/` mocks, and the body type (`bodyType`). The runtime (1.x or 2.x) follows the script's imports unless given; `both` runs both. A custom function of a Message Mapping script takes `args` instead, as the Groovy tab's *Arguments*; the result's `mapping` holds the returned value or the output queue. |
 | `validate_xsd` | XSD. |
 | `evaluate_xpath` | XPath (1.0 or 3.1, with namespaces). A node of the body also says where it is (`at`: the element positions from the root, its name, an attribute's name). |
-| `run_flow_step` | Flow Steps: a Content Modifier, Filter, Router, Splitter, Gather, converter (JSON ↔ XML, XML ↔ CSV), Encoder (Base64) or Message Digest step from an iFlow (`iflowStep`: name or id, with `iflow` when several iFlows share it) or from a configuration (`step`). |
-| `save_file` | **Save as…**: writes a text file (`content`, or a run's output with `contentFrom`) into the project, creating folders. An existing file is replaced only with `overwrite: true`. |
+| `run_flow_step` | Flow Steps: a Content Modifier, Filter, Router, Splitter, Gather, converter (JSON ↔ XML, XML ↔ CSV), Encoder, Decoder (Base64, GZIP, ZIP) or Message Digest step from an iFlow (`iflowStep`: name or id, with `iflow` when several iFlows share it) or from a configuration (`step`). |
+| `save_file` | **Save as…**: writes a file (`content`, bytes as `contentBase64`, or a run's output with `contentFrom`, binary or not) into the project, creating folders. An existing file is replaced only with `overwrite: true`. |
 | `import_iflow` | **Import iFlow**: an iFlow exported from the tenant (`.zip`, any path) into `iflows/<name>/`; returns its steps. An existing folder is replaced only with `overwrite: true`. |
 | `reference` | No tab: what the simulator offers, generated from its sources. `script-api`: the Script API, Message Mapping and platform service methods; `platform`: the formats of the `platform/` files; `fidelity`: [Fidelity](fidelity.md). |
 
@@ -117,7 +117,7 @@ replace the body or the rows of the same name. A Gather takes `messagesFrom` (a 
 
 To keep results small, a body the step left as it was (from 200 characters) is left out, with
 `bodyUnchanged` saying so; bodies longer than 20,000 characters, and a Splitter's messages longer than 2,000,
-come back shortened, with `bodyShortened`. The run keeps the whole body: `read_file` with `runId` reads it, `save_file` with `contentFrom` saves it. The server keeps the
+come back shortened, with `bodyShortened`; a binary body (an Encoder's GZIP or ZIP result) longer than that is left out, and `messageFrom` passes it on as bytes, as `bodyPath` does with a `.zip` or `.gz` file. The run keeps the whole body: `read_file` with `runId` reads it, `save_file` with `contentFrom` saves it. The server keeps the
 last 50 runs (at most 64 MB) of its process; an older or unknown `runId` is an error that says to run again.
 
 Calls can run concurrently. Without `overwrite`, file/iFlow creation is checked atomically by the

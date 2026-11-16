@@ -108,6 +108,7 @@ Labels follow the REA evidence rules (see §4): **Observed** = read in a source 
 | F61 | The same mapping with `request-empty-context.xml` (an empty `Group` between `a`, `b` and `c`): three `Call`s; the middle one holds a `describeQueue` document with no entries and no `Value`. A `String[]` function is **called for an empty context, with an empty array**; a single-value function is not called there. | Observed (one tenant) | S32 |
 | F62 | Encoder, Decoder and Message Digest steps in exported iFlows: `activityType` `Encoder` with `encoderType` = `Base64 Encode` or `ZIP Compress`; `activityType` `Decoder`, whose scheme is also in the key `encoderType` (`Base64 Decode`, `ZIP Decompress`); `activityType` `MessageDigest` with `digestAlgorithm` (`SHA-512`), `canonicalizationMethod` (`none`) and `targetHeader` (`SAPMessageDigest`). `cmdVariantUri` repeats the scheme (`cname::ZIP Compress`). Not seen: the GZIP schemes, the digest's filter XPath and its namespace mapping, any other value of `digestAlgorithm` and `canonicalizationMethod`, the MIME Multipart variants → Q-E1 | Observed (8 steps in 3 public iFlows on GitHub, 2026-11-16) | S50 |
 | F63 | SAP's documentation of the three steps. Decoder: *Base64 Decode*, *GZIP Decompress*, *ZIP Decompress*, no settings. Encoder: the page's list of schemes is empty in the mirror; its example encodes `<message>`, CR LF, tab, `Input for encoder`, CR LF, `</message>`, CR LF to `PG1lc3NhZ2U+DQoJSW5wdXQgZm9yIGVuY29kZXINCjwvbWVzc2FnZT4NCg==`, plain Base64 of those bytes (60 characters, too short to show whether long output is wrapped). Message Digest: "can only process XML content"; the message is turned into canonical XML, the digest of that goes to a header and "the original message remains unchanged"; *Filter (XPath)* is optional, with a prefix namespace mapping; canonicalization is Canonical XML 1.0, Exclusive 1.0 or 1.1, each with or without comments, or *None*; algorithms MD5, SHA1, SHA256, SHA384, SHA512 (default SHA512); *Target Header Name* defaults to `SAPMessageDigest` and holds the Base64-encoded digest. The SAP blog on ZIP and GZIP that the pages link could not be opened (HTTP 403); nothing here rests on it. What the pages leave open → Q-E1 | Observed (SAP docs) | S49 |
+| F64 | Camel 3.14.7's data formats for Base64, GZIP and ZIP with their defaults, read in their source. camel-base64: encoding writes lines of 76 characters, each ended by CR LF, the last one too (commons-codec's chunked Base64); decoding is lenient: characters outside the alphabet are skipped (`-` and `_` count as Base64), the text ends at the first `=`, an incomplete last group gives the bits it has, nothing is an error. camel-zip-deflater (GZIP): a GZIP stream without a file name, time 0 and operating system 255 in its header. camel-zipfile: compressing writes one entry named after the file name part of `CamelFileName`, else after the message id, and sets `CamelFileName` to that name with `.zip`; decompressing (without an iterator) takes the first entry as the body and its name as `CamelFileName`, and fails with "Zip file has more than 1 entry." when there is a second. A scratch run against commons-codec 1.16.1 and commons-compress 1.26.1 gave the same bytes as the simulator for 401 random inputs (Base64 Encode, GZIP) and 20,000 dirty Base64 texts. **Whether CPI's Encoder and Decoder are these data formats is not known** → Q-E1 | Read (Camel source) | S51 |
 
 ---
 
@@ -323,7 +324,7 @@ Plain, git-friendly files. The engines' `test` command (`cpiwb-xml test tests/`,
 | **3 — Groovy MVP** | Groovy 1.x and 2.x, typed headers/properties, MPL, API call log, console, diff | Done (0.1.0) |
 | **4 — Productivity** | Platform API mocks, lint, runtime comparison, iFlow-zip import, flow steps, MCP server | Done (0.1.0–0.3.0) |
 | **5 — Distribution** | Windows/macOS installers, engine jars for Java 17+, code signing and auto-update (§10.2) | Unsigned installers and manual update check built; signing and auto-update open |
-| **6 — Workflow** | What a review of other tools showed (§10.5): platform data in the Groovy tab, a traced message from CPI Helper, XPath comfort, Encoder / Decoder and Message Digest steps, JUnit output and compare rules for test cases, Value Mapping import, run history, examples, debugging | Planned (2026-11-13); W1 to W3, W5, W6 (XML) and the first part of W4 (Message Digest, Base64 Encode) built (W2 with the desktop link, W2b) |
+| **6 — Workflow** | What a review of other tools showed (§10.5): platform data in the Groovy tab, a traced message from CPI Helper, XPath comfort, Encoder / Decoder and Message Digest steps, JUnit output and compare rules for test cases, Value Mapping import, run history, examples, debugging | Planned (2026-11-13); W1 to W3, W5, W6 (XML) and W4 built (W2 with the desktop link, W2b; W4's tenant probe not run yet) |
 
 ### 10.1 MCP server for coding agents (built, 2026-11-01)
 
@@ -434,8 +435,8 @@ and `run_flow_step` cover it. The engine class is `ConverterStep` in the XML eng
 its JSON reader keeps member order, duplicates and number text). Rules come from SAP's documentation (F47,
 S30), the iFlow keys from public iFlows (F46). Not built, from SAP's list of message transformers: EDI ↔ XML
 and the EDI Extractor (they need EDI schemas), Encoder / Decoder (Base64, GZIP, ZIP, MIME Multipart), XML
-Modifier; they can follow when needed. Message Digest and the Encoder's Base64 Encode are built, the rest
-of Encoder / Decoder is planned (§10.5 W4).
+Modifier; they can follow when needed. Message Digest, Encoder and Decoder with Base64, GZIP and ZIP are built
+(§10.5 W4); MIME Multipart is not.
 
 ### 10.5 Workflow roadmap
 
@@ -508,24 +509,20 @@ wrong node. Inspired by XSLTDebugX; covered by unit and browser tests.
 Sizes are rough estimates: S is a day or two, M about a week, L more. Follow `AGENTS.md` for tests,
 fidelity evidence, status updates and changelog entries. The following are proposals, not available features.
 
-**W4. Encoder, Decoder and Message Digest as flow steps (M).** *Prompted by the encoding tools in All-in-one;
-they are CPI steps, listed as not built in §10.4.*
-* First the sources, as for the converters: SAP's documentation of each step, the iFlow keys from public
-  iFlows (as F46), and a probe for what the documentation leaves open (Q-E1). Read on 2026-11-16: the
-  documentation (F63) and the keys (F62). The probe is prepared (`probes/encoders/`, step 9 of its README)
-  and not run yet.
-* **Built first (2026-11-16), because their result is text or a header:** Message Digest and the Encoder's
-  Base64 Encode, in the XML engines (`DigestStep`, `EncoderStep`), the Flow Steps tab, `run_flow_step` and
-  the iFlow import. Canonicalization uses the JDK's XML signature API with a node set of the element and
-  everything below it; a native image needs the canonicalizer classes and a resource bundle in its
-  metadata, which the smoke workload now covers. Assumptions and refusals are in `fidelity.md`.
-* **Still to build:** Base64 Decode, GZIP and ZIP in both directions, with `bodyBase64` in a step's result,
-  "binary, n bytes" and Save in the tab, and bytes passed on by `runId`.
-* Base64 encode and decode, GZIP and ZIP compress and decompress, Message Digest. MIME Multipart, EDI and the
-  XML Modifier stay out.
-* Compressed bodies are bytes, and bodies travel as text through JSON-RPC; how a binary result is shown and
-  passed on is the design question of this item.
-* The Flow Steps tab and `mcp/flow.rs` together, the iFlow import, a row in `fidelity.md`, probe baselines.
+**W4. Encoder, Decoder and Message Digest as flow steps (built; tenant probe pending).** *Prompted by the
+encoding tools in All-in-one; they are CPI steps, listed as not built in §10.4.*
+* Sources: SAP's documentation of each step (F63), the iFlow keys from public iFlows (F62), and Camel's data
+  formats for what SAP does not document (F64). The probe for Q-E1 is prepared (`probes/encoders/`, step 9 of
+  its README, with the simulator's baseline) and not run yet; until it has, Base64's line wrapping, GZIP's
+  header, the ZIP entry's name and the digest's *None* are assumptions.
+* Built in two parts on 2026-11-16, in the XML engines (`DigestStep`, `EncoderStep`), the Flow Steps tab,
+  `run_flow_step` and the iFlow import. First Message Digest and Base64 Encode, whose result is text or a header;
+  canonicalization uses the JDK's XML signature API, and a native image needs its classes and a resource bundle
+  in the metadata. Then Base64 Decode, GZIP and ZIP in both directions: a result that is no text is `bodyBase64`
+  with `binary: true`, the tab shows its size and a hex dump, *Use as input* and *Save…* take the bytes, a
+  binary project file is an input, and the MCP server passes bytes on by `runId` and reads and writes them
+  (`read_file` with `binary`, `save_file` with `contentBase64`). A Groovy script gets such a body as `byte[]`.
+* MIME Multipart, EDI and the XML Modifier stay out. Assumptions and refusals are in `fidelity.md`.
 
 **W5. JUnit XML from the test command (built).** *Prompted by the CI focus of Figaf and cpictl.*
 `test --junit <file>` writes a report in Maven Surefire's layout: one suite per engine run (named after
@@ -647,7 +644,7 @@ writes, SUPPRESS in a mapping function's input).
 | Q-C1 | Converters: compact or indented output, the XML declaration, CSV line ends and quoting, an unmapped JSON prefix without namespace mapping (F47), the XML to JSON namespace table's cell order | Answered for the probes' cases (F54–F57); open: the XML to JSON namespace table's cell order, `\r\n` or `\n` in CSV | Save a response with `curl --output` |
 | Q-F1 | Gather's Combine with a body that is not XML (JSON or plain text after a script): failure, the text as it is (as character data in the wrapper, malformed only where the text is, e.g. `a & b`), or another form. SAP documents XML only and shows no such case | Open; the simulator keeps the text and warns | `probes/gather/` (probes/README.md, step 8) |
 | Q-P1 | Partner Directory / Keystore / Secure Store edge cases: missing parameter, unknown partner, unknown keystore alias (null or exception, which message) | Answered (F52) | — |
-| Q-E1 | Encoder, Decoder and Message Digest, what F62 and F63 leave open. Base64: whether long output is wrapped (and with which line end), what the decoder does with line breaks and with invalid input. GZIP: the header fields (time, name), so whether output bytes can be compared at all. ZIP: the entry's name (`CamelFileName`, the message id?), and a decompress of an archive with several entries. Digest: what *None* hashes (the body's bytes as they are?), a body that is not XML, a filter that selects several nodes or none, the header's type; the iFlow keys of the filter and of the GZIP schemes | Open (§10.5 W4); the settings and the digest's header are documented (F63). Probe prepared, not run | `probes/encoders/` (step 9 of the probes' README); the probe iFlow's export for the keys |
+| Q-E1 | Encoder, Decoder and Message Digest, what F62 and F63 leave open. Base64: whether long output is wrapped (and with which line end), what the decoder does with line breaks and with invalid input. GZIP: the header fields (time, name), so whether output bytes can be compared at all. ZIP: the entry's name (`CamelFileName`, the message id?), and a decompress of an archive with several entries. Digest: what *None* hashes (the body's bytes as they are?), a body that is not XML, a filter that selects several nodes or none, the header's type; the iFlow keys of the filter and of the GZIP schemes | Open (§10.5 W4); the settings and the digest's header are documented (F63); the simulator follows Camel's data formats (F64). Probe prepared, not run | `probes/encoders/` (step 9 of the probes' README); the probe iFlow's export for the keys |
 | Q-VM1 | Format of an exported Value Mapping artifact | Open (§10.5 W7) | Export one sample, or read one from SAP's public sample packages |
 | Q-D1 | Whether an IDE's breakpoints bind to a script that an engine jar runs under the JDWP agent | Open (§10.5 W10) | Try it with IntelliJ and VS Code on `cpiwb-groovy-v1.jar run` |
 
@@ -708,3 +705,4 @@ writes, SUPPRESS in a mapping function's input).
   top-level Local Network Access navigation discussion (not a compatibility guarantee): https://github.com/WICG/local-network-access/issues/48
 - S49 SAP-docs Integration Suite documentation (S25 mirror, commit 147acb7 of 2026-10-22), read on 2026-11-16: *Define an Encoder*, *Define a Decoder*, *Define Message Digest*, *Simple Integration Flow Using a Message Digest Step*, *Use the Base64 Encoder*, *Use the Base64 Decoder*. help.sap.com renders these pages with scripts and could not be read directly.
 - S50 Public iFlows on GitHub with Encoder, Decoder and Message Digest steps (code search `encoderType` and `MessageDigest canonicalizationMethod` in `.iflw` files, 2026-11-16), read for property names only: `alee536/CPI-iFlows` (Encoder and Decoder), `stevedpedersen/cpilint` (IF_LINT_NAMES), `nesun3/sap-cloud-integration-artifacts` (Zip Spliting).
+- S51 Apache Camel 3.14.7 source, read on 2026-11-16 for the defaults of the data formats behind Base64, GZIP and ZIP: `components/camel-base64` (`Base64DataFormat`), `components/camel-zip-deflater` (`GzipDeflaterDataFormat`), `components/camel-zipfile` (`ZipFileDataFormat`); no code taken: https://github.com/apache/camel/tree/camel-3.14.7/components

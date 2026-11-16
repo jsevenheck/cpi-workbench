@@ -173,11 +173,17 @@ the multimap wrapper.
 
 The encoder baselines (`baseline-simulator/encoders/`) come from the MCP server: `run_flow_step` with the
 step of the row, then `run_groovy` (groovy-1.x) with `encoders/probe-report.groovy` on that run. There is a
-baseline for the rows the simulator has: `base64-encode`, `digest-c14n`, `digest-none` and `digest-filter`;
-`*.canonical.xml` is the text a digest is of, and `*.error.txt` the error where the simulator refuses
-(`digest-filter-many`) or fails (`digest-c14n` on `not-xml.txt`). A tenant's report lists more header names.
-Regenerate them with `node probes/encoders/baseline.mjs <cpi-workbench binary> .`; the request files come
-from the script's own folder and are sent as they are in the repository (LF line ends).
+baseline for every row but `digest-default` (the defaults are what the probe asks for); `zip` only with the
+header `CamelFileName: order.xml` (`zip.named`): without it the simulator names the entry after a message id
+it makes up, which differs per run. `*.canonical.xml` is the text a digest is of, and `*.error.txt` the error
+where the simulator refuses (`digest-filter-many`) or fails (`digest-c14n` on `not-xml.txt`, `unzip` on
+`two-entries.zip`). A binary result reaches the script as `byte[]` (the simulator's choice; a tenant's
+`bodyClass` answers it). The ZIP archive's bytes hold the time of the run, and GZIP's compressed bytes
+depend on the JVM's zlib, so those two differ from a tenant's in places that say nothing about the step;
+compare the header fields and the unpacked content. A tenant's report lists more header names.
+Regenerate them with `node probes/encoders/baseline.mjs <cpi-workbench binary> .`; the request files are
+read from `encoders/` as `bodyPath`, as they are in the repository (LF line ends), and the `.gz` and `.zip`
+files as bytes.
 
 The converter baselines come from the Flow Steps tab's Converter (or `convert.run`) with the settings
 in step 7. In the baselines, IDs that change with each run are replaced by `x` (the random alias suffix

@@ -1,0 +1,13 @@
+{
+    "probeStep": "base64-decode",
+    "bodyClass": "[B",
+    "bodyLength": 12,
+    "bodyBase64": "PE9yZGVynotbase6",
+    "bodyText": null,
+    "headerNames": [
+        "ProbeStep"
+    ],
+    "headers": {
+        
+    }
+}

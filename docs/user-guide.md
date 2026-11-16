@@ -88,7 +88,7 @@ Download the installer for your platform from the
 ### Flow Steps
 
 * **Flow Steps** runs a **Content Modifier**, **Filter**, **Router**, **General / Iterating Splitter**,
-  **Gather**, **Converter**, **Encoder** or **Message Digest** on an input message (body, headers,
+  **Gather**, **Converter**, **Encoder**, **Decoder** or **Message Digest** on an input message (body, headers,
   properties, namespace mapping):
   * Content Modifier: header and property rows with their source types and data types, and the
     message body; the result shows each row's value and the output message.
@@ -100,10 +100,14 @@ Download the installer for your platform from the
   * Converter: JSON to XML, XML to JSON (namespace mapping, root element options, streaming), XML to CSV
     and CSV to XML (with an XSD from the project), with the settings of CPI's converter steps. *Use as
     input* chains them with the other steps, e.g. JSON to XML, then a Router.
-  * Encoder: *Base64 Encode* writes the body's bytes as Base64 text. The text is one line; whether CPI
-    wraps long output is not verified on a tenant, and the result says so. *GZIP Compress*, *ZIP Compress*
-    and *MIME Multipart Encode* give a binary body and are not simulated yet: the step fails with
-    `UnsupportedInSimulator`. There is no Decoder step yet.
+  * Encoder and Decoder: *Base64 Encode* / *Decode*, *GZIP Compress* / *Decompress* and *ZIP Compress* /
+    *Decompress*, as Camel's data formats do them. That CPI does the same is not verified on a tenant, and the
+    result says so: Base64 Encode writes lines of 76 characters with CR LF, ZIP Compress names its one entry
+    after the header `CamelFileName` (set it in Headers), ZIP Decompress takes an archive with one entry.
+    A result that is no text shows its size and a hex dump of its first bytes; *Use as input* passes the
+    bytes on (to a Decoder, for instance) and *Save…* writes them to a file. A `.zip` or `.gz` file of the
+    project opens as a binary input body in the same way (click it under `inputs/`, or *Use as input*).
+    *MIME Multipart* is not simulated.
   * Message Digest: the message, or the one element a *Filter (XPath)* selects, is written as canonical
     XML (the six methods CPI offers, or *None*), and its digest (MD5, SHA1, SHA256, SHA384, SHA512) goes
     to the *Target Header Name* as Base64 text; the body stays. The result shows the header and the
@@ -123,7 +127,7 @@ Download the installer for your platform from the
   resolver provides them ([Fidelity](fidelity.md), F39).
 
   Camel Simple and the Content Modifier run on Camel 3.14.7, as on a tenant for both script versions
-  (tenants still on software 6.x / 5.x run Camel 2 and are not covered). XPath, the converters, the Encoder and the Message
+  (tenants still on software 6.x / 5.x run Camel 2 and are not covered). XPath, the converters, the Encoder, the Decoder and the Message
   Digest run on
   an installed XML engine (Saxon-HE 9.9 by default, otherwise 12). See [Fidelity](fidelity.md#flow-steps-content-modifier-filter-router-splitter-gather-converter).
 ### iFlow import

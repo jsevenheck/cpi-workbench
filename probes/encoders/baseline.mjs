@@ -21,20 +21,35 @@ async function tool(name, args) {
   try { return JSON.parse(text); } catch { return { ok: false, raw: text }; }
 }
 const script = fs.readFileSync(path.join(probes, 'encoders', 'probe-report.groovy'), 'utf8');
-const body = (f) => fs.readFileSync(path.join(probes, 'encoders', f), 'utf8');
 const ns = { o: 'urn:example:order' };
+const enc = (scheme) => ({ type: 'encoder', config: { scheme } });
+const dec = (scheme) => ({ type: 'decoder', config: { scheme } });
+const digestC14n = { type: 'messageDigest', config: { canonicalization: 'c14n10', algorithm: 'SHA256', targetHeader: 'ProbeDigest' } };
+const digestNone = { type: 'messageDigest', config: { canonicalization: 'none', algorithm: 'MD5' } };
+// [baseline name, ProbeStep, request body (encoders/), step, more request headers]
 const cases = [
-  ['base64-encode.long', 'base64-encode', 'long.xml', { type: 'encoder', config: { scheme: 'base64Encode' } }],
-  ['base64-encode.short', 'base64-encode', 'short.txt', { type: 'encoder', config: { scheme: 'base64Encode' } }],
-  ['digest-c14n', 'digest-c14n', 'digest.xml', { type: 'messageDigest', config: { canonicalization: 'c14n10', algorithm: 'SHA256', targetHeader: 'ProbeDigest' } }],
-  ['digest-c14n.not-xml', 'digest-c14n', 'not-xml.txt', { type: 'messageDigest', config: { canonicalization: 'c14n10', algorithm: 'SHA256', targetHeader: 'ProbeDigest' } }],
-  ['digest-none', 'digest-none', 'digest.xml', { type: 'messageDigest', config: { canonicalization: 'none', algorithm: 'MD5' } }],
-  ['digest-none.not-xml', 'digest-none', 'not-xml.txt', { type: 'messageDigest', config: { canonicalization: 'none', algorithm: 'MD5' } }],
+  ['base64-encode.long', 'base64-encode', 'long.xml', enc('base64Encode')],
+  ['base64-encode.short', 'base64-encode', 'short.txt', enc('base64Encode')],
+  ['base64-decode.oneline', 'base64-decode', 'base64-oneline.txt', dec('base64Decode')],
+  ['base64-decode.wrapped', 'base64-decode', 'base64-wrapped.txt', dec('base64Decode')],
+  ['base64-decode.invalid', 'base64-decode', 'base64-invalid.txt', dec('base64Decode')],
+  ['gzip.long', 'gzip', 'long.xml', enc('gzipCompress')],
+  ['gunzip.long', 'gunzip', 'long.xml.gz', dec('gzipDecompress')],
+  // Without CamelFileName the entry is named after a message id the simulator makes up, which differs per run;
+  // the archive's bytes hold the time of the run in either case.
+  ['zip.named', 'zip', 'long.xml', enc('zipCompress'), { CamelFileName: 'order.xml' }],
+  ['unzip.one-entry', 'unzip', 'one-entry.zip', dec('zipDecompress')],
+  ['unzip.two-entries', 'unzip', 'two-entries.zip', dec('zipDecompress')],
+  ['digest-c14n', 'digest-c14n', 'digest.xml', digestC14n],
+  ['digest-c14n.not-xml', 'digest-c14n', 'not-xml.txt', digestC14n],
+  ['digest-none', 'digest-none', 'digest.xml', digestNone],
+  ['digest-none.not-xml', 'digest-none', 'not-xml.txt', digestNone],
   ['digest-filter', 'digest-filter', 'digest.xml', { type: 'messageDigest', config: { canonicalization: 'exclusive', algorithm: 'SHA1', filter: '/o:Order/o:Header' } }],
   ['digest-filter-many', 'digest-filter-many', 'digest.xml', { type: 'messageDigest', config: { canonicalization: 'exclusive', algorithm: 'SHA1', filter: '/o:Order/o:Item' } }],
 ];
-for (const [name, probeStep, file, step] of cases) {
-  const r = await tool('run_flow_step', { body: body(file), headers: { ProbeStep: probeStep }, namespaces: ns, step });
+for (const [name, probeStep, file, step, headers = {}] of cases) {
+  // bodyPath: the server passes a file that is no text (.gz, .zip) as its bytes.
+  const r = await tool('run_flow_step', { bodyPath: 'encoders/' + file, headers: { ProbeStep: probeStep, ...headers }, namespaces: ns, step });
   const errors = (r.diagnostics ?? []).filter((d) => d.severity === 'error').map((d) => d.message);
   if (r.ok === false || !r.runId) {
     fs.writeFileSync(path.join(out, name + '.error.txt'), (errors.join('\n') || JSON.stringify(r)) + '\n');

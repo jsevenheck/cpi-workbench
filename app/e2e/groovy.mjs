@@ -516,15 +516,33 @@ await page.getByRole('button', { name: 'Run step' }).click();
 await page.locator('.res .d.error', { hasText: 'UnsupportedInSimulator' }).waitFor({ timeout: 10000 })
   .catch(() => fail('Message Digest: a filter that selects several nodes must be refused'));
 await page.getByLabel('Digest filter XPath').fill('');
-// Encoder: Base64 of the body; a scheme with a binary result is refused.
+// Encoder: Base64 of the body in lines; GZIP gives bytes, which go on as the input of a Decoder and come back as the
+// body. MIME Multipart is refused.
 await page.getByRole('tab', { name: 'Encoder' }).click();
 await page.getByRole('button', { name: 'Run step' }).click();
-await page.locator('.res pre', { hasText: /^(PD94|PE9y)[A-Za-z0-9+/=]+$/ }).waitFor({ timeout: 10000 })
+await page.locator('.res pre', { hasText: /^(PD94|PE9y)[A-Za-z0-9+/=\s]+$/ }).waitFor({ timeout: 10000 })
   .catch(async () => fail('Base64 Encode: ' + (await page.locator('.res').innerText()).slice(0, 300)));
-await page.getByLabel('Encoding Scheme').selectOption('zipCompress');
+await page.getByLabel('Encoding Scheme').selectOption('mimeMultipartEncode');
 await page.getByRole('button', { name: 'Run step' }).click();
 await page.locator('.res .d.error', { hasText: 'UnsupportedInSimulator' }).waitFor({ timeout: 10000 })
-  .catch(() => fail('ZIP Compress must be refused'));
+  .catch(() => fail('MIME Multipart Encode must be refused'));
+await page.getByLabel('Encoding Scheme').selectOption('gzipCompress');
+await page.getByRole('button', { name: 'Run step' }).click();
+await page.locator('.res h3', { hasText: 'binary' }).waitFor({ timeout: 10000 })
+  .catch(async () => fail('GZIP Compress: ' + (await page.locator('.res').innerText()).slice(0, 300)));
+if (!/^00000000 +1f 8b 08/.test(await page.getByLabel('Binary output').innerText())) fail('GZIP Compress: no GZIP header in the hex view');
+await page.locator('.res h3', { hasText: 'binary' }).getByRole('button', { name: 'Use as input' }).click();
+await page.getByLabel('Binary input body').waitFor({ timeout: 5000 }).catch(() => fail('The GZIP result did not become a binary input'));
+await page.getByRole('tab', { name: 'Decoder' }).click();
+await page.getByLabel('Decoding Scheme').selectOption('gzipDecompress');
+await page.getByRole('button', { name: 'Run step' }).click();
+await page.locator('.res pre', { hasText: '<Order id="4711"' }).waitFor({ timeout: 10000 })
+  .catch(async () => fail('GZIP Decompress: ' + (await page.locator('.res').innerText()).slice(0, 300)));
+// The decoded body back as the text input, for the steps below.
+await page.locator('.res h3', { hasText: 'bytes' }).getByRole('button', { name: 'Use as input' }).click();
+await page.getByLabel('Binary input body').waitFor({ state: 'detached', timeout: 5000 }).catch(() => fail('The decoded text did not replace the binary input'));
+await page.getByLabel('Decoding Scheme').selectOption('base64Decode');
+await page.getByRole('tab', { name: 'Encoder' }).click();
 await page.getByLabel('Encoding Scheme').selectOption('base64Encode');
 // Converter: XML to JSON on the sample body, the result back as input, then JSON to XML.
 await page.getByRole('tab', { name: 'Converter' }).click();

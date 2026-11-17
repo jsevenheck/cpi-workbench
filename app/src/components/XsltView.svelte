@@ -108,7 +108,7 @@
       <button class="small" onclick={saveMappingAs} disabled={!app.project} title="Save under a new name; the open file stays as it is">Save as…</button>
     </header>
     <div class="body">
-      {#if !xslt.mapping}<p class="empty-hint">Open a mapping from the project, or type or paste one here.</p>{/if}
+      {#if !xslt.mapping}<p class="empty-hint">{app.project ? "Open a mapping from the project" : "Open a project, or load a mapping under Examples… on the left"}, or type or paste one here.</p>{/if}
       <Editor bind:this={mappingEditor} bind:value={xslt.mapping} language={languageFor(xslt.mappingPath ?? 'm.xsl')}
         markers={markers} onchange={changed} onrun={runXslt} onsave={saveMapping} label="XSLT mapping" />
     </div>

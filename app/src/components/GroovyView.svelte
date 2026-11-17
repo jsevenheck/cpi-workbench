@@ -266,7 +266,7 @@
       <button class="small" onclick={saveScriptAs} disabled={!app.project} title="Save under a new name; the open file stays as it is">Save as…</button>
     </header>
     <div class="body">
-      {#if !groovy.script}<p class="empty-hint">Open a script from the project, or type or paste one here.</p>{/if}
+      {#if !groovy.script}<p class="empty-hint">{app.project ? "Open a script from the project" : "Open a project, or load a script under Examples… on the left"}, or type or paste one here.</p>{/if}
       <Editor bind:this={scriptEditor} bind:value={groovy.script} language="java" markers={markers}
         onchange={changed} onrun={runGroovy} onsave={saveScript} label="Groovy script" />
     </div>

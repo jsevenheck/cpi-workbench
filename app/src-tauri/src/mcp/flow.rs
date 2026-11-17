@@ -334,7 +334,7 @@ fn converter_defaults() -> Value {
         "useNamespaces": false, "separator": ":", "namespaceMapping": "",
         "addRootElement": false, "rootElementName": "root", "rootNamespace": "",
         "suppressRoot": false, "streaming": false, "streamingElements": "all", "arrayPaths": "", "outputEncoding": "",
-        "sourcePath": "/Order/Item", "fieldSeparator": ",", "csvHeader": "xml", "includeParent": false, "parentPath": "",
+        "sourcePath": "", "fieldSeparator": ",", "csvHeader": "xml", "includeParent": false, "parentPath": "",
         "includeAttributes": false,
         "schema": "", "targetPath": "", "recordMarker": "", "firstLineHeader": true, "headerMapping": "xsd",
     })

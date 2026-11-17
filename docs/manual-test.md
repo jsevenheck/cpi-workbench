@@ -96,10 +96,11 @@ The first run starts the Java engines and can take a few seconds.
 
 | # | Step | Expected |
 |---|---|---|
-| 2.15 | **Content Modifier** with the sample settings | The value of each row and the output message. |
-| 2.16 | **Filter** (`/Order/Item[@qty > 1]`); change the Value Type | The filtered body; the result follows the Value Type. |
-| 2.17 | **Router**; change a condition | The route the message takes; another route after the change. |
-| 2.18 | **Splitter**, then *Gather* on its result | The split messages; Combine gives SAP's multi-mapping format. |
+| 2.14a | Start the app without a project | Input, mapping, script, XPath and every flow step are empty; the empty editors point to *Examples…*; nothing runs. |
+| 2.15 | **Content Modifier** on `inputs/order.xml`: a header row `OrderId`, XPath `/Order/@number` | The value of each row and the output message. |
+| 2.16 | **Filter** `/Order/Items/Item[@qty > 1]`; change the Value Type | The filtered body; the result follows the Value Type. |
+| 2.17 | **Router**: *+ Route* twice, one Non-XML condition `${header.SenderId} = 'ERP'` with that header set, the other the default; change the condition | The route the message takes; another route after the change. |
+| 2.18 | **Splitter** `/Order/Items/Item`, then *Gather* on its result | The split messages; Combine gives SAP's multi-mapping format. |
 | 2.19 | Splitter on `inputs/orders.xml`, XPath `/src:Orders/src:Order`, namespace `src` = `urn:demo:integration:orders:source:v1` | One message per order. |
 | 2.20 | *Use as input* on a result | The result becomes the next step's input. |
 | 2.21 | Switch between steps and tabs | Each step keeps its settings and last result. |
@@ -126,7 +127,7 @@ The first run starts the Java engines and can take a few seconds.
 | 3.1b | **Import iFlow** with an exported Value Mapping, then with an exported integration package that has an iFlow using a script collection | The status names the value mapping rows; *Platform* → *Value Mappings* shows both directions. The package's iFlows and collections are under `iflows/`, other types are named as skipped, and the collection's script opens from the iFlow's Groovy step. |
 | 3.1c | After 3.1: the list under **iFlows**, then click *Write to data store*; in **Diagram**, double-click *Enrich order* | The list shows the HTTPS and SOAP adapters, the Router's routes *Other (default)* and *ERP* with its condition, the exception subprocess and the local process *Archive order*. *Write to data store* opens the Diagram tab with its settings (`storageName`); the double-click opens `enrich.groovy`. |
 | 3.2 | Click a Groovy or XSLT step | The file opens with the step's function name and script version. |
-| 3.3 | Click the Content Modifier, Filter, Gather and *JSON to XML* | They open in Flow Steps with their settings; `{{parameters}}` come from `parameters.prop` (the converter's root element `Orders`). The **×** after *From …* gives the step its own settings back; the other steps keep theirs. |
+| 3.3 | Click the Content Modifier, Filter, Gather and *JSON to XML* | They open in Flow Steps with their settings; `{{parameters}}` come from `parameters.prop` (the converter's root element `Orders`). The **×** after *From …* gives the step its empty starting settings back; the other steps keep theirs. |
 | 3.3a | Click *Map order* (**M**) | Its script `lookup.gsh` opens with the mapping function `getHeader`. |
 | 3.4 | Optional: an iFlow exported from your own tenant, without secrets | Imports without errors; steps run or report `UnsupportedInSimulator`. |
 

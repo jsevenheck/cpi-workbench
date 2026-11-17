@@ -53,8 +53,12 @@ of its version.
   browser mode listens (and the Groovy engines' `--http` default), so the two could not run side by side. If you
   turned the receiver on in 0.4.0, it stays on 7778 and the *Custom URL* in the plugins keeps working; to move,
   set the port under **⚙** and enter the new *Custom URL* in both plugins.
+- **The app starts empty.** Input bodies, headers, the mapping and script editors, the XPath expression and the
+  flow steps (Content Modifier rows, Router routes, Splitter, Filter and the converter's source path) no longer
+  hold sample values; without a project, **Examples…** loads something to try. The MCP server's converter has no
+  default source path either.
 - **Flow Steps: a step opened from an iFlow can be closed.** The **×** after *From <iFlow> · <step>* gives the
-  step the tab's own settings back and drops its result; the iFlow is not changed. Closing or switching the
+  step its empty starting settings back and drops its result; the iFlow is not changed. Closing or switching the
   project closes the steps taken from its iFlows, which used to keep their settings and *From* line.
 
 ### Fixed

@@ -46,8 +46,26 @@ async function openAndRun(file, statusText) {
   await runIt();
 }
 
-// 1) Sample script on Groovy 1.x.
+// 1) The Groovy tab starts empty and runs nothing; a script typed in runs on Groovy 1.x.
 await page.getByRole('tab', { name: 'Groovy Script' }).click();
+await page.locator('section.script .empty-hint', { hasText: 'Examples' }).waitFor({ timeout: 5000 })
+  .catch(() => fail('the empty script editor does not point to the examples'));
+await page.waitForTimeout(1000);
+if (await page.locator('section.output .badge').count()) fail('something ran on an empty start');
+const typeInto = async (pane, text) => {
+  await page.locator(`${pane} .view-lines`).click({ position: { x: 40, y: 10 } });
+  await page.keyboard.press('Control+a');
+  await page.keyboard.insertText(text);
+};
+await typeInto('section.input', '<Order id="4711">\n  <Item sku="M-100" qty="2"/>\n  <Item sku="M-200" qty="1"/>\n</Order>\n');
+await typeInto('section.script', "import com.sap.gateway.ip.core.customdev.util.Message\n"
+  + "def Message processData(Message message) {\n"
+  + "    def order = new XmlSlurper().parseText(message.getBody(String))\n"
+  + "    messageLogFactory.getMessageLog(message)?.setStringProperty('Order', order.@id.text())\n"
+  + "    println \"Processing order ${order.@id}\"\n"
+  + "    message.setBody('<ProcessedOrder/>')\n"
+  + "    return message\n}\n");
+await runIt();
 await page.locator('section.output .badge.ok').waitFor({ timeout: 20000 });
 // Monaco renders the output a moment after the badge, so wait for the text itself.
 await page.locator('section.output .view-lines', { hasText: 'ProcessedOrder' }).waitFor({ timeout: 10000 })
@@ -58,12 +76,13 @@ await page.getByRole('tab', { name: /^Console/ }).click();
 if (!(await page.locator('section.output .console').innerText()).includes('Processing order 4711')) fail('console output missing');
 if (shots) await page.screenshot({ path: path.join(shots, 'g1-groovy-v1.png') });
 
-// 2) Switch to 2.x: the untouched sample switches to the v2 API and still works.
-await page.getByLabel('Runtime profile').selectOption('groovy-2.x');
-await page.waitForTimeout(500);
+// 2) A Groovy 2.x example loads without a project, waits for Run and runs on Groovy 4.
+await page.getByLabel('Examples').selectOption('groovy-xml');
+await page.getByRole('dialog').filter({ hasText: 'Discard the unsaved changes' }).getByRole('button', { name: 'OK' }).click();
+await page.locator('.status', { hasText: 'has not run' }).waitFor({ timeout: 10000 });
+if ((await page.getByLabel('Runtime profile').inputValue()) !== 'groovy-2.x') fail('the 2.x example did not switch to 2.x');
+await runIt();
 await page.locator('section.output .badge.ok').waitFor({ timeout: 20000 });
-const script = await page.locator('section.script .view-lines').innerText();
-if (!script.includes('com.sap.it.script.v2.api.Message')) fail('v2 sample not loaded');
 await page.locator('section.output footer', { hasText: 'Groovy 4.0.29' }).waitFor({ timeout: 10000 });
 
 // 3) A runtime error is reported with its script line.
@@ -489,14 +508,41 @@ await page.locator('section.input').getByRole('button', { name: 'Format' }).clic
 await page.locator('section.input .view-lines', { hasText: '"items": [' }).waitFor({ timeout: 5000 })
   .catch(() => fail('Format did not pretty-print the JSON input'));
 
-// 6b) Flow Steps with their sample settings: Content Modifier (XPath on the XML engine, Simple on Camel),
-// Router (CPI's Non-XML spelling) and General Splitter.
+// 6b) Flow Steps, which start empty: Content Modifier (XPath on the XML engine, Simple on Camel),
+// Router (CPI's Non-XML spelling) and General Splitter, with the settings entered here.
 await page.getByRole('tab', { name: 'Flow Steps' }).click();
+const flowInput = page.locator('section[aria-label="Input message"]');
+await flowInput.locator('.view-lines').click({ position: { x: 40, y: 10 } });
+await page.keyboard.press('Control+a');
+await page.keyboard.insertText('<Order id="4711">\n  <Item sku="M-100" qty="2"/>\n  <Item sku="M-200" qty="1"/>\n</Order>\n');
+await flowInput.getByRole('tab', { name: /^Headers/ }).click();
+await flowInput.getByRole('button', { name: '+ Add' }).click();
+await flowInput.getByLabel('Name').last().fill('SenderId');
+await flowInput.getByLabel('Value').last().fill('ERP_100');
+await flowInput.getByRole('tab', { name: /^Body/ }).click();
 await page.getByRole('tab', { name: 'Content Modifier' }).click();
+const config = page.locator('section[aria-label="Step configuration"]');
+if (!process.env.CPIWB_IFLOW_ZIP) {
+  // Without the iFlow's Content Modifier (4b): the same row by hand.
+  await config.getByRole('button', { name: '+ Add' }).click();
+  await config.getByLabel('Name').last().fill('OrderId');
+  await config.getByLabel('Source Type').last().selectOption('xpath');
+  await config.getByLabel('Source Value').last().fill('/Order/@id');
+}
 await page.getByRole('button', { name: 'Run step' }).click();
-// Both the sample and the imported iFlow's Content Modifier set the header OrderId from /Order/@id.
+// The imported iFlow's Content Modifier (or the row above) sets the header OrderId from /Order/@id.
 await page.locator('.res .row', { hasText: 'OrderId' }).filter({ hasText: '4711' }).waitFor({ timeout: 20000 })
   .catch(() => fail('Content Modifier: header OrderId is not 4711'));
+await page.getByRole('tab', { name: 'Router' }).click();
+if (await config.getByLabel('Route name').count()) fail('the Router does not start empty');
+for (const [name, condition] of [['ERP', "${header.SenderId} = 'ERP_100'"], ['Default', '']]) {
+  await config.getByRole('button', { name: '+ Route' }).click();
+  await config.getByLabel('Route name').last().fill(name);
+  if (condition) await config.getByLabel('Condition').last().fill(condition);
+  else await config.getByLabel('Default route').last().check();
+}
+await page.getByRole('tab', { name: 'Splitter' }).click();
+await config.getByLabel('Split expression').fill('/Order/Item');
 await page.getByRole('tab', { name: 'Router' }).click();
 await page.getByRole('button', { name: 'Run step' }).click();
 await page.locator('.taken-line', { hasText: 'ERP' }).waitFor({ timeout: 10000 })

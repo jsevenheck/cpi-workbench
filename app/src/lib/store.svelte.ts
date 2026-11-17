@@ -13,37 +13,6 @@ import { isArchive, pathKey, projectPath } from './paths';
 import { resolveSimpleFunctions } from './simple';
 import { callsJava } from './trust';
 
-export const SAMPLE_XSL = `<?xml version="1.0" encoding="UTF-8"?>
-<!-- Headers and exchange properties arrive as xsl:param with the same name, like in Cloud Integration.
-     $exchange + hci:setHeader / hci:setProperty change the message. Press Ctrl+Enter to run. -->
-<xsl:stylesheet version="3.0"
-    xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
-    xmlns:hci="http://sap.com/it/"
-    exclude-result-prefixes="hci">
-
-  <xsl:param name="exchange"/>
-  <xsl:param name="SenderSystem" select="'unknown'"/>
-  <xsl:output method="xml" indent="yes"/>
-
-  <xsl:template match="/Order">
-    <xsl:value-of select="hci:setHeader($exchange, 'OrderNumber', @id)"/>
-    <xsl:value-of select="hci:setProperty($exchange, 'ItemCount', string(count(Item)))"/>
-    <xsl:message>Mapping order <xsl:value-of select="@id"/> from <xsl:value-of select="$SenderSystem"/></xsl:message>
-    <SalesOrder sender="{$SenderSystem}">
-      <xsl:for-each select="Item">
-        <Line no="{position()}" material="{@sku}" qty="{@qty}"/>
-      </xsl:for-each>
-    </SalesOrder>
-  </xsl:template>
-</xsl:stylesheet>
-`;
-
-export const SAMPLE_INPUT = `<Order id="4711">
-  <Item sku="M-100" qty="2"/>
-  <Item sku="M-200" qty="1"/>
-</Order>
-`;
-
 export type StepTool = 'xslt' | 'groovy' | 'xsd' | 'xpath' | 'flow';
 
 export const app = $state({
@@ -86,10 +55,10 @@ export interface IflowStep {
 
 export const xslt = $state({
   mappingPath: null as string | null,
-  mapping: SAMPLE_XSL,
-  savedMapping: SAMPLE_XSL,
-  body: SAMPLE_INPUT,
-  headers: [{ name: 'SenderSystem', value: 'ERP_100', type: 'String' }] as Row[],
+  mapping: '',
+  savedMapping: '',
+  body: '',
+  headers: [] as Row[],
   properties: [] as Row[],
   paramPrecedence: 'header' as 'header' | 'property',
   missingParameter: 'default' as 'default' | 'error',
@@ -185,10 +154,10 @@ def Message processData(Message message) {
 
 export const groovy = $state({
   scriptPath: null as string | null,
-  script: SAMPLE_GROOVY_V1,
-  savedScript: SAMPLE_GROOVY_V1,
+  script: '',
+  savedScript: '',
   functionName: 'processData',
-  body: SAMPLE_INPUT,
+  body: '',
   headers: [] as Row[],
   properties: [] as Row[],
   bodyType: 'String' as 'String' | 'byte[]' | 'InputStream',
@@ -228,10 +197,10 @@ export const xsd = $state({
 });
 
 export const xpath = $state({
-  expression: '//Item/@sku',
+  expression: '',
   version: '3.1' as '1.0' | '3.1',
   namespaces: [] as Row[],
-  body: SAMPLE_INPUT,
+  body: '',
   result: null as null | { ok: boolean; items: any[]; count: number; diagnostics: Diagnostic[]; engine: string },
   /** The document the result is for: its places are marked only while the text is still this. */
   resultBody: '',
@@ -276,36 +245,24 @@ function converterDefaults() {
     useNamespaces: false, separator: ':', namespaceMapping: '',
     addRootElement: false, rootElementName: 'root', rootNamespace: '',
     suppressRoot: false, streaming: false, streamingElements: 'all' as 'all' | 'specific', arrayPaths: '', outputEncoding: '',
-    sourcePath: '/Order/Item', fieldSeparator: ',', csvHeader: 'xml' as 'none' | 'xml' | 'xsd', includeParent: false, parentPath: '',
+    sourcePath: '', fieldSeparator: ',', csvHeader: 'xml' as 'none' | 'xml' | 'xsd', includeParent: false, parentPath: '',
     includeAttributes: false,
     schema: '', targetPath: '', recordMarker: '', firstLineHeader: true, headerMapping: 'xsd' as 'xsd' | 'csv',
   };
 }
 
 /**
- * The settings each flow step starts with (the samples of the tab), keyed as in `flow`. Closing a step taken from an
- * iFlow brings them back.
+ * The settings each flow step starts with, keyed as in `flow`: empty where the user fills them in (rows, routes,
+ * expressions), SAP's defaults where the step has a choice (scheme, method, header name). Closing a step taken from
+ * an iFlow brings them back.
  */
 function flowStepDefaults() {
   return {
-    cm: {
-      headers: [{ action: 'Create', name: 'OrderId', type: 'xpath', value: '/Order/@id', datatype: 'java.lang.String', default: '' }] as CmRow[],
-      properties: [{ action: 'Create', name: 'Key', type: 'expression', value: '${header.SenderId}-${header.OrderId}', datatype: '', default: '' }] as CmRow[],
-      bodyType: 'constant' as 'constant' | 'expression',
-      body: '',
-    },
-    router: {
-      routes: [
-        // SAP: all routes use the same condition type; XML and Non-XML mixed make the evaluation fail.
-        { name: 'ERP', expressionType: 'nonxml', condition: "${header.SenderId} = 'ERP_100'", default: false },
-        { name: 'Web shop', expressionType: 'nonxml', condition: "${header.SenderId} = 'WEBSHOP' and ${header.Priority} = 'high'", default: false },
-        { name: 'Default', expressionType: 'nonxml', condition: '', default: true },
-      ] as Route[],
-      throwException: false,
-    },
+    cm: { headers: [] as CmRow[], properties: [] as CmRow[], bodyType: 'constant' as 'constant' | 'expression', body: '' },
+    router: { routes: [] as Route[], throwException: false },
     splitter: { splitter: 'general' as 'general' | 'iterating', expressionType: 'xpath' as 'xpath' | 'token' | 'lineBreak',
-      expression: '/Order/Item', grouping: '', streaming: true },
-    filter: { expression: "/Order/Item[@qty > 1]", valueType: 'nodelist' },
+      expression: '', grouping: '', streaming: true },
+    filter: { expression: '', valueType: 'nodelist' },
     /** Gather's settings; its messages are not settings and are not part of this. */
     gather: { messageType: 'sameXml', algorithm: 'combine', sourceXPath: '', targetXPath: '' },
     converter: converterDefaults(),
@@ -326,13 +283,13 @@ export const flow = $state({
   camel: 'groovy-2.x' as Profile,
   /** The iFlow step each step's settings came from, if any. */
   sources: {} as Partial<Record<FlowStep, string>>,
-  body: SAMPLE_INPUT,
+  body: '',
   /**
    * A body that is no text (a .zip or .gz from the project, an Encoder's GZIP or ZIP result): its bytes as Base64.
    * While set, it is the input body and `body` is not used; whatever sets `body` clears it.
    */
   binary: null as null | { base64: string; size: number },
-  headers: [{ name: 'SenderId', value: 'ERP_100', type: 'String' }] as Row[],
+  headers: [] as Row[],
   properties: [] as Row[],
   ...flowStepDefaults(),
   /** The messages to gather: a splitter's result or bodies added by hand. */
@@ -1922,7 +1879,7 @@ function openFlowStep(step: IflowStep) {
 }
 
 /**
- * Closes the iFlow step a flow step's settings came from: the step gets the tab's own settings back and loses its
+ * Closes the iFlow step a flow step's settings came from: the step gets its starting settings back and loses its
  * result. The iFlow is not touched; the step opens again from the iFlow list or the diagram. Gather keeps its messages.
  */
 export function closeFlowStep(step: FlowStep) {
@@ -1936,7 +1893,7 @@ export function closeFlowStep(step: FlowStep) {
   // A run still open for the closed step must not write its result here.
   flowSeq++;
   flow.running = false;
-  app.status = `Closed ${source}; the step has its own settings again.`;
+  app.status = `Closed ${source}; the step has its starting settings again.`;
 }
 
 /** The flow steps taken from the project's iFlows close with it. */

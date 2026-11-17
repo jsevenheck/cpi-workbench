@@ -131,7 +131,9 @@ come with the app; **Save** asks where to keep them, once a project is open. As 
     so the input pane shows no header or property tabs for it; the namespaces stay for *Combine at XPath*.
 
   Each step keeps its settings and its last result when you switch between the steps or tabs; the input
-  message is shared by all steps but Gather. Nothing is kept after the app restarts.
+  message is shared by all steps but Gather. Nothing is kept after the app restarts. The steps start empty
+  (no rows, routes or expressions; SAP's defaults where a step has a choice), as do the input bodies, the
+  mapping and the script editors: without a project, **Examples…** loads something to try.
 
   In XPath, `$name` is the header of that name, else the exchange property, as Camel's XPath variable
   resolver provides them ([Fidelity](fidelity.md), F39).
@@ -147,7 +149,7 @@ come with the app; **Save** asks where to keep them, once a project is open. As 
   refused, since Windows takes both for one folder. A Groovy Script or XSLT Mapping step opens its file with the step's function name and
   script version; a flow step opens in Flow Steps with its settings, with `{{parameters}}` from the
   iFlow's `parameters.prop`; the line *From <iFlow> · <step>* above its settings says where they came from, and
-  its **×** gives the step the tab's own settings back (the iFlow stays as it is; closing the project does the
+  its **×** gives the step its empty starting settings back (the iFlow stays as it is; closing the project does the
   same for all its steps). Steps that choose their mapping from a header at runtime are marked. A
   **Message Mapping** step (**M**) is not simulated; clicking it opens the first Groovy script its
   `.mmap` uses, with its first mapping function. The `.iflw` format is not publicly documented, so

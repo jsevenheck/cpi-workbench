@@ -159,7 +159,7 @@
       <button class="primary small" onclick={runFlowStep} disabled={flow.running}>Run step</button>
     </header>
     {#if flow.sources[flow.step]}<p class="hint src">From {flow.sources[flow.step]}<button class="close-file" onclick={() => closeFlowStep(flow.step)}
-      title="Close the iFlow step: this step gets its own settings back (the iFlow stays as it is)" aria-label="Close iFlow step">×</button></p>{/if}
+      title="Close the iFlow step: this step starts over with empty settings (the iFlow stays as it is)" aria-label="Close iFlow step">×</button></p>{/if}
     <div class="cfg">
       {#if flow.step === 'contentModifier'}
         <div class="tabs" role="tablist">

@@ -159,6 +159,31 @@ class IflowImportTest {
         assertTrue(Files.notExists(project.resolve("iflows/a.txt")));
     }
 
+    /** A folder Windows would take for an existing one (case, trailing dots) is refused, also when overwriting. */
+    @Test
+    void refusesAFolderThatDiffersFromAnExistingOneOnlyAsWindowsIgnores(@TempDir Path tmp) throws Exception {
+        Path zip = tmp.resolve("ok.zip");
+        try (ZipOutputStream z = new ZipOutputStream(Files.newOutputStream(zip))) {
+            z.putNextEntry(new ZipEntry("a.txt"));
+            z.write("x".getBytes());
+            z.closeEntry();
+        }
+        Path project = Files.createDirectories(tmp.resolve("project/iflows/Shared")).getParent().getParent();
+        for (String name : List.of("shared", "Shared.", "SHARED..")) {
+            for (boolean createNew : List.of(true, false)) {
+                IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+                        () -> IflowImport.extract(zip, project, name, createNew), name);
+                assertTrue(e.getMessage().contains("existing iflows/Shared"), e::getMessage);
+            }
+        }
+        try (var listed = Files.list(project.resolve("iflows"))) {
+            assertEquals(List.of("Shared"), listed.map(p -> p.getFileName().toString()).toList());
+        }
+        assertTrue(Files.notExists(project.resolve("iflows/Shared/a.txt")));
+        IflowImport.extract(zip, project, "Shared", false); // the same folder: overwriting stays allowed
+        assertTrue(Files.exists(project.resolve("iflows/Shared/a.txt")));
+    }
+
     /** createNew: the file system decides whether the folder is new, so two imports at once cannot both write it. */
     @Test
     void createNewRefusesAnExistingFolder(@TempDir Path tmp) throws Exception {

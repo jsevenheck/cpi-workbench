@@ -178,21 +178,34 @@ class ArtifactImportTest {
             "Same, Same, true", "Same, Same, false",
             "Order Flow, Order_Flow, true", "Order Flow, Order_Flow, false",
             "Order:Flow, Order?Flow, true", "Order:Flow, Order?Flow, false",
-            "Shared, shared, true", "Shared, shared, false"
+            "Shared, shared, true", "Shared, shared, false",
+            "Trailing., Trailing, true", "Trailing., Trailing, false"
     })
     void packageFolderCollisionsAreRefusedBeforeAnyWrites(String first, String second, boolean createNew,
                                                           @TempDir Path tmp) throws Exception {
-        assertPackageCollision(first, second, false, createNew, tmp);
+        assertPackageRefused(first, second, false, createNew, tmp, COLLISION);
     }
 
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
     void packageFallbackFileNamesAlsoCollide(boolean createNew, @TempDir Path tmp) throws Exception {
-        assertPackageCollision("Fallback.zip", "Fallback.ZIP", true, createNew, tmp);
+        assertPackageRefused("Fallback.zip", "Fallback.ZIP", true, createNew, tmp, COLLISION);
     }
 
-    private static void assertPackageCollision(String first, String second, boolean fallback, boolean createNew,
-                                               Path tmp) throws Exception {
+    /** Refused before the value mappings are written, not when the folder is created after them. */
+    @ParameterizedTest
+    @CsvSource({"'..', Invalid iFlow name, true", "'..', Invalid iFlow name, false",
+            "existing, differs from the existing iflows/Existing, true", "existing, differs from the existing iflows/Existing, false",
+            "Existing., differs from the existing iflows/Existing, false"})
+    void packageFolderNamesAreCheckedBeforeAnyWrites(String first, String expected, boolean createNew,
+                                                     @TempDir Path tmp) throws Exception {
+        assertPackageRefused(first, "Other", false, createNew, tmp, expected);
+    }
+
+    private static final String COLLISION = "Package artifact folder collision: iflows/";
+
+    private static void assertPackageRefused(String first, String second, boolean fallback, boolean createNew,
+                                             Path tmp, String expected) throws Exception {
         String resources = "{\"resources\":["
                 + resource("early", "RESTAPIProvider", "Early.zip", "Early") + ","
                 + resource("v1", "ValueMapping", "VM.zip", "VM") + ","
@@ -218,8 +231,8 @@ class ArtifactImportTest {
             Map<String, String> before = snapshot(project);
             IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
                     () -> ArtifactImport.importZip(archive, project, null, createNew));
-            assertTrue(error.getMessage().contains("Package artifact folder collision: iflows/"), error::getMessage);
-            assertTrue(error.getMessage().contains("one") && error.getMessage().contains("two"), error::getMessage);
+            assertTrue(error.getMessage().contains(expected), error::getMessage);
+            assertTrue(!expected.equals(COLLISION) || error.getMessage().contains("one") && error.getMessage().contains("two"), error::getMessage);
             assertEquals(before, snapshot(project), "collision preflight must leave every file and directory unchanged");
         }
     }

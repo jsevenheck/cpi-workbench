@@ -56,9 +56,12 @@ of its version.
 
 ### Fixed
 
-- **Package import** rejects artifact folder-name collisions after sanitization (also ignoring case), before
-  writing any files or value mappings, even when overwrite is enabled. Resolve the conflicting artifact
-  identifiers before importing.
+- **Package import** rejects artifact folder-name collisions after sanitization (also ignoring case and
+  trailing dots, as Windows does), before writing any files or value mappings, even when overwrite is
+  enabled. Resolve the conflicting artifact identifiers before importing.
+- **iFlow and package import** refuse a folder that differs from one already in `iflows/` only in letter case
+  or trailing dots (on Windows that is the same folder), and check an artifact named `.` or `..` before the
+  package's value mappings are written.
 
 ## [0.4.0] - 2026-11-16
 

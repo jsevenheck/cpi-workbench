@@ -3,7 +3,7 @@ title: "The CPI Helper receiver's default port moved to 7790; a saved 7778 is le
 author: Claude
 date: 2026-11-16
 branch: claude/great-cannon-v2nd6h
-cost: { minutes: 78, tokens: 1496643 }
+cost: { minutes: 92, tokens: 1684730 }
 id: l-460c0a5b
 scope: repo
 status: active
@@ -42,6 +42,9 @@ touches:
 - `expect.ignore` with "compare": "json" indexes the documents as written: several pointers into one array remove the elements they name, not the ones that slid into their place after an earlier removal.
 - A package export's Value Mapping artifacts are imported as one table. Importing them one after another let a later artifact replace an earlier one's rows for the same agencies and identifiers, and with createNew it failed half-way. The import result therefore has one valueMappings entry per package.
 - A script step with a scriptBundleId is resolved in its script collection only; a file of the same name in the iFlow itself is another script.
+- A folder under iflows/ is refused when it differs from another only in letter case or trailing dots: between two artifacts of one package (collision) and against a folder already in the project (single iFlow and package import, create-new and overwrite). Windows treats such names as one folder; Linux would create a second one beside it, so a project shared via git breaks on Windows.
+- Names that are only dots ("", ".", "..") are refused in the same preflight, so a package fails before its value mappings are written.
+- One rule for both imports: the package preflight calls the same helpers as the single-iFlow extract, so the two cannot drift.
 
 ## Tried and ruled out
 - Rewriting a saved 7778 to the new default: the hand-over is one way, the app cannot change the Custom URL in the extension, so the one-click path would break without a word. A saved 7778 also cannot be told apart from one the user chose.
@@ -56,6 +59,7 @@ touches:
 - Apache Santuario as a dependency, or the JDK's internal canonicalizer classes: a new library with its own native-image needs, or classes the module does not export.
 - Copying the filtered element into a new document before canonicalizing: it loses the namespaces and xml: attributes the element inherits, which Canonical XML includes.
 - Taking the tracing agent's output as it is: it also rewrote the locales of resource bundles that were there and added Saxon classes that `saxon-generated` covers. Only the canonicalizer classes, the digest classes and the `xmlsecurity` bundle were kept.
+- Windows reserved names (CON, PRN, NUL, COM1 …): not refused. Tenant artifact ids like that are unlikely, and Windows itself fails with an error there; add it to the same helper if one turns up.
 
 ## Watch out
 - Whether other common software uses 7790 was not checked.
@@ -97,3 +101,7 @@ In the code: `EncoderStep` (`encode.run`, `decode.run`), `SimExchange.toJsonOrBi
 - Two artifacts of one package whose names give the same folder under iflows/ still overwrite each other or stop half-way with createNew.
 
 In the code: `JsonCompare`, `ArtifactImport.importPackage`, `ValueMappingImport.importGroups`, `IflowImport` (scriptBundleId), `DiagramView.svelte`, `mcp/tools.rs` (validate_xsd, evaluate_xpath with `flow::body_only`), `ScriptRunner` (decodable).
+- A stale app/dist makes both browser e2e tests time out (e.g. waiting for "Write to data store"): run `npm --prefix app run build` before them, not only when dist is missing.
+- Empty files cpiwb-xml-he99 / cpiwb-xml-he12 in app/src-tauri/target/debug (left from a build) make mcp-smoke fail with "Permission denied" instead of falling back to the JARs; move them aside.
+
+In the code: IflowImport.folderName / folderKey / checkExisting; ArtifactImport.importPackage preflight; tests ArtifactImportTest.packageFolderNamesAreCheckedBeforeAnyWrites, IflowImportTest.refusesAFolderThatDiffersFromAnExistingOneOnlyAsWindowsIgnores.

@@ -61,7 +61,8 @@ public final class IflowImport {
             throw new IllegalArgumentException("Not a file: " + zip);
         }
         String n = name == null || name.isBlank() ? zip.getFileName().toString().replaceFirst("\\.zip$", "") : name;
-        n = n.replaceAll("[^A-Za-z0-9._-]+", "_");
+        n = folderName(n);
+        checkExisting(projectRoot, n);
         Path iflows = projectRoot.resolve("iflows").normalize();
         Path target = iflows.resolve(n).normalize();
         if (!target.startsWith(iflows) || target.equals(iflows)) {
@@ -99,6 +100,40 @@ public final class IflowImport {
             }
         }
         return new Extracted(projectRoot.relativize(target).toString().replace('\\', '/'), files);
+    }
+
+    /** The folder under {@code iflows/} for an artifact name: characters a folder name should not have become {@code _}. */
+    static String folderName(String name) {
+        String n = name.replaceAll("[^A-Za-z0-9._-]+", "_");
+        if (n.matches("\\.*")) {
+            throw new IllegalArgumentException("Invalid iFlow name: '" + n + "'");
+        }
+        return n;
+    }
+
+    /** Folder names Windows treats as one: letter case and trailing dots do not count there. */
+    static String folderKey(String folder) {
+        return folder.replaceAll("\\.+$", "").toLowerCase(Locale.ROOT);
+    }
+
+    /**
+     * Refuses a folder that differs from one already in {@code iflows/} only in letter case or trailing dots:
+     * on Windows it would be that folder, elsewhere a second one beside it.
+     */
+    static void checkExisting(Path projectRoot, String folder) throws IOException {
+        Path iflows = projectRoot.resolve("iflows");
+        if (!Files.isDirectory(iflows)) {
+            return;
+        }
+        try (Stream<Path> existing = Files.list(iflows)) {
+            for (Path p : (Iterable<Path>) existing::iterator) {
+                String other = p.getFileName().toString();
+                if (!other.equals(folder) && folderKey(other).equals(folderKey(folder))) {
+                    throw new IllegalArgumentException("iflows/" + folder + " differs from the existing iflows/" + other
+                            + " only in letter case or trailing dots, and on Windows they are one folder. Rename one of them before importing.");
+                }
+            }
+        }
     }
 
     /** The current entry, failing as soon as the archive's unpacked size passes the limit. */

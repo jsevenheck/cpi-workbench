@@ -143,7 +143,8 @@ come with the app; **Save** asks where to keep them, once a project is open. As 
 ### iFlow import
 
 * **Import iFlow** unpacks an iFlow exported from Integration Suite (zip) into `iflows/` and lists
-  its steps. A Groovy Script or XSLT Mapping step opens its file with the step's function name and
+  its steps. A folder that differs from one already there only in letter case or trailing dots is
+  refused, since Windows takes both for one folder. A Groovy Script or XSLT Mapping step opens its file with the step's function name and
   script version; a flow step opens in Flow Steps with its settings, with `{{parameters}}` from the
   iFlow's `parameters.prop`. Steps that choose their mapping from a header at runtime are marked. A
   **Message Mapping** step (**M**) is not simulated; clicking it opens the first Groovy script its
@@ -157,7 +158,7 @@ come with the app; **Save** asks where to keep them, once a project is open. As 
   and message mapping goes to `iflows/<its id>/`, its value mappings into the table, other artifact types
   are named as skipped. A Groovy step whose script is in a script collection opens the script from that
   collection's folder. If two artifacts would use the same folder after replacing unsupported characters
-  with `_` (also ignoring letter case), the entire package is rejected before any files or value mappings
+  with `_` (also ignoring letter case and trailing dots), the entire package is rejected before any files or value mappings
   are written, even when overwriting is allowed. Resolve the conflicting artifact identifiers before
   exporting again, or export the artifacts separately and import them under distinct folder names.
 * The list under **iFlows** shows each imported iFlow whole: its adapters (⇢ from a sender, ⇠ to a

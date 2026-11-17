@@ -9,7 +9,6 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.zip.ZipEntry;
@@ -105,22 +104,19 @@ public final class ArtifactImport {
             }
         }
         // Preflight every folder before writing anything, including the value mapping table. Two package
-        // artifacts must never merge into one folder, even in overwrite mode. Compare without case so that
-        // the same package is also safe on Windows; sanitization matches IflowImport.extract.
+        // artifacts must never merge into one folder, even in overwrite mode. Compare as Windows does (case,
+        // trailing dots) so that the same package is safe there too; the checks are those of IflowImport.extract.
         Map<String, String> destinations = new LinkedHashMap<>();
         for (String[] f : folders) {
-            String folder = f[1].replaceAll("[^A-Za-z0-9._-]+", "_");
-            String previous = destinations.putIfAbsent(folder.toLowerCase(Locale.ROOT), f[0]);
+            String folder = IflowImport.folderName(f[1]);
+            String previous = destinations.putIfAbsent(IflowImport.folderKey(folder), f[0]);
             if (previous != null) {
                 throw new IllegalArgumentException("Package artifact folder collision: iflows/" + folder
                         + " (resources " + previous + " and " + f[0] + "). Rename the artifacts in the package before importing.");
             }
-        }
-        if (createNew) {
-            for (String[] f : folders) {
-                if (Files.exists(projectRoot.resolve("iflows").resolve(f[1].replaceAll("[^A-Za-z0-9._-]+", "_")))) {
-                    throw new IllegalArgumentException("exists already: iflows/" + f[1].replaceAll("[^A-Za-z0-9._-]+", "_"));
-                }
+            IflowImport.checkExisting(projectRoot, folder);
+            if (createNew && Files.exists(projectRoot.resolve("iflows").resolve(folder))) {
+                throw new IllegalArgumentException("exists already: iflows/" + folder);
             }
         }
         long budget = MAX_PACKAGE;

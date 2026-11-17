@@ -23,7 +23,8 @@ browser mode. The main methods are:
   `encode.run`, `decode.run`, `digest.run` (XML engines),
 * `groovy.run`, `simple.eval`, `contentModifier.run` (Groovy engines); the UI evaluates a Router
   route by route with `xpath.eval` and `simple.eval`,
-* `tests.run`, and `project.*`, `file.*`, `iflow.*` for files and imported models (all engines).
+* `tests.run`, and `project.*`, `file.*`, `iflow.*` for files and imported models (all engines);
+  `iflow.index` / `iflow.search` (`IflowIndex`) back the Where used tab and the MCP tool `iflow_where_used`.
 
 File methods and XML runs stay inside the open project (`ProjectFiles`, `ProjectResolver`; `ProjectPaths` follows symbolic links). Over
 HTTP, the engines answer pages from `localhost`, `127.0.0.1` and the desktop shell only: requests

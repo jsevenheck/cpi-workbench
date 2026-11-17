@@ -174,6 +174,18 @@ public final class ProjectFiles {
         return IflowModel.models(root);
     }
 
+    /** {@code iflow.index}: the imported iFlows' entries and parameters ({@link IflowIndex}). */
+    public synchronized Map<String, Object> iflowIndex() throws IOException {
+        requireRoot();
+        return IflowIndex.index(root);
+    }
+
+    /** {@code iflow.search}: where a value, key or kind is used in the imported iFlows ({@link IflowIndex}). */
+    public synchronized Map<String, Object> iflowSearch(Map<String, Object> p) throws IOException {
+        requireRoot();
+        return IflowIndex.search(root, p);
+    }
+
     public synchronized Path root() {
         return root;
     }

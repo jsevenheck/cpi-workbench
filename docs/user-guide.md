@@ -174,8 +174,18 @@ come with the app; **Save** asks where to keep them, once a project is open. As 
   there, as before; any other element opens in the **Diagram** tab with its settings (read-only).
 * **Diagram** (shown once iFlows are imported) draws an iFlow in the layout its export stores, without
   SAP's icons: pools, steps, Routers, events, adapters and exception subprocesses. Scroll to zoom, drag to
-  move, **Fit** shows all of it. A click shows an element's type and settings; a step that runs in the
+  move, **Fit** shows all of it. A click shows an element's type and settings (for a sender or receiver,
+  also its adapters' settings); a step that runs in the
   app (blue outline) opens with a double-click or **Open in …**. Nothing in the diagram can be changed.
+  The ⌕ next to a setting searches for its value in **Where used**.
+* **Where used** (next to Diagram) searches all imported iFlows offline. Type a host, a credential or key
+  alias, a queue, a script file, a `{{parameter}}` or any value: it lists every step, adapter and Router
+  route whose settings contain it, grouped by iFlow; a key name (`address`) finds that setting everywhere.
+  **Kind** narrows to addresses, credentials, queues, key aliases, files or parameters, where the adapter's
+  setting says what it holds (from public exports; other settings are searched as plain values). A click
+  shows the element in the diagram; a script or mapping opens in its tab. **Parameters** lists each iFlow's
+  externalized parameters with value, type and description (`parameters.prop`, `parameters.propdef`), where
+  they are used, and marks those that are *unused* or have *no value*.
 ### Groovy completions and Message Mapping functions
 
 * **Completions** in Groovy scripts: after `message.` (or a variable declared as `Message`),

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Synthetic iFlow for the where-used index, with adapter keys as public exports carry them (plan F69). -->
+<bpmn2:definitions xmlns:bpmn2="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:ifl="http:///com.sap.ifl.model/Ifl.xsd" id="Definitions_1">
+  <bpmn2:collaboration id="Collaboration_1" name="Outbound orders">
+    <bpmn2:participant id="Participant_1" ifl:type="EndpointSender" name="Order queue"><bpmn2:extensionElements><ifl:property><key>ifl:type</key><value>EndpointSender</value></ifl:property></bpmn2:extensionElements></bpmn2:participant>
+    <bpmn2:participant id="Participant_2" ifl:type="EndpointRecevier" name="Backend"><bpmn2:extensionElements><ifl:property><key>ifl:type</key><value>EndpointRecevier</value></ifl:property></bpmn2:extensionElements></bpmn2:participant>
+    <bpmn2:participant id="Participant_3" ifl:type="EndpointRecevier" name="Database"><bpmn2:extensionElements><ifl:property><key>ifl:type</key><value>EndpointRecevier</value></ifl:property></bpmn2:extensionElements></bpmn2:participant>
+    <bpmn2:participant id="Participant_Process_1" ifl:type="IntegrationProcess" name="Integration Process" processRef="Process_1"><bpmn2:extensionElements></bpmn2:extensionElements></bpmn2:participant>
+    <bpmn2:messageFlow id="MessageFlow_1" name="JMS" sourceRef="Participant_1" targetRef="StartEvent_1"><bpmn2:extensionElements><ifl:property><key>ComponentType</key><value>JMS</value></ifl:property><ifl:property><key>direction</key><value>Sender</value></ifl:property><ifl:property><key>QueueName_inbound</key><value>ORDERS_IN</value></ifl:property></bpmn2:extensionElements></bpmn2:messageFlow>
+    <bpmn2:messageFlow id="MessageFlow_2" name="HTTP" sourceRef="CallActivity_1" targetRef="Participant_2"><bpmn2:extensionElements><ifl:property><key>ComponentType</key><value>HTTP</value></ifl:property><ifl:property><key>direction</key><value>Receiver</value></ifl:property><ifl:property><key>httpAddressWithoutQuery</key><value>{{BackendUrl}}/orders</value></ifl:property><ifl:property><key>credentialName</key><value>partner_sftp</value></ifl:property></bpmn2:extensionElements></bpmn2:messageFlow>
+    <bpmn2:messageFlow id="MessageFlow_3" name="JDBC" sourceRef="CallActivity_2" targetRef="Participant_3"><bpmn2:extensionElements><ifl:property><key>ComponentType</key><value>JDBC</value></ifl:property><ifl:property><key>direction</key><value>Receiver</value></ifl:property><ifl:property><key>alias</key><value>orders_ds</value></ifl:property></bpmn2:extensionElements></bpmn2:messageFlow>
+  </bpmn2:collaboration>
+  <bpmn2:process id="Process_1" name="Integration Process">
+    <bpmn2:startEvent id="StartEvent_1" name="Start"><bpmn2:messageEventDefinition/></bpmn2:startEvent>
+    <bpmn2:serviceTask id="CallActivity_1" name="Send order"><bpmn2:extensionElements><ifl:property><key>activityType</key><value>ExternalCall</value></ifl:property></bpmn2:extensionElements></bpmn2:serviceTask>
+    <bpmn2:serviceTask id="CallActivity_2" name="Store order"><bpmn2:extensionElements><ifl:property><key>activityType</key><value>ExternalCall</value></ifl:property></bpmn2:extensionElements></bpmn2:serviceTask>
+    <bpmn2:endEvent id="EndEvent_1" name="End"><bpmn2:messageEventDefinition/></bpmn2:endEvent>
+    <bpmn2:sequenceFlow id="SequenceFlow_1" sourceRef="StartEvent_1" targetRef="CallActivity_1"/>
+    <bpmn2:sequenceFlow id="SequenceFlow_2" sourceRef="CallActivity_1" targetRef="CallActivity_2"/>
+    <bpmn2:sequenceFlow id="SequenceFlow_3" sourceRef="CallActivity_2" targetRef="EndEvent_1"/>
+  </bpmn2:process>
+</bpmn2:definitions>

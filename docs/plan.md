@@ -115,6 +115,7 @@ Labels follow the REA evidence rules (see §4): **Observed** = read in a source 
 | F66 | An exported integration package (zip): `resources.cnt`, Base64 of JSON with `resources` (`id`, `resourceType`, `name`, `uniqueId`, …) and `relations`; one `<id>_content` per resource, itself the artifact's export zip; `contentmetadata.md` (Base64 properties), `hash`, `ExportInformation.info`. Types seen: `ContentPackage` (the package, no content to import), `IFlow`, `ScriptCollection`, `ValueMapping`, `RESTAPIProvider`. A Script step whose script lives in a script collection has the key `scriptBundleId` = the collection's `uniqueId`, and the iFlow's manifest a `Require-Capability: scriptcollection.<id>` | Observed (one export, 2026-11-16) | — |
 | F67 | A Groovy script run by `cpiwb-groovy-v1.jar run` or `cpiwb-groovy-v2.jar run` under `-agentlib:jdwp` (SapMachine 25, Windows): jdb's `stop at <class>:<line>` binds in `processData` and stops there, with `message` and the local variables readable. The class is the file name made a Java name (`enrich-order.groovy` → `enrich_order`, source name `enrich_order.groovy`), so a debugger that maps by file name needs a file name that is a Java name. IntelliJ and VS Code not tried → Q-D1 | Observed (simulator, 2026-11-16) | — |
 | F68 | The `.iflw` beyond the steps (S53): one `bpmn2:collaboration`; `bpmn2:participant` with `ifl:type` `EndpointSender`, `EndpointRecevier` (sic) or `IntegrationProcess`; main and local processes differ only in the process's `cmdVariantUri` (`cname::IntegrationProcess` / `cname::LocalIntegrationProcess`), not in name or participant type, and an iFlow can have several main processes. Adapters are `bpmn2:messageFlow` with `ComponentType` and `direction`. An Exception Subprocess is a `bpmn2:subProcess` inside its process with `activityType` `ErrorEventSubProcessTemplate`, connected by no flow. A Router is an `exclusiveGateway` whose `default` attribute names the default route; the other routes carry a `conditionExpression` and `expressionType`. A Sequential Multicast is a `parallelGateway` (`activityType` `SequentialMulticast`). Process Call and Looping Process Call: `callActivity` with `activityType` `ProcessCallElement`, `subActivityType` `NonLoopingProcess` / `LoopingProcess` and `processId` = the called process's id. `bpmndi:BPMNDiagram` has a shape (absolute `dc:Bounds`) for every element and an edge for every flow, with waypoints from centre to centre. Not seen: Join and parallel Multicast | Observed (public exports, 2026-11-16) | S53 |
+| F69 | Adapter property keys and parameter files in exported iFlows (S55). In each `bpmn2:messageFlow`, `ComponentType` names the adapter and these keys hold an address, a credential alias, a queue or a keystore alias. SFTP / PollingSFTP / FTP: `host`, `path`; `credential_name`; `privateKeyAlias`. HTTPS (sender): `urlPath`. HTTP: `httpAddressWithoutQuery`; `credentialName`; `privateKeyAlias`. SOAP: `address`, `soapWsdlURL`; `credentialName`, `UserNameTokenCredentialName`, `WsdlUserNameTokenCredentialName`; `privateKeyAlias`, `PrivateKeyAliasSigning`, `PublicKeyAliasEncryption`, `PrivateKeyAliasResponseSigning`, `PublicKeyAliasResponseEncryption`. HCIOData (OData): `address`; `alias` (a credential); `odataCertAuthPrivateKeyAlias`. SuccessFactors: `address`; `alias`. JMS: `QueueName_inbound`, `QueueName_outbound`. ProcessDirect: `address`. Mail: `server`; `user`, `tokenCredential`. IDOC: `address`; `credentialName`; `privateKeyAlias`. AS2: `address`, `receipientURL` (sic), `mdnTargetURL`; `userCredentialAlias`, `mdnUserCredentialAlias`; several `…KeyAlias…` keys. AMQP: `host`, `path`; `credentialName`; `destinationName` (queue). RFC: `destination`. XI: `Address`, `Address_inbound`; `BasicAuthCredentialName`; `ClientCertificateAlias`. AdvancedEventMesh: `host`; `queueName`, `topicEndpointName`, `destinationName`. JDBC's `alias` names a data source, not a credential. The same key means different things in different adapters, so the table is per adapter. `parameters.prop` is a Java properties file (spaces and colons escaped); `parameters.propdef` is `<parameters><parameter><key/><name/><type>xsd:…</type><isRequired/><constraint/><description/><additionalMetadata/></parameter>…`, optionally followed by `<param_references>` | Observed (443 public iFlows, 2026-11-17) | S55 |
 
 ---
 
@@ -605,7 +606,7 @@ CPI Explorer and CPI Flow Visualizer; only the idea is taken.
 1. **Evidence first.** Record as a new finding which property keys adapters (HTTPS, SOAP, SFTP, JMS, AS2,
    OData, Mail, ProcessDirect, IDoc) use for address, credential and queue, and the format of
    `parameters.propdef`, from public iFlow exports, as F62 did for encoders. Until a key is recorded,
-   the search treats it like any other property.
+   the search treats it like any other property. *Done: F69, S55.*
 2. **One implementation in the engine.** A new RPC `iflow.index` in `engine/core` (`IflowIndex.java`)
    on both engine kinds, so the app and the MCP server share it. Per iFlow:
    * every element (adapter flows, participants, steps) with its property map, as `iflow.models` reads it,
@@ -620,8 +621,8 @@ CPI Explorer and CPI Flow Visualizer; only the idea is taken.
    results grouped by iFlow; a click selects the element in the diagram (`selectIflowNode(…, true)`), a
    script or mapping opens in its tab. A *Parameters* view lists each iFlow's parameters with value, uses,
    *unused* and *unresolved* marked. The diagram's details aside gets a "Where else is this used?" action.
-5. **MCP.** A tool `iflow_where_used` (`query`, `kind`, `iflow`) and the parameters in `project_info`'s
-   iFlows, from the same RPCs.
+5. **MCP.** A tool `iflow_where_used` (`query`, `kind`, `iflow`; `parameters: true` lists the parameters
+   instead, which keeps `project_info` short), from the same RPCs.
 6. **Fixtures and tests.** Extend `engine/core/src/test/resources/iflow` (or add a second iFlow) with
    adapters that carry an address, a credential alias and a queue, shared references between two iFlows,
    a `parameters.propdef`, an unused and an unresolved parameter. Java tests for index and search, unit
@@ -765,3 +766,7 @@ writes, SUPPRESS in a mapping function's input).
   the iFlow's own diagram through bpmn-js, whose licence keeps the bpmn.io mark visible); the *iFlow Documenter*
   of CPI Developer Studio (commercial: an ordered step list in Markdown). No SAP specification of the format was
   found.
+- S55 Public iFlow exports read on 2026-11-17 for adapter property keys and the parameter files only: the 384
+  `.iflw` files of SAP/apibusinesshub-integration-recipes and 59 from community repositories on GitHub (among
+  them alee536/CPI-iFlows and nesun3/sap-cloud-integration-artifacts), with their `parameters.prop` and
+  `parameters.propdef`. No code taken.

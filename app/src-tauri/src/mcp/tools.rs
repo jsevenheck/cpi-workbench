@@ -196,6 +196,12 @@ schemas/*.xsd, inputs/*.xml|json|csv, platform/*.json. Folders are created.")),
         ("name", path("Folder name under iflows/ for an iFlow; default: the zip's file name. A package's artifacts keep their ids.")),
         ("overwrite", json!({ "type": "boolean", "default": false, "description": "Import into existing iflows/ folders, replacing their files, and replace value mappings of the same agencies and identifiers." })),
     ]);
+    let where_used = obj(vec![
+        ("query", json!({ "type": "string", "description": "A value to find (a host, credential alias, queue, file, {{parameter}} or any text; ignoring case), or a property key (address) to list it everywhere." })),
+        ("kind", json!({ "type": "string", "enum": ["address", "credential", "queue", "key", "file", "parameter"], "description": "Only properties that hold this, where the key says so (address, credential, queue, key: a keystore alias), the files steps use, or values with {{parameters}}." })),
+        ("iflow", json!({ "type": "string", "description": "Only this iFlow (its folder under iflows/, as project_info lists it)." })),
+        ("parameters", json!({ "type": "boolean", "default": false, "description": "Instead of a search: each iFlow's externalized parameters with their values from parameters.prop, where they are used, and which are unused or have no value." })),
+    ]);
     let reference = obj(vec![
         ("topic", json!({ "type": "string", "enum": reference::TOPICS, "description": "script-api: the Script API, \
 Message Mapping and platform service methods the Groovy engines offer. platform: the formats of the mocked platform/ files \
@@ -246,6 +252,9 @@ CPI, per step type, and what is not." })),
              iFlows, script collections and value mappings (other artifact types are listed as skipped). Returns the \
              imported iFlows' steps; their files open with read_file and run with the tools above.",
             import, &["zip"], Effect::WritesProject),
+        tool("iflow_where_used", "Where used in the imported iFlows",
+            "Searches the iFlows under iflows/ (read-only, nothing connects to a tenant): which adapters, steps and routes use a              value (a host, credential alias, queue, file or {{parameter}}), with the iFlow, element and property key of each              place. With parameters: true, lists each iFlow's externalized parameters, their values, uses, and those unused              or without a value. Give query, kind, or both; or parameters.",
+            where_used, &[], Effect::ReadOnly),
         tool("reference", "Simulator reference",
             "What the simulator offers, generated from its sources: the Script API (script-api), the platform/ data formats \
              (platform) and what is verified against CPI (fidelity). Read it before writing a script that uses \
@@ -302,6 +311,7 @@ fn dispatch(server: &Server, name: &str, args: &Args) -> Result<Value, String> {
         "read_file" => files::read_file(server, args),
         "save_file" => files::save_file(server, args),
         "import_iflow" => files::import_iflow(server, args),
+        "iflow_where_used" => where_used(server, args),
         "reference" => Ok(json!({ "topic": str_arg(args, "topic"), "text": reference::topic(str_arg(args, "topic").unwrap_or_default())? })),
         _ => Err(format!("Unknown tool: {name}")),
     }
@@ -543,6 +553,33 @@ fn project_info(server: &Server) -> Result<Value, String> {
     info["files"] = Value::Array(files.into_iter().take(MAX_FILES).collect());
     info["iflowSteps"] = engine_call(server, rt, "iflow.steps", json!({}))?["steps"].clone();
     Ok(info)
+}
+
+/// `iflow.search`, or with `parameters` the parameters of `iflow.index` (IflowIndex.java, which the Where used tab calls too).
+fn where_used(server: &Server, args: &Args) -> Result<Value, String> {
+    if server.project().is_none() {
+        return Err("No project is open: start the server with a project folder.".into());
+    }
+    let rt = file_runtime(server)?;
+    let iflow = str_arg(args, "iflow");
+    if args.get("parameters").and_then(Value::as_bool) == Some(true) {
+        if args.contains_key("query") || args.contains_key("kind") {
+            return Err("parameters lists the parameters; give query or kind without it.".into());
+        }
+        let r = engine_call(server, rt, "iflow.index", json!({}))?;
+        let iflows: Vec<Value> = r["iflows"].as_array().cloned().unwrap_or_default().into_iter()
+            .filter(|i| iflow.is_none_or(|f| i["iflow"] == f))
+            .map(|i| json!({ "iflow": i["iflow"], "name": i["name"], "error": i["error"], "parameters": i["parameters"] }))
+            .collect();
+        return Ok(json!({ "iflows": iflows }));
+    }
+    let mut params = json!({});
+    for key in ["query", "kind", "iflow"] {
+        if let Some(v) = args.get(key) {
+            params[key] = v.clone();
+        }
+    }
+    engine_call(server, rt, "iflow.search", params)
 }
 
 fn run_xslt(server: &Server, args: &Args) -> Result<Value, String> {

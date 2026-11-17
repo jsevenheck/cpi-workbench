@@ -279,6 +279,21 @@ if (process.env.CPIWB_IFLOW_ZIP) {
   await page.locator('.diagram [data-node="CallActivity_1"]').dblclick();
   await page.locator('section.script h2', { hasText: 'enrich.groovy' }).waitFor({ timeout: 10000 })
     .catch(() => fail('a double-click in the diagram did not open the Groovy step'));
+  // 4b3) Where used: a value finds its adapter, a click shows it in the diagram; Parameters lists {{…}} uses.
+  await page.getByRole('tab', { name: 'Where used', exact: true }).click();
+  await page.getByLabel('Search the iFlows').fill('s4.example');
+  const hit = page.locator('.wu .el', { hasText: 'SOAP receiver' });
+  await hit.waitFor({ timeout: 10000 }).catch(() => fail('Where used found no SOAP receiver for s4.example'));
+  if (!(await hit.locator('mark').count())) fail('the match is not highlighted');
+  await hit.locator('button.name').click();
+  await page.locator('.diagram .details').waitFor({ timeout: 10000 }).catch(() => fail('a hit did not show the diagram'));
+  if (!(await page.locator('.diagram .details').innerText()).includes('s4.example.com')) fail('the hit selected another element');
+  await page.getByRole('tab', { name: 'Where used', exact: true }).click();
+  await page.getByRole('tab', { name: 'Parameters' }).click();
+  const params = page.locator('.wu table.params');
+  await params.waitFor({ timeout: 10000 }).catch(() => fail('no parameter table'));
+  if (!(await params.innerText()).includes('GroupSize')) fail('parameters: ' + (await params.innerText()));
+  if (shots) await page.screenshot({ path: path.join(shots, 'g5c-whereused.png') });
   await page.getByRole('tab', { name: 'Groovy Script' }).click();
 }
 

@@ -11,6 +11,11 @@ of its version.
 - **Fidelity indicator.** Next to the runtime and next to *Run step* in Flow Steps, a button says how well the
   open step's behaviour is backed: tenant-verified, documented or partly an assumption. A click lists the rows of
   the [Fidelity](docs/fidelity.md) page for that step, which now gives each row the steps it applies to and its basis.
+- **Where used.** A new tab next to *Diagram* searches all imported iFlows offline for a host, credential or key
+  alias, queue, file, parameter or any value, and lists each iFlow's externalized parameters with value, type,
+  description and uses, marking unused ones and ones without a value. The ⌕ next to a diagram setting searches
+  for it. A sender or receiver in the diagram now also shows its adapters' settings. Over MCP: the tool
+  `iflow_where_used`.
 
 ### Changed
 

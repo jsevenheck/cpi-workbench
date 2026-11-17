@@ -1,5 +1,6 @@
 import { EXAMPLES } from './examples';
 import type { IflowModel } from './iflowmodel';
+import type { IndexEntry, IndexedIflow } from './whereused';
 import { addRun, type HistoryEntry } from './history';
 import { call, openProject, closeProject as closeEngineProject, availableProfiles, DEFAULT_PROFILE, type Profile, type ProfileInfo } from './engine';
 import type { Diagnostic, FileEntry, GroovyResult, Row, XsltResult } from './types';
@@ -21,7 +22,7 @@ export const app = $state({
   engineInfo: null as any,
   profile: DEFAULT_PROFILE as Profile,
   groovyProfile: 'groovy-1.x' as Profile,
-  tool: 'xslt' as StepTool | 'file' | 'diagram',
+  tool: 'xslt' as StepTool | 'file' | 'diagram' | 'whereused',
   /** The step tool last shown; inputs opened from the tree go to its body. */
   stepTool: 'xslt' as StepTool,
   /** The inputs/ file last loaded or saved as each tool's input body. */
@@ -35,6 +36,64 @@ export const app = $state({
   /** The iFlow the Diagram tab shows and the element chosen in the list or the diagram (id null: none). */
   iflowSelected: null as { iflow: string; id: string | null } | null,
 });
+
+/** The Where used tab: a search over the imported iFlows and their parameters (engine `iflow.search`, `iflow.index`). */
+export const whereUsed = $state({
+  view: 'search' as 'search' | 'parameters',
+  query: '',
+  kind: '',
+  /** Only this iFlow; empty: all. */
+  iflow: '',
+  hits: [] as IndexEntry[],
+  /** The query the hits are for. */
+  searched: '',
+  index: [] as IndexedIflow[],
+  error: '',
+});
+
+let whereUsedSeq = 0;
+
+/** Runs the Where used search for the tab's query, kind and iFlow. */
+export async function searchIflows() {
+  const seq = ++whereUsedSeq;
+  const query = whereUsed.query.trim();
+  if (!app.project || (!query && !whereUsed.kind)) {
+    whereUsed.hits = [];
+    whereUsed.searched = '';
+    whereUsed.error = '';
+    return;
+  }
+  try {
+    const r = await call('iflow.search', { query, kind: whereUsed.kind || undefined, iflow: whereUsed.iflow || undefined });
+    if (seq !== whereUsedSeq) return;
+    whereUsed.hits = r.hits;
+    whereUsed.searched = query;
+    whereUsed.error = '';
+  } catch (e) {
+    if (seq === whereUsedSeq) whereUsed.error = (e as Error).message;
+  }
+}
+
+/** The parameters of the imported iFlows, for the Where used tab's Parameters view. */
+export async function loadIflowIndex() {
+  if (!app.project) return;
+  try {
+    whereUsed.index = (await call('iflow.index')).iflows;
+    whereUsed.error = '';
+  } catch (e) {
+    whereUsed.error = (e as Error).message;
+  }
+}
+
+/** Opens the Where used tab searching for a value (from the diagram's details). */
+export function showWhereUsed(query: string, iflow = '') {
+  whereUsed.view = 'search';
+  whereUsed.query = query;
+  whereUsed.kind = '';
+  whereUsed.iflow = iflow;
+  app.tool = 'whereused';
+  void searchIflows();
+}
 
 export interface IflowStep {
   iflow: string;
@@ -682,7 +741,10 @@ export async function closeProject() {
   app.iflowModels = [];
   app.iflowSelected = null;
   closeIflowFlowSteps();
-  if (app.tool === 'diagram') app.tool = app.stepTool;
+  if (app.tool === 'diagram' || app.tool === 'whereused') app.tool = app.stepTool;
+  whereUsed.hits = [];
+  whereUsed.index = [];
+  whereUsed.searched = '';
 }
 
 export async function refreshFiles() {
@@ -709,7 +771,10 @@ export async function loadIflowModels() {
   } catch {
     app.iflowModels = [];
   }
-  if (!app.iflowModels.length && app.tool === 'diagram') app.tool = app.stepTool;
+  if (!app.iflowModels.length && (app.tool === 'diagram' || app.tool === 'whereused')) app.tool = app.stepTool;
+  // Results of the iFlows before a rescan or import would point at elements that may be gone.
+  if (whereUsed.searched || whereUsed.kind) void searchIflows();
+  if (whereUsed.index.length) void loadIflowIndex();
 }
 
 /** The step of an iFlow element that a tab can open (Groovy, XSLT, a flow step, …), if any. */

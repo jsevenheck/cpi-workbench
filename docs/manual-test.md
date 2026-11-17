@@ -147,7 +147,7 @@ Use a copy of `examples/demo-project`. Setup details: [MCP server](mcp.md).
 |---|---|---|
 | 5.1 | Create `.mcp.json` in the project folder (below) | – |
 | 5.2 | Start `claude` in the project folder (terminal or the Code tab of the desktop app) | Claude Code asks once before it starts the project's server → allow. |
-| 5.3 | `/mcp` | `cpi-workbench` is connected with 10 tools: `project_info`, `read_file`, `run_xslt`, `run_groovy`, `validate_xsd`, `evaluate_xpath`, `run_flow_step`, `save_file`, `import_iflow`, `reference`. |
+| 5.3 | `/mcp` | `cpi-workbench` is connected with 11 tools: `project_info`, `read_file`, `run_xslt`, `run_groovy`, `validate_xsd`, `evaluate_xpath`, `run_flow_step`, `save_file`, `import_iflow`, `iflow_where_used`, `reference`. |
 | 5.4 | *"Use project_info to show what is in the project."* | Files and installed runtimes. |
 | 5.5 | *"Run mappings/order-to-salesorder.xsl on inputs/order.xml with header SenderSystem=ERP and property CustomerGroup=02, then on both Saxon versions."* | Same result as 2.2 and 2.3. |
 | 5.6 | *"Run scripts/enrich-order.groovy on inputs/order.xml and show the message log."* | Same result as 2.6; the first run is slower while the engine starts. |

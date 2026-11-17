@@ -47,7 +47,7 @@ fn legacy_handshake_negotiates_the_version() {
     assert_eq!(by_id(&msgs, 3)["result"], json!({}));
     let list = &by_id(&msgs, 4)["result"];
     assert!(list.get("resultType").is_none() && list.get("ttlMs").is_none(), "legacy results stay legacy: {list}");
-    assert_eq!(list["tools"].as_array().unwrap().len(), 10);
+    assert_eq!(list["tools"].as_array().unwrap().len(), 11);
 }
 
 #[test]
@@ -121,11 +121,11 @@ fn tool_definitions_follow_the_spec() {
     let tools = tools::definitions();
     let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
     assert_eq!(names, ["project_info", "read_file", "run_xslt", "run_groovy", "validate_xsd", "evaluate_xpath", "run_flow_step",
-        "save_file", "import_iflow", "reference"]);
+        "save_file", "import_iflow", "iflow_where_used", "reference"]);
     // Only tools that cannot run code are read-only: XSLT's java: calls and Groovy can (JavaExtensions).
     let read_only: Vec<&str> = tools.iter().filter(|t| t["annotations"]["readOnlyHint"] == true)
         .map(|t| t["name"].as_str().unwrap()).collect();
-    assert_eq!(read_only, ["project_info", "read_file", "validate_xsd", "evaluate_xpath", "reference"]);
+    assert_eq!(read_only, ["project_info", "read_file", "validate_xsd", "evaluate_xpath", "iflow_where_used", "reference"]);
     // Writing tools say so, so that a client can ask before they run; tools that run code keep the defaults.
     for name in ["save_file", "import_iflow"] {
         let a = &tools.iter().find(|t| t["name"] == name).unwrap()["annotations"];
@@ -446,6 +446,38 @@ fn tools_run_on_the_engines() {
     assert!(c.err("evaluate_xpath", json!({ "expression": "/", "bodyPath": "../outside.xml" })).contains("outside the project"));
 
     engines.shutdown();
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Where-used search and the parameter overview over the two iFlows of the index fixture (engine/core, F69).
+#[test]
+fn where_used_searches_the_imported_iflows() {
+    let Some(engines) = engines() else { return };
+    let dir = project("whereused");
+    let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    copy_dir(&repo.join("engine/core/src/test/resources/iflow-index/iflows"), &dir.join("iflows"));
+    *engines.on_start.lock().unwrap() = Some(("project.open".into(), json!({ "dir": dir.to_string_lossy() })));
+    let server = Server::new(engines.clone(), Some(dir.clone()));
+    let c = Call(&server);
+
+    let q = c.ok("iflow_where_used", json!({ "query": "ORDERS_IN" }));
+    let places: Vec<String> = q["hits"].as_array().unwrap().iter()
+        .map(|h| format!("{}/{}", h["iflow"].as_str().unwrap(), h["key"].as_str().unwrap())).collect();
+    assert_eq!(places, ["Inbound_Files/QueueName_outbound", "Outbound_Orders/QueueName_inbound"], "{q}");
+    assert_eq!(q["hits"][0]["kind"], "queue");
+
+    let cred = c.ok("iflow_where_used", json!({ "kind": "credential", "iflow": "Outbound_Orders" }));
+    assert_eq!(cred["hits"].as_array().unwrap().len(), 1, "{cred}");
+    assert_eq!(cred["hits"][0]["key"], "credentialName");
+
+    let p = c.ok("iflow_where_used", json!({ "parameters": true, "iflow": "Inbound_Files" }));
+    assert_eq!(p["iflows"].as_array().unwrap().len(), 1, "{p}");
+    let host = p["iflows"][0]["parameters"].as_array().unwrap().iter().find(|x| x["name"] == "SftpHost").unwrap().clone();
+    assert_eq!(host["description"], "Partner SFTP server", "{host}");
+    assert_eq!(host["required"], true);
+
+    assert!(c.err("iflow_where_used", json!({ "parameters": true, "query": "x" })).contains("parameters lists"));
+    assert!(c.err("iflow_where_used", json!({})).contains("query"));
     let _ = std::fs::remove_dir_all(&dir);
 }
 

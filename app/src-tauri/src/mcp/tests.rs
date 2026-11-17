@@ -765,3 +765,20 @@ fn runs_chain_by_id() {
     engines.shutdown();
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// The choices taken as defaults are the same list on both sides, and only missing or null ones count.
+#[test]
+fn assumed_defaults_match_the_tab() {
+    let ts = include_str!("../../../src/lib/flowcalls.ts");
+    for (kind, keys) in flow::ASSUMED_DEFAULTS {
+        let line = format!("  {kind}: [{}],", keys.iter().map(|k| format!("'{k}'")).collect::<Vec<_>>().join(", "));
+        assert!(ts.contains(&line), "flowcalls.ts ASSUMED_DEFAULTS lacks: {line}");
+    }
+    let start = ts.find("export const ASSUMED_DEFAULTS").unwrap();
+    let block = &ts[start..start + ts[start..].find("};").unwrap()];
+    assert_eq!(block.lines().filter(|l| l.trim_end().ends_with("],")).count(), flow::ASSUMED_DEFAULTS.len(), "{block}");
+    assert_eq!(flow::defaulted("messageDigest", &json!({ "algorithm": "SHA-256", "targetHeader": null })),
+        ["canonicalization", "targetHeader"]);
+    assert!(flow::defaulted("encoder", &json!({ "scheme": "gzipCompress" })).is_empty());
+    assert!(flow::defaulted("router", &json!({})).is_empty());
+}

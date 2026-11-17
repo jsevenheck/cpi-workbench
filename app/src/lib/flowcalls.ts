@@ -116,6 +116,25 @@ export function settingsFromIflowStep(type: FlowStep, c: any = {}): any {
   }
 }
 
+/**
+ * The choices an iFlow step may leave out, which then take the tab's default. Whether CPI uses the same default for a
+ * setting missing from an export is not known, so the app and the MCP server name these as assumed. `mcp/flow.rs`
+ * (`ASSUMED_DEFAULTS`) repeats this list; its test reads this one, so keep one entry per line.
+ */
+export const ASSUMED_DEFAULTS: Partial<Record<FlowStep, string[]>> = {
+  filter: ['valueType'],
+  splitter: ['splitter', 'expressionType'],
+  gather: ['messageType', 'algorithm'],
+  encoder: ['scheme'],
+  decoder: ['scheme'],
+  messageDigest: ['canonicalization', 'algorithm', 'targetHeader'],
+};
+
+/** The settings of an iFlow step that its configuration leaves out (or sets null) and that took a default. */
+export function defaultedSettings(type: FlowStep, c: any = {}): string[] {
+  return (ASSUMED_DEFAULTS[type] ?? []).filter((k) => c?.[k] === undefined || c?.[k] === null);
+}
+
 /** A converter list as the tab's text: one `prefix = namespace` or path per line. */
 function converterText(v: unknown, key: 'namespaceMapping' | 'arrayPaths'): string {
   if (!Array.isArray(v)) return (v as string) ?? '';

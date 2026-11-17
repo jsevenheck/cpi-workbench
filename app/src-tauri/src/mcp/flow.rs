@@ -65,7 +65,31 @@ pub fn run(server: &Server, args: &Args) -> Result<Value, String> {
     if let Some(note) = step.get("note").filter(|n| n.is_string()) {
         result["step"]["note"] = note.clone();
     }
+    // Choices the iFlow step leaves out ran with the default; whether CPI does the same is not known.
+    if args.contains_key("iflowStep") {
+        let missing = defaulted(&kind, &config);
+        if !missing.is_empty() {
+            result["step"]["defaulted"] = json!(missing);
+            result["step"]["defaultedNote"] = json!(format!("Not in the iFlow, so the default was used (an assumption:                 whether CPI does the same is not known): {}.", missing.join(", ")));
+        }
+    }
     Ok(result)
+}
+
+/// The choices an iFlow step may leave out, which then take the default (`ASSUMED_DEFAULTS` in `flowcalls.ts`).
+pub(super) const ASSUMED_DEFAULTS: [(&str, &[&str]); 6] = [
+    ("filter", &["valueType"]),
+    ("splitter", &["splitter", "expressionType"]),
+    ("gather", &["messageType", "algorithm"]),
+    ("encoder", &["scheme"]),
+    ("decoder", &["scheme"]),
+    ("messageDigest", &["canonicalization", "algorithm", "targetHeader"]),
+];
+
+/// The settings of `ASSUMED_DEFAULTS` that the config leaves out or sets null.
+pub(super) fn defaulted(kind: &str, config: &Value) -> Vec<&'static str> {
+    ASSUMED_DEFAULTS.iter().find(|(k, _)| *k == kind).map(|(_, keys)| keys.iter().copied()
+        .filter(|key| config.get(*key).is_none_or(Value::is_null)).collect()).unwrap_or_default()
 }
 
 /// Runs a step with its config; a Gather gets its messages. No engine is reached except through `ctx.call`.

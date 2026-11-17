@@ -31,7 +31,9 @@ of its version.
 
 - **A flow step from an iFlow without some settings** now runs with the step's defaults in the app, as it already
   did over MCP: an Encoder or Decoder without a scheme (Base64), a Message Digest without canonicalization, algorithm
-  or target header, a Splitter without its type or expression type. Before, the app sent empty values.
+  or target header, a Splitter without its type or expression type. Before, the app sent empty values. Whether CPI
+  uses the same defaults is not known: the app names them under the step's *From* line, and the MCP server returns
+  them as `step.defaulted`.
 - **Converter lists over MCP**: an iFlow's namespace mapping and array paths reach the engine as the app sends them,
   one entry per line. The Flow Steps tab and the MCP server now replay shared fixtures in their tests
   (`testdata/flow-parity`), so the two cannot drift apart unnoticed.

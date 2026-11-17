@@ -27,3 +27,12 @@ for (const file of files) {
     assert.deepEqual(calls, f.calls);
   });
 }
+
+test('an iFlow step names the choices it leaves out, which take the default', async () => {
+  const { defaultedSettings, settingsFromIflowStep } = await import('../src/lib/flowcalls.ts');
+  assert.deepEqual(defaultedSettings('encoder', {}), ['scheme']);
+  assert.deepEqual(defaultedSettings('encoder', { scheme: 'gzipCompress' }), []);
+  assert.deepEqual(defaultedSettings('messageDigest', { algorithm: 'SHA-256', targetHeader: null }), ['canonicalization', 'targetHeader']);
+  assert.deepEqual(defaultedSettings('contentModifier', {}), []);
+  assert.equal(settingsFromIflowStep('encoder', {}).scheme, 'base64Encode');
+});

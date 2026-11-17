@@ -161,7 +161,8 @@
       <button class="primary small" onclick={runFlowStep} disabled={flow.running}>Run step</button>
     </header>
     {#if flow.sources[flow.step]}<p class="hint src">From {flow.sources[flow.step]}<button class="close-file" onclick={() => closeFlowStep(flow.step)}
-      title="Close the iFlow step: this step starts over with empty settings (the iFlow stays as it is)" aria-label="Close iFlow step">×</button></p>{/if}
+      title="Close the iFlow step: this step starts over with empty settings (the iFlow stays as it is)" aria-label="Close iFlow step">×</button></p>
+      {#if flow.defaulted[flow.step]}<p class="hint src assumed">Not in the iFlow, so the default is used (an assumption: whether CPI does the same is not known): {flow.defaulted[flow.step]}</p>{/if}{/if}
     <div class="cfg">
       {#if flow.step === 'contentModifier'}
         <div class="tabs" role="tablist">
@@ -470,6 +471,7 @@
   td input:not([type]), td select { width: 100%; box-sizing: border-box; }
   tr.taken td { background: var(--ok-bg); }
   .hint { color: var(--muted); font-size: 12px; margin: 4px 0; }
+  .src.assumed { color: var(--warn); }
   .src { padding: 4px 10px; margin: 0; border-bottom: 1px solid var(--border-soft); font-family: var(--mono); font-size: 11px; }
   .row { padding: 3px 0; border-bottom: 1px solid var(--border-soft); }
   .k { color: var(--muted); font-size: 11px; display: flex; align-items: center; gap: 8px; }

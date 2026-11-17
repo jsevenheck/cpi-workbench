@@ -11,7 +11,7 @@ import { attachmentInput, attachmentRows, parsePlatformFile, platformDoc, platfo
   soapHeaderInput, soapHeaderRows, type AttachmentRow, type PlatformKey, type PlatformRows, type SoapHeaderRow } from './platform';
 import { toRows } from './rows';
 import { isArchive, pathKey, projectPath } from './paths';
-import { flowConfigKey, flowStepDefaults, runStep, settingsFromIflowStep, type FlowRun, type FlowStep, type RouteResult } from './flowcalls';
+import { defaultedSettings, flowConfigKey, flowStepDefaults, runStep, settingsFromIflowStep, type FlowRun, type FlowStep, type RouteResult } from './flowcalls';
 import { callsJava } from './trust';
 
 export type StepTool = 'xslt' | 'groovy' | 'xsd' | 'xpath' | 'flow';
@@ -286,6 +286,8 @@ export const flow = $state({
   camel: 'groovy-2.x' as Profile,
   /** The iFlow step each step's settings came from, if any. */
   sources: {} as Partial<Record<FlowStep, string>>,
+  /** Settings the iFlow step left out, with the default the tab took for each (an assumption). */
+  defaulted: {} as Partial<Record<FlowStep, string>>,
   body: '',
   /**
    * A body that is no text (a .zip or .gz from the project, an Encoder's GZIP or ZIP result): its bytes as Base64.
@@ -1717,6 +1719,9 @@ function openFlowStep(step: IflowStep) {
   else (flow as any)[flowConfigKey[type]] = settings;
   flow.step = step.type as FlowStep;
   flow.sources[step.type as FlowStep] = `${step.iflow} · ${step.name || step.id}`;
+  const missing = defaultedSettings(type, step.config ?? {});
+  if (missing.length) flow.defaulted[type] = missing.map((k) => `${k} = ${(settings as any)[k]}`).join(', ');
+  else delete flow.defaulted[type];
   // Only this step's result is out of date; the other steps keep theirs.
   flow[flowResultKey[step.type as FlowStep]] = null;
   // A run still open for the step this replaces must not write its result here.
@@ -1737,6 +1742,7 @@ export function closeFlowStep(step: FlowStep) {
   if (step === 'gather') flow.gather = { ...d.gather, messages: flow.gather.messages };
   else (flow as any)[flowConfigKey[step]] = d[flowConfigKey[step]];
   delete flow.sources[step];
+  delete flow.defaulted[step];
   flow[flowResultKey[step]] = null;
   // A run still open for the closed step must not write its result here.
   flowSeq++;

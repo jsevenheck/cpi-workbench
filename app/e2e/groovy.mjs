@@ -231,6 +231,13 @@ if (process.env.CPIWB_IFLOW_ZIP) {
   if ((await page.getByLabel('Filter XPath').inputValue()) !== '/Order/Item') fail('Filter XPath from the iFlow');
   await page.locator('.steps .step', { hasText: 'Gather items' }).click();
   if ((await page.getByLabel('Aggregation Algorithm').inputValue()) !== 'combineAtXPath') fail('Gather algorithm from the iFlow');
+  // × closes the iFlow step: Gather has its own settings again; the Filter taken from the iFlow stays.
+  await page.getByRole('button', { name: 'Close iFlow step' }).click();
+  await page.locator('.src').waitFor({ state: 'detached', timeout: 5000 }).catch(() => fail('Close iFlow step left the "From" line'));
+  if ((await page.getByLabel('Aggregation Algorithm').inputValue()) !== 'combine') fail('Close iFlow step did not bring back Gather\'s own settings');
+  await page.getByRole('tab', { name: 'Filter' }).click();
+  await page.locator('.src', { hasText: 'Keep items' }).waitFor({ timeout: 5000 }).catch(() => fail('closing Gather also closed the Filter from the iFlow'));
+  if ((await page.getByLabel('Filter XPath').inputValue()) !== '/Order/Item') fail('closing Gather changed the Filter from the iFlow');
   // A Message Mapping step is listed (not simulated); it opens its script with the first mapping function.
   await page.locator('.steps .step', { hasText: 'Map order' }).click();
   await page.locator('section.script h2', { hasText: 'lookup.gsh' }).waitFor({ timeout: 10000 })
@@ -659,6 +666,14 @@ if (process.env.CPIWB_IFLOW_ZIP) {
 // 7) Closing the project closes it in the engines too: runs no longer see its platform data.
 await page.getByTitle('Close project').click();
 await page.getByLabel('Project folder').waitFor({ timeout: 5000 });
+// The flow steps taken from the project's iFlows close with it.
+if (process.env.CPIWB_IFLOW_ZIP) {
+  await page.getByRole('tab', { name: 'Flow Steps' }).click();
+  for (const step of ['Content Modifier', 'Filter']) {
+    await page.getByRole('tab', { name: step, exact: true }).click();
+    if (await page.locator('.src').count()) fail(`${step} still shows "${await page.locator('.src').innerText()}" after Close project`);
+  }
+}
 const afterClose = await page.evaluate(async () => {
   const r = await fetch('http://127.0.0.1:7778/rpc', { method: 'POST', headers: { 'content-type': 'application/json', 'x-cpiwb': '1' },
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'project.list', params: {} }) });

@@ -126,7 +126,7 @@ The first run starts the Java engines and can take a few seconds.
 | 3.1b | **Import iFlow** with an exported Value Mapping, then with an exported integration package that has an iFlow using a script collection | The status names the value mapping rows; *Platform* → *Value Mappings* shows both directions. The package's iFlows and collections are under `iflows/`, other types are named as skipped, and the collection's script opens from the iFlow's Groovy step. |
 | 3.1c | After 3.1: the list under **iFlows**, then click *Write to data store*; in **Diagram**, double-click *Enrich order* | The list shows the HTTPS and SOAP adapters, the Router's routes *Other (default)* and *ERP* with its condition, the exception subprocess and the local process *Archive order*. *Write to data store* opens the Diagram tab with its settings (`storageName`); the double-click opens `enrich.groovy`. |
 | 3.2 | Click a Groovy or XSLT step | The file opens with the step's function name and script version. |
-| 3.3 | Click the Content Modifier, Filter, Gather and *JSON to XML* | They open in Flow Steps with their settings; `{{parameters}}` come from `parameters.prop` (the converter's root element `Orders`). |
+| 3.3 | Click the Content Modifier, Filter, Gather and *JSON to XML* | They open in Flow Steps with their settings; `{{parameters}}` come from `parameters.prop` (the converter's root element `Orders`). The **×** after *From …* gives the step its own settings back; the other steps keep theirs. |
 | 3.3a | Click *Map order* (**M**) | Its script `lookup.gsh` opens with the mapping function `getHeader`. |
 | 3.4 | Optional: an iFlow exported from your own tenant, without secrets | Imports without errors; steps run or report `UnsupportedInSimulator`. |
 

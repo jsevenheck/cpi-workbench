@@ -282,6 +282,41 @@ function converterDefaults() {
   };
 }
 
+/**
+ * The settings each flow step starts with (the samples of the tab), keyed as in `flow`. Closing a step taken from an
+ * iFlow brings them back.
+ */
+function flowStepDefaults() {
+  return {
+    cm: {
+      headers: [{ action: 'Create', name: 'OrderId', type: 'xpath', value: '/Order/@id', datatype: 'java.lang.String', default: '' }] as CmRow[],
+      properties: [{ action: 'Create', name: 'Key', type: 'expression', value: '${header.SenderId}-${header.OrderId}', datatype: '', default: '' }] as CmRow[],
+      bodyType: 'constant' as 'constant' | 'expression',
+      body: '',
+    },
+    router: {
+      routes: [
+        // SAP: all routes use the same condition type; XML and Non-XML mixed make the evaluation fail.
+        { name: 'ERP', expressionType: 'nonxml', condition: "${header.SenderId} = 'ERP_100'", default: false },
+        { name: 'Web shop', expressionType: 'nonxml', condition: "${header.SenderId} = 'WEBSHOP' and ${header.Priority} = 'high'", default: false },
+        { name: 'Default', expressionType: 'nonxml', condition: '', default: true },
+      ] as Route[],
+      throwException: false,
+    },
+    splitter: { splitter: 'general' as 'general' | 'iterating', expressionType: 'xpath' as 'xpath' | 'token' | 'lineBreak',
+      expression: '/Order/Item', grouping: '', streaming: true },
+    filter: { expression: "/Order/Item[@qty > 1]", valueType: 'nodelist' },
+    /** Gather's settings; its messages are not settings and are not part of this. */
+    gather: { messageType: 'sameXml', algorithm: 'combine', sourceXPath: '', targetXPath: '' },
+    converter: converterDefaults(),
+    /** Encoder and Decoder. The MCP server uses the same defaults (`mcp/flow.rs`); an imported step keeps its scheme. */
+    encoder: { scheme: 'base64Encode' },
+    decoder: { scheme: 'base64Decode' },
+    /** Message Digest. The MCP server uses the same defaults (`message_digest` in `mcp/flow.rs`); change both together. */
+    digest: { filter: '', canonicalization: 'c14n10', algorithm: 'SHA512', targetHeader: 'SAPMessageDigest' },
+  };
+}
+
 export const flow = $state({
   step: 'contentModifier' as FlowStep,
   /**
@@ -299,32 +334,9 @@ export const flow = $state({
   binary: null as null | { base64: string; size: number },
   headers: [{ name: 'SenderId', value: 'ERP_100', type: 'String' }] as Row[],
   properties: [] as Row[],
-  cm: {
-    headers: [{ action: 'Create', name: 'OrderId', type: 'xpath', value: '/Order/@id', datatype: 'java.lang.String', default: '' }] as CmRow[],
-    properties: [{ action: 'Create', name: 'Key', type: 'expression', value: '${header.SenderId}-${header.OrderId}', datatype: '', default: '' }] as CmRow[],
-    bodyType: 'constant' as 'constant' | 'expression',
-    body: '',
-  },
-  router: {
-    routes: [
-      // SAP: all routes use the same condition type; XML and Non-XML mixed make the evaluation fail.
-      { name: 'ERP', expressionType: 'nonxml', condition: "${header.SenderId} = 'ERP_100'", default: false },
-      { name: 'Web shop', expressionType: 'nonxml', condition: "${header.SenderId} = 'WEBSHOP' and ${header.Priority} = 'high'", default: false },
-      { name: 'Default', expressionType: 'nonxml', condition: '', default: true },
-    ] as Route[],
-    throwException: false,
-  },
-  splitter: { splitter: 'general' as 'general' | 'iterating', expressionType: 'xpath' as 'xpath' | 'token' | 'lineBreak',
-    expression: '/Order/Item', grouping: '', streaming: true },
-  filter: { expression: "/Order/Item[@qty > 1]", valueType: 'nodelist' },
+  ...flowStepDefaults(),
   /** The messages to gather: a splitter's result or bodies added by hand. */
-  gather: { messageType: 'sameXml', algorithm: 'combine', sourceXPath: '', targetXPath: '', messages: [] as string[] },
-  converter: converterDefaults(),
-  /** Encoder and Decoder. The MCP server uses the same defaults (`mcp/flow.rs`); an imported step keeps its scheme. */
-  encoder: { scheme: 'base64Encode' },
-  decoder: { scheme: 'base64Decode' },
-  /** Message Digest. The MCP server uses the same defaults (`message_digest` in `mcp/flow.rs`); change both together. */
-  digest: { filter: '', canonicalization: 'c14n10', algorithm: 'SHA512', targetHeader: 'SAPMessageDigest' },
+  gather: { ...flowStepDefaults().gather, messages: [] as string[] },
   cmResult: null as any,
   routerResult: null as null | { routes: RouteResult[]; taken: string; diagnostics: string[] },
   splitResult: null as any,
@@ -742,6 +754,7 @@ export async function open(dir: string, initProject = false) {
   if (other) scriptMemory.clear(); // its paths belong to the other project
   app.project = { root: r.root, files: r.files };
   if (other) resetPlatform(); // at once: no run of the opened project uses rows typed before it
+  if (other) closeIflowFlowSteps(); // their iFlows belong to the other project
   safeSet('cpiwb.project', r.root);
   await loadIflowSteps();
   if (!r.isProject && !initProject) app.status = 'Folder has no cpi-workbench.json – it still works; use "Init" to add the standard folders.';
@@ -773,6 +786,7 @@ export async function closeProject() {
   app.iflowSteps = [];
   app.iflowModels = [];
   app.iflowSelected = null;
+  closeIflowFlowSteps();
   if (app.tool === 'diagram') app.tool = app.stepTool;
 }
 
@@ -1905,6 +1919,31 @@ function openFlowStep(step: IflowStep) {
   flow.running = false;
   app.tool = 'flow';
   app.status = `Loaded ${step.name || step.id} from ${step.iflow}` + (step.note ? `. ${step.note}` : '');
+}
+
+/**
+ * Closes the iFlow step a flow step's settings came from: the step gets the tab's own settings back and loses its
+ * result. The iFlow is not touched; the step opens again from the iFlow list or the diagram. Gather keeps its messages.
+ */
+export function closeFlowStep(step: FlowStep) {
+  const source = flow.sources[step];
+  if (!source) return;
+  const d = flowStepDefaults();
+  if (step === 'gather') flow.gather = { ...d.gather, messages: flow.gather.messages };
+  else (flow as any)[flowConfigKey[step]] = d[flowConfigKey[step]];
+  delete flow.sources[step];
+  flow[flowResultKey[step]] = null;
+  // A run still open for the closed step must not write its result here.
+  flowSeq++;
+  flow.running = false;
+  app.status = `Closed ${source}; the step has its own settings again.`;
+}
+
+/** The flow steps taken from the project's iFlows close with it. */
+function closeIflowFlowSteps() {
+  const status = app.status;
+  for (const step of Object.keys(flow.sources) as FlowStep[]) closeFlowStep(step);
+  app.status = status;
 }
 
 export async function formatXml(text: string): Promise<string> {

@@ -146,7 +146,9 @@ come with the app; **Save** asks where to keep them, once a project is open. As 
   its steps. A folder that differs from one already there only in letter case or trailing dots is
   refused, since Windows takes both for one folder. A Groovy Script or XSLT Mapping step opens its file with the step's function name and
   script version; a flow step opens in Flow Steps with its settings, with `{{parameters}}` from the
-  iFlow's `parameters.prop`. Steps that choose their mapping from a header at runtime are marked. A
+  iFlow's `parameters.prop`; the line *From <iFlow> · <step>* above its settings says where they came from, and
+  its **×** gives the step the tab's own settings back (the iFlow stays as it is; closing the project does the
+  same for all its steps). Steps that choose their mapping from a header at runtime are marked. A
   **Message Mapping** step (**M**) is not simulated; clicking it opens the first Groovy script its
   `.mmap` uses, with its first mapping function. The `.iflw` format is not publicly documented, so
   it is read generically (best effort).

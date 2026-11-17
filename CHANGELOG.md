@@ -53,6 +53,9 @@ of its version.
   browser mode listens (and the Groovy engines' `--http` default), so the two could not run side by side. If you
   turned the receiver on in 0.4.0, it stays on 7778 and the *Custom URL* in the plugins keeps working; to move,
   set the port under **⚙** and enter the new *Custom URL* in both plugins.
+- **Flow Steps: a step opened from an iFlow can be closed.** The **×** after *From <iFlow> · <step>* gives the
+  step the tab's own settings back and drops its result; the iFlow is not changed. Closing or switching the
+  project closes the steps taken from its iFlows, which used to keep their settings and *From* line.
 
 ### Fixed
 

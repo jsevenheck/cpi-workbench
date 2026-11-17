@@ -5,7 +5,7 @@
   import KeyValueTable from './KeyValueTable.svelte';
   import CmTable from './CmTable.svelte';
   import { app, flow, groovy, xpath, runFlowStep, useAsFlowInput, gatherSplitResult, saveInput, closeInput, ask, mayOverwrite, writeBytes,
-    refreshFiles, type FlowStep } from '../lib/store.svelte';
+    refreshFiles, closeFlowStep, type FlowStep } from '../lib/store.svelte';
 
   const panes = paneSizes('flow', [1, 1.2, 1]);
   const STEPS: [FlowStep, string][] = [['contentModifier', 'Content Modifier'], ['filter', 'Filter'], ['router', 'Router'],
@@ -158,7 +158,8 @@
       <div class="spacer"></div>
       <button class="primary small" onclick={runFlowStep} disabled={flow.running}>Run step</button>
     </header>
-    {#if flow.sources[flow.step]}<p class="hint src">From {flow.sources[flow.step]}</p>{/if}
+    {#if flow.sources[flow.step]}<p class="hint src">From {flow.sources[flow.step]}<button class="close-file" onclick={() => closeFlowStep(flow.step)}
+      title="Close the iFlow step: this step gets its own settings back (the iFlow stays as it is)" aria-label="Close iFlow step">×</button></p>{/if}
     <div class="cfg">
       {#if flow.step === 'contentModifier'}
         <div class="tabs" role="tablist">

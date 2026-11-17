@@ -1,10 +1,27 @@
 <script lang="ts">
-  const KIND: Record<string, string> = { groovy: 'G', xslt: 'X', xsd: 'V', mmap: 'M', contentModifier: 'C', filter: 'F', router: 'R', splitter: 'S', gather: 'A', converter: 'T' };
-  const LABEL: Record<string, string> = { mmap: 'Message Mapping', converter: 'Converter', contentModifier: 'Content Modifier', filter: 'Filter', router: 'Router', splitter: 'Splitter', gather: 'Gather' };
+  const KIND: Record<string, string> = { groovy: 'G', xslt: 'X', xsd: 'V', mmap: 'M', contentModifier: 'C', filter: 'F', router: 'R', splitter: 'S', gather: 'A', converter: 'T', encoder: 'E', decoder: 'E', messageDigest: 'D' };
+  const LABEL: Record<string, string> = { mmap: 'Message Mapping', converter: 'Converter', contentModifier: 'Content Modifier', filter: 'Filter', router: 'Router', splitter: 'Splitter', gather: 'Gather', encoder: 'Encoder', decoder: 'Decoder', messageDigest: 'Message Digest' };
+  import { adapters, outline, typeLabel, type IflowModel } from '../lib/iflowmodel';
+  import { EXAMPLES } from '../lib/examples';
+  import { shownInTree } from '../lib/paths';
   import { isDesktop, pickFolder, pickZip } from '../lib/engine';
   import { app, open, closeProject, openFile, mayDiscard, mayOverwrite, freePath, refreshFiles, writeFile, ask, xslt, xsd, groovy, SAMPLE_GROOVY_V1, SAMPLE_GROOVY_V2,
-    importIflow, openIflowStep, loadIflowSteps, deleteFile, copyFile, useAsInput, fileView } from '../lib/store.svelte';
+    importIflow, loadExample, openIflowStep, loadIflowSteps, iflowStepFor, selectIflowNode, deleteFile, copyFile, useAsInput, fileView } from '../lib/store.svelte';
 
+  /** The iFlows folded in the list, by file. */
+  let foldedIflows = $state(new Set<string>());
+  function toggleIflow(file: string) {
+    const next = new Set(foldedIflows);
+    if (!next.delete(file)) next.add(file);
+    foldedIflows = next;
+  }
+  const PROC: Record<string, string> = { main: '', local: 'local process', exception: 'exception subprocess', subprocess: 'subprocess' };
+  function isSelected(iflow: string, id: string) {
+    return app.iflowSelected?.iflow === iflow && app.iflowSelected.id === id;
+  }
+  function processName(m: IflowModel, id: string) {
+    return m.processes?.find((p) => p.id === id)?.name || id;
+  }
   let dirInput = $state('');
   let filter = $state('');
   let collapsed = $state<Record<string, boolean>>({});
@@ -32,7 +49,7 @@
 
   async function importZip() {
     try {
-      const zip = isDesktop ? await pickZip() : (await ask('Path of the exported iFlow (.zip)', ''))?.value;
+      const zip = isDesktop ? await pickZip() : (await ask('Path of the exported iFlow, Value Mapping or package (.zip)', ''))?.value;
       if (zip) await importIflow(zip);
     } catch (e) {
       app.error = (e as Error).message;
@@ -63,8 +80,7 @@
     }
   }
 
-  const RELEVANT = /\.(xsl|xslt|xsd|xml|json|groovy|txt|csv)$/i;
-  let files = $derived((app.project?.files ?? []).filter((f) => !f.dir && RELEVANT.test(f.path)
+  let files = $derived((app.project?.files ?? []).filter((f) => !f.dir && shownInTree(f.path)
     && (!filter || f.path.toLowerCase().includes(filter.toLowerCase()))));
   let groups = $derived.by(() => {
     const g = new Map<string, string[]>();
@@ -102,7 +118,7 @@
         <button class="small" onclick={() => newFile('xsl')}>+ Mapping</button>
         <button class="small" onclick={() => newFile('xsd')}>+ Schema</button>
         <button class="small" onclick={() => newFile('groovy')}>+ Script</button>
-        <button class="small" onclick={importZip} title="Import an iFlow exported from Integration Suite (zip)">Import iFlow</button>
+        <button class="small" onclick={importZip} title="Import an iFlow, a Value Mapping or a whole integration package exported from Integration Suite (zip)">Import iFlow</button>
         <button class="small" onclick={initProject} title="Create mappings/, schemas/, tests/ and cpi-workbench.json">Init</button>
         <button class="small" onclick={() => void closeProject()} title="Close project">✕</button>
       </div>
@@ -113,18 +129,67 @@
         <input class="mono" placeholder="/path/to/project" bind:value={dirInput} onkeydown={(e) => e.key === 'Enter' && openDialog()} aria-label="Project folder" />
       {/if}
       <button class="primary" onclick={openDialog}>{isDesktop ? 'Open folder…' : 'Open'}</button>
-      <p class="muted small">Without a project you can still try mappings in the editor.</p>
+      <p class="muted small">Without a project you can still try mappings in the editor, or load an example:</p>
+      <select class="examples" aria-label="Examples" value="" onchange={(e) => { const t = e.currentTarget; void loadExample(t.value); t.value = ''; }}>
+        <option value="" disabled>Examples…</option>
+        {#each EXAMPLES as ex}<option value={ex.id}>{ex.title}</option>{/each}
+      </select>
     {/if}
   </div>
-  {#if app.project && app.iflowSteps.length}
+  {#if app.project && (app.iflowSteps.length || app.iflowModels.length)}
     <div class="steps" aria-label="iFlow steps">
-      <div class="group static">iFlow steps <button class="icon" title="Rescan" onclick={() => { refreshFiles(); loadIflowSteps(); }}>↻</button></div>
-      {#each app.iflowSteps as s}
-        <button class="file step" class:missing={(s.type === 'groovy' || s.type === 'xslt' || s.type === 'xsd' || s.type === 'mmap') && !s.fileFound} title={`${s.iflow} · ${LABEL[s.type] ?? s.type}${s.componentVersion ? ' ' + s.componentVersion : ''}${s.file ? ' · ' + s.file : ''}${s.note ? ' · ' + s.note : ''}`}
-          onclick={() => openIflowStep(s)}>
-          <span class="kind {s.type}">{KIND[s.type] ?? '!'}</span>{s.name || s.id}
-        </button>
-      {/each}
+      <div class="group static">iFlows <button class="icon" title="Rescan" onclick={() => { refreshFiles(); loadIflowSteps(); }}>↻</button></div>
+      {#if app.iflowModels.length}
+        {#each app.iflowModels as m (m.file)}
+          <button class="iflow-head" onclick={() => toggleIflow(m.file)} title={m.file} aria-expanded={!foldedIflows.has(m.file)}>
+            {foldedIflows.has(m.file) ? '▸' : '▾'} {m.name ?? m.iflow}</button>
+          {#if !foldedIflows.has(m.file)}
+            {#if m.error}
+              <div class="node err" title={m.error}>{m.error}</div>
+              {#each app.iflowSteps.filter((s) => s.iflow === m.iflow) as s}
+                <button class="file step" onclick={() => openIflowStep(s)}><span class="kind {s.type}">{KIND[s.type] ?? '!'}</span>{s.name || s.id}</button>
+              {/each}
+            {/if}
+            {#each adapters(m) as a}
+              <button class="node adapter" onclick={() => a.system && selectIflowNode(m.iflow, a.system.id, true)}
+                title={`${a.flow.adapter ?? a.flow.name} adapter, ${a.inbound ? 'from' : 'to'} ${a.system?.name ?? '?'}`}>
+                {a.inbound ? '⇢' : '⇠'} {a.flow.adapter ?? a.flow.name} <span class="type">{a.inbound ? 'from' : 'to'} {a.system?.name ?? '?'}</span></button>
+            {/each}
+            {#each outline(m) as g}
+              <div class="proc" title={g.process.id}>{g.process.name || g.process.id} <span class="type">{PROC[g.process.kind] ?? ''}</span></div>
+              {#each g.entries.filter((e) => e.node.kind !== 'start') as e}
+                {@const pad = 22 + e.depth * 12}
+                {#if e.route}
+                  <div class="route" style:padding-left={`${pad - 6}px`} title={e.route.condition ?? ''}>
+                    {e.route.name || 'route'}{e.route.default ? ' (default)' : ''}{e.route.condition ? ': ' + e.route.condition : ''}</div>
+                {/if}
+                {@const step = e.again ? undefined : iflowStepFor(m.iflow, e.node.id)}
+                {#if step}
+                  <button class="file step" class:missing={(step.type === 'groovy' || step.type === 'xslt' || step.type === 'xsd' || step.type === 'mmap') && !step.fileFound}
+                    class:active={isSelected(m.iflow, e.node.id)} style:padding-left={`${pad}px`}
+                    title={`${LABEL[step.type] ?? step.type}${step.componentVersion ? ' ' + step.componentVersion : ''}${step.file ? ' · ' + step.file : ''}${step.note ? ' · ' + step.note : ''}`}
+                    onclick={() => { selectIflowNode(m.iflow, e.node.id); void openIflowStep(step); }}>
+                    <span class="kind {step.type}">{KIND[step.type] ?? '!'}</span>{e.node.name || e.node.id}
+                  </button>
+                {:else}
+                  <button class="node" class:again={e.again} class:unreachable={e.unreachable} class:active={isSelected(m.iflow, e.node.id)}
+                    style:padding-left={`${pad}px`} onclick={() => selectIflowNode(m.iflow, e.node.id, true)}
+                    title={`${typeLabel(e.node)}${e.again ? ' · continues here (listed above)' : ''}${e.unreachable ? ' · no flow leads here' : ''} · show in the diagram`}>
+                    {e.again ? '↪ ' : ''}{e.node.name || typeLabel(e.node)} <span class="type">{typeLabel(e.node)}{e.node.calls ? ' → ' + processName(m, e.node.calls) : ''}</span>
+                  </button>
+                {/if}
+              {/each}
+            {/each}
+          {/if}
+        {/each}
+      {:else}
+          {#each app.iflowSteps as s}
+            <button class="file step" class:missing={(s.type === 'groovy' || s.type === 'xslt' || s.type === 'xsd' || s.type === 'mmap') && !s.fileFound} title={`${s.iflow} · ${LABEL[s.type] ?? s.type}${s.componentVersion ? ' ' + s.componentVersion : ''}${s.file ? ' · ' + s.file : ''}${s.note ? ' · ' + s.note : ''}`}
+              onclick={() => openIflowStep(s)}>
+              <span class="kind {s.type}">{KIND[s.type] ?? '!'}</span>{s.name || s.id}
+            </button>
+          {/each}
+      {/if}
     </div>
   {/if}
   {#if app.project}
@@ -168,6 +233,7 @@
   .filter, .proj input { width: 100%; box-sizing: border-box; }
   .muted { color: var(--muted); font-size: 12px; margin: 0; }
   .small { font-size: 11px; }
+  .examples { width: 100%; margin-top: 4px; }
   .pad { padding: 10px; }
   .tree { overflow: auto; flex: 1; padding: 4px 0; }
   .group { display: block; width: 100%; text-align: left; border: none; background: none; color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; padding: 6px 10px 2px; cursor: pointer; }
@@ -181,16 +247,25 @@
   .menu button:hover, .menu button:focus-visible { background: var(--hover); }
   .menu .danger { color: var(--err); }
   .menu hr { border: none; border-top: 1px solid var(--border); margin: 4px 0; }
-  .steps { max-height: 30%; overflow: auto; border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+  .steps { max-height: 45%; overflow: auto; border-bottom: 1px solid var(--border); padding-bottom: 4px; }
   .group.static { cursor: default; display: flex; align-items: center; justify-content: space-between; }
   .step { font-family: inherit; padding-left: 12px; }
   .step.missing { opacity: 0.6; }
+  .iflow-head { display: block; width: 100%; text-align: left; border: none; background: none; color: var(--fg); font-size: 12px; font-weight: 600; padding: 4px 10px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .iflow-head:hover, .node:hover { background: var(--hover); }
+  .proc { color: var(--muted); font-size: 11px; font-weight: 600; padding: 4px 10px 1px 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .route { color: var(--muted); font-size: 10px; font-style: italic; padding: 1px 10px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .node { display: block; width: 100%; text-align: left; border: none; background: none; color: var(--muted); font-size: 12px; padding: 3px 10px 3px 22px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: var(--mono); }
+  .node.active { background: var(--active); color: var(--accent); }
+  .node.again, .node.unreachable { font-style: italic; }
+  .node.err { color: var(--err); cursor: default; white-space: normal; }
+  .type { font-size: 10px; opacity: 0.8; font-family: var(--mono); }
   .kind { display: inline-block; width: 16px; font-size: 10px; font-weight: 700; font-family: var(--mono); }
   .kind.groovy { color: var(--ok); }
   .kind.xslt { color: var(--accent); }
   .kind.xsd { color: var(--warn); }
   .kind.mmap { color: var(--ok); }
   .kind.error { color: var(--err); }
-  .kind.contentModifier, .kind.filter, .kind.router, .kind.splitter, .kind.gather, .kind.converter { color: var(--muted); }
+  .kind.contentModifier, .kind.filter, .kind.router, .kind.splitter, .kind.gather, .kind.converter, .kind.encoder, .kind.decoder, .kind.messageDigest { color: var(--muted); }
   @media (max-width: 800px) { .side { width: 100%; border-right: none; border-bottom: 1px solid var(--border); max-height: 35vh; } }
 </style>

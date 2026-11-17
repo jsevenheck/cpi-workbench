@@ -5,6 +5,7 @@
   import Editor from './Editor.svelte';
   import KeyValueTable from './KeyValueTable.svelte';
   import CompareView from './CompareView.svelte';
+  import HistoryView from './HistoryView.svelte';
   import QueueEditor from './QueueEditor.svelte';
   import RowTable from './RowTable.svelte';
   import PlatformPanel from './PlatformPanel.svelte';
@@ -18,7 +19,7 @@
   const panes = paneSizes('groovy', [1, 1.3, 1.1]);
 
   let inputTab = $state<'body' | 'args' | 'headers' | 'properties' | 'attachments' | 'soap' | 'platform'>('body');
-  let outputTab = $state<'body' | 'headers' | 'properties' | 'mpl' | 'console' | 'api' | 'compare'>('body');
+  let outputTab = $state<'body' | 'headers' | 'properties' | 'mpl' | 'console' | 'api' | 'compare' | 'history'>('body');
   let showDiff = $state(false);
   let scriptEditor: Editor | undefined = $state();
   let mplOpen = $state<number | null>(null);
@@ -265,7 +266,7 @@
       <button class="small" onclick={saveScriptAs} disabled={!app.project} title="Save under a new name; the open file stays as it is">Save as…</button>
     </header>
     <div class="body">
-      {#if !groovy.script}<p class="empty-hint">Open a script from the project, or type or paste one here.</p>{/if}
+      {#if !groovy.script}<p class="empty-hint">{app.project ? "Open a script from the project" : "Open a project, or load a script under Examples… on the left"}, or type or paste one here.</p>{/if}
       <Editor bind:this={scriptEditor} bind:value={groovy.script} language="java" markers={markers}
         onchange={changed} onrun={runGroovy} onsave={saveScript} label="Groovy script" />
     </div>
@@ -287,6 +288,7 @@
         <button role="tab" class:active={outputTab === 'console'} onclick={() => (outputTab = 'console')}>Console{#if result && (result.console || result.diagnostics.length)}<span class="count" class:err={errors.length > 0}>{result.diagnostics.length + (result.console ? 1 : 0)}</span>{/if}</button>
         <button role="tab" class:active={outputTab === 'api'} onclick={() => (outputTab = 'api')}>API calls{#if result?.apiCalls.length}<span class="count">{result.apiCalls.length}</span>{/if}</button>
         {#if groovy.compareOn}<button role="tab" class:active={outputTab === 'compare'} onclick={() => (outputTab = 'compare')}>Compare</button>{/if}
+        <button role="tab" class:active={outputTab === 'history'} onclick={() => (outputTab = 'history')} title="The last runs of this tab in this session">History{#if groovy.history.length}<span class="count">{groovy.history.length}</span>{/if}</button>
       </div>
       <button class="small" class:on={groovy.compareOn} onclick={toggleCompare} disabled={!other && !groovy.compareOn}
         title={other ? 'Also run on ' + other + ' and show the differences' : 'No second Groovy runtime available'}>{groovy.compareOn ? 'Comparing' : 'Compare'}</button>
@@ -295,7 +297,9 @@
       {/if}
     </header>
     <div class="body">
-      {#if !result}
+      {#if outputTab === 'history'}
+        <HistoryView history={groovy.history} {result} resultAt={groovy.resultAt} profile={app.groovyProfile} language={outLanguage} />
+      {:else if !result}
         <p class="hint">Press <kbd>Ctrl</kbd>+<kbd>Enter</kbd> or <b>Run</b>. The first run starts the Groovy runtime (about a second); later runs take milliseconds.</p>
       {:else if outputTab === 'compare'}
         <CompareView profile={app.groovyProfile} {result} compare={groovy.compare} language={outLanguage} />

@@ -1,0 +1,13 @@
+{
+    "probeStep": "base64-decode",
+    "bodyClass": "java.lang.String",
+    "bodyLength": 305,
+    "bodyBase64": "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz4KPE9yZGVyIGlkPSI0NzExIj4KICA8Q3VzdG9tZXI+TcO8bGxlciAmYW1wOyBTw7ZobmUgR21iSDwvQ3VzdG9tZXI+CiAgPEl0ZW0gc2t1PSJNLTEwMCIgcXR5PSIyIj5TY2hyYXViZSBNNCDDlyAyMCwgdmVyemlua3Q8L0l0ZW0+CiAgPEl0ZW0gc2t1PSJNLTIwMCIgcXR5PSIxIj5VbnRlcmxlZ3NjaGVpYmUgw5ggNCwzPC9JdGVtPgogIDxOb3RlPkxpZWZlcnVuZyBiaXMgRnJlaXRhZzsgYmVpIFLDvGNrZnJhZ2VuIGJpdHRlIGFucnVmZW4uPC9Ob3RlPgo8L09yZGVyPgo=",
+    "bodyText": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Order id=\"4711\">\n  <Customer>M\u00fcller &amp; S\u00f6hne GmbH</Customer>\n  <Item sku=\"M-100\" qty=\"2\">Schraube M4 \u00d7 20, verzinkt</Item>\n  <Item sku=\"M-200\" qty=\"1\">Unterlegscheibe \u00d8 4,3</Item>\n  <Note>Lieferung bis Freitag; bei R\u00fcckfragen bitte anrufen.</Note>\n</Order>\n",
+    "headerNames": [
+        "ProbeStep"
+    ],
+    "headers": {
+        
+    }
+}

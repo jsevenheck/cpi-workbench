@@ -1,3 +1,6 @@
+import { EXAMPLES } from './examples';
+import type { IflowModel } from './iflowmodel';
+import { addRun, type HistoryEntry } from './history';
 import { call, openProject, closeProject as closeEngineProject, availableProfiles, DEFAULT_PROFILE, type Profile, type ProfileInfo } from './engine';
 import type { Diagnostic, FileEntry, GroovyResult, Row, XsltResult } from './types';
 import { argText, mappingArgs } from './queue';
@@ -6,40 +9,9 @@ import { bodyWarning, readShared, sharedSummary, type SharedMessage } from './sh
 import { attachmentInput, attachmentRows, parsePlatformFile, platformDoc, platformFileText, platformRows, platformRunData, PLATFORM_FILES, PLATFORM_KEYS,
   soapHeaderInput, soapHeaderRows, type AttachmentRow, type PlatformKey, type PlatformRows, type SoapHeaderRow } from './platform';
 import { toRows } from './rows';
-import { pathKey, projectPath } from './paths';
+import { isArchive, pathKey, projectPath } from './paths';
 import { resolveSimpleFunctions } from './simple';
 import { callsJava } from './trust';
-
-export const SAMPLE_XSL = `<?xml version="1.0" encoding="UTF-8"?>
-<!-- Headers and exchange properties arrive as xsl:param with the same name, like in Cloud Integration.
-     $exchange + hci:setHeader / hci:setProperty change the message. Press Ctrl+Enter to run. -->
-<xsl:stylesheet version="3.0"
-    xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
-    xmlns:hci="http://sap.com/it/"
-    exclude-result-prefixes="hci">
-
-  <xsl:param name="exchange"/>
-  <xsl:param name="SenderSystem" select="'unknown'"/>
-  <xsl:output method="xml" indent="yes"/>
-
-  <xsl:template match="/Order">
-    <xsl:value-of select="hci:setHeader($exchange, 'OrderNumber', @id)"/>
-    <xsl:value-of select="hci:setProperty($exchange, 'ItemCount', string(count(Item)))"/>
-    <xsl:message>Mapping order <xsl:value-of select="@id"/> from <xsl:value-of select="$SenderSystem"/></xsl:message>
-    <SalesOrder sender="{$SenderSystem}">
-      <xsl:for-each select="Item">
-        <Line no="{position()}" material="{@sku}" qty="{@qty}"/>
-      </xsl:for-each>
-    </SalesOrder>
-  </xsl:template>
-</xsl:stylesheet>
-`;
-
-export const SAMPLE_INPUT = `<Order id="4711">
-  <Item sku="M-100" qty="2"/>
-  <Item sku="M-200" qty="1"/>
-</Order>
-`;
 
 export type StepTool = 'xslt' | 'groovy' | 'xsd' | 'xpath' | 'flow';
 
@@ -49,7 +21,7 @@ export const app = $state({
   engineInfo: null as any,
   profile: DEFAULT_PROFILE as Profile,
   groovyProfile: 'groovy-1.x' as Profile,
-  tool: 'xslt' as StepTool | 'file',
+  tool: 'xslt' as StepTool | 'file' | 'diagram',
   /** The step tool last shown; inputs opened from the tree go to its body. */
   stepTool: 'xslt' as StepTool,
   /** The inputs/ file last loaded or saved as each tool's input body. */
@@ -58,6 +30,10 @@ export const app = $state({
   error: '',
   busy: false,
   iflowSteps: [] as IflowStep[],
+  /** The imported iFlows as a whole (processes, all elements, flows, layout), for the list and the Diagram tab. */
+  iflowModels: [] as IflowModel[],
+  /** The iFlow the Diagram tab shows and the element chosen in the list or the diagram (id null: none). */
+  iflowSelected: null as { iflow: string; id: string | null } | null,
 });
 
 export interface IflowStep {
@@ -68,7 +44,7 @@ export interface IflowStep {
   /** Message Mapping steps: the Groovy scripts its .mmap uses (the mapping itself is not simulated). */
   scripts?: string[];
   note?: string;
-  /** Flow step settings (Content Modifier, Filter, Router, Splitter, Gather) as the iFlow stores them. */
+  /** Flow step settings (Content Modifier, Filter, Router, Splitter, Gather, Converter, Encoder, Message Digest) as the iFlow stores them. */
   config?: any;
   componentVersion?: string;
   file?: string;
@@ -79,10 +55,10 @@ export interface IflowStep {
 
 export const xslt = $state({
   mappingPath: null as string | null,
-  mapping: SAMPLE_XSL,
-  savedMapping: SAMPLE_XSL,
-  body: SAMPLE_INPUT,
-  headers: [{ name: 'SenderSystem', value: 'ERP_100', type: 'String' }] as Row[],
+  mapping: '',
+  savedMapping: '',
+  body: '',
+  headers: [] as Row[],
   properties: [] as Row[],
   paramPrecedence: 'header' as 'header' | 'property',
   missingParameter: 'default' as 'default' | 'error',
@@ -94,6 +70,9 @@ export const xslt = $state({
   casePath: null as string | null,
   compareOn: false,
   compare: null as CompareRun<XsltResult> | null,
+  /** The tab's last runs in this session (in memory only), and the time of the one shown. */
+  history: [] as HistoryEntry<XsltResult>[],
+  resultAt: null as number | null,
 });
 
 /**
@@ -175,10 +154,10 @@ def Message processData(Message message) {
 
 export const groovy = $state({
   scriptPath: null as string | null,
-  script: SAMPLE_GROOVY_V1,
-  savedScript: SAMPLE_GROOVY_V1,
+  script: '',
+  savedScript: '',
   functionName: 'processData',
-  body: SAMPLE_INPUT,
+  body: '',
   headers: [] as Row[],
   properties: [] as Row[],
   bodyType: 'String' as 'String' | 'byte[]' | 'InputStream',
@@ -195,6 +174,8 @@ export const groovy = $state({
   casePlatform: null as Record<string, unknown> | null,
   compareOn: false,
   compare: null as CompareRun<GroovyResult> | null,
+  history: [] as HistoryEntry<GroovyResult>[],
+  resultAt: null as number | null,
   /** A Message Mapping function, known from the last run of this function; null for processData(message). */
   mapping: null as { function: string; parameters: string[] } | null,
   /** The open script's Message Mapping functions (signatures), from its last run that compiled. */
@@ -216,10 +197,10 @@ export const xsd = $state({
 });
 
 export const xpath = $state({
-  expression: '//Item/@sku',
+  expression: '',
   version: '3.1' as '1.0' | '3.1',
   namespaces: [] as Row[],
-  body: SAMPLE_INPUT,
+  body: '',
   result: null as null | { ok: boolean; items: any[]; count: number; diagnostics: Diagnostic[]; engine: string },
   /** The document the result is for: its places are marked only while the text is still this. */
   resultBody: '',
@@ -228,7 +209,7 @@ export const xpath = $state({
   running: false,
 });
 
-export type FlowStep = 'contentModifier' | 'filter' | 'router' | 'splitter' | 'gather' | 'converter';
+export type FlowStep = 'contentModifier' | 'filter' | 'router' | 'splitter' | 'gather' | 'converter' | 'encoder' | 'decoder' | 'messageDigest';
 
 /** A Content Modifier row in the iFlow's encoding (type: constant, header, property, xpath, expression, ...). */
 export interface CmRow {
@@ -264,9 +245,32 @@ function converterDefaults() {
     useNamespaces: false, separator: ':', namespaceMapping: '',
     addRootElement: false, rootElementName: 'root', rootNamespace: '',
     suppressRoot: false, streaming: false, streamingElements: 'all' as 'all' | 'specific', arrayPaths: '', outputEncoding: '',
-    sourcePath: '/Order/Item', fieldSeparator: ',', csvHeader: 'xml' as 'none' | 'xml' | 'xsd', includeParent: false, parentPath: '',
+    sourcePath: '', fieldSeparator: ',', csvHeader: 'xml' as 'none' | 'xml' | 'xsd', includeParent: false, parentPath: '',
     includeAttributes: false,
     schema: '', targetPath: '', recordMarker: '', firstLineHeader: true, headerMapping: 'xsd' as 'xsd' | 'csv',
+  };
+}
+
+/**
+ * The settings each flow step starts with, keyed as in `flow`: empty where the user fills them in (rows, routes,
+ * expressions), SAP's defaults where the step has a choice (scheme, method, header name). Closing a step taken from
+ * an iFlow brings them back.
+ */
+function flowStepDefaults() {
+  return {
+    cm: { headers: [] as CmRow[], properties: [] as CmRow[], bodyType: 'constant' as 'constant' | 'expression', body: '' },
+    router: { routes: [] as Route[], throwException: false },
+    splitter: { splitter: 'general' as 'general' | 'iterating', expressionType: 'xpath' as 'xpath' | 'token' | 'lineBreak',
+      expression: '', grouping: '', streaming: true },
+    filter: { expression: '', valueType: 'nodelist' },
+    /** Gather's settings; its messages are not settings and are not part of this. */
+    gather: { messageType: 'sameXml', algorithm: 'combine', sourceXPath: '', targetXPath: '' },
+    converter: converterDefaults(),
+    /** Encoder and Decoder. The MCP server uses the same defaults (`mcp/flow.rs`); an imported step keeps its scheme. */
+    encoder: { scheme: 'base64Encode' },
+    decoder: { scheme: 'base64Decode' },
+    /** Message Digest. The MCP server uses the same defaults (`message_digest` in `mcp/flow.rs`); change both together. */
+    digest: { filter: '', canonicalization: 'c14n10', algorithm: 'SHA512', targetHeader: 'SAPMessageDigest' },
   };
 }
 
@@ -279,36 +283,26 @@ export const flow = $state({
   camel: 'groovy-2.x' as Profile,
   /** The iFlow step each step's settings came from, if any. */
   sources: {} as Partial<Record<FlowStep, string>>,
-  body: SAMPLE_INPUT,
-  headers: [{ name: 'SenderId', value: 'ERP_100', type: 'String' }] as Row[],
+  body: '',
+  /**
+   * A body that is no text (a .zip or .gz from the project, an Encoder's GZIP or ZIP result): its bytes as Base64.
+   * While set, it is the input body and `body` is not used; whatever sets `body` clears it.
+   */
+  binary: null as null | { base64: string; size: number },
+  headers: [] as Row[],
   properties: [] as Row[],
-  cm: {
-    headers: [{ action: 'Create', name: 'OrderId', type: 'xpath', value: '/Order/@id', datatype: 'java.lang.String', default: '' }] as CmRow[],
-    properties: [{ action: 'Create', name: 'Key', type: 'expression', value: '${header.SenderId}-${header.OrderId}', datatype: '', default: '' }] as CmRow[],
-    bodyType: 'constant' as 'constant' | 'expression',
-    body: '',
-  },
-  router: {
-    routes: [
-      // SAP: all routes use the same condition type; XML and Non-XML mixed make the evaluation fail.
-      { name: 'ERP', expressionType: 'nonxml', condition: "${header.SenderId} = 'ERP_100'", default: false },
-      { name: 'Web shop', expressionType: 'nonxml', condition: "${header.SenderId} = 'WEBSHOP' and ${header.Priority} = 'high'", default: false },
-      { name: 'Default', expressionType: 'nonxml', condition: '', default: true },
-    ] as Route[],
-    throwException: false,
-  },
-  splitter: { splitter: 'general' as 'general' | 'iterating', expressionType: 'xpath' as 'xpath' | 'token' | 'lineBreak',
-    expression: '/Order/Item', grouping: '', streaming: true },
-  filter: { expression: "/Order/Item[@qty > 1]", valueType: 'nodelist' },
+  ...flowStepDefaults(),
   /** The messages to gather: a splitter's result or bodies added by hand. */
-  gather: { messageType: 'sameXml', algorithm: 'combine', sourceXPath: '', targetXPath: '', messages: [] as string[] },
-  converter: converterDefaults(),
+  gather: { ...flowStepDefaults().gather, messages: [] as string[] },
   cmResult: null as any,
   routerResult: null as null | { routes: RouteResult[]; taken: string; diagnostics: string[] },
   splitResult: null as any,
   filterResult: null as any,
   gatherResult: null as any,
   converterResult: null as any,
+  encoderResult: null as any,
+  decoderResult: null as any,
+  digestResult: null as any,
   running: false,
 });
 
@@ -403,7 +397,7 @@ export async function importMessage(pasted: string | SharedMessage, options: Imp
       if (m.body !== '') {
         if (tool === 'xsd') xsd.body = m.body;
         else if (tool === 'xpath') xpath.body = m.body;
-        else flow.body = m.body;
+        else setFlowBody(m.body);
         delete app.inputPaths[tool];
       }
       if (tool === 'flow') {
@@ -464,6 +458,44 @@ function importGroovy(m: SharedMessage, rerun: boolean) {
       app.status += ' The open script has not run on it: press Ctrl+Enter to run it.';
     }
   }
+}
+
+/**
+ * Loads a bundled example (lib/examples.ts) into its tab, without a path: Save asks for one. The mapping runs as
+ * one opened from a file would; a script waits for Ctrl+Enter, as a script opened from a file does.
+ */
+export async function loadExample(id: string) {
+  const ex = EXAMPLES.find((e) => e.id === id);
+  if (!ex || !(await mayDiscard(ex.tool))) return;
+  app.error = '';
+  if (ex.tool === 'xslt') {
+    xslt.mappingPath = xslt.casePath = null;
+    xslt.mapping = ex.source;
+    xslt.savedMapping = '';
+    xslt.body = ex.body;
+    delete app.inputPaths.xslt;
+    app.tool = 'xslt';
+    disarmXslt('the example');
+    app.status = `Loaded the example ${ex.path} with its input. Save asks where to keep it.`;
+    rerunIfLive('xslt');
+    return;
+  }
+  rememberScript();
+  groovy.scriptPath = groovy.casePath = null;
+  groovy.casePlatform = null;
+  groovy.script = ex.source;
+  groovy.savedScript = '';
+  groovy.functionName = 'processData';
+  groovy.mapping = null;
+  groovy.functions = [];
+  groovy.stepFunction = null;
+  groovy.args = [];
+  forgetGroovyRun();
+  groovy.body = ex.body;
+  delete app.inputPaths.groovy;
+  if (ex.profile && hasProfile(ex.profile)) app.groovyProfile = ex.profile;
+  app.tool = 'groovy';
+  disarmGroovy('the example ' + ex.path);
 }
 
 function importXslt(m: SharedMessage, rerun: boolean) {
@@ -679,6 +711,7 @@ export async function open(dir: string, initProject = false) {
   if (other) scriptMemory.clear(); // its paths belong to the other project
   app.project = { root: r.root, files: r.files };
   if (other) resetPlatform(); // at once: no run of the opened project uses rows typed before it
+  if (other) closeIflowFlowSteps(); // their iFlows belong to the other project
   safeSet('cpiwb.project', r.root);
   await loadIflowSteps();
   if (!r.isProject && !initProject) app.status = 'Folder has no cpi-workbench.json – it still works; use "Init" to add the standard folders.';
@@ -708,6 +741,10 @@ export async function closeProject() {
   resetPlatform();
   app.inputPaths = {};
   app.iflowSteps = [];
+  app.iflowModels = [];
+  app.iflowSelected = null;
+  closeIflowFlowSteps();
+  if (app.tool === 'diagram') app.tool = app.stepTool;
 }
 
 export async function refreshFiles() {
@@ -724,13 +761,56 @@ export async function loadIflowSteps() {
   } catch {
     app.iflowSteps = [];
   }
+  await loadIflowModels();
 }
 
+export async function loadIflowModels() {
+  if (!app.project) return;
+  try {
+    app.iflowModels = (await call('iflow.models')).models;
+  } catch {
+    app.iflowModels = [];
+  }
+  if (!app.iflowModels.length && app.tool === 'diagram') app.tool = app.stepTool;
+}
+
+/** The step of an iFlow element that a tab can open (Groovy, XSLT, a flow step, …), if any. */
+export function iflowStepFor(iflow: string, id: string): IflowStep | undefined {
+  return app.iflowSteps.find((s) => s.iflow === iflow && s.id === id);
+}
+
+/** Selects an element of an imported iFlow; with show, the Diagram tab comes up with it. */
+export function selectIflowNode(iflow: string, id: string | null, show = false) {
+  app.iflowSelected = { iflow, id };
+  if (show) app.tool = 'diagram';
+}
+
+/** Imports an exported iFlow, Value Mapping or integration package (the engine tells them apart). */
 export async function importIflow(zip: string) {
   const r = await call('iflow.import', { zip });
   if (app.project) app.project.files = r.fileList;
   app.iflowSteps = r.steps;
-  app.status = `Imported ${r.imported} (${r.files} files, ${r.steps.length} steps found)`;
+  await loadIflowModels();
+  const vms: { rows: number; replaced: number; notes: string[] }[] = r.valueMappings ?? [];
+  const skipped: { name: string; type: string; reason: string }[] = r.skipped ?? [];
+  const parts: string[] = [];
+  if (r.iflows?.length) parts.push(`${r.files} files, ${r.steps.length} steps found`);
+  if (vms.length) {
+    const rows = vms.reduce((n, v) => n + v.rows, 0);
+    const replaced = vms.reduce((n, v) => n + v.replaced, 0);
+    parts.push(`${rows} value mapping rows` + (replaced ? `, ${replaced} replaced` : ''));
+  }
+  if (skipped.length) parts.push(`skipped: ${skipped.map((s) => `${s.name} (${s.type}, ${s.reason})`).join(', ')}`);
+  const notes = vms.flatMap((v) => v.notes);
+  app.status = `Imported ${r.imported} (${parts.join('; ')})` + (notes.length ? `. ${notes.join(' ')}` : '');
+  if (vms.length) {
+    // Unsaved edits of the table stay, and saving them would write over the imported rows.
+    if (platformDirty('valueMappings')) {
+      app.error = 'The import changed platform/value-mappings.json, but the Value Mappings table has unsaved changes: '
+        + 'saving them replaces the imported rows. Discard them to see the imported rows.';
+    }
+    await loadPlatform();
+  }
 }
 
 /** Opens the file of an imported iFlow step with the step's settings (function, script version). */
@@ -764,6 +844,11 @@ export async function readFile(path: string): Promise<string> {
 
 export async function writeFile(path: string, content: string) {
   await call('file.write', { path, content });
+}
+
+/** Writes bytes given as Base64 (a body that is no text). */
+export async function writeBytes(path: string, base64: string) {
+  await call('file.write', { path, contentBase64: base64 });
 }
 
 /** The editor a file opens in, or null for inputs (they replace the input body, not an editor). */
@@ -852,7 +937,8 @@ export async function openFile(path: string, opts: OpenOptions = {}) {
     // take the file's content if it changed on disk while the editor has no unsaved changes.
     if (!opts.functionName && !opts.profile && isOpenInItsTab(path)) return await reopen(path);
     if (!opts.discardChecked && !(await mayDiscard(editorFor(path)))) return;
-    const content = await readFile(path);
+    const content = path.startsWith('inputs/') || isArchive(path) ? await readInputFile(path) : await readFile(path);
+    if (content === null) return await setBinaryInput(path);
     if (lower.endsWith('.xsl') || lower.endsWith('.xslt')) {
       xslt.mappingPath = path;
       xslt.mapping = content;
@@ -1012,8 +1098,9 @@ export function closeInput(tool: StepTool) {
   } else if (tool === 'flow') {
     flowSeq++;
     flow.running = false;
-    flow.body = '';
+    setFlowBody('');
     flow.cmResult = flow.routerResult = flow.splitResult = flow.filterResult = flow.gatherResult = flow.converterResult = null;
+    flow.encoderResult = flow.decoderResult = flow.digestResult = null;
   } else if (tool === 'groovy') {
     forgetGroovyRun();
     groovy.body = '';
@@ -1057,6 +1144,8 @@ function stepBody(tool: StepTool) {
 }
 
 function setInput(path: string, content: string) {
+  // Text with a NUL character is no text the editors can hold (an archive that happens to be valid UTF-8).
+  if (content.includes('\0')) return void setBinaryInput(path).catch(fail);
   // XSLT, XSD and XPath read XML only; a JSON body can only feed a Groovy script (or the Flow Steps, on the same engine).
   const json = /\.json$/i.test(path) || /^\s*[[{]/.test(content);
   if (json && !app.profiles.some((p) => p.kind === 'groovy' && p.available)) {
@@ -1066,7 +1155,7 @@ function setInput(path: string, content: string) {
   const tool: StepTool = json && app.stepTool !== 'flow' ? 'groovy' : app.stepTool;
   if (tool === 'xsd') xsd.body = content;
   else if (tool === 'xpath') xpath.body = content;
-  else if (tool === 'flow') flow.body = content;
+  else if (tool === 'flow') setFlowBody(content);
   else if (tool === 'groovy') groovy.body = content;
   else xslt.body = content;
   app.inputPaths[tool] = path;
@@ -1078,10 +1167,38 @@ function setInput(path: string, content: string) {
 /** Loads any file as the input body of the current step tool. */
 export async function useAsInput(path: string) {
   try {
-    setInput(path, await readFile(path));
+    const content = await readInputFile(path);
+    if (content === null) await setBinaryInput(path);
+    else setInput(path, content);
   } catch (e) {
     fail(e);
   }
+}
+
+/** A file's text, or null when it is no text: the engine refuses to decode it. */
+async function readInputFile(path: string): Promise<string | null> {
+  try {
+    return await readFile(path);
+  } catch (e) {
+    if (String((e as Error)?.message ?? e).includes('cannot be read as text')) return null;
+    throw e;
+  }
+}
+
+/** A file that is no text (an archive for a Decoder) as the Flow Steps' input: the only steps that take bytes. */
+async function setBinaryInput(path: string) {
+  const r = await call('file.read', { path, binary: true });
+  flow.body = '';
+  flow.binary = { base64: r.contentBase64, size: r.size };
+  app.inputPaths.flow = path;
+  app.tool = 'flow';
+  app.status = `Loaded ${path} as a binary input body (${r.size} bytes) in Flow Steps; a Decoder reads it.`;
+}
+
+/** The Flow Steps' input body as text; a binary body set before is dropped. */
+function setFlowBody(body: string) {
+  flow.body = body;
+  flow.binary = null;
 }
 
 /** Saves the input body of the current step tool under inputs/, so it survives opening other files. */
@@ -1091,12 +1208,14 @@ export async function saveInput() {
     return;
   }
   const body = stepBody(app.stepTool);
-  const ext = /^\s*[[{]/.test(body) ? 'json' : /^\s*</.test(body) ? 'xml' : 'txt';
+  const bytes = app.stepTool === 'flow' ? flow.binary : null;
+  const ext = bytes ? 'bin' : /^\s*[[{]/.test(body) ? 'json' : /^\s*</.test(body) ? 'xml' : 'txt';
   const r = await ask('Save input body as (path inside the project)', `inputs/input.${ext}`);
   if (!r) return;
   try {
     if (!(await mayOverwrite(r.value))) return;
-    await writeFile(r.value, body);
+    if (bytes) await writeBytes(r.value, bytes.base64);
+    else await writeFile(r.value, body);
     app.inputPaths[app.stepTool] = r.value;
     app.status = 'Saved input as ' + r.value;
     await refreshFiles();
@@ -1376,6 +1495,8 @@ export async function runXslt() {
     if (seq === runSeq) {
       xslt.result = r;
       xslt.compare = c;
+      xslt.resultAt = Date.now();
+      xslt.history = addRun(xslt.history, { at: xslt.resultAt, profile: app.profile, what: xslt.mappingPath ?? 'mapping.xsl', result: r });
     }
   } catch (e) {
     if (seq === runSeq) fail(e);
@@ -1424,6 +1545,9 @@ export async function runGroovy() {
     if (seq === groovySeq) {
       groovy.result = r;
       groovy.compare = c;
+      groovy.resultAt = Date.now();
+      groovy.history = addRun(groovy.history, { at: groovy.resultAt, profile: app.groovyProfile,
+        what: `${groovy.scriptPath ?? 'script.groovy'} · ${r.mapping?.function ?? params.function}`, result: r });
       const pick = pickMappingFunction;
       pickMappingFunction = false;
       if (pick && !r.ok && r.failedPhase === 'compile' && r.functions?.length && !r.mapping) {
@@ -1527,7 +1651,9 @@ function flowXmlProfile(): Profile {
 }
 
 function flowInput() {
-  return { body: flow.body, headers: clean(flow.headers), properties: clean(flow.properties) };
+  const rows = { headers: clean(flow.headers), properties: clean(flow.properties) };
+  // The engines take bytes as bodyBase64 (SimExchange.fromJson).
+  return flow.binary ? { bodyBase64: flow.binary.base64, ...rows } : { body: flow.body, ...rows };
 }
 
 /**
@@ -1557,8 +1683,9 @@ async function simpleEval(run: FlowRun, expression: string, mode: 'condition' | 
 // A run's result goes to the step it was started for, and only if no newer run or newly opened step came since.
 let flowSeq = 0;
 const flowResultKey = { contentModifier: 'cmResult', filter: 'filterResult', router: 'routerResult', splitter: 'splitResult', gather: 'gatherResult',
-  converter: 'converterResult' } as const;
-const flowConfigKey = { contentModifier: 'cm', filter: 'filter', router: 'router', splitter: 'splitter', gather: 'gather', converter: 'converter' } as const;
+  converter: 'converterResult', encoder: 'encoderResult', decoder: 'decoderResult', messageDigest: 'digestResult' } as const;
+const flowConfigKey = { contentModifier: 'cm', filter: 'filter', router: 'router', splitter: 'splitter', gather: 'gather', converter: 'converter',
+  encoder: 'encoder', decoder: 'decoder', messageDigest: 'digest' } as const;
 
 export async function runFlowStep() {
   const seq = ++flowSeq;
@@ -1573,6 +1700,9 @@ export async function runFlowStep() {
       : step === 'router' ? await runRouter(run, config)
       : step === 'splitter' ? await runSplitter(run, config)
       : step === 'converter' ? await runConverter(run, config)
+      : step === 'encoder' ? await call('encode.run', { scheme: config.scheme, input: run.input }, run.xml)
+      : step === 'decoder' ? await call('decode.run', { scheme: config.scheme, input: run.input }, run.xml)
+      : step === 'messageDigest' ? await call('digest.run', { ...config, namespaces: run.namespaces, input: run.input }, run.xml)
       : await runGather(run, config);
     if (seq === flowSeq) flow[flowResultKey[step]] = r;
   } catch (e) {
@@ -1595,7 +1725,7 @@ async function runContentModifier(run: FlowRun, cm: typeof flow.cm) {
       if (r.action === 'Create' && r.type === 'xpath') {
         if (r.value.includes('$') && (pending.headers.length || pending.properties.length)) {
           const s = await call('contentModifier.run', { ...pending, bodyType: 'constant', body: '', input: state }, run.camel);
-          if (s.ok) state = { body: input.body, headers: s.output.headers, properties: s.output.properties };
+          if (s.ok) state = { ...input, headers: s.output.headers, properties: s.output.properties };
           pending = { headers: [], properties: [] };
         }
         try {
@@ -1652,7 +1782,8 @@ async function runSplitter(run: FlowRun, s: typeof flow.splitter) {
   const resolve = async (v: string) => (v.includes('${') ? (await simpleEval(run, v, 'expression')).value ?? '' : v);
   return await call('split.run', {
     splitter: s.splitter, expressionType: s.expressionType, expression: await resolve(s.expression),
-    grouping: await resolve(String(s.grouping ?? '')), streaming: s.streaming, namespaces: run.namespaces, input: { body: run.input.body },
+    grouping: await resolve(String(s.grouping ?? '')), streaming: s.streaming, namespaces: run.namespaces,
+    input: 'bodyBase64' in run.input ? { bodyBase64: run.input.bodyBase64 } : { body: run.input.body },
   }, run.xml);
 }
 
@@ -1690,9 +1821,16 @@ export function gatherSplitResult() {
   flow.step = 'gather';
 }
 
-/** A result message becomes the next input, to try steps one after another. */
-export function useAsFlowInput(body: string, headers?: Row[], properties?: Row[]) {
-  flow.body = body;
+/**
+ * A result message becomes the next input, to try steps one after another. A result that is no text (an Encoder's
+ * GZIP or ZIP) comes as `{ bodyBase64, bodySize }`.
+ */
+export function useAsFlowInput(body: string | { bodyBase64: string; bodySize: number }, headers?: Row[], properties?: Row[]) {
+  if (typeof body === 'string') setFlowBody(body);
+  else {
+    flow.body = '';
+    flow.binary = { base64: body.bodyBase64, size: body.bodySize };
+  }
   if (headers) flow.headers = headers.map((r) => ({ ...r }));
   if (properties) flow.properties = properties.map((r) => ({ ...r }));
   delete app.inputPaths.flow;
@@ -1715,6 +1853,12 @@ function openFlowStep(step: IflowStep) {
     flow.converter = { ...converterDefaults(), ...c,
       namespaceMapping: Array.isArray(c.namespaceMapping) ? c.namespaceMapping.map((m: any) => `${m.prefix} = ${m.namespace}`).join('\n') : c.namespaceMapping ?? '',
       arrayPaths: Array.isArray(c.arrayPaths) ? c.arrayPaths.join('\n') : c.arrayPaths ?? '' };
+  } else if (step.type === 'encoder') {
+    flow.encoder = { scheme: c.scheme ?? '' };
+  } else if (step.type === 'decoder') {
+    flow.decoder = { scheme: c.scheme ?? '' };
+  } else if (step.type === 'messageDigest') {
+    flow.digest = { filter: c.filter ?? '', canonicalization: c.canonicalization ?? '', algorithm: c.algorithm ?? '', targetHeader: c.targetHeader ?? '' };
   } else if (step.type === 'gather') {
     // The messages stay: they come from the splitter, not from the iFlow.
     flow.gather = { ...flow.gather, messageType: c.messageType ?? 'sameXml', algorithm: c.algorithm ?? 'combine',
@@ -1731,7 +1875,32 @@ function openFlowStep(step: IflowStep) {
   flowSeq++;
   flow.running = false;
   app.tool = 'flow';
-  app.status = `Loaded ${step.name || step.id} from ${step.iflow}`;
+  app.status = `Loaded ${step.name || step.id} from ${step.iflow}` + (step.note ? `. ${step.note}` : '');
+}
+
+/**
+ * Closes the iFlow step a flow step's settings came from: the step gets its starting settings back and loses its
+ * result. The iFlow is not touched; the step opens again from the iFlow list or the diagram. Gather keeps its messages.
+ */
+export function closeFlowStep(step: FlowStep) {
+  const source = flow.sources[step];
+  if (!source) return;
+  const d = flowStepDefaults();
+  if (step === 'gather') flow.gather = { ...d.gather, messages: flow.gather.messages };
+  else (flow as any)[flowConfigKey[step]] = d[flowConfigKey[step]];
+  delete flow.sources[step];
+  flow[flowResultKey[step]] = null;
+  // A run still open for the closed step must not write its result here.
+  flowSeq++;
+  flow.running = false;
+  app.status = `Closed ${source}; the step has its starting settings again.`;
+}
+
+/** The flow steps taken from the project's iFlows close with it. */
+function closeIflowFlowSteps() {
+  const status = app.status;
+  for (const step of Object.keys(flow.sources) as FlowStep[]) closeFlowStep(step);
+  app.status = status;
 }
 
 export async function formatXml(text: string): Promise<string> {

@@ -6,6 +6,73 @@ of its version.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-17
+
+### Added
+
+- **Import of Value Mappings and integration packages.** *Import iFlow* (and the MCP server's `import_iflow`) also
+  takes an exported Value Mapping, whose groups become rows of `platform/value-mappings.json` in both directions
+  (the value marked default first), and a whole package export with its iFlows, script collections and value
+  mappings. A Groovy step whose script is in a script collection finds it in that collection's folder. Artifacts
+  whose folder names would collide (also ignoring case and trailing dots, as Windows does) refuse the import
+  before any file or value mapping is written, even when overwrite is on.
+- **iFlow outline and Diagram tab.** After an import the sidebar lists each iFlow whole: adapters, processes,
+  exception subprocesses and every element in flow order, with the Router's routes and conditions. The new
+  *Diagram* tab draws the iFlow in the layout of its export (read-only); steps the app runs open from both.
+- **Examples without a project.** *Examples…* in the sidebar loads a mapping or script of the demo project with
+  its input; they come with the app.
+- **Debugging Groovy scripts.** `docs/debugging.md` shows how to stop a script at a breakpoint: an engine jar
+  under Java's debug agent, with jdb, IntelliJ or VS Code attached.
+- **Run history.** The XSLT and Groovy output has a *History* tab with the last runs of this session and
+  *Compare with the previous run* (body, headers, properties), in memory only.
+- **Test cases: `"compare": "json"`.** Compares JSON bodies as values (member order and formatting do not count),
+  and `expect.ignore` takes JSON Pointers there (`/order/items/*/uuid`).
+- **Flow Steps: Message Digest.** The message, or the one element a filter XPath selects, is written as canonical
+  XML (the six methods CPI offers, or *None*) and its digest (MD5 to SHA512) goes to a header, `SAPMessageDigest`
+  by default, as Base64 text. The result also shows the canonical form the digest is of. In the tab, in the MCP
+  server's `run_flow_step` (the header travels on with `messageFrom`) and from an imported iFlow. Not tried on a
+  tenant yet: *None* hashing the body's bytes is an assumption, and a filter that selects several nodes is refused.
+- **Flow Steps: Encoder and Decoder.** Base64, GZIP and ZIP in both directions, as Camel 3.14.7's data formats do
+  them with their defaults (Base64 in lines of 76 characters with CR LF; ZIP's entry named after `CamelFileName`).
+  That CPI's steps behave the same is not verified on a tenant yet, and the result says so. MIME Multipart is not
+  simulated.
+- **Flow Steps: binary bodies.** A result that is no text (GZIP, ZIP) shows its size and a hex dump; *Use as input*
+  passes the bytes to the next step and *Save…* writes them to a file. A `.zip` or `.gz` file of the project is
+  listed in the file tree, wherever it is, and opens from there as a binary input body. The MCP server passes such
+  a body on by `runId` and as `bodyPath`, `read_file` returns bytes with `binary: true` and `save_file` writes them
+  (`contentBase64`, or `contentFrom` a binary run). A Groovy script gets a body that is no text as `byte[]` instead
+  of garbled text.
+- **Flow Steps: a step opened from an iFlow can be closed.** The **×** after *From <iFlow> · <step>* gives the
+  step its empty starting settings back and drops its result; the iFlow is not changed. Closing or switching the
+  project closes the steps taken from its iFlows.
+- **Test cases: a JUnit XML report.** `test <path> --junit <file>` on each engine also writes the results as a
+  JUnit XML report for a CI system: one test case per case, failed cases with their messages, the cases of other
+  engines as skipped. The output and the exit code stay as they are. The layout is Maven Surefire's; it has not
+  been tried with a CI reporter yet. See [test cases](docs/test-cases.md).
+- **Test cases: leave out values that change with every run.** `expect.ignore` lists XPath expressions (XPath 1.0)
+  whose nodes are removed from the expected and the actual body before they are compared as `xml`: a timestamp, a
+  generated id. `expect.namespaces` binds the prefixes the expressions use. A rule that cannot apply (no XPath,
+  an unknown prefix, a comparison as text) makes the case an error. XML bodies only.
+
+### Changed
+
+- **CPI Helper receiver: the default port is 7790**, no longer 7778. 7778 is where the Groovy 1.x engine of the
+  browser mode listens (and the Groovy engines' `--http` default), so the two could not run side by side. If you
+  turned the receiver on in 0.4.0, it stays on 7778 and the *Custom URL* in the plugins keeps working; to move,
+  set the port under **⚙** and enter the new *Custom URL* in both plugins.
+- **The app starts empty.** Input bodies, headers, the mapping and script editors, the XPath expression and the
+  flow steps (Content Modifier rows, Router routes, Splitter, Filter and the converter's source path) no longer
+  hold sample values; without a project, **Examples…** loads something to try. The MCP server's converter has no
+  default source path either.
+- **Flow steps taken from an iFlow close with their project.** Closing or switching the project used to leave their
+  settings and *From* line in the Flow Steps tab.
+
+### Fixed
+
+- **iFlow and package import** refuse a folder that differs from one already in `iflows/` only in letter case
+  or trailing dots (on Windows that is the same folder), and check an artifact named `.` or `..` before the
+  package's value mappings are written.
+
 ## [0.4.0] - 2026-11-16
 
 Workflow in the tabs: platform data as tables, a traced message from CPI Helper (pasted, or with one click
@@ -307,7 +374,8 @@ First public release.
   supported.
 - The installers and engine jars include the licence texts and notices of the bundled components.
 
-[Unreleased]: https://github.com/jsevenheck/cpi-workbench/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/jsevenheck/cpi-workbench/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/jsevenheck/cpi-workbench/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/jsevenheck/cpi-workbench/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/jsevenheck/cpi-workbench/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/jsevenheck/cpi-workbench/compare/v0.2.0...v0.3.0

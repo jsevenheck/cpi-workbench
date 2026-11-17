@@ -49,6 +49,7 @@ Opening Groovy scripts/cases waits for **Run** or **Ctrl+Enter** before the firs
 
 | # | Step | Expected |
 |---|---|---|
+| 2.0 | Before opening the project: **Examples…** → each entry | The XSLT example runs on its input at once; a Groovy example loads its script and input and runs on Ctrl+Enter, on 2.x. |
 | 2.1 | `mappings/orders-to-batch.xsl`, input `inputs/orders.xml` | Output appears (live or Ctrl+Enter) and matches `inputs/order-batch.xml`. |
 | 2.2 | `mappings/order-to-salesorder.xsl`, input `inputs/order.xml`, header `SenderSystem`, property `CustomerGroup` | The output uses both values; **Parameters** shows them bound from header and property. |
 | 2.3 | **Compare** | Runs on Saxon-HE 9.9 and 12 and lists the differences, or none. |
@@ -66,6 +67,7 @@ The first run starts the Java engines and can take a few seconds.
 | 2.8 | `scripts/validate-order-batch-json.groovy`, input `inputs/order-batch.json` | Runs with the JSON body. |
 | 2.9 | `scripts/route-by-partner.groovy`, input `inputs/order.xml`, header `SalesChannel` = `web-eu` | Reads the Partner Directory. |
 | 2.10 | **Compare** on a script | Runs on 1.x and 2.x. |
+| 2.10b | Run a mapping, change it so the output differs, run again; output tab **History**, *Compare with the previous run* | Two runs with time, file, runtime and status; the comparison names the body and header differences between the shown result and the earlier run. Running the unchanged mapping again adds no row. |
 | 2.11 | Type `message.` in a script; also `messageLogFactory.` and Ctrl+Space | The Script API methods are listed. |
 | 2.11a | `scripts/mapping-functions.groovy`: open **Function**, choose `countPerContext(values)`; context 1 starts empty: **+ Value** `A`, **+ Value** `B`, then **+ Context** and `C` | Before any run, **Function** lists the functions under *Message Mapping function* and the left pane shows **Function arguments** with `values`; **Result** shows *Context 1* `2` and *Context 2* `1` (**Text**: `["2"]` and `["1"]`). |
 | 2.11b | **Function** `getHeader(headerName)`, `headerName` `SenderSystem` with that header set; then a name that is not set; then **null** | **Result** shows the header's value, then `null`. With **null** the run fails with a `NullPointerException` in line 7: once a header is set, Camel's case-insensitive header map takes no null name. Opening another script brings the **Body** tab back. |
@@ -73,7 +75,7 @@ The first run starts the Java engines and can take a few seconds.
 | 2.11e | `tests/groovy-enrich-order/case.json`, run it; **Platform** tab: change *Target value* of the first value mapping; then **Save** | The output's `SoldTo` property follows the change at once, with a dot next to *Value mappings*; after **Save** the dot is gone and `platform/value-mappings.json` has the value. |
 | 2.11f | `tests/groovy-attachment/case.json`: **Attachments** tab; set *Content from* to *text*, name `delivery-note.txt`, content `Delivery DN-1` | The tab shows the case's file with its project path; with the text, the `DeliveryNote` header is `Delivery DN-1`. |
 | 2.11g | With CPI Helper on a tenant's iFlow page, trace on: send a Groovy step from the **GroovyDebugX** plugin (body, headers, properties, script); copy the opened tab's address; Groovy tab → **Import…** → paste | Body, headers, properties and the script arrive; the status line says what came and that the script has not run; **Run** runs it. |
-| 2.11j | **⚙** → **Receive links from CPI Helper** on (port 7778); set the shown *Custom URL* in GroovyDebugX and xsltDebugX; send a Groovy step, then an XSLT step | The plugin's tab says "Sent. Confirm the import…"; the app comes to the front with a dialog naming the tab, the body's size and what it replaces; **Import** fills that tab, **Cancel** leaves it. A body cut off in the trace shows a warning in the dialog and, after the import, in the red bar. With the setting off, the tab shows the browser's error page. |
+| 2.11j | **⚙** → **Receive links from CPI Helper** on (port 7790 on a fresh installation; a setting saved by 0.4.0 keeps 7778); set the shown *Custom URL* in GroovyDebugX and xsltDebugX; send a Groovy step, then an XSLT step | The plugin's tab says "Sent. Confirm the import…"; the app comes to the front with a dialog naming the tab, the body's size and what it replaces; **Import** fills that tab, **Cancel** leaves it. A body cut off in the trace shows a warning in the dialog and, after the import, in the red bar. With the setting off, the tab shows the browser's error page. |
 | 2.11h | Without a tenant, the same path: XSLT tab → **Import…** → paste `http://localhost/#share/XYwxC8IwEIX_SrjZUlwlBhwcnBTbzTgc9sBikpZLIpXS_-6lm273vve-m2HyDnYK9Jk7YtV3ewtttbVg9CmRV_GVhRws1EbX68bARsEUXSpauZ-EgqPE2wwBPZWioSCw-UR5UkZvdHktjtcLLHchIw8jcerpz2wZH_SjeAwZXZUoJlGXLw` (a link in xsltDebugX's format with a body, one header and one property, no mapping) | The input body is `<Order id="T-1">…`, header `SenderSystem` = `ERP`, property `Trace` = `manual-test`; the mapping stays as it was. On macOS before 13.3 an error says the web view cannot unpack the link. |
 | 2.11i | `scripts/mapping-functions.groovy`, **Live** off: **Function** `getHeader`, run; then **Other name…**, type `setProperty`, fill both arguments, run | The result is the second argument, and the arguments stay filled after the run. |
 | 2.11k | Receiver on, script/mapping already run once, **Live** on; import only body/headers/properties | No automatic run, including a previously scheduled Live callback. The status asks for Ctrl+Enter. **Run** executes the existing code on the new message. |
@@ -94,15 +96,18 @@ The first run starts the Java engines and can take a few seconds.
 
 | # | Step | Expected |
 |---|---|---|
-| 2.15 | **Content Modifier** with the sample settings | The value of each row and the output message. |
-| 2.16 | **Filter** (`/Order/Item[@qty > 1]`); change the Value Type | The filtered body; the result follows the Value Type. |
-| 2.17 | **Router**; change a condition | The route the message takes; another route after the change. |
-| 2.18 | **Splitter**, then *Gather* on its result | The split messages; Combine gives SAP's multi-mapping format. |
+| 2.14a | Start the app without a project | Input, mapping, script, XPath and every flow step are empty; the empty editors point to *Examples…*; nothing runs. |
+| 2.15 | **Content Modifier** on `inputs/order.xml`: a header row `OrderId`, XPath `/Order/@number` | The value of each row and the output message. |
+| 2.16 | **Filter** `/Order/Items/Item[@qty > 1]`; change the Value Type | The filtered body; the result follows the Value Type. |
+| 2.17 | **Router**: *+ Route* twice, one Non-XML condition `${header.SenderId} = 'ERP'` with that header set, the other the default; change the condition | The route the message takes; another route after the change. |
+| 2.18 | **Splitter** `/Order/Items/Item`, then *Gather* on its result | The split messages; Combine gives SAP's multi-mapping format. |
 | 2.19 | Splitter on `inputs/orders.xml`, XPath `/src:Orders/src:Order`, namespace `src` = `urn:demo:integration:orders:source:v1` | One message per order. |
 | 2.20 | *Use as input* on a result | The result becomes the next step's input. |
 | 2.21 | Switch between steps and tabs | Each step keeps its settings and last result. |
 | 2.22a | **Converter**: XML to JSON on `inputs/order.xml`, *Use as input*, then JSON to XML | JSON with `@` attributes, then XML like the input (without indentation). |
 | 2.22b | **Converter**: XML to CSV on `inputs/order.xml`, path `/Order/Items/Item`, *Include Attribute Values* | A header line and one line per item. |
+| 2.22c | **Message Digest** on `inputs/order.xml` with the defaults; then change the body's attribute order or indentation inside a tag and run again; then *None* | The header `SAPMessageDigest` with a Base64 value and the canonical form; the same digest after the change; with *None* another digest and a note that this is an assumption. |
+| 2.22d | **Encoder**: *Base64 Encode* on `inputs/order.xml`; then *GZIP Compress*, *Use as input*, **Decoder** *GZIP Decompress*; then *ZIP Compress* with a header `CamelFileName` = `in/order.xml`, *Save…* as `inputs/order.zip`, click that file in the tree and run **Decoder** *ZIP Decompress*; then *MIME Multipart Encode* | Base64 in lines of 76 characters with an info that the details are Camel's; GZIP shows "binary", its size and a hex dump starting `1f 8b 08`, the input pane shows a binary body, and the Decoder gives back the order; ZIP sets `CamelFileName` = `order.xml.zip`, the saved file opens as a binary input, and ZIP Decompress gives the order with `CamelFileName` = `order.xml`; MIME Multipart fails with `UnsupportedInSimulator`. |
 | 2.23 | Start a step and change the body or its settings at once | The result belongs to the state at the start; the change applies to the next run. |
 
 ### Editor and files
@@ -119,8 +124,10 @@ The first run starts the Java engines and can take a few seconds.
 | # | Step | Expected |
 |---|---|---|
 | 3.1 | **Import iFlow** with the ZIP from section 0 | Unpacked into `iflows/`; lists the Groovy, XSLT, XML Validator, Content Modifier, Filter, Router, Splitter, Gather, Message Mapping (**M**) and converter (**T**) steps. |
+| 3.1b | **Import iFlow** with an exported Value Mapping, then with an exported integration package that has an iFlow using a script collection | The status names the value mapping rows; *Platform* → *Value Mappings* shows both directions. The package's iFlows and collections are under `iflows/`, other types are named as skipped, and the collection's script opens from the iFlow's Groovy step. |
+| 3.1c | After 3.1: the list under **iFlows**, then click *Write to data store*; in **Diagram**, double-click *Enrich order* | The list shows the HTTPS and SOAP adapters, the Router's routes *Other (default)* and *ERP* with its condition, the exception subprocess and the local process *Archive order*. *Write to data store* opens the Diagram tab with its settings (`storageName`); the double-click opens `enrich.groovy`. |
 | 3.2 | Click a Groovy or XSLT step | The file opens with the step's function name and script version. |
-| 3.3 | Click the Content Modifier, Filter, Gather and *JSON to XML* | They open in Flow Steps with their settings; `{{parameters}}` come from `parameters.prop` (the converter's root element `Orders`). |
+| 3.3 | Click the Content Modifier, Filter, Gather and *JSON to XML* | They open in Flow Steps with their settings; `{{parameters}}` come from `parameters.prop` (the converter's root element `Orders`). The **×** after *From …* gives the step its empty starting settings back; the other steps keep theirs. |
 | 3.3a | Click *Map order* (**M**) | Its script `lookup.gsh` opens with the mapping function `getHeader`. |
 | 3.4 | Optional: an iFlow exported from your own tenant, without secrets | Imports without errors; steps run or report `UnsupportedInSimulator`. |
 

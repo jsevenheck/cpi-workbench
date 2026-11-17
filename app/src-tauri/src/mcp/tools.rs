@@ -42,8 +42,8 @@ fn values_schema(what: &str) -> Value {
 /// Body, headers and properties of the incoming message.
 fn message_properties(props: &mut Map<String, Value>, headers: bool) {
     props.insert("body".into(), json!({ "type": "string", "description": "The message body. Use body or bodyPath." }));
-    props.insert("bodyPath".into(), json!({ "type": "string", "description": "Project-relative file whose content is the message body." }));
-    props.insert("messageFrom".into(), json!({ "type": "string", "description": "The runId of an earlier run (or runId/part, e.g. a Splitter's run-…/2): its output message is the input, as the message flows to the next step in an iFlow. body, bodyPath, headers and properties given here replace the body or the rows of the same name." }));
+    props.insert("bodyPath".into(), json!({ "type": "string", "description": "Project-relative file whose content is the message body; a file that is no text (a .zip or .gz for a Decoder) is passed as its bytes." }));
+    props.insert("messageFrom".into(), json!({ "type": "string", "description": "The runId of an earlier run (or runId/part, e.g. a Splitter's run-…/2): its output message (a binary body as bytes) is the input, as the message flows to the next step in an iFlow. body, bodyPath, headers and properties given here replace the body or the rows of the same name." }));
     if headers {
         props.insert("headers".into(), values_schema("Message headers"));
         props.insert("properties".into(), values_schema("Exchange properties"));
@@ -144,9 +144,9 @@ holds the returned value or the output queue in the same form." })),
     let mut step = obj(vec![
         ("iflowStep", json!({ "type": "string", "description": "Name or id of a step that project_info lists under iflowSteps. Use iflowStep or step." })),
         ("iflow", json!({ "type": "string", "description": "The iFlow of iflowStep, when several iFlows have a step with that name or id." })),
-        ("step", json!({ "type": "object", "description": "A step given directly (as edited in the Flow Steps tab): {\"type\": \"contentModifier\"|\"filter\"|\"router\"|\"splitter\"|\"gather\"|\"converter\", \"config\": {...}}, config shaped as project_info shows it for iFlow steps.",
+        ("step", json!({ "type": "object", "description": "A step given directly (as edited in the Flow Steps tab): {\"type\": \"contentModifier\"|\"filter\"|\"router\"|\"splitter\"|\"gather\"|\"converter\"|\"encoder\"|\"decoder\"|\"messageDigest\", \"config\": {...}}, config shaped as project_info shows it for iFlow steps.",
             "properties": {
-                "type": { "type": "string", "enum": ["contentModifier", "filter", "router", "splitter", "gather", "converter"] },
+                "type": { "type": "string", "enum": ["contentModifier", "filter", "router", "splitter", "gather", "converter", "encoder", "decoder", "messageDigest"] },
                 "config": { "type": "object", "description": "The tab's settings for the type (keys left out take the tab's defaults). \
 contentModifier: {headers: [row], properties: [row], bodyType: \"constant\"|\"expression\", body}, row = {action: \"Create\"|\"Delete\", name, \
 type: \"constant\"|\"header\"|\"property\"|\"xpath\"|\"expression\", value, datatype (e.g. \"java.lang.String\"), default}. \
@@ -158,7 +158,13 @@ converter: {conversion: \"jsonToXml\"|\"xmlToJson\"|\"xmlToCsv\"|\"csvToXml\"; J
 namespaceMapping ([{prefix, namespace}] or lines \"prefix = uri\"), addRootElement, rootElementName, rootNamespace (a prefix of namespaces), \
 suppressRoot, streaming, streamingElements: \"all\"|\"specific\", arrayPaths, outputEncoding; XML to CSV: sourcePath, fieldSeparator, \
 csvHeader: \"none\"|\"xml\", includeParent, parentPath, includeAttributes; CSV to XML: schema (project .xsd), targetPath, recordMarker, \
-fieldSeparator, firstLineHeader, headerMapping: \"xsd\"|\"csv\"}." } },
+fieldSeparator, firstLineHeader, headerMapping: \"xsd\"|\"csv\"}. \
+encoder: {scheme: \"base64Encode\"|\"gzipCompress\"|\"zipCompress\"} (MIME Multipart is not simulated; ZIP names its entry after the \
+header CamelFileName). decoder: {scheme: \"base64Decode\"|\"gzipDecompress\"|\"zipDecompress\"}. A result that is no text has binary: true, \
+bodyBase64 (left out when long), bodySize and a hex preview; messageFrom passes it on as bytes. \
+messageDigest: {filter (XPath 1.0 that selects one element; empty: the whole message), canonicalization: \"c14n10\"|\"c14n10Comments\"|\
+\"exclusive\"|\"exclusiveComments\"|\"c14n11\"|\"c14n11Comments\"|\"none\", algorithm: \"MD5\"|\"SHA1\"|\"SHA256\"|\"SHA384\"|\"SHA512\", \
+targetHeader}; the result has header {name, value}, the canonical text and the output message with the header." } },
             "required": ["type", "config"], "additionalProperties": false })),
         ("messages", json!({ "type": "array", "items": { "type": "string" },
             "description": "Gather only: the bodies to gather, e.g. the messages a splitter returned. Use messages or messagesFrom." })),
@@ -171,7 +177,8 @@ fieldSeparator, firstLineHeader, headerMapping: \"xsd\"|\"csv\"}." } },
     let path = |what: &str| json!({ "type": "string", "description": what });
     let read = obj(vec![
         ("path", path("Project-relative file, as project_info lists it (e.g. iflows/Order/src/main/resources/script/check.groovy). Use path or runId.")),
-        ("runId", path("The runId (or runId/part) of an earlier run: its whole output body, e.g. when the result showed it shortened.")),
+        ("runId", path("The runId (or runId/part) of an earlier run: its whole output body, e.g. when the result showed it shortened. A binary body comes back as contentBase64.")),
+        ("binary", json!({ "type": "boolean", "default": false, "description": "With path: the file's bytes as contentBase64, for a file that is no text (an archive)." })),
         ("startLine", json!({ "type": "integer", "minimum": 1, "default": 1, "description": "First line to return (1-based)." })),
         ("maxLines", json!({ "type": "integer", "minimum": 1, "default": 2000, "description": "Lines to return at most; long files come in parts." })),
         ("startChar", json!({ "type": "integer", "minimum": 0, "description": "Read by characters instead of lines, from this 0-based offset (200,000 at most per call): for text in one long line, such as minified XML or JSON." })),
@@ -179,14 +186,15 @@ fieldSeparator, firstLineHeader, headerMapping: \"xsd\"|\"csv\"}." } },
     let save = obj(vec![
         ("path", path("Project-relative file to write, in the folder of its kind: mappings/*.xsl, scripts/*.groovy, \
 schemas/*.xsd, inputs/*.xml|json|csv, platform/*.json. Folders are created.")),
-        ("content", json!({ "type": "string", "description": "The whole file content (text). Use content or contentFrom." })),
-        ("contentFrom", path("The runId (or runId/part) of an earlier run: saves its output body, e.g. a mapping's result as a new input.")),
+        ("content", json!({ "type": "string", "description": "The whole file content (text). Use content, contentBase64 or contentFrom." })),
+        ("contentBase64", json!({ "type": "string", "description": "The file's bytes as Base64, for a file that is no text." })),
+        ("contentFrom", path("The runId (or runId/part) of an earlier run: saves its output body, e.g. a mapping's result as a new input; a binary body (GZIP, ZIP) is saved as its bytes.")),
         ("overwrite", json!({ "type": "boolean", "default": false, "description": "Replace an existing file. Without it, an existing file is an error." })),
     ]);
     let import = obj(vec![
-        ("zip", path("The iFlow exported from the tenant (.zip): an absolute path, or a path inside the project.")),
-        ("name", path("Folder name under iflows/; default: the zip's file name.")),
-        ("overwrite", json!({ "type": "boolean", "default": false, "description": "Import into an existing iflows/ folder, replacing its files." })),
+        ("zip", path("The iFlow, Value Mapping or integration package exported from the tenant (.zip): an absolute path, or a path inside the project.")),
+        ("name", path("Folder name under iflows/ for an iFlow; default: the zip's file name. A package's artifacts keep their ids.")),
+        ("overwrite", json!({ "type": "boolean", "default": false, "description": "Import into existing iflows/ folders, replacing their files, and replace value mappings of the same agencies and identifiers." })),
     ]);
     let reference = obj(vec![
         ("topic", json!({ "type": "string", "enum": reference::TOPICS, "description": "script-api: the Script API, \
@@ -201,7 +209,7 @@ CPI, per step type, and what is not." })),
              each script, XSLT and XML Validator step's file, function and runtime), and the installed runtimes. Call this first.",
             Map::new(), &[], Effect::ReadOnly),
         tool("read_file", "Read a project file",
-            "Reads a text file of the project: an input message, a mapping, a script, a schema, an iFlow's files or the \
+            "Reads a file of the project (a file that is no text with binary: true): an input message, a mapping, a script, a schema, an iFlow's files or the \
              platform/ data. Long files come in parts (startLine, maxLines).",
             read, &[], Effect::ReadOnly),
         tool("run_xslt", "Run an XSLT mapping",
@@ -221,19 +229,22 @@ CPI, per step type, and what is not." })),
             "Evaluates an XPath on the body, like the XPath tab. Returns the value or the selected nodes.",
             xpath, &["expression"], Effect::ReadOnly),
         tool("run_flow_step", "Run a flow step",
-            "Runs a Content Modifier, Filter, Router, General or Iterating Splitter, Gather or converter (JSON/XML/CSV) step on a message, like the \
+            "Runs a Content Modifier, Filter, Router, General or Iterating Splitter, Gather, converter (JSON/XML/CSV), Encoder or Decoder \
+             (Base64, GZIP, ZIP) or Message Digest step on a message, like the \
              Flow Steps tab, from an iFlow of the project or from a config given here. Returns the output message(s), or \
              for a Router each route's result and the route taken. For an iFlow's script, XSLT or XML Validator step, \
              use run_groovy, run_xslt or validate_xsd with the step's file, function and profile from project_info.",
             step, &[], Effect::RunsCode),
         tool("save_file", "Save a file to the project",
-            "Writes a text file into the project, e.g. a mapping, script, schema, input message or platform/ data the user \
+            "Writes a file into the project (text, or bytes with contentBase64 or a binary run result), e.g. a mapping, script, schema, input message or platform/ data the user \
              wants to keep; the app shows it after ↻ in its file tree. Save only what the user asked for. An existing file \
              is replaced only with overwrite: true.",
             save, &["path"], Effect::WritesProject),
-        tool("import_iflow", "Import an iFlow",
-            "Imports an iFlow exported from the tenant (.zip) into iflows/<name>/, as the app's Import iFlow does. \
-             Returns its steps; their files open with read_file and run with the tools above.",
+        tool("import_iflow", "Import an iFlow, Value Mapping or package",
+            "Imports what the tenant exports as a .zip, as the app's Import does: an iFlow into iflows/<name>/; a Value \
+             Mapping as rows of platform/value-mappings.json (both directions); an integration package with each of its \
+             iFlows, script collections and value mappings (other artifact types are listed as skipped). Returns the \
+             imported iFlows' steps; their files open with read_file and run with the tools above.",
             import, &["zip"], Effect::WritesProject),
         tool("reference", "Simulator reference",
             "What the simulator offers, generated from its sources: the Script API (script-api), the platform/ data formats \
@@ -261,8 +272,7 @@ pub fn call(server: &Server, name: &str, args: &Args) -> Result<Value, String> {
     let mut args = args.clone();
     if runs_step {
         if let Some(refs) = args.get("messagesFrom") {
-            let ms: Vec<Value> = message_refs(server, refs)?.into_iter()
-                .map(|m| json!({ "body": m.body, "headers": m.headers, "properties": m.properties })).collect();
+            let ms: Vec<Value> = message_refs(server, refs)?.iter().map(runs::Message::to_json).collect();
             args.insert(RESOLVED_MESSAGES.into(), Value::Array(ms));
         }
         let m = message(server, &args)?;
@@ -272,7 +282,7 @@ pub fn call(server: &Server, name: &str, args: &Args) -> Result<Value, String> {
     // A run that produced a message keeps it under a runId; long bodies come back shortened.
     if runs_step && result["ok"] != false && result["valid"] != false {
         let input = runs::Message::from_output(&args[RESOLVED_INPUT])
-            .unwrap_or_else(|| runs::Message { body: String::new(), headers: json!([]), properties: json!([]) });
+            .unwrap_or_else(|| runs::Message::text("", json!([]), json!([])));
         if let Some(id) = server.runs().keep(runs::produced(name, &input, &result)) {
             runs::shorten(&mut result, &id, &input.body);
             result["runId"] = json!(id);
@@ -425,25 +435,47 @@ pub fn message(server: &Server, args: &Args) -> Result<Value, String> {
         (None, Some(_)) => messages_from(server, args)?.into_iter().next(),
         _ => None,
     };
-    let body = match one_of(args, "body", "bodyPath", true)? {
-        (Some(b), _) => b.to_string(),
-        (_, Some(p)) => read_file(server, p)?,
-        _ => base.as_ref().map(|m| m.body.clone()).unwrap_or_default(),
-    };
     let (headers, properties) = (value_rows(args, "headers")?, value_rows(args, "properties")?);
     let (headers, properties) = match &base {
         Some(m) => (runs::merge_rows(&m.headers, &headers), runs::merge_rows(&m.properties, &properties)),
         None => (headers, properties),
     };
-    Ok(json!({ "body": body, "headers": headers, "properties": properties }))
+    let message = match one_of(args, "body", "bodyPath", true)? {
+        (Some(b), _) => runs::Message::text(b, headers, properties),
+        (_, Some(p)) => {
+            let mut m = read_body(server, p)?;
+            (m.headers, m.properties) = (headers, properties);
+            m
+        }
+        _ => match base {
+            Some(m) => runs::Message { headers, properties, ..m },
+            None => runs::Message::text("", headers, properties),
+        },
+    };
+    Ok(message.to_json())
+}
+
+/// A project file as a message body: its text, or its bytes when it is no text (an archive for a Decoder).
+fn read_body(server: &Server, path: &str) -> Result<runs::Message, String> {
+    match read_file(server, path) {
+        Ok(t) if !t.contains('\0') => Ok(runs::Message::text(&t, json!([]), json!([]))),
+        Ok(_) => read_bytes(server, path),
+        Err(e) if e.contains("cannot be read as text") => read_bytes(server, path),
+        Err(e) => Err(e),
+    }
+}
+
+/// A project file's bytes, as Base64.
+fn read_bytes(server: &Server, path: &str) -> Result<runs::Message, String> {
+    let r = engine_call(server, file_runtime(server)?, "file.read", json!({ "path": path, "binary": true }))?;
+    Ok(runs::Message { body: String::new(), body_base64: Some(r["contentBase64"].as_str().unwrap_or_default().to_string()),
+        headers: json!([]), properties: json!([]) })
 }
 
 /// The messages of `messagesFrom`, as the call resolved them before the step (`call`), or now.
 pub fn messages_from(server: &Server, args: &Args) -> Result<Vec<runs::Message>, String> {
     match args.get(RESOLVED_MESSAGES) {
-        Some(Value::Array(ms)) => Ok(ms.iter().map(|m| runs::Message {
-            body: m["body"].as_str().unwrap_or_default().to_string(), headers: m["headers"].clone(), properties: m["properties"].clone(),
-        }).collect()),
+        Some(Value::Array(ms)) => Ok(ms.iter().filter_map(runs::Message::from_output).collect()),
         _ => message_refs(server, args.get("messagesFrom").unwrap_or(&Value::Null)),
     }
 }
@@ -549,7 +581,7 @@ fn api_runtime(script: &str) -> &'static str {
 
 fn validate_xsd(server: &Server, args: &Args) -> Result<Value, String> {
     let m = message(server, args)?;
-    let params = json!({ "schema": source(args, "schema", "schemaPath", "schema.xsd")?, "input": { "body": m["body"] } });
+    let params = json!({ "schema": source(args, "schema", "schemaPath", "schema.xsd")?, "input": flow::body_only(&m) });
     engine_call(server, str_arg(args, "runtime").unwrap_or(xml_runtime(server)), "xsd.validate", params)
 }
 
@@ -558,7 +590,7 @@ fn evaluate_xpath(server: &Server, args: &Args) -> Result<Value, String> {
         "expression": str_arg(args, "expression").unwrap_or_default(),
         "version": str_arg(args, "version").unwrap_or("3.1"),
         "namespaces": args.get("namespaces").cloned().unwrap_or(json!({})),
-        "input": { "body": message(server, args)?["body"] },
+        "input": flow::body_only(&message(server, args)?),
     });
     engine_call(server, str_arg(args, "runtime").unwrap_or(xml_runtime(server)), "xpath.eval", params)
 }

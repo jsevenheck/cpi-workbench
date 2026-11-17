@@ -42,5 +42,8 @@
   }, {
     "name":"com.sun.org.apache.xml.internal.res.XMLErrorResources",
     "locales":["", "und"]
+  }, {
+    "name":"com.sun.org.apache.xml.internal.security/resource/xmlsecurity",
+    "locales":["en"]
   }]
 }

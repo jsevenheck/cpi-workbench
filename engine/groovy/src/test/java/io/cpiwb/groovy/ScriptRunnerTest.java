@@ -552,6 +552,28 @@ class ScriptRunnerTest {
         assertEquals("Müller", ((Map<?, ?>) r.get("output")).get("body"), Json.write(r));
     }
 
+    /** A binary body (an Encoder's GZIP result) reaches the script as its bytes, not as garbled text. */
+    @Test
+    void aBodyThatIsNoTextReachesTheScriptAsBytes() throws Exception {
+        byte[] gzip = {0x1f, (byte) 0x8b, 8, 0, 0, 0, 0, 0, 0, (byte) 0xff, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+        String b64 = java.util.Base64.getEncoder().encodeToString(gzip);
+        Map<String, Object> r = run("def processData(m) { def b = m.getBody(byte[]); "
+                + "m.setProperty('cls', m.getBody().getClass().getName()); m.setBody(b.encodeBase64().toString()); m }",
+                Json.o().with("bodyBase64", b64), Json.o());
+        assertTrue(Json.bool(r, "ok", false), () -> Json.write(r));
+        assertEquals(b64, ((Map<?, ?>) r.get("output")).get("body"), Json.write(r));
+        assertEquals("[B", entry(r, "properties", "cls").get("value"));
+        assertTrue(Json.write(r).contains("no text (20 bytes)"), Json.write(r));
+        // Bytes that are no text as the script's result: shown as text, with a warning.
+        Map<String, Object> out = run("def processData(m) { m.setBody(m.getBody(byte[])); m }", Json.o().with("bodyBase64", b64), Json.o());
+        assertTrue(Json.write(out).contains("UnsupportedInSimulator: the output body is no text"), Json.write(out));
+        // UTF-16 with a little-endian byte order mark is text, though Java would encode it big-endian.
+        Map<String, Object> utf16 = run("def processData(m) { m.setBody([0xFF, 0xFE, 0x3C, 0, 0x61, 0, 0x2F, 0, 0x3E, 0] as byte[]); m }",
+                Json.o().with("body", "x"), Json.o());
+        assertEquals("<a/>", ((Map<?, ?>) utf16.get("output")).get("body"), Json.write(utf16));
+        assertFalse(Json.write(utf16).contains("no text"), Json.write(utf16));
+    }
+
     /** A script or attachment path that is a link out of the project is refused, as file.read refuses it. */
     @Test
     void scriptPathThroughALinkOutOfTheProjectIsRefused(@org.junit.jupiter.api.io.TempDir java.nio.file.Path tmp) throws Exception {

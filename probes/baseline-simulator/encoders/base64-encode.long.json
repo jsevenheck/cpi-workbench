@@ -1,0 +1,13 @@
+{
+    "probeStep": "base64-encode",
+    "bodyClass": "java.lang.String",
+    "bodyLength": 420,
+    "bodyBase64": "UEQ5NGJXd2dkbVZ5YzJsdmJqMGlNUzR3SWlCbGJtTnZaR2x1WnowaVZWUkdMVGdpUHo0S1BFOXlaR1Z5SUdsa1BTSTBOekV4SWo0Sw0KSUNBOFEzVnpkRzl0WlhJK1RjTzhiR3hsY2lBbVlXMXdPeUJUdzdab2JtVWdSMjFpU0R3dlEzVnpkRzl0WlhJK0NpQWdQRWwwWlcwZw0KYzJ0MVBTSk5MVEV3TUNJZ2NYUjVQU0l5SWo1VFkyaHlZWFZpWlNCTk5DRERseUF5TUN3Z2RtVnllbWx1YTNROEwwbDBaVzArQ2lBZw0KUEVsMFpXMGdjMnQxUFNKTkxUSXdNQ0lnY1hSNVBTSXhJajVWYm5SbGNteGxaM05qYUdWcFltVWd3NWdnTkN3elBDOUpkR1Z0UGdvZw0KSUR4T2IzUmxQa3hwWldabGNuVnVaeUJpYVhNZ1JuSmxhWFJoWnpzZ1ltVnBJRkxEdkdOclpuSmhaMlZ1SUdKcGRIUmxJR0Z1Y25WbQ0KWlc0dVBDOU9iM1JsUGdvOEwwOXlaR1Z5UGdvPQ0K",
+    "bodyText": "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz4KPE9yZGVyIGlkPSI0NzExIj4K\r\nICA8Q3VzdG9tZXI+TcO8bGxlciAmYW1wOyBTw7ZobmUgR21iSDwvQ3VzdG9tZXI+CiAgPEl0ZW0g\r\nc2t1PSJNLTEwMCIgcXR5PSIyIj5TY2hyYXViZSBNNCDDlyAyMCwgdmVyemlua3Q8L0l0ZW0+CiAg\r\nPEl0ZW0gc2t1PSJNLTIwMCIgcXR5PSIxIj5VbnRlcmxlZ3NjaGVpYmUgw5ggNCwzPC9JdGVtPgog\r\nIDxOb3RlPkxpZWZlcnVuZyBiaXMgRnJlaXRhZzsgYmVpIFLDvGNrZnJhZ2VuIGJpdHRlIGFucnVm\r\nZW4uPC9Ob3RlPgo8L09yZGVyPgo=\r\n",
+    "headerNames": [
+        "ProbeStep"
+    ],
+    "headers": {
+        
+    }
+}

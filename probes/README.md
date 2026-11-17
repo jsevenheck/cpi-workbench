@@ -15,6 +15,7 @@ Groovy engines follow it since 0.3.0.
 | `prepare-xslt-probe.groovy` + `probe-xslt-behaviour.xsl` | Groovy 1.x, then XSLT Mapping | Header vs. property precedence, Java→XDM types, missing params, `setHeader` return value (Q-X2 … Q-X5) | Ran 2026-11-09 |
 | `converters/` | **JSON to XML, XML to JSON, XML to CSV, CSV to XML** converters | Output formatting and XML declaration, JSON escaping, CSV line ends and quoting, an unmapped JSON prefix without namespace mapping (Q-C1) | All four ran; observed output matches, but CSV line-end bytes remain unverified |
 | `gather/` | General Splitter, **Groovy Script 1.x**, **Gather** (Combine) | What Combine does with a body that is not XML: JSON or plain text among XML parts, or only such parts (Q-F1) | Not run yet |
+| `encoders/` | **Encoder**, **Decoder**, **Message Digest**, then Groovy Script **1.x** | Base64 line wrapping and what the decoder accepts, GZIP header fields, the ZIP entry's name and an archive with two entries, what the digest's *None* hashes, a body that is not XML, a filter with several nodes, the step's default settings; the exported iFlow gives the keys not seen so far (Q-E1, F62) | Not run yet |
 | `probe-mapping-v1.groovy` | Custom function in a **Message Mapping** | Groovy and Java version of mapping scripts, the classes and methods behind `MappingContext` and `Output`, and how values reach a `String[]` function: one call per context, how the results are joined, single-value calls (Q-M1) | Ran 2026-11-09 with both targets and both requests |
 
 ## How to run
@@ -87,6 +88,34 @@ another error, note its text and line.
    message processing log; a failure is as useful an answer as a body. The simulator's results are in
    `baseline-simulator/gather/<mode>-<sameXml|differentXml>.xml`.
 
+9. iFlow **Probe_Encoders** (Q-E1): `HTTPS sender (address /cpiwb/encoders, allowed headers
+   ProbeStep|CamelFileName)` → `Router` → one branch per row below → `Groovy Script 1.x:
+   encoders/probe-report.groovy` → end. The Router's routes are Non-XML conditions on the header, such as
+   `${header.ProbeStep} = 'base64-encode'`; each branch holds only the step under test, and all branches
+   join before the script. (One small iFlow per row works as well; then the header is not needed, but
+   send it anyway, the report repeats it.) The script answers with JSON: the body's class, its bytes as
+   Base64 and as text, the names of all headers and the values of those a step may set.
+
+   | `ProbeStep` | Step under test and its settings | Request body (`encoders/`) | Answers |
+   |---|---|---|---|
+   | `base64-encode` | Encoder: *Base64 Encode* | `long.xml`, then `short.txt` | Is long output wrapped, with which line end, and does it end with one? (The report's `bodyBase64` shows the bytes.) |
+   | `base64-decode` | Decoder: *Base64 Decode* | `base64-oneline.txt`, `base64-wrapped.txt` (lines of 76 characters with CR LF), `base64-invalid.txt` | Does the decoder take wrapped input, and what does invalid input give? |
+   | `gzip` | Encoder: *GZIP Compress* | `long.xml` | The GZIP header's time, name and OS bytes: can results be compared byte by byte? |
+   | `gunzip` | Decoder: *GZIP Decompress* | `long.xml.gz` | The body's class after decompression. |
+   | `zip` | Encoder: *ZIP Compress* | `long.xml`, once as it is and once with the request header `CamelFileName: order.xml` | The entry's name without and with the header. |
+   | `unzip` | Decoder: *ZIP Decompress* | `one-entry.zip`, then `two-entries.zip` | Which entry becomes the body (or the error) and which headers the step sets. |
+   | `digest-default` | Message Digest as a new step has it: change nothing | `digest.xml` | The default canonicalization method and algorithm (note them, or see the export). |
+   | `digest-c14n` | Message Digest: *Canonical XML Version 1.0*, *SHA256*, Target Header Name `ProbeDigest` | `digest.xml`, then `not-xml.txt` | The digest against the baseline's; a body that is not XML. |
+   | `digest-none` | Message Digest: *None*, *MD5* | `digest.xml`, then `not-xml.txt` | Whether *None* hashes the body's bytes as they are (the baseline does), also for a body that is not XML. |
+   | `digest-filter` | Message Digest: *Exclusive XML Canonicalization Version 1.0*, *SHA1*, Filter `/o:Order/o:Header` with the namespace mapping `o` = `urn:example:order` | `digest.xml` | A filtered element's digest against the baseline's. |
+   | `digest-filter-many` | As `digest-filter`, with the Filter `/o:Order/o:Item` (two elements) | `digest.xml` | What a filter with several nodes gives. |
+
+   For each request keep the response, or, if the message fails, the error text from the message
+   processing log; a failure is as useful an answer as a body. Then **export the iFlow** (or the
+   iFlows) as a zip: the model shows the keys of the GZIP schemes, the digest's filter and namespace
+   mapping and the values of its other settings, which no public sample had (F62). The simulator's
+   results for the steps it has are in `baseline-simulator/encoders/`.
+
 **Sending the requests.** With the runtime URL of the tenant (`https://<runtime host>/http`) and the
 client ID and secret of a service key for the Process Integration Runtime, `curl` sends a file
 unchanged and saves the answer unchanged. In Windows PowerShell write `curl.exe`. The credentials are
@@ -100,7 +129,13 @@ curl -s -u "<clientid>:<clientsecret>" --data-binary @probes/converters/json-to-
 curl -s -u "<clientid>:<clientsecret>" --data-binary @probes/converters/xml-to-csv.xml -H "Content-Type: application/xml" "$U/cpiwb/xml-to-csv" --output xml-to-csv.csv
 curl -s -u "<clientid>:<clientsecret>" --data-binary @probes/gather/request.xml -H "Content-Type: application/xml" -H "ProbeMode: mixed" "$U/cpiwb/gather" --output gather-mixed-sameXml.xml
 curl -s -u "<clientid>:<clientsecret>" --data-binary @probes/converters/csv-to-xml.csv -H "Content-Type: text/plain" "$U/cpiwb/csv-to-xml" --output csv-to-xml.xml
+curl -s -u "<clientid>:<clientsecret>" --data-binary @probes/encoders/long.xml -H "Content-Type: application/xml" -H "ProbeStep: base64-encode" "$U/cpiwb/encoders" --output base64-encode.long.json
+curl -s -u "<clientid>:<clientsecret>" --data-binary @probes/encoders/long.xml -H "Content-Type: application/xml" -H "ProbeStep: zip" -H "CamelFileName: order.xml" "$U/cpiwb/encoders" --output zip.named.json
+curl -s -u "<clientid>:<clientsecret>" --data-binary @probes/encoders/two-entries.zip -H "Content-Type: application/zip" -H "ProbeStep: unzip" "$U/cpiwb/encoders" --output unzip.two-entries.json
 ```
+
+The other rows of step 9 follow the same pattern: the file of the row, its `ProbeStep`, and an output
+name of `<ProbeStep>.<file>.json`.
 
 Review response bodies and errors for tenant hostnames, paths, IDs or other confidential data before
 sharing them or attaching them to an issue. Sanitized results go into `results-tenant/<date>/`;
@@ -135,6 +170,20 @@ The Gather baselines come from the MCP server: `run_flow_step` with the Splitter
 with `messagesFrom` those runs. Each run there gives `ok: true` and a warning for each part that is not an
 XML document; the bodies are well-formed XML all the same, since JSON and plain text are character data inside
 the multimap wrapper.
+
+The encoder baselines (`baseline-simulator/encoders/`) come from the MCP server: `run_flow_step` with the
+step of the row, then `run_groovy` (groovy-1.x) with `encoders/probe-report.groovy` on that run. There is a
+baseline for every row but `digest-default` (the defaults are what the probe asks for); `zip` only with the
+header `CamelFileName: order.xml` (`zip.named`): without it the simulator names the entry after a message id
+it makes up, which differs per run. `*.canonical.xml` is the text a digest is of, and `*.error.txt` the error
+where the simulator refuses (`digest-filter-many`) or fails (`digest-c14n` on `not-xml.txt`, `unzip` on
+`two-entries.zip`). A binary result reaches the script as `byte[]` (the simulator's choice; a tenant's
+`bodyClass` answers it). The ZIP archive's bytes hold the time of the run, and GZIP's compressed bytes
+depend on the JVM's zlib, so those two differ from a tenant's in places that say nothing about the step;
+compare the header fields and the unpacked content. A tenant's report lists more header names.
+Regenerate them with `node probes/encoders/baseline.mjs <cpi-workbench binary> .`; the request files are
+read from `encoders/` as `bodyPath`, as they are in the repository (LF line ends), and the `.gz` and `.zip`
+files as bytes.
 
 The converter baselines come from the Flow Steps tab's Converter (or `convert.run`) with the settings
 in step 7. In the baselines, IDs that change with each run are replaced by `x` (the random alias suffix

@@ -8,6 +8,7 @@ read its tagged documentation and [changelog](../CHANGELOG.md).
 |---|---|
 | [Installing](install.md) | install the desktop app or the command-line jars from a release |
 | [User guide](user-guide.md) | use the desktop app, the command line or the browser mode |
+| [Debugging Groovy](debugging.md) | stop a Groovy script at a breakpoint with jdb, IntelliJ or VS Code |
 | [MCP server](mcp.md) | let a coding agent (e.g. Claude Code) use the app's tabs on the simulator |
 | [Test cases and platform data](test-cases.md) | write `case.json` files, mock Secure Store, Partner Directory, Keystore, number ranges, attachments, SOAP headers, libraries |
 | [Fidelity](fidelity.md) | know what behaves like CPI, what does not, and what is not verified yet |

@@ -110,6 +110,12 @@ public final class ProjectFiles {
         if (Files.size(f) > MAX_READ) {
             throw new IllegalArgumentException("File too large for the editor: " + f);
         }
+        if (Json.bool(p, "binary", false)) {
+            // A file that is no text (an archive for a Decoder step): its bytes, not an error.
+            byte[] bytes = Files.readAllBytes(f);
+            return Json.o().with("path", Json.str(p, "path", "")).with("contentBase64", java.util.Base64.getEncoder().encodeToString(bytes))
+                    .with("size", bytes.length);
+        }
         return Json.o().with("path", Json.str(p, "path", "")).with("content", TextFiles.read(f));
     }
 
@@ -117,7 +123,9 @@ public final class ProjectFiles {
         Path f = resolve(Json.str(p, "path", ""));
         Files.createDirectories(f.getParent());
         // XML that names its encoding is written in it, so the file stays what its declaration says.
-        byte[] content = TextFiles.encode(Json.str(p, "content", ""));
+        // contentBase64: the bytes of a body that is no text (a step's binary result).
+        byte[] content = p.get("contentBase64") != null ? java.util.Base64.getDecoder().decode(Json.str(p, "contentBase64", ""))
+                : TextFiles.encode(Json.str(p, "content", ""));
         if (Json.bool(p, "createNew", false)) {
             // Only when no file is there, checked by the file system as it creates it: another process writing
             // the same path at the same time cannot be replaced.
@@ -146,10 +154,10 @@ public final class ProjectFiles {
         return Json.o().with("deleted", true);
     }
 
-    /** Imports an exported iFlow zip into iflows/<name>/ and lists its script and XSLT steps. */
-    public synchronized Map<String, Object> iflowImport(Map<String, Object> p) throws IOException {
+    /** Imports an exported iFlow, Value Mapping or integration package (ArtifactImport) and lists the steps. */
+    public synchronized Map<String, Object> iflowImport(Map<String, Object> p) throws Exception {
         requireRoot();
-        Map<String, Object> r = IflowImport.importZip(Path.of(Json.str(p, "zip", "")), root, Json.str(p, "name", null),
+        Map<String, Object> r = ArtifactImport.importZip(Path.of(Json.str(p, "zip", "")), root, Json.str(p, "name", null),
                 Json.bool(p, "createNew", false));
         r.put("fileList", list());
         return r;
@@ -158,6 +166,12 @@ public final class ProjectFiles {
     public synchronized Map<String, Object> iflowSteps() throws IOException {
         requireRoot();
         return IflowImport.steps(root);
+    }
+
+    /** {@code iflow.models}: processes, elements, flows and layout of the imported iFlows ({@link IflowModel}). */
+    public synchronized Map<String, Object> iflowModels() throws IOException {
+        requireRoot();
+        return IflowModel.models(root);
     }
 
     public synchronized Path root() {

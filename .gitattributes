@@ -6,3 +6,6 @@
 *.p12 binary
 *.jar binary
 *.zip binary
+*.gz binary
+# A Base64 request in MIME form: its CR LF line ends are the point.
+probes/encoders/base64-wrapped.txt -text

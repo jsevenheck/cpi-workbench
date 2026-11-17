@@ -166,7 +166,7 @@ fn wrong_arguments_are_tool_errors() {
     assert!(call(json!({ "expression": "/a", "bodyPath": "x.xml" })).contains("No project is open"));
     assert!(call_tool("read_file", json!({ "path": "a.xml", "startLine": 0 })).contains("startLine"));
     assert!(call_tool("save_file", json!({ "path": "a.xml", "content": "x", "overwrite": "yes" })).contains("type boolean"));
-    assert!(call_tool("save_file", json!({ "path": "a.xml" })).contains("Give content, or contentFrom"));
+    assert!(call_tool("save_file", json!({ "path": "a.xml" })).contains("Give one of content, contentBase64"));
     assert!(call_tool("reference", json!({ "topic": "groovy" })).contains("must be one of"));
     assert!(call_tool("read_file", json!({ "path": "a.xml" })).contains("No project is open"));
 }
@@ -371,6 +371,39 @@ fn tools_run_on_the_engines() {
     // As in the tab, only a missing value gets the default; an empty one goes to the engine as it is.
     let empty = c.ok("run_flow_step", json!({ "body": order, "step": { "type": "filter", "config": { "expression": "/Order", "valueType": "" } } }));
     assert_eq!(empty["ok"], false, "{empty}");
+    // Encoder and Message Digest. The digest's header travels on with the message; keys left out take the tab's defaults.
+    let enc = c.ok("run_flow_step", json!({ "body": "<a/>", "step": { "type": "encoder", "config": {} } }));
+    assert_eq!(enc["body"], "PGEvPg==\r\n", "{enc}");
+    assert!(c.ok("run_flow_step", json!({ "body": "<a/>", "step": { "type": "encoder", "config": { "scheme": "mimeMultipartEncode" } } }))
+        .to_string().contains("UnsupportedInSimulator"));
+    // A binary result travels on as bytes: by runId to a Decoder, into a file and from it as bodyPath.
+    let gz = c.ok("run_flow_step", json!({ "body": "<a/>", "step": { "type": "encoder", "config": { "scheme": "gzipCompress" } } }));
+    assert_eq!(gz["binary"], true, "{gz}");
+    let gunzip = c.ok("run_flow_step", json!({ "messageFrom": gz["runId"], "step": { "type": "decoder", "config": { "scheme": "gzipDecompress" } } }));
+    assert_eq!(gunzip["body"], "<a/>", "{gunzip}");
+    let zip = c.ok("run_flow_step", json!({ "body": "<a/>", "headers": { "CamelFileName": "in/a.xml" },
+        "step": { "type": "encoder", "config": { "scheme": "zipCompress" } } }));
+    assert!(zip["output"]["headers"].to_string().contains("a.xml.zip"), "{zip}");
+    c.ok("save_file", json!({ "path": "inputs/a.zip", "contentFrom": zip["runId"] }));
+    let bytes = c.ok("read_file", json!({ "path": "inputs/a.zip", "binary": true }));
+    assert!(bytes["contentBase64"].as_str().unwrap().starts_with("UEsDB"), "{bytes}");
+    assert!(c.err("read_file", json!({ "path": "inputs/a.zip" })).contains("binary: true"));
+    assert_eq!(c.ok("read_file", json!({ "runId": zip["runId"] }))["contentBase64"], bytes["contentBase64"]);
+    let unzip = c.ok("run_flow_step", json!({ "bodyPath": "inputs/a.zip", "step": { "type": "decoder", "config": { "scheme": "zipDecompress" } } }));
+    assert_eq!(unzip["body"], "<a/>", "{unzip}");
+    assert!(unzip["output"]["headers"].to_string().contains("\"a.xml\""), "{unzip}");
+    c.ok("save_file", json!({ "path": "inputs/b.gz", "contentBase64": "H4sIAAAAAAAC/7NJ0rfjAgCsbt2hBQAAAA==" }));
+    let b = c.ok("run_flow_step", json!({ "bodyPath": "inputs/b.gz", "step": { "type": "decoder", "config": { "scheme": "gzipDecompress" } } }));
+    assert_eq!(b["body"], "<b/>\n", "{b}");
+    assert!(c.err("save_file", json!({ "path": "inputs/c.txt", "content": "x", "contentBase64": "eA==" })).contains("one of"));
+    let dig = c.ok("run_flow_step", json!({ "body": "<a  y='2' x='1'/>", "headers": { "Keep": "1" },
+        "step": { "type": "messageDigest", "config": { "algorithm": "MD5", "targetHeader": "D" } } }));
+    assert_eq!(dig["canonical"], "<a x=\"1\" y=\"2\"></a>", "{dig}");
+    let after = c.ok("run_groovy", json!({ "messageFrom": dig["runId"],
+        "script": "def processData(m) { m.setBody(m.getHeaders()['Keep'] + '|' + m.getHeaders()['D'] + '|' + m.getBody(String)); m }" }));
+    assert_eq!(after["output"]["body"], format!("1|{}|<a  y='2' x='1'/>", dig["header"]["value"].as_str().unwrap()), "{after}");
+    assert!(c.err("run_flow_step", json!({ "body": "<a/>", "step": { "type": "messageDigest", "config": { "xpath": "/a" } } }))
+        .contains("filter, canonicalization, algorithm, targetHeader"));
     // A key the tab does not have is named, rather than ignored (tried on 2026-11-06 from Claude Desktop).
     let typo = c.err("run_flow_step", json!({ "body": order, "step": { "type": "splitter", "config": { "xpath": "/Order/Item" } } }));
     assert!(typo.contains("Unknown splitter config key(s): xpath") && typo.contains("expression"), "{typo}");
@@ -551,6 +584,17 @@ fn files_are_read_saved_and_imported_inside_the_project() {
     assert!(c.err("import_iflow", json!({ "zip": zip.to_string_lossy(), "name": "Order Sync" })).contains("exists already"));
     c.ok("import_iflow", json!({ "zip": zip.to_string_lossy(), "name": "Order Sync", "overwrite": true }));
     assert!(c.err("import_iflow", json!({ "zip": "missing.zip" })).contains("No file"));
+    // A Value Mapping export becomes rows of the platform table, both ways (made-up values).
+    let vm_zip = std::env::temp_dir().join(format!("cpiwb-mcp-vm-{}.zip", std::process::id()));
+    std::fs::write(&vm_zip, stored_zip(&[("value_mapping.xml", "<vm version=\"2.0\"><group id=\"g\"><entry><agency>Red</agency>\
+        <schema>Role</schema><value>R1</value></entry><entry><agency>Blue</agency><schema>Role</schema><value>B1</value></entry></group></vm>")])).unwrap();
+    let vm = c.ok("import_iflow", json!({ "zip": vm_zip.to_string_lossy() }));
+    assert_eq!(vm["kind"], "valueMapping", "{vm}");
+    assert_eq!(vm["valueMappings"][0]["rows"], 2, "{vm}");
+    assert!(vm["steps"].as_array().unwrap().is_empty());
+    assert!(c.err("import_iflow", json!({ "zip": vm_zip.to_string_lossy() })).contains("exists already"));
+    assert!(std::fs::read_to_string(dir.join("platform/value-mappings.json")).unwrap().contains("\"targetValue\":\"R1\""));
+    let _ = std::fs::remove_file(&vm_zip);
     let info = c.ok("project_info", json!({}));
     assert!(info["iflowSteps"].as_array().unwrap().iter().any(|s| s["iflow"] == "Order_Sync"));
 

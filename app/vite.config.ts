@@ -14,6 +14,8 @@ export default defineConfig({
     // Cargo rebuilds src-tauri/ under `tauri dev`; on Windows, watching its locked build output
     // (target/debug/*.dll) crashes Vite with EBUSY. Tauri watches the Rust side itself.
     watch: { ignored: ['**/src-tauri/**'] },
+    // lib/examples.ts bundles files of examples/demo-project, outside this folder.
+    fs: { allow: ['.', '../examples/demo-project'] },
   },
   build: {
     target: 'es2022',

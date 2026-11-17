@@ -44,11 +44,39 @@ my-project/
   profile and skips the others; any other profile name is an error, on every engine.
 * `test <path>` exits with 1 when a case failed or when `<path>` holds no `case.json`. With
   `--fail-if-none` it also exits with 1 when this engine ran none of the cases (all were for other engines).
+* `test <path> --junit <file>` also writes the results as a JUnit XML report, for a CI system that shows test
+  results. Each engine writes its own report, so give each a file of its own:
+  `java -jar cpiwb-groovy-v1.jar test tests --junit reports/groovy-1.x.xml`.
+  * One `testsuite` named after the engine's profile, one `testcase` per case with the profile as `classname`.
+    A failed case is a `failure`, a case that could not run an `error`, a case of another engine `skipped`,
+    each with the case's messages.
+  * The output and the exit code stay as they are. A report that cannot be written is an error (exit code 1);
+    missing folders are created.
+  * JUnit XML has no official schema. The layout is Maven Surefire's (`testsuite` as the root), and the
+    reports validate against Surefire's published schema. They have not been tried with a CI reporter
+    (GitHub Actions, Jenkins, GitLab).
 * Files (bodies, mappings, expected output) are read as UTF-8, or in the encoding their XML declaration names.
 * Header and property types: `String`, `Integer`, `Long`, `Boolean`, `Double`, `Float`,
   `BigDecimal`, `Date` (ISO-8601), `byte[]` (Base64), `null`.
 * `body` is a string, `{ "file": "…" }` or `{ "text": "…" }`. Paths are relative to the case folder.
-* `compare` is `xml` (ignores formatting and namespace declarations), `text` or `trimmed`.
+* `compare` is `xml` (ignores formatting and namespace declarations), `json` (ignores formatting and the order of
+  an object's members; `1` equals `1.0`; arrays keep their order), `text` or `trimmed`.
+* `expect.ignore` leaves out what changes with every run (a timestamp, a generated id): a list of XPath
+  expressions whose nodes (elements, attributes, text) are removed from the expected and from the actual body
+  before they are compared as `xml`:
+  `"expect": { "body": { "file": "expected.xml" }, "ignore": ["//CreatedAt", "//Item/@uuid"] }`.
+  * XPath 1.0, on every engine. A name without a prefix matches only an element that is in no namespace; for the
+    others, bind prefixes with `expect.namespaces` (`"namespaces": { "o": "urn:example:order" }`, then `//o:CreatedAt`)
+    or write `//*[local-name()='CreatedAt']`. The prefixes are the case's own, not those of the documents.
+  * An expression that matches nothing is not an error by itself (the node may be optional); when the bodies
+    differ, the message names the expressions that matched nothing.
+  * The case is an error when `ignore` is no list of XPath expressions, uses an unknown prefix, selects the
+    whole document, or stands without `expect.body` or with another `compare` than `xml` or `json`.
+  * With `"compare": "json"` the rules are JSON Pointers (RFC 6901) instead of XPaths, and a segment `*` stands
+    for every member or element: `"ignore": ["/order/createdAt", "/order/items/*/uuid"]`. A rule that does not
+    start with `/` is an error; one that matches nothing is named when the bodies differ, as above. Every rule
+    addresses the bodies as written: `/items/0` and `/items/1` leave out the first two elements.
+  * This is CPI Workbench's own rule for its test cases; it imitates nothing in CPI.
 * `expect.ok: false` asserts that the mapping or script fails.
 
 ### Message Mapping functions
@@ -71,7 +99,7 @@ or `def void f(String[] a, Output output, MappingContext c)`, runs with `args` i
 * `args` holds one entry per `String` or `String[]` parameter, in order; `Output` and
   `MappingContext` come from the simulator. A `String` argument may be `null` (the Groovy tab's
   **null** button). A `String[]` argument is a list of contexts; an entry
-  is a string, `{ "suppress": true }` or `{ "xsiNil": true }`. A flat list is one context.
+  is a string, `null`, `{ "suppress": true }` or `{ "xsiNil": true }`. A flat list is one context.
 * The signature decides how the function is called: with `String` arguments once (*Single values*),
   with `String[]` arguments once per context (*All values of a context*), which needs the same number
   of contexts in every `String[]` argument.

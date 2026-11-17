@@ -90,6 +90,32 @@ public final class SimExchange {
                 .with("properties", TypedValue.writeList(properties));
     }
 
+    /**
+     * The body as text, or null when its bytes are no text: not decodable (in the encoding an XML declaration
+     * names, else UTF-8) or with a NUL character, as compressed content and most decoded files are.
+     */
+    public String bodyText() {
+        try {
+            String text = TextFiles.decode(body, "The body");
+            return text.indexOf('\0') >= 0 ? null : text;
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+    }
+
+    /**
+     * As {@link #toJson()}, for a step whose result may be no text: such a body is given as {@code bodyBase64}
+     * with {@code binary: true}, and there is no {@code body}. {@link #fromJson} reads both forms.
+     */
+    public Json.Obj toJsonOrBinary() {
+        String text = bodyText();
+        Json.Obj o = text != null ? Json.o().with("body", text)
+                : Json.o().with("binary", true).with("bodyBase64", Base64.getEncoder().encodeToString(body));
+        return o.with("encoding", charset.name()).with("bodySize", body.length)
+                .with("headers", TypedValue.writeList(headers))
+                .with("properties", TypedValue.writeList(properties));
+    }
+
     /** Added / changed / removed entries between two maps (values compared with type). */
     public static Json.Obj diff(Map<String, Object> before, Map<String, Object> after) {
         List<Object> added = new ArrayList<>();

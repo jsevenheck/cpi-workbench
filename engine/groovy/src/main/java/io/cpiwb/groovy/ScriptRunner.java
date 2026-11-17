@@ -140,6 +140,12 @@ public final class ScriptRunner {
         SimExchange in = SimExchange.fromJson(Json.obj(req, "input"));
         Exchange exchange = Exchanges.create();
         String bodyType = Json.str(options, "bodyType", "String");
+        if ("String".equals(bodyType) && in.bodyText() == null) {
+            // Bytes that are no text (an Encoder's GZIP or ZIP result) would be garbled as a String.
+            bodyType = "byte[]";
+            diags.add(Diagnostic.info("The input body is no text (" + in.getBody().length + " bytes), so the script gets it as byte[]. "
+                    + "Which class the body has on a tenant after an Encoder or Decoder is not verified (docs/plan.md Q-E1)."));
+        }
         exchange.getIn().setBody(inputBody(in, bodyType));
         exchange.getIn().getHeaders().putAll(in.getHeaders());
         exchange.getProperties().putAll(in.getProperties());
@@ -470,7 +476,14 @@ public final class ScriptRunner {
             } else if (body instanceof byte[]) {
                 // Bytes that name their own encoding (an XML declaration) are read in it, else in the input's.
                 java.nio.charset.Charset own = io.cpiwb.core.TextFiles.declaredCharset((byte[]) body);
-                text = new String((byte[]) body, own == null ? charset : own);
+                Charset cs = own == null ? charset : own;
+                text = new String((byte[]) body, cs);
+                // Bytes that are not decodable or hold a NUL character are no text. Not "the text gives the bytes
+                // back": UTF-16 with a little-endian byte order mark is text, and Java encodes it big-endian.
+                if (!decodable((byte[]) body, cs) || text.indexOf('\0') >= 0) {
+                    diags.add(Diagnostic.warning("UnsupportedInSimulator: the output body is no text (" + ((byte[]) body).length
+                            + " bytes). A script's result is shown and passed on as text, which changes such bytes."));
+                }
             } else if (body instanceof InputStream || body instanceof Reader) {
                 text = exchange.getIn().getBody(String.class);
             } else {
@@ -492,6 +505,16 @@ public final class ScriptRunner {
                 .with("bodySize", text == null ? 0 : text.getBytes(charset).length)
                 .with("headers", TypedValue.writeList(headers))
                 .with("properties", TypedValue.writeList(props));
+    }
+
+    private static boolean decodable(byte[] bytes, Charset cs) {
+        try {
+            cs.newDecoder().onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
+                    .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT).decode(java.nio.ByteBuffer.wrap(bytes));
+            return true;
+        } catch (java.nio.charset.CharacterCodingException e) {
+            return false;
+        }
     }
 
     private Json.Obj finish(Json.Obj result, boolean ok, String failedPhase, List<Diagnostic> diags, Json.Obj output,

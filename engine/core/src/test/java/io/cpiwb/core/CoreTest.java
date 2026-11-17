@@ -12,6 +12,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -267,6 +268,105 @@ class CoreTest {
     }
 
     @Test
+    void xmlCompareLeavesOutIgnoredNodes() {
+        String expected = "<o><id>1</id><t ts=\"a\">x</t></o>";
+        String actual = "<o><id>2</id><t ts=\"b\">x</t></o>";
+        assertTrue(TestRunner.compare(expected, actual, "xml").contains("expected text '1'"));
+        assertTrue(TestRunner.compare(expected, actual, "xml", List.of("//id"), Map.of()).contains("attributes differ"), "only what is named");
+        assertNull(TestRunner.compare(expected, actual, "xml", List.of("//id", "//t/@ts"), Map.of()));
+        assertNull(TestRunner.compare(expected, actual, "xml", List.of("//id/text()", "o/t/@ts"), Map.of()));
+        // On one side only, and an element whose ancestor an earlier rule removed.
+        assertNull(TestRunner.compare("<o><t>x</t></o>", "<o><h><id>2</id></h><t>x</t></o>", "xml", List.of("//h", "//id"), Map.of()));
+        // Mixed content: the text around a removed element is one text again.
+        assertNull(TestRunner.compare("<a>x<t/>y</a>", "<a>xy</a>", "xml", List.of("//t"), Map.of()));
+        // What is left still has to match.
+        assertTrue(TestRunner.compare("<o><id>1</id><v>a</v></o>", "<o><id>2</id><v>b</v></o>", "xml", List.of("//id"), Map.of()).contains("expected text 'a'"));
+
+        // XPath 1.0: a plain name does not match in a namespace, and the difference says so.
+        String ns = "<o xmlns=\"urn:x\"><Created>%s</Created></o>";
+        String diff = TestRunner.compare(ns.formatted("1"), ns.formatted("2"), "xml", List.of("//Created"), Map.of());
+        assertTrue(diff.contains("expected text '1'") && diff.contains("expect.ignore matched no node: //Created"), diff);
+        assertNull(TestRunner.compare(ns.formatted("1"), ns.formatted("2"), "xml", List.of("//*[local-name()='Created']"), Map.of()));
+        assertNull(TestRunner.compare(ns.formatted("1"), ns.formatted("2"), "xml", List.of("//x:Created"), Map.of("x", "urn:x")));
+        assertNull(TestRunner.compare("<o xml:lang=\"de\"/>", "<o xml:lang=\"en\"/>", "xml", List.of("//@xml:lang"), Map.of()));
+        // A rule that matches nothing is not an error while the rest is equal (the node may be optional).
+        assertNull(TestRunner.compare("<o/>", "<o/>", "xml", List.of("//Created"), Map.of()));
+
+        for (String bad : List.of("//id[", "count(//id)", "'text'", "//p:id", "/", "/*", "//id | /o")) {
+            IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+                    () -> TestRunner.compare(expected, actual, "xml", List.of(bad), Map.of()), bad);
+            assertTrue(e.getMessage().startsWith("expect.ignore '" + bad + "'"), e.getMessage());
+        }
+    }
+
+    @Test
+    void aCaseWithIgnoreRunsAndAWrongRuleIsAnError(@TempDir Path tmp) throws Exception {
+        String[] body = {"<o><id>2</id><v>a</v></o>"};
+        RpcHandler step = new RpcHandler() {
+            @Override
+            public Object call(String method, Map<String, Object> params) {
+                return Json.o().with("ok", true).with("output", Json.o().with("body", body[0]));
+            }
+
+            @Override
+            public Map<String, Object> describe() {
+                return Map.of();
+            }
+        };
+        TestRunner runner = new TestRunner(step, null).register("xslt", (tc, dir, root, params) -> "xslt.run");
+        String c = "{\"step\":\"xslt\",\"expect\":{\"body\":\"<o><id>1</id><v>a</v></o>\"%s}}";
+        Path file = tmp.resolve("case.json");
+        Files.writeString(file, c.formatted(""));
+        assertEquals("failed", runner.run(file).status);
+        Files.writeString(file, c.formatted(",\"ignore\":[\"//id\"]"));
+        TestRunner.CaseResult ok = runner.run(file);
+        assertEquals("passed", ok.status, ok.messages.toString());
+        // Rules that cannot apply: not a list of strings, a comparison as text, no expected body, no XPath.
+        for (String wrong : List.of(",\"ignore\":\"//id\"", ",\"ignore\":[1]", ",\"ignore\":[\"//id\"],\"compare\":\"text\"", ",\"ignore\":[\"//id[\"]")) {
+            Files.writeString(file, c.formatted(wrong));
+            TestRunner.CaseResult r = runner.run(file);
+            assertEquals("error", r.status, wrong);
+            assertTrue(r.messages.get(0).contains("expect.ignore"), r.messages.toString());
+        }
+        Files.writeString(file, "{\"step\":\"xslt\",\"expect\":{\"ignore\":[\"//id\"]}}");
+        assertEquals("error", runner.run(file).status);
+        // A prefix is bound by expect.namespaces, and unknown without it.
+        body[0] = "<o xmlns='urn:n'><id>2</id></o>";
+        String n = "{\"step\":\"xslt\",\"expect\":{\"body\":\"<o xmlns='urn:n'><id>1</id></o>\",\"ignore\":[\"//n:id\"]%s}}";
+        Files.writeString(file, n.formatted(",\"namespaces\":{\"n\":\"urn:n\"}"));
+        assertEquals("passed", runner.run(file).status, runner.run(file).messages.toString());
+        Files.writeString(file, n.formatted(""));
+        TestRunner.CaseResult unbound = runner.run(file);
+        assertEquals("error", unbound.status);
+        assertTrue(unbound.messages.get(0).contains("the prefix 'n' is not in expect.namespaces"), unbound.messages.toString());
+    }
+
+    @Test
+    void jsonCompareIgnoresMemberOrderAndLeavesOutPointers() {
+        assertNull(TestRunner.compare("{\"a\":1,\"b\":[1,2]}", "{ \"b\": [1, 2.0], \"a\": 1 }", "json"));
+        assertEquals("at /b/1: expected 2 but was 3", TestRunner.compare("{\"a\":1,\"b\":[1,2]}", "{\"a\":1,\"b\":[1,3]}", "json"));
+        assertEquals("at /a: expected \"x\" but the member is missing", TestRunner.compare("{\"a\":\"x\"}", "{}", "json"));
+        assertEquals("at /z: unexpected member true", TestRunner.compare("{}", "{\"z\":true}", "json"));
+        assertEquals("at /: expected 1 elements but there are 2", TestRunner.compare("[1]", "[1,2]", "json"));
+        assertEquals("at /a~1b: expected null but was 0", TestRunner.compare("{\"a/b\":null}", "{\"a/b\":0}", "json"));
+        assertTrue(TestRunner.compare("{", "{}", "json").startsWith("cannot compare as JSON"));
+
+        String expected = "{\"order\":{\"id\":\"1\",\"createdAt\":\"2026-01-01\",\"items\":[{\"uuid\":\"a\",\"n\":1},{\"uuid\":\"b\",\"n\":2}]}}";
+        String actual = "{\"order\":{\"id\":\"1\",\"createdAt\":\"2026-11-16\",\"items\":[{\"uuid\":\"x\",\"n\":1},{\"uuid\":\"y\",\"n\":2}]}}";
+        assertNotNull(TestRunner.compare(expected, actual, "json"));
+        assertNull(TestRunner.compare(expected, actual, "json", List.of("/order/createdAt", "/order/items/*/uuid"), Map.of()));
+        // The rules index the documents as written: the first two elements, not the first and the third.
+        assertNull(TestRunner.compare("{\"b\":[1,2,3]}", "{\"b\":[8,9,3]}", "json", List.of("/b/0", "/b/1"), Map.of()));
+        String diff = TestRunner.compare(expected, actual, "json", List.of("/order/created", "/order/items/*/uuid"), Map.of());
+        assertTrue(diff.startsWith("at /order/createdAt") && diff.contains("expect.ignore matched nothing: /order/created"), diff);
+        for (String bad : List.of("", "order/id")) {
+            IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+                    () -> TestRunner.compare(expected, actual, "json", List.of(bad), Map.of()));
+            assertTrue(e.getMessage().startsWith("expect.ignore '" + bad + "'"), e.getMessage());
+        }
+    }
+
+    @Test
     void testRunExitCodes() {
         Map<String, Object> none = Json.o().with("results", List.of()).with("passed", 0).with("failed", 0).with("skipped", 0);
         assertEquals(1, Cli.printTestResults(none, true, false));
@@ -274,6 +374,73 @@ class CoreTest {
                 .with("passed", 0).with("failed", 0).with("skipped", 1);
         assertEquals(0, Cli.printTestResults(skipped, true, false));
         assertEquals(1, Cli.printTestResults(skipped, true, true));
+    }
+
+    private static Map<String, Object> caseResult(String status, String name, int ms, String... messages) {
+        return Json.o().with("status", status).with("name", name).with("ms", ms).with("messages", List.of(messages));
+    }
+
+    @Test
+    void junitReportHasOneTestCasePerCase() throws Exception {
+        // A quote, markup, a line break, a control character and a lone surrogate: all of it may be quoted from an input.
+        String odd = "Expected <a x=\"1\"> & got\n\tline 2 \u0001 \uD83D end";
+        Map<String, Object> r = Json.o().with("results", List.of(
+                        caseResult("passed", "order & <invoice>", 1500),
+                        caseResult("failed", "wrong body", 12, odd, "second message"),
+                        caseResult("error", "broken", 3, "IOException: no such file"),
+                        caseResult("skipped", "other engine", 0, "Profile 'groovy-1.x' is handled by another engine"),
+                        caseResult("skipped", "no message", 0)))
+                .with("passed", 1).with("failed", 2).with("skipped", 2);
+        String xml = Cli.junitXml(r, "saxon-he-12");
+        assertFalse(xml.contains("\r"), "LF on every computer");
+        javax.xml.parsers.DocumentBuilderFactory f = javax.xml.parsers.DocumentBuilderFactory.newInstance();
+        org.w3c.dom.Element suite = f.newDocumentBuilder()
+                .parse(new java.io.ByteArrayInputStream(xml.getBytes(java.nio.charset.StandardCharsets.UTF_8))).getDocumentElement();
+        assertEquals("testsuite", suite.getTagName());
+        assertEquals("saxon-he-12", suite.getAttribute("name"));
+        assertEquals("5|1|1|2|1.515", String.join("|", suite.getAttribute("tests"), suite.getAttribute("failures"),
+                suite.getAttribute("errors"), suite.getAttribute("skipped"), suite.getAttribute("time")));
+        org.w3c.dom.NodeList cases = suite.getElementsByTagName("testcase");
+        assertEquals(5, cases.getLength());
+        org.w3c.dom.Element passed = (org.w3c.dom.Element) cases.item(0);
+        assertEquals("order & <invoice>", passed.getAttribute("name"));
+        assertEquals("saxon-he-12", passed.getAttribute("classname"));
+        assertEquals("1.500", passed.getAttribute("time"));
+        assertEquals(0, passed.getChildNodes().getLength());
+        org.w3c.dom.Element failure = (org.w3c.dom.Element) ((org.w3c.dom.Element) cases.item(1)).getElementsByTagName("failure").item(0);
+        // What XML 1.0 cannot hold is replaced; the line break and the tab survive in the attribute.
+        String readable = odd.replace('\u0001', '\uFFFD').replace('\uD83D', '\uFFFD');
+        assertEquals(readable, failure.getAttribute("message"));
+        assertEquals(readable + "\nsecond message", failure.getTextContent());
+        org.w3c.dom.Element error = (org.w3c.dom.Element) ((org.w3c.dom.Element) cases.item(2)).getElementsByTagName("error").item(0);
+        assertEquals("IOException: no such file", error.getAttribute("message"));
+        assertEquals("Profile 'groovy-1.x' is handled by another engine",
+                ((org.w3c.dom.Element) ((org.w3c.dom.Element) cases.item(3)).getElementsByTagName("skipped").item(0)).getAttribute("message"));
+        assertEquals("skipped", ((org.w3c.dom.Element) ((org.w3c.dom.Element) cases.item(4)).getElementsByTagName("skipped").item(0)).getAttribute("message"));
+        // A pair of surrogates is one character and stays.
+        assertEquals("\uD83D\uDE00", Cli.xml("\uD83D\uDE00", true));
+    }
+
+    @Test
+    void junitOptionWritesTheReportAndKeepsTheExitCode(@TempDir Path tmp) throws Exception {
+        Map<String, Object> ok = Json.o().with("results", List.of(caseResult("passed", "a", 1))).with("passed", 1).with("failed", 0).with("skipped", 0);
+        Map<String, Object> failed = Json.o().with("results", List.of(caseResult("failed", "a", 1, "Body differs")))
+                .with("passed", 0).with("failed", 1).with("skipped", 0);
+        Path report = tmp.resolve("new folder/report.xml");
+        assertEquals(0, Cli.testCommand(ok, new Cli.Args(new String[] {"test", "tests", "--junit", report.toString(), "--json"}), "groovy-1.x"));
+        assertTrue(Files.readString(report).contains("<testsuite name=\"groovy-1.x\" tests=\"1\" failures=\"0\""), Files.readString(report));
+        assertEquals(1, Cli.testCommand(failed, new Cli.Args(new String[] {"test", "--junit", report.toString()}), "groovy-1.x"));
+        assertTrue(Files.readString(report).contains("<failure message=\"Body differs\""), "a second run replaces the report");
+        // The file's name is not taken for the path of the cases.
+        assertNull(new Cli.Args(new String[] {"test", "--junit", report.toString()}).positional(1));
+        // No file named: not a report called "--json", and not silence.
+        assertEquals(2, Cli.testCommand(ok, new Cli.Args(new String[] {"test", "tests", "--junit"}), "groovy-1.x"));
+        assertEquals(2, Cli.testCommand(ok, new Cli.Args(new String[] {"test", "tests", "--junit", "--json"}), "groovy-1.x"));
+        assertFalse(Files.exists(Path.of("--json")));
+        // A report that cannot be written fails the command although every case passed.
+        assertEquals(1, Cli.testCommand(ok, new Cli.Args(new String[] {"test", "tests", "--junit", tmp.toString()}), "groovy-1.x"));
+        // Without the option nothing changes.
+        assertEquals(0, Cli.testCommand(ok, new Cli.Args(new String[] {"test", "tests"}), "groovy-1.x"));
     }
 
     /** Browser mode: the supervising process starts the same engine again, marked as the one that serves. */

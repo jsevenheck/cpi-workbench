@@ -46,8 +46,26 @@ async function openAndRun(file, statusText) {
   await runIt();
 }
 
-// 1) Sample script on Groovy 1.x.
+// 1) The Groovy tab starts empty and runs nothing; a script typed in runs on Groovy 1.x.
 await page.getByRole('tab', { name: 'Groovy Script' }).click();
+await page.locator('section.script .empty-hint', { hasText: 'Examples' }).waitFor({ timeout: 5000 })
+  .catch(() => fail('the empty script editor does not point to the examples'));
+await page.waitForTimeout(1000);
+if (await page.locator('section.output .badge').count()) fail('something ran on an empty start');
+const typeInto = async (pane, text) => {
+  await page.locator(`${pane} .view-lines`).click({ position: { x: 40, y: 10 } });
+  await page.keyboard.press('Control+a');
+  await page.keyboard.insertText(text);
+};
+await typeInto('section.input', '<Order id="4711">\n  <Item sku="M-100" qty="2"/>\n  <Item sku="M-200" qty="1"/>\n</Order>\n');
+await typeInto('section.script', "import com.sap.gateway.ip.core.customdev.util.Message\n"
+  + "def Message processData(Message message) {\n"
+  + "    def order = new XmlSlurper().parseText(message.getBody(String))\n"
+  + "    messageLogFactory.getMessageLog(message)?.setStringProperty('Order', order.@id.text())\n"
+  + "    println \"Processing order ${order.@id}\"\n"
+  + "    message.setBody('<ProcessedOrder/>')\n"
+  + "    return message\n}\n");
+await runIt();
 await page.locator('section.output .badge.ok').waitFor({ timeout: 20000 });
 // Monaco renders the output a moment after the badge, so wait for the text itself.
 await page.locator('section.output .view-lines', { hasText: 'ProcessedOrder' }).waitFor({ timeout: 10000 })
@@ -58,12 +76,13 @@ await page.getByRole('tab', { name: /^Console/ }).click();
 if (!(await page.locator('section.output .console').innerText()).includes('Processing order 4711')) fail('console output missing');
 if (shots) await page.screenshot({ path: path.join(shots, 'g1-groovy-v1.png') });
 
-// 2) Switch to 2.x: the untouched sample switches to the v2 API and still works.
-await page.getByLabel('Runtime profile').selectOption('groovy-2.x');
-await page.waitForTimeout(500);
+// 2) A Groovy 2.x example loads without a project, waits for Run and runs on Groovy 4.
+await page.getByLabel('Examples').selectOption('groovy-xml');
+await page.getByRole('dialog').filter({ hasText: 'Discard the unsaved changes' }).getByRole('button', { name: 'OK' }).click();
+await page.locator('.status', { hasText: 'has not run' }).waitFor({ timeout: 10000 });
+if ((await page.getByLabel('Runtime profile').inputValue()) !== 'groovy-2.x') fail('the 2.x example did not switch to 2.x');
+await runIt();
 await page.locator('section.output .badge.ok').waitFor({ timeout: 20000 });
-const script = await page.locator('section.script .view-lines').innerText();
-if (!script.includes('com.sap.it.script.v2.api.Message')) fail('v2 sample not loaded');
 await page.locator('section.output footer', { hasText: 'Groovy 4.0.29' }).waitFor({ timeout: 10000 });
 
 // 3) A runtime error is reported with its script line.
@@ -231,6 +250,13 @@ if (process.env.CPIWB_IFLOW_ZIP) {
   if ((await page.getByLabel('Filter XPath').inputValue()) !== '/Order/Item') fail('Filter XPath from the iFlow');
   await page.locator('.steps .step', { hasText: 'Gather items' }).click();
   if ((await page.getByLabel('Aggregation Algorithm').inputValue()) !== 'combineAtXPath') fail('Gather algorithm from the iFlow');
+  // × closes the iFlow step: Gather has its own settings again; the Filter taken from the iFlow stays.
+  await page.getByRole('button', { name: 'Close iFlow step' }).click();
+  await page.locator('.src').waitFor({ state: 'detached', timeout: 5000 }).catch(() => fail('Close iFlow step left the "From" line'));
+  if ((await page.getByLabel('Aggregation Algorithm').inputValue()) !== 'combine') fail('Close iFlow step did not bring back Gather\'s own settings');
+  await page.getByRole('tab', { name: 'Filter' }).click();
+  await page.locator('.src', { hasText: 'Keep items' }).waitFor({ timeout: 5000 }).catch(() => fail('closing Gather also closed the Filter from the iFlow'));
+  if ((await page.getByLabel('Filter XPath').inputValue()) !== '/Order/Item') fail('closing Gather changed the Filter from the iFlow');
   // A Message Mapping step is listed (not simulated); it opens its script with the first mapping function.
   await page.locator('.steps .step', { hasText: 'Map order' }).click();
   await page.locator('section.script h2', { hasText: 'lookup.gsh' }).waitFor({ timeout: 10000 })
@@ -240,6 +266,19 @@ if (process.env.CPIWB_IFLOW_ZIP) {
   await page.locator('section.output .badge.ok').waitFor({ timeout: 20000 })
     .catch(() => fail('mapping script from the iFlow did not run'));
   if ((await fnName()) !== 'getHeader') fail('mapping function not picked');
+  // 4b2) The list holds the whole iFlow (routes, adapters, other processes); an element that is not simulated
+  // shows its settings in the Diagram tab, and a double-click there opens a step that runs.
+  if (!(await page.locator('.steps .route', { hasText: 'ERP' }).count())) fail('the Router route is not in the list');
+  if (!(await page.locator('.steps .adapter', { hasText: 'HTTPS' }).count())) fail('the sender adapter is not in the list');
+  await page.locator('.steps .node', { hasText: 'Write to data store' }).click();
+  await page.locator('.diagram svg').waitFor({ timeout: 10000 }).catch(() => fail('the Diagram tab did not open'));
+  const details = page.locator('.diagram .details');
+  await details.waitFor({ timeout: 5000 }).catch(() => fail('no details for the selected element'));
+  if (!(await details.innerText()).includes('storageName')) fail('details of the data store step: ' + (await details.innerText()));
+  if (shots) await page.screenshot({ path: path.join(shots, 'g5b-diagram.png') });
+  await page.locator('.diagram [data-node="CallActivity_1"]').dblclick();
+  await page.locator('section.script h2', { hasText: 'enrich.groovy' }).waitFor({ timeout: 10000 })
+    .catch(() => fail('a double-click in the diagram did not open the Groovy step'));
   await page.getByRole('tab', { name: 'Groovy Script' }).click();
 }
 
@@ -469,14 +508,41 @@ await page.locator('section.input').getByRole('button', { name: 'Format' }).clic
 await page.locator('section.input .view-lines', { hasText: '"items": [' }).waitFor({ timeout: 5000 })
   .catch(() => fail('Format did not pretty-print the JSON input'));
 
-// 6b) Flow Steps with their sample settings: Content Modifier (XPath on the XML engine, Simple on Camel),
-// Router (CPI's Non-XML spelling) and General Splitter.
+// 6b) Flow Steps, which start empty: Content Modifier (XPath on the XML engine, Simple on Camel),
+// Router (CPI's Non-XML spelling) and General Splitter, with the settings entered here.
 await page.getByRole('tab', { name: 'Flow Steps' }).click();
+const flowInput = page.locator('section[aria-label="Input message"]');
+await flowInput.locator('.view-lines').click({ position: { x: 40, y: 10 } });
+await page.keyboard.press('Control+a');
+await page.keyboard.insertText('<Order id="4711">\n  <Item sku="M-100" qty="2"/>\n  <Item sku="M-200" qty="1"/>\n</Order>\n');
+await flowInput.getByRole('tab', { name: /^Headers/ }).click();
+await flowInput.getByRole('button', { name: '+ Add' }).click();
+await flowInput.getByLabel('Name').last().fill('SenderId');
+await flowInput.getByLabel('Value').last().fill('ERP_100');
+await flowInput.getByRole('tab', { name: /^Body/ }).click();
 await page.getByRole('tab', { name: 'Content Modifier' }).click();
+const config = page.locator('section[aria-label="Step configuration"]');
+if (!process.env.CPIWB_IFLOW_ZIP) {
+  // Without the iFlow's Content Modifier (4b): the same row by hand.
+  await config.getByRole('button', { name: '+ Add' }).click();
+  await config.getByLabel('Name').last().fill('OrderId');
+  await config.getByLabel('Source Type').last().selectOption('xpath');
+  await config.getByLabel('Source Value').last().fill('/Order/@id');
+}
 await page.getByRole('button', { name: 'Run step' }).click();
-// Both the sample and the imported iFlow's Content Modifier set the header OrderId from /Order/@id.
+// The imported iFlow's Content Modifier (or the row above) sets the header OrderId from /Order/@id.
 await page.locator('.res .row', { hasText: 'OrderId' }).filter({ hasText: '4711' }).waitFor({ timeout: 20000 })
   .catch(() => fail('Content Modifier: header OrderId is not 4711'));
+await page.getByRole('tab', { name: 'Router' }).click();
+if (await config.getByLabel('Route name').count()) fail('the Router does not start empty');
+for (const [name, condition] of [['ERP', "${header.SenderId} = 'ERP_100'"], ['Default', '']]) {
+  await config.getByRole('button', { name: '+ Route' }).click();
+  await config.getByLabel('Route name').last().fill(name);
+  if (condition) await config.getByLabel('Condition').last().fill(condition);
+  else await config.getByLabel('Default route').last().check();
+}
+await page.getByRole('tab', { name: 'Splitter' }).click();
+await config.getByLabel('Split expression').fill('/Order/Item');
 await page.getByRole('tab', { name: 'Router' }).click();
 await page.getByRole('button', { name: 'Run step' }).click();
 await page.locator('.taken-line', { hasText: 'ERP' }).waitFor({ timeout: 10000 })
@@ -502,6 +568,59 @@ await page.getByLabel('Value Type').selectOption('nodelist');
 await page.getByRole('button', { name: 'Run step' }).click();
 await page.locator('.res h3', { hasText: '1 item(s) selected' }).waitFor({ timeout: 10000 })
   .catch(() => fail('Filter did not select the one item with qty > 1'));
+// Message Digest: the header with the digest and the canonical form it is of; the body stays.
+await page.getByRole('tab', { name: 'Message Digest' }).click();
+await page.getByLabel('Digest Algorithm').selectOption('SHA256');
+await page.getByRole('button', { name: 'Run step' }).click();
+await page.locator('.res .row', { hasText: 'SAPMessageDigest' }).waitFor({ timeout: 10000 })
+  .catch(async () => fail('Message Digest: ' + (await page.locator('.res').innerText()).slice(0, 300)));
+if (!/^[A-Za-z0-9+/]{43}=$/.test(await page.locator('.res .row code').innerText())) fail('Message Digest: not a Base64 SHA-256 value');
+await page.locator('.res pre', { hasText: '<Order id="4711"' }).waitFor({ timeout: 5000 })
+  .catch(() => fail('Message Digest did not show the canonical form'));
+await page.getByLabel('Digest filter XPath').fill('/Order/Item');
+await page.getByRole('button', { name: 'Run step' }).click();
+await page.locator('.res .d.error', { hasText: 'UnsupportedInSimulator' }).waitFor({ timeout: 10000 })
+  .catch(() => fail('Message Digest: a filter that selects several nodes must be refused'));
+await page.getByLabel('Digest filter XPath').fill('');
+// Encoder: Base64 of the body in lines; GZIP gives bytes, which go on as the input of a Decoder and come back as the
+// body. MIME Multipart is refused.
+await page.getByRole('tab', { name: 'Encoder' }).click();
+await page.getByRole('button', { name: 'Run step' }).click();
+await page.locator('.res pre', { hasText: /^(PD94|PE9y)[A-Za-z0-9+/=\s]+$/ }).waitFor({ timeout: 10000 })
+  .catch(async () => fail('Base64 Encode: ' + (await page.locator('.res').innerText()).slice(0, 300)));
+await page.getByLabel('Encoding Scheme').selectOption('mimeMultipartEncode');
+await page.getByRole('button', { name: 'Run step' }).click();
+await page.locator('.res .d.error', { hasText: 'UnsupportedInSimulator' }).waitFor({ timeout: 10000 })
+  .catch(() => fail('MIME Multipart Encode must be refused'));
+await page.getByLabel('Encoding Scheme').selectOption('gzipCompress');
+await page.getByRole('button', { name: 'Run step' }).click();
+await page.locator('.res h3', { hasText: 'binary' }).waitFor({ timeout: 10000 })
+  .catch(async () => fail('GZIP Compress: ' + (await page.locator('.res').innerText()).slice(0, 300)));
+if (!/^00000000 +1f 8b 08/.test(await page.getByLabel('Binary output').innerText())) fail('GZIP Compress: no GZIP header in the hex view');
+// A saved archive is listed in the file tree, also outside inputs/, and opens from there as the binary input.
+await page.locator('.res h3', { hasText: 'binary' }).getByRole('button', { name: 'Save…' }).click();
+await page.locator('.dlg input.mono').fill('archives/order.gz');
+await page.locator('.dlg').getByRole('button', { name: 'OK' }).click();
+const savedGz = page.locator('nav.tree button.file[title="archives/order.gz"]');
+await savedGz.waitFor({ timeout: 5000 }).catch(() => fail('the saved archives/order.gz is not listed in the file tree'));
+if (await savedGz.count()) {
+  await savedGz.click();
+  await page.getByLabel('Binary input body').filter({ hasText: 'archives/order.gz' }).waitFor({ timeout: 5000 })
+    .catch(async () => fail('archives/order.gz did not open as the binary input: ' + await page.locator('.status, .error').allInnerTexts()));
+}
+await page.locator('.res h3', { hasText: 'binary' }).getByRole('button', { name: 'Use as input' }).click();
+await page.getByLabel('Binary input body').waitFor({ timeout: 5000 }).catch(() => fail('The GZIP result did not become a binary input'));
+await page.getByRole('tab', { name: 'Decoder' }).click();
+await page.getByLabel('Decoding Scheme').selectOption('gzipDecompress');
+await page.getByRole('button', { name: 'Run step' }).click();
+await page.locator('.res pre', { hasText: '<Order id="4711"' }).waitFor({ timeout: 10000 })
+  .catch(async () => fail('GZIP Decompress: ' + (await page.locator('.res').innerText()).slice(0, 300)));
+// The decoded body back as the text input, for the steps below.
+await page.locator('.res h3', { hasText: 'bytes' }).getByRole('button', { name: 'Use as input' }).click();
+await page.getByLabel('Binary input body').waitFor({ state: 'detached', timeout: 5000 }).catch(() => fail('The decoded text did not replace the binary input'));
+await page.getByLabel('Decoding Scheme').selectOption('base64Decode');
+await page.getByRole('tab', { name: 'Encoder' }).click();
+await page.getByLabel('Encoding Scheme').selectOption('base64Encode');
 // Converter: XML to JSON on the sample body, the result back as input, then JSON to XML.
 await page.getByRole('tab', { name: 'Converter' }).click();
 await page.getByLabel('Converter', { exact: true }).selectOption('xmlToJson');
@@ -523,9 +642,84 @@ await page.locator('.res pre', { hasText: 'multimap:Message1' }).waitFor({ timeo
   .catch(() => fail('the Gather result was lost after switching steps'));
 if (shots) await page.screenshot({ path: path.join(shots, 'g4-flow-steps.png') });
 
+// 6b) Diagram regressions: pan a selected element out of view, and deselect without changing iFlow.
+if (process.env.CPIWB_IFLOW_ZIP) {
+  // A second real import, not a mocked model. Keep the archive outside the disposable project.
+  const secondZip = project + '-diagram-second.zip';
+  fs.copyFileSync(process.env.CPIWB_IFLOW_ZIP, secondZip);
+  try {
+    await page.getByRole('button', { name: 'Import iFlow' }).click();
+    await page.locator('.dlg input.mono').fill(secondZip);
+    await page.locator('.dlg').getByRole('button', { name: 'OK' }).click();
+    await page.getByRole('tab', { name: 'Diagram', exact: true }).click();
+    const picker = page.getByLabel('iFlow', { exact: true });
+    await picker.waitFor();
+    const options = await picker.locator('option').evaluateAll((els) => els.map((e) => e.value));
+    if (options.length !== 2) throw new Error('diagram regression needs two imported iFlows: ' + options);
+    const shown = options[1]; // Not the first model: falling back to that model must fail this check.
+    await picker.selectOption(shown);
+    const modelPath = await page.locator('.diagram .bar .file').innerText();
+    if (!modelPath.startsWith(`iflows/${shown}/`)) throw new Error('picker and rendered iFlow disagree: ' + modelPath);
+    const diagram = page.locator('.diagram svg');
+    const node = diagram.locator('[data-node="CallActivity_1"]');
+    await node.click();
+    await page.locator('.diagram .details').waitFor();
+    const before = await diagram.getAttribute('viewBox');
+    const rect = await diagram.boundingBox();
+    for (let i = 0; i < 3; i++) {
+      await page.mouse.move(rect.x + rect.width * 0.15, rect.y + rect.height * 0.5);
+      await page.mouse.down();
+      await page.mouse.move(rect.x + rect.width * 0.85, rect.y + rect.height * 0.5, { steps: 12 });
+      await page.mouse.up();
+    }
+    const panned = await diagram.getAttribute('viewBox');
+    const [bx, , bw] = before.split(' ').map(Number);
+    const [px] = panned.split(' ').map(Number);
+    if (!(bx - px > bw)) throw new Error(`selected element snapped back while panning: ${before} -> ${panned}`);
+    // Let Svelte effects and browser rendering settle before checking that it stayed there.
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    if ((await diagram.getAttribute('viewBox')) !== panned) throw new Error('diagram snapped back after panning');
+    if (!(await node.getAttribute('class')).includes('selected')) throw new Error('panning lost the selected node');
+    if (shots) await page.screenshot({ path: path.join(shots, 'g6b-diagram-panned.png') });
+    await page.getByRole('button', { name: 'Close details' }).click();
+    await page.locator('.diagram .details').waitFor({ state: 'detached' });
+    if ((await picker.inputValue()) !== shown) throw new Error('Close details switched to another iFlow');
+    if ((await page.locator('.diagram .bar .file').innerText()) !== modelPath) throw new Error('Close details changed the rendered iFlow');
+    if ((await diagram.getAttribute('viewBox')) !== panned) throw new Error('Close details reset the diagram view');
+    await page.getByTitle('Show the whole iFlow').click();
+    await node.click();
+    await page.locator('.diagram .details').waitFor();
+    const blank = await diagram.evaluate((svg) => {
+      const r = svg.getBoundingClientRect();
+      for (const dy of [0.05, 0.95, 0.5]) for (const dx of [0.05, 0.95, 0.5]) {
+        const x = r.left + r.width * dx, y = r.top + r.height * dy;
+        const el = document.elementFromPoint(x, y);
+        if (el && svg.contains(el) && !el.closest('[data-node]')) return { x, y };
+      }
+      throw new Error('no empty point in the diagram');
+    });
+    await page.mouse.click(blank.x, blank.y);
+    await page.locator('.diagram .details').waitFor({ state: 'detached' });
+    if ((await picker.inputValue()) !== shown) throw new Error('background deselection switched to another iFlow');
+    if ((await page.locator('.diagram .bar .file').innerText()) !== modelPath) throw new Error('background deselection changed the rendered iFlow');
+    if (shots) await page.screenshot({ path: path.join(shots, 'g6b-diagram-deselected.png') });
+    console.log('diagram regressions passed: selected pan, Close details, background deselection on second iFlow');
+  } finally {
+    fs.rmSync(secondZip, { force: true });
+  }
+}
+
 // 7) Closing the project closes it in the engines too: runs no longer see its platform data.
 await page.getByTitle('Close project').click();
 await page.getByLabel('Project folder').waitFor({ timeout: 5000 });
+// The flow steps taken from the project's iFlows close with it.
+if (process.env.CPIWB_IFLOW_ZIP) {
+  await page.getByRole('tab', { name: 'Flow Steps' }).click();
+  for (const step of ['Content Modifier', 'Filter']) {
+    await page.getByRole('tab', { name: step, exact: true }).click();
+    if (await page.locator('.src').count()) fail(`${step} still shows "${await page.locator('.src').innerText()}" after Close project`);
+  }
+}
 const afterClose = await page.evaluate(async () => {
   const r = await fetch('http://127.0.0.1:7778/rpc', { method: 'POST', headers: { 'content-type': 'application/json', 'x-cpiwb': '1' },
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'project.list', params: {} }) });

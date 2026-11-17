@@ -30,18 +30,30 @@ fn relative(server: &Server, path: &str) -> Result<PathBuf, String> {
 }
 
 pub fn read_file(server: &Server, args: &Args) -> Result<Value, String> {
+    let binary = args.get("binary").and_then(Value::as_bool).unwrap_or(false);
     let (key, path, content) = match (str_arg(args, "path"), str_arg(args, "runId")) {
         (Some(_), Some(_)) => return Err("Give path or runId, not both.".into()),
         (None, None) => return Err("Give path (a project file) or runId (an earlier run's output body).".into()),
-        (None, Some(r)) => ("runId", r, server.runs().message(r)?.body),
+        (None, Some(r)) => {
+            let m = server.runs().message(r)?;
+            match m.body_base64 {
+                Some(b64) => return bytes("runId", r, b64),
+                None => ("runId", r, m.body),
+            }
+        }
         (Some(path), None) => {
             let full = relative(server, path)?;
             if full.is_dir() {
                 return Err(format!("{path} is a folder; project_info lists its files."));
             }
-            let content = super::tools::read_file(server, path)?;
+            if binary {
+                let r = engine_call(server, file_runtime(server)?, "file.read", json!({ "path": path, "binary": true }))?;
+                return bytes("path", path, r["contentBase64"].as_str().unwrap_or_default().to_string());
+            }
+            let content = super::tools::read_file(server, path)
+                .map_err(|e| if e.contains("cannot be read as text") { format!("{e} Read it with binary: true.") } else { e })?;
             if content.contains('\0') {
-                return Err(format!("{path} is a binary file, not text."));
+                return Err(format!("{path} is a binary file, not text. Read it with binary: true, or give it to a step as bodyPath."));
             }
             ("path", path, content)
         }
@@ -91,6 +103,17 @@ pub fn read_file(server: &Server, args: &Args) -> Result<Value, String> {
     Ok(r)
 }
 
+/// Bytes as Base64, refused beyond the cap of one call: a run passes them on with messageFrom instead.
+fn bytes(key: &str, path: &str, b64: String) -> Result<Value, String> {
+    let size = b64.len() / 4 * 3 - b64.bytes().rev().take_while(|&c| c == b'=').count();
+    if b64.len() > MAX_CHARS {
+        let instead = if key == "path" { format!("Pass it to a step with bodyPath \"{path}\".") }
+            else { format!("Pass it to a step with messageFrom \"{path}\", or save it with save_file contentFrom \"{path}\".") };
+        return Err(format!("{path} has {size} bytes, more than one call returns as Base64 ({MAX_CHARS} characters). {instead}"));
+    }
+    Ok(json!({ key: path, "binary": true, "contentBase64": b64, "size": size }))
+}
+
 /// Characters from a 0-based offset, at most MAX_CHARS: for text that is one long line (minified XML or JSON).
 fn read_chars(key: &str, path: &str, content: &str, from: usize) -> Value {
     let total = content.chars().count();
@@ -104,11 +127,19 @@ fn read_chars(key: &str, path: &str, content: &str, from: usize) -> Value {
 }
 
 pub fn save_file(server: &Server, args: &Args) -> Result<Value, String> {
-    let content = match (str_arg(args, "content"), str_arg(args, "contentFrom")) {
-        (Some(_), Some(_)) => return Err("Give content or contentFrom, not both.".into()),
-        (None, None) => return Err("Give content, or contentFrom (an earlier run's runId).".into()),
-        (Some(c), None) => c.to_string(),
-        (None, Some(r)) => server.runs().message(r)?.body,
+    let given = ["content", "contentBase64", "contentFrom"].into_iter().filter(|k| args.contains_key(*k)).count();
+    if given != 1 {
+        return Err("Give one of content, contentBase64 (bytes) or contentFrom (an earlier run's runId).".into());
+    }
+    // The engine's file.write takes text as content and bytes as contentBase64.
+    let content = match (str_arg(args, "content"), str_arg(args, "contentBase64"), str_arg(args, "contentFrom")) {
+        (Some(c), _, _) => json!({ "content": c }),
+        (_, Some(b), _) => json!({ "contentBase64": b }),
+        (_, _, Some(r)) => match server.runs().message(r)? {
+            m if m.body_base64.is_some() => json!({ "contentBase64": m.body_base64 }),
+            m => json!({ "content": m.body }),
+        },
+        _ => return Err("content, contentBase64 and contentFrom are strings.".into()),
     };
     let path = str_arg(args, "path").unwrap_or_default();
     let full = relative(server, path)?;
@@ -124,7 +155,10 @@ pub fn save_file(server: &Server, args: &Args) -> Result<Value, String> {
     }
     // createNew: the engine creates the file only if none is there, so a second MCP server (another agent session
     // on the same project), which the lock does not reach, cannot be replaced either.
-    engine_call(server, file_runtime(server)?, "file.write", json!({ "path": path, "content": content, "createNew": !overwrite }))
+    let mut write = content;
+    write["path"] = json!(path);
+    write["createNew"] = json!(!overwrite);
+    engine_call(server, file_runtime(server)?, "file.write", write)
         .map_err(|e| if e.contains("exists already") { format!("{path} exists already (written just now by another call). \
             Read it first; to replace it, call save_file again with overwrite: true.") } else { e })?;
     Ok(json!({ "path": path, "saved": true, "replaced": exists }))
@@ -160,26 +194,28 @@ pub fn import_iflow(server: &Server, args: &Args) -> Result<Value, String> {
     // The export usually lies outside the project (Downloads); a relative path is inside the project.
     let zip = if Path::new(zip_arg).is_absolute() { PathBuf::from(zip_arg) } else { project.join(zip_arg) };
     if !zip.is_file() {
-        return Err(format!("No file at {}. Give the path of an iFlow exported from the tenant as a .zip.", zip.display()));
+        return Err(format!("No file at {}. Give the path of an iFlow, Value Mapping or integration package exported from the tenant as a .zip.", zip.display()));
     }
     let name = str_arg(args, "name");
     let folder = iflow_folder(&zip, name);
     if folder.is_empty() || folder == "." || folder == ".." {
         return Err("Give the iFlow a name of letters, digits, '.', '_' or '-'.".into());
     }
-    let target = project.join("iflows").join(&folder);
     let overwrite = args.get("overwrite").and_then(Value::as_bool).unwrap_or(false);
-    let exists_msg = || format!("iflows/{folder} exists already. Give another name, or overwrite: true to replace its files.");
     let _write = server.write_lock();
-    if target.exists() && !overwrite {
-        return Err(exists_msg());
-    }
-    // createNew: the engine creates the folder only if none is there (another MCP server, past this lock).
+    // The engine tells an iFlow, a Value Mapping and a package export apart. createNew: it writes nothing when a
+    // folder or value mapping it would write exists (another MCP server, past this lock).
     let r = engine_call(server, file_runtime(server)?, "iflow.import",
         json!({ "zip": zip.to_string_lossy(), "name": folder, "createNew": !overwrite }))
-        .map_err(|e| if e.contains("exists already") { exists_msg() } else { e })?;
-    let steps: Vec<Value> = r["steps"].as_array().into_iter().flatten().filter(|s| s["iflow"] == folder.as_str()).cloned().collect();
-    Ok(json!({ "imported": r["imported"], "files": r["files"], "steps": steps }))
+        .map_err(|e| if e.contains("exists already") {
+            format!("{e}. Give another name, or overwrite: true to replace what is there.")
+        } else { e })?;
+    let folders: Vec<String> = r["iflows"].as_array().into_iter().flatten()
+        .filter_map(|f| f.as_str().map(|f| f.trim_start_matches("iflows/").to_string())).collect();
+    let steps: Vec<Value> = r["steps"].as_array().into_iter().flatten()
+        .filter(|s| s["iflow"].as_str().is_some_and(|i| folders.iter().any(|f| f == i))).cloned().collect();
+    Ok(json!({ "kind": r["kind"], "imported": r["imported"], "files": r["files"], "steps": steps,
+        "valueMappings": r["valueMappings"], "skipped": r["skipped"] }))
 }
 
 #[cfg(test)]

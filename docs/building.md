@@ -74,7 +74,9 @@ node app/e2e/groovy.mjs /tmp/demo-project
 ```
 
 With `CPIWB_IFLOW_ZIP` set to a zip of `engine/core/src/test/resources/iflow`, `groovy.mjs` also imports
-that iFlow and opens its Groovy, Content Modifier, Filter, Gather and Message Mapping steps. CI does this; locally:
+that iFlow and opens its Groovy, Content Modifier, Filter, Gather and Message Mapping steps. It also imports
+another copy and checks panning with a selected diagram element, plus deselection on the non-first iFlow
+through both *Close details* and a background click. CI does this; locally:
 `jar --create --no-manifest --file /tmp/iflow.zip -C engine/core/src/test/resources/iflow .`
 
 The scripts modify their project: give each a fresh disposable copy. The receiver's XML-body
@@ -101,6 +103,9 @@ macOS 11 (the app's `minimumSystemVersion`), and a CI step checks that.
 
 The workflow artifacts (engine jars, installers) expire after 3 days; a tag's installers stay 90 days,
 and the release keeps its own copies.
+
+CI validates the native engines' declared minimum macOS version; it does not boot macOS 11.
+Compatibility with that OS and its WKWebView still needs the manual release checks.
 
 Native images must be built on each target OS; there is no cross-compilation.
 The installers are not code-signed yet. On macOS the app is signed ad hoc (`signingIdentity: "-"`,
@@ -129,7 +134,14 @@ the changelog has no section for it. A version with a suffix (`0.2.0-rc.1`) beco
 
 ## Native image metadata
 
-When a Saxon feature fails only in the native build, re-record the reachability metadata:
+When a Saxon or JDK feature fails only in the native build, re-record the reachability metadata (the Message
+Digest's XML canonicalization did: "No handler installed" until the JDK's canonicalizer classes and their
+resource bundle were in it):
 
 1. Run `workload.py` with `-agentlib:native-image-agent=config-merge-dir=engine/xml-heXX/src/main/resources/META-INF/native-image/io.cpiwb/cpiwb-xml-heXX`.
 2. Regenerate `saxon-generated/reflect-config.json` with `engine/native/GenReflect.java`.
+
+The agent also rewrites entries that were there (the locales of resource bundles) and adds Saxon classes that
+`saxon-generated` covers. Keep what the failing feature needs and leave the rest as committed; then build the
+native engines and run `workload.py` on them. A local build needs GraalVM and the target OS's native
+compiler toolchain; build time varies by machine.

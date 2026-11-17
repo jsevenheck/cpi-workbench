@@ -3,8 +3,8 @@
 The design, the research ledger (findings F…, sources S…, open questions Q…) and the roadmap. What is
 available in the current checkout: [status](status.md). What matches CPI: [fidelity](fidelity.md).
 This ledger preserves dated evidence; later findings may supersede earlier observations without
-invalidating the original report. Completed designs below describe the current implementation,
-not work still to do.
+invalidating the original report. Usage and implementation details live in the linked guides;
+the roadmap retains design decisions, exclusions and genuinely open work.
 
 ---
 
@@ -22,13 +22,15 @@ with CLI/browser mode also available on Linux) where you:
 
 The test must behave **as close as possible to the real CPI step**: same Groovy version, same Saxon release line, same parameter binding, same API surface, same type conversions. That fidelity is the reason to build this instead of using a generic Groovy console or XSLT tester.
 
-Everything runs **offline** on the local machine.
+All simulation runs **locally**. The app never connects to a tenant; its manual update check contacts
+GitHub, and its opt-in CPI Helper receiver accepts loopback traffic.
 
 ### In scope
 - Groovy Script step, **Script API v1** (step 1.x, Groovy 2.4.21) and **Script API v2** (step 2.x, Groovy 4.0.29)
 - XSLT Mapping step (XSLT 1.0 / 2.0 / 3.0)
 - XML Validator-like **XSD validation**, an **XPath tester**
-- Single **flow steps**: Content Modifier, Filter, Router, Splitter, Gather, Converter (§10)
+- Single **flow steps**: Content Modifier, Filter, Router, Splitter, Gather, Converter, Encoder / Decoder
+  (Base64, GZIP, ZIP) and Message Digest (§10)
 - Custom functions of **Message Mapping** scripts, run on their own (§10.3)
 - Test cases saved as files, a runner and CLI for regression tests; an **MCP server** for coding agents (§10.1)
 
@@ -106,6 +108,13 @@ Labels follow the REA evidence rules (see §4): **Observed** = read in a source 
 | F59 | `probe-mapping-v1.groovy` in a Message Mapping on that tenant (`Root` → `Result`, `Value` → `describeQueue` → `Info`, input `a`, `b` / `c` in two `Group`s): mapping scripts run on **Groovy 2.4.21 and Java 21** (SAP SE 21.0.13). The `String[]` function received the first context only, `a` and `b`, as `String`s without a context change entry, so the signature `(String[], Output, MappingContext)` gave *All values of a context*. Only that call's document reached the output: `Result` occurs once, so a target field under it takes the first context (expected if the calls' results are joined by context changes; not shown directly). Behind the interfaces: `com.sap.xi.mapping.camel.impl.MappingContextImpl` (`getHeader`, `getProperty`, `setHeader`, `setProperty` and an undocumented `invalidateCache()`) and `com.sap.xi.mapping.camel.impl.OutputImpl` (SAP's documented methods and `getResultList()`, which returns `com.sap.aii.mappingtool.tf7.rt.ResultList`, PI's mapping runtime class). An unknown header is null; `CamelHttpMethod` was `GET`. | Observed (one tenant) | S32 |
 | F60 | The same probe with the target `Result/Call/Info`, `Value` (`Group` → `Call`) and `request.xml`: one `Call` per source context, each with the document of one `describeQueue` call (`a`, `b`, then `c`), so the per-context results are **joined by context changes**. `describeValue(String, MappingContext)` returned `a`, `b` and `c` in their contexts: a single-value function is **called once per value**. The `ResultList` behind `Output` is `com.sap.aii.mappingtool.tf7.rt.ResultListImpl`; its public constants are the strings `CC` = `__cC_`, `SUPPRESS` = `_sUpPresSeD_` and `XSI_NIL` = `_!xSi#NiL$_`. SUPPRESS in a function's input was not tested. | Observed (one tenant) | S32 |
 | F61 | The same mapping with `request-empty-context.xml` (an empty `Group` between `a`, `b` and `c`): three `Call`s; the middle one holds a `describeQueue` document with no entries and no `Value`. A `String[]` function is **called for an empty context, with an empty array**; a single-value function is not called there. | Observed (one tenant) | S32 |
+| F62 | Encoder, Decoder and Message Digest steps in exported iFlows: `activityType` `Encoder` with `encoderType` = `Base64 Encode` or `ZIP Compress`; `activityType` `Decoder`, whose scheme is also in the key `encoderType` (`Base64 Decode`, `ZIP Decompress`); `activityType` `MessageDigest` with `digestAlgorithm` (`SHA-512`), `canonicalizationMethod` (`none`) and `targetHeader` (`SAPMessageDigest`). `cmdVariantUri` repeats the scheme (`cname::ZIP Compress`). Not seen: the GZIP schemes, the digest's filter XPath and its namespace mapping, any other value of `digestAlgorithm` and `canonicalizationMethod`, the MIME Multipart variants → Q-E1 | Observed (8 steps in 3 public iFlows on GitHub, 2026-11-16) | S50 |
+| F63 | SAP's documentation of the three steps. Decoder: *Base64 Decode*, *GZIP Decompress*, *ZIP Decompress*, no settings. Encoder: the page's list of schemes is empty in the mirror; its example encodes `<message>`, CR LF, tab, `Input for encoder`, CR LF, `</message>`, CR LF to `PG1lc3NhZ2U+DQoJSW5wdXQgZm9yIGVuY29kZXINCjwvbWVzc2FnZT4NCg==`, plain Base64 of those bytes (60 characters, too short to show whether long output is wrapped). Message Digest: "can only process XML content"; the message is turned into canonical XML, the digest of that goes to a header and "the original message remains unchanged"; *Filter (XPath)* is optional, with a prefix namespace mapping; canonicalization is Canonical XML 1.0, Exclusive 1.0 or 1.1, each with or without comments, or *None*; algorithms MD5, SHA1, SHA256, SHA384, SHA512 (default SHA512); *Target Header Name* defaults to `SAPMessageDigest` and holds the Base64-encoded digest. The SAP blog on ZIP and GZIP that the pages link could not be opened (HTTP 403); nothing here rests on it. What the pages leave open → Q-E1 | Observed (SAP docs) | S49 |
+| F64 | Camel 3.14.7's data formats for Base64, GZIP and ZIP with their defaults, read in their source. camel-base64: encoding writes lines of 76 characters, each ended by CR LF, the last one too (commons-codec's chunked Base64); decoding is lenient: characters outside the alphabet are skipped (`-` and `_` count as Base64), the text ends at the first `=`, an incomplete last group gives the bits it has, nothing is an error. camel-zip-deflater (GZIP): a GZIP stream without a file name, time 0 and operating system 255 in its header. camel-zipfile: compressing writes one entry named after the file name part of `CamelFileName`, else after the message id, and sets `CamelFileName` to that name with `.zip`; decompressing (without an iterator) takes the first entry as the body and its name as `CamelFileName`, and fails with "Zip file has more than 1 entry." when there is a second. A scratch run against commons-codec 1.16.1 and commons-compress 1.26.1 gave the same bytes as the simulator for 401 random inputs (Base64 Encode, GZIP) and 20,000 dirty Base64 texts. **Whether CPI's Encoder and Decoder are these data formats is not known** → Q-E1 | Read (Camel source) | S51 |
+| F65 | An exported Value Mapping artifact (zip): `value_mapping.xml` with `<vm version="2.0">`, one `<group id>` per set of equivalent values, one `<entry>` per side with `<agency>`, `<schema>` and `<value>`; an entry may carry `isDefault="true"`. Next to it `META-INF/MANIFEST.MF` (`SAP-BundleType: ValueMapping`), `.project` and `metainfo.prop` (`source=`, `target=`). Seen: two agencies per artifact, one schema each, defaults on entries whose value repeats in other groups | Observed (one export, 2026-11-16) | — |
+| F66 | An exported integration package (zip): `resources.cnt`, Base64 of JSON with `resources` (`id`, `resourceType`, `name`, `uniqueId`, …) and `relations`; one `<id>_content` per resource, itself the artifact's export zip; `contentmetadata.md` (Base64 properties), `hash`, `ExportInformation.info`. Types seen: `ContentPackage` (the package, no content to import), `IFlow`, `ScriptCollection`, `ValueMapping`, `RESTAPIProvider`. A Script step whose script lives in a script collection has the key `scriptBundleId` = the collection's `uniqueId`, and the iFlow's manifest a `Require-Capability: scriptcollection.<id>` | Observed (one export, 2026-11-16) | — |
+| F67 | A Groovy script run by `cpiwb-groovy-v1.jar run` or `cpiwb-groovy-v2.jar run` under `-agentlib:jdwp` (SapMachine 25, Windows): jdb's `stop at <class>:<line>` binds in `processData` and stops there, with `message` and the local variables readable. The class is the file name made a Java name (`enrich-order.groovy` → `enrich_order`, source name `enrich_order.groovy`), so a debugger that maps by file name needs a file name that is a Java name. IntelliJ and VS Code not tried → Q-D1 | Observed (simulator, 2026-11-16) | — |
+| F68 | The `.iflw` beyond the steps (S53): one `bpmn2:collaboration`; `bpmn2:participant` with `ifl:type` `EndpointSender`, `EndpointRecevier` (sic) or `IntegrationProcess`; main and local processes differ only in the process's `cmdVariantUri` (`cname::IntegrationProcess` / `cname::LocalIntegrationProcess`), not in name or participant type, and an iFlow can have several main processes. Adapters are `bpmn2:messageFlow` with `ComponentType` and `direction`. An Exception Subprocess is a `bpmn2:subProcess` inside its process with `activityType` `ErrorEventSubProcessTemplate`, connected by no flow. A Router is an `exclusiveGateway` whose `default` attribute names the default route; the other routes carry a `conditionExpression` and `expressionType`. A Sequential Multicast is a `parallelGateway` (`activityType` `SequentialMulticast`). Process Call and Looping Process Call: `callActivity` with `activityType` `ProcessCallElement`, `subActivityType` `NonLoopingProcess` / `LoopingProcess` and `processId` = the called process's id. `bpmndi:BPMNDiagram` has a shape (absolute `dc:Bounds`) for every element and an edge for every flow, with waypoints from centre to centre. Not seen: Join and parallel Multicast | Observed (public exports, 2026-11-16) | S53 |
 
 ---
 
@@ -126,7 +135,7 @@ Why: the goal is to behave like CPI. CPI executes scripts with Groovy, converts 
 | **MPL emulation** | `messageLogFactory`, string properties, custom header properties, log attachments |
 | **Platform API mocks** | `ITApiFactory`: Secure Store, Value Mapping, Keystore, Partner Directory, number ranges — data from local files (no Data Store: no public API, F28) |
 | **XSLT step runner** | CPI parameter binding (F10), `$exchange` + `setHeader`/`setProperty` as Saxon integrated extension functions (F11, F15), output handling, `xsl:include`/`xsl:import` resolution |
-| **XSD validator step**, **XPath tester** and **flow steps** | CPI-style configuration and error reporting; Content Modifier, Filter, Router, Splitter, Gather and Converter (§10) |
+| **XSD validator step**, **XPath tester** and **flow steps** | CPI-style configuration and error reporting; Content Modifier, Filter, Router, Splitter, Gather, Converter, Encoder / Decoder and Message Digest (§10) |
 | **Runtime profiles + calibration probes** | One engine per CPI runtime (Saxon 9.9 / 12, Groovy Script 1.x / 2.x, both on Camel 3.14); probe iFlows to verify against a real tenant (§8) |
 | **Compatibility linter** | v1→v2 migration warnings, Groovy 2→4 breaking changes, EE-only XSLT features |
 | **Test-case format, runner, CLI** | Regression tests without a tenant |
@@ -307,80 +316,56 @@ my-project/
       input.xml
       expected-output.xml # optional → regression assertion
 ```
-Plain, git-friendly files. The engines' `test` command (`cpiwb-xml test tests/`, `java -jar cpiwb-groovy-v1.jar test tests/`) runs the cases and exits non-zero on failure. Format: [test cases](test-cases.md). Open: a test case from an **exported MPL trace** (export format unknown, F18) and test cases for flow steps.
+Plain, git-friendly files. The engines' `test` command (`cpiwb-xml-he99 test tests/`,
+`java -jar cpiwb-groovy-v1.jar test tests/`) runs the cases and exits non-zero on failure.
+Format: [test cases](test-cases.md). MPL-export-to-case import (format unknown, F18) and flow-step
+test cases are not implemented; neither is currently scheduled.
 
 ---
 
 ## 10. Roadmap
 
-| Phase | Scope | Status |
-|---|---|---|
-| **0 — Spikes** | Native Saxon, CPI binding/extensions and Tauri ⇄ engine JSON-RPC | Architecture validated; current performance budgets still need measurements (§5.3) |
-| **1 — Probe kit** | Fingerprint and probe iFlows for the questions in Appendix A | Ran on one tenant on 2026-11-09 (F48–F61); results in `probes/results-tenant/` |
-| **2 — XSLT MVP** | XSLT with live mode, CPI binding, both Saxon profiles, XSD validation, XPath tester, test cases, CLI | Done (0.1.0) |
-| **3 — Groovy MVP** | Groovy 1.x and 2.x, typed headers/properties, MPL, API call log, console, diff | Done (0.1.0) |
-| **4 — Productivity** | Platform API mocks, lint, runtime comparison, iFlow-zip import, flow steps, MCP server | Done (0.1.0–0.3.0) |
-| **5 — Distribution** | Windows/macOS installers, engine jars for Java 17+, code signing and auto-update (§10.2) | Unsigned installers and manual update check built; signing and auto-update open |
-| **6 — Workflow** | What a review of other tools showed (§10.5): platform data in the Groovy tab, a traced message from CPI Helper, XPath comfort, Encoder / Decoder and Message Digest steps, JUnit output and compare rules for test cases, Value Mapping import, run history, examples, debugging | Planned (2026-11-13); W1 to W3 built (W2 with the desktop link, W2b) |
+Completed delivery phases are recorded in the [changelog](../CHANGELOG.md), not kept as roadmap
+items. Current coverage and limits are in [status](status.md).
 
-### 10.1 MCP server for coding agents (built, 2026-11-01)
+Remaining work:
 
-`cpi-workbench mcp` ([MCP server](mcp.md)) lets a coding agent run mappings, scripts and flow steps
-through the [Model Context Protocol](https://modelcontextprotocol.io). Test suites remain CLI-only.
-Decisions:
+* Code signing and automatic update installation (§10.2); the manual update check already exists.
+* Fidelity verification in [Appendix A](#appendix-a--question-checklist), particularly the prepared
+  Encoder / Decoder / Message Digest and Gather probes (Q-E1, Q-F1).
+* [Manual release checks](manual-test.md), including macOS and a real MCP client.
+* Permanent regression coverage for receiver coordination and browser XML warning paths
+  ([status](status.md#evidence-and-automated-coverage)).
+* Current Windows/macOS performance measurements (§5.3).
 
-* **One server in front of all engines**, as a subcommand of the desktop executable: it reuses the
-  shell's engine supervisor, the bundled JRE and native images, and the Windows junction for
-  non-ASCII install folders, and the installers need no new file. On Windows the executable is a
-  GUI-subsystem program; CI starts the release build with piped stdio on Windows and macOS
-  (`app/scripts/mcp-smoke.mjs`), which answers the open question from the first assessment.
-* **No new dependency:** the protocol is implemented on `serde_json` (`app/src-tauri/src/mcp/`). It is
-  dual-era as the 2026-07-28 specification allows: stateless 2026-07-28 requests and the `initialize`
-  handshake of 2025-11-25 back to 2024-11-05, which the official SDKs still negotiate (TypeScript
-  1.32.2 and Python 2.3.0, tried on 2026-11-01).
-* **The app leads; the server adds no function.** One tool per tab: `project_info`, `run_xslt`,
-  `run_groovy`, `validate_xsd`, `evaluate_xpath`, `run_flow_step`, with the tabs' inputs. Left out on
-  purpose because the app has no such tab: running test cases (CLI only), Camel Simple on its own,
-  a lint tool (the lint comes with every `run_groovy` result).
-* **File access for agents without their own (2026-11-13).** Claude Desktop has no file tools, so without a
-  filesystem server it could run steps but not look at the input or the iFlow, nor keep a result. The server
-  adds what the app's file tree, **Save as…** and **Import iFlow** give a person: `read_file`, `save_file`
-  (an existing file only with `overwrite`), `import_iflow` (an existing folder only with `overwrite`), all
-  through the engines' `ProjectFiles` path checks, plus `reference` (Script API, `platform/` formats, fidelity,
-  generated from `completions.ts`, the clean-room classes and the docs, reducing duplication), server
-  `instructions` with the way to work, and one prompt. Still left out: running test suites, which remains a CLI feature.
-* **Results by reference (2026-11-13).** A headless agent limited to the MCP tools copied each output body into
-  the next call. Runs now return a `runId`, and `messageFrom` / `messagesFrom` take the message on, as it flows
-  through an iFlow. Opaque handles of the server process, as the 2026-07-28 specification describes stateful
-  tools (validated on each call, an unknown one is a tool error); a per-process prefix makes an id from an
-  earlier process unknown rather than another run. Intermediate files in `inputs/` were ruled out: they stay
-  in the project and lose headers and properties.
-* **Flow steps** run like the Flow Steps tab, call for call (`mcp/flow.rs` follows
-  `store.svelte.ts`), so no CLI command was needed first. A test-case step for flow steps stays open.
-* **Security:** the server is bound to one project folder, opens no port, and marks only the project,
-  XSD and XPath tools read-only (XSLT's reflexive `java:` calls and Groovy run code without a sandbox,
-  as in the app). Payload files may carry prompt injection; the docs say so.
+These are open tasks and verification gaps, not a release-date commitment.
+
+### 10.1 MCP server design
+
+Setup, tools, protocol revisions and privileges: [MCP server](mcp.md). Decisions retained here:
+
+* **One server in front of all engines**, as a subcommand of the desktop executable: reuse the
+  supervisor, bundled runtime and Windows path alias rather than ship another runtime.
+* **No protocol dependency:** implement the supported MCP revisions on `serde_json`.
+  SDK compatibility and release-executable smoke coverage are recorded in [MCP](mcp.md#protocol).
+* **The app leads:** step tools follow the tabs' engine calls; file tools provide the tree/save/import
+  workflow to clients without filesystem tools. Test suites remain CLI-only; lint travels with script results.
+* **Source-derived reference:** generate API topics from completions and clean-room classes, platform
+  formats and fidelity from the docs, to avoid a second manually maintained API description.
+* **Results by reference:** opaque, bounded, process-local `runId` handles preserve bodies, headers
+  and properties for chaining. Intermediate files were rejected because they persist and lose metadata.
+* **No sandbox or network server:** project file tools enforce paths; user code keeps the same
+  privileges as in the app. Payloads may contain prompt injection.
 
 ### 10.2 Updates
 
-**Built: manual update check.** A gear icon opens a small settings menu with the installed version
-and *Check for updates*. The button asks the GitHub API for the latest release
-(`/repos/jsevenheck/cpi-workbench/releases/latest`), compares the versions (SemVer) and, for a
-newer one, links to its release page; installing stays manual. Decisions:
+The manual update check is implemented ([User guide](user-guide.md#what-a-run-can-access)).
+It contacts GitHub only when clicked, never on startup; installation stays manual.
+`open_release_page` accepts only this repository's release pages and uses the OS opener.
+`tauri-plugin-opener` was rejected because it added about 40 crates for one link in the
+2026-11-07 assessment. Real desktop-window checks remain in the release checklist.
 
-* **Only on demand.** The app makes no network request on its own: no check at start-up. The README
-  and the user guide say that this button contacts github.com (the app still never connects to a
-  tenant).
-* The CSP allows `connect-src https://api.github.com` (GitHub's API answers CORS requests with
-  `Access-Control-Allow-Origin: *`). No keys, no CI change.
-* *Built (2026-11-07):* the release page opens through a command of the shell
-  (`open_release_page`), not through `tauri-plugin-opener`: the plugin added about 40 crates to
-  `Cargo.lock` (D-Bus via `zbus` on Linux) for one link. The command accepts this repository's
-  release pages only and hands them to the system's opener (`rundll32 url.dll,FileProtocolHandler`
-  on Windows, `open` on macOS, `xdg-open` on Linux). The menu is in the desktop app only; tried in a
-  browser with a mocked shell. Real desktop-window checks remain in the release checklist.
-
-**Planned: install updates (Phase 5).** Research on 2026-11-04 used `tauri-plugin-updater` 2.14.1
+**Open: automatic update installation.** Research on 2026-11-04 used `tauri-plugin-updater` 2.14.1
 and Tauri's NSIS template; re-check versions before implementing. The proposed updater reads a
 release `latest.json`, verifies updater signatures and installs the matching NSIS/MSI/macOS package.
 Updater signatures are separate from OS code signing. On Windows the researched plugin exits with
@@ -403,37 +388,25 @@ To verify then: whether SmartScreen prompts for an installer the updater downloa
 no Mark of the Web, so no prompt); replacing the ad-hoc signed macOS app; the updater behind a
 company proxy (it has proxy settings; whether it uses the Windows system proxy is not checked).
 
-### 10.3 Message Mapping scripts (built for 0.3.0)
+### 10.3 Message Mapping scripts
 
-Found in the Windows test on 2026-11-06: iFlows carry Groovy scripts of Message Mappings, custom
-functions such as `def String f(String arg1, MappingContext context)`. Graphical Message Mapping stays
-out of scope (§1); running its scripts on their own is in scope. Built from SAP's Javadoc (F40), SAP's
-patch notes (F41) and SAP's PI documentation of queues (F42):
+Run custom functions on their own, not graphical `.mmap` execution. Public APIs follow SAP's
+Javadoc (F40); execution types follow the signature evidence (F44, F59–F61), and 2.x warns because
+SAP excludes it from Message Mapping (F41). Queue-wide execution is not offered (F44).
+Single-value functions are intentionally called once with the supplied values, rather than once
+per queue value. Marker identity remains an assumption (Q-M1).
+Usage: [Mapping functions](user-guide.md#groovy-completions-and-message-mapping-functions);
+case format: [Test cases](test-cases.md#message-mapping-functions).
 
-* `MappingContext`, `ExchangePropertyProvider` and `Output` in `api-common`, for both engines. A
-  function whose parameters are `String`, `String[]`, `Output` and `MappingContext` runs with
-  arguments instead of a message; the result has its returned value or output queue, and headers
-  and properties as for a script step. On 2.x a warning cites F41.
-* Execution types follow the signature (F44): *single* (no `String[]`: one call) and *All values of
-  a context* (`String[]`: one call per context, without context changes in the arrays, F42; a tenant
-  showed it, F59, F60). Each call gets an `Output` of its own; the results are joined by context
-  changes, as on a tenant (F60).
-  *All values of a queue* is not offered: two community guides say CPI has no such type.
-* The iFlow import lists Message Mapping steps (F45) and opens the scripts their `.mmap` uses.
-* Not simulated: graphical Message Mapping and `.mmap` files; calling a single-value function once per
-  value of a queue (a tenant does, F60; the simulator runs it once with the values given). The markers
-  have a tenant's texts (F60) and are compared by identity (an assumption).
-
-### 10.4 Converters (built for 0.3.0)
+### 10.4 Converter design
 
 JSON ↔ XML and XML ↔ CSV as a *Converter* step in the Flow Steps tab, not a tab of their own: the tab already
 has the input message, the step settings, the result and *Use as input* to chain steps, and the iFlow import
 and `run_flow_step` cover it. The engine class is `ConverterStep` in the XML engine (native, no new library;
 its JSON reader keeps member order, duplicates and number text). Rules come from SAP's documentation (F47,
-S30), the iFlow keys from public iFlows (F46). Not built, from SAP's list of message transformers: EDI ↔ XML
-and the EDI Extractor (they need EDI schemas), Encoder / Decoder (Base64, GZIP, ZIP, MIME Multipart), XML
-Modifier and Message Digest; they can follow when needed (Encoder / Decoder and Message Digest are
-planned, §10.5 W4).
+S30), the iFlow keys from public iFlows (F46). Encoder / Decoder with Base64, GZIP and ZIP and Message
+Digest are also implemented (W4). EDI ↔ XML, the EDI Extractor, MIME Multipart and XML Modifier remain
+unsupported and unscheduled.
 
 ### 10.5 Workflow roadmap
 
@@ -462,98 +435,65 @@ Apache-2.0 repository.
 | cpi-saper-dev-mcp (S44) | MCP server, beta: edits iFlows locally, runs XSLT locally and Groovy through a runner iFlow on a development tenant | Local and tenant |
 | sap-cpi-mocks (S45), CPILint (S46) | A Maven library of `Message` mocks for Spock tests; a governance lint for iFlows (MIT) | Locally |
 
-#### Completed workflow
+#### Retained workflow decisions and verification
 
-**W1. Platform data, attachments and SOAP headers (built).** Input tabs and platform tables edit
-local test data; unsaved rows apply to runs and **Save** writes the JSON file. Unknown fields are
-preserved. Keystores and advanced fields remain file-based. Without a project the data stays in
-memory. CLI/test-case formats are unchanged. Inspired by GrooveBox; covered by the Groovy e2e.
+**W1–W2. Platform inputs and CPI Helper hand-over.** Inspired by GrooveBox and CPI Helper (S37,
+S47). Current usage: [Groovy/platform inputs](user-guide.md#groovy-xslt-and-platform-data) and
+[CPI Helper](user-guide.md#a-message-from-a-tenants-trace-cpi-helper); data formats:
+[test cases](test-cases.md). Windows hand-over evidence and the upstream cut-off body remain
+recorded in Q-T2/Q-T3.
 
-**W2. CPI Helper messages (built).** GroovyDebugX and xsltDebugX have *Custom URL* settings and
-hand over JSON as raw DEFLATE plus Base64url (S47). `share.ts` reads pasted links/JSON and browser-mode
-`#share/` links. Imported code waits for a manual run. Tenant messages were imported on Windows
-on 2026-11-16; a large XSLT body was already cut off upstream (Q-T3). Desktop receiver: W2b.
-
-**W2b. Desktop receiver (built, 0.4.0).** Opt-in `127.0.0.1` HTTP page, port 7778 by default,
-with a same-origin POST of the fragment data. The UI shows the destination, body size, supplied parts
-and replacements before import; any browser page may open a link, so it does not authenticate CPI
-Helper as the sender. The newest undecided message wins. Receiver imports disarm both incoming and
-already-open code, even with Live on. Settings changes are serialized.
-
-* Implementation and HTTP limits: [Architecture](architecture.md#cpi-helper-receiver).
-  Unpacked links are limited to 128 million UTF-16 code units; XML/JSON body checks stop above
-  64 million. Malformed bodies warn but are still imported. XML error recognition differs between
-  Chromium/WebKit and Firefox. The parser is shared with pasted and browser-mode imports.
+**W2b. Desktop receiver design.** An opt-in loopback page transfers the URL fragment by a
+same-origin POST, with confirmation and no automatic code execution. This does not authenticate
+the sender. Current limits and coordination: [Architecture](architecture.md#cpi-helper-receiver).
 * A commandline-based `cpi-workbench://` scheme was rejected: Windows `CreateProcessW` accepts at
   most 32,767 characters including the terminator, while an observed link was about 70,000.
   Chromium's Mojo URL serialization is limited to 2,097,152 characters; other browser paths may
   differ. These are transport limits, not limits on the original traced body (S48).
-* Links may persist in browser history. A receiver that is off gives a browser error; starting it
-  and reloading, or pasting the link, recovers the message. No tenant connection is made.
 * Evidence records Windows pasted and receiver transfers (Q-T2), including a 25 MB body (Q-T3).
   Full plugin-click acceptance, macOS and Local Network Access remain in
   [manual test 2.11j](manual-test.md). No claim of cross-platform verification is made.
 
-**W3. XPath locations and history (built).** Both XPath versions return structural node positions
-(`at`), which `xmltext.ts` maps to source text. The UI highlights matches, jumps to results, writes
-the XPath at the cursor with the namespace mapping, and recalls session expressions with ↑/↓.
-Entity references that can hide nodes or namespaces disable text locations rather than mark the
-wrong node. Inspired by XSLTDebugX; covered by unit and browser tests.
+**W3. XPath text locations.** Inspired by XSLTDebugX (S35). Structural positions are mapped to
+source text; entity references disable locations when they could hide nodes or namespaces.
+Usage: [XSD and XPath](user-guide.md#xsd-and-xpath).
 
-#### Planned work, in this order
+**W4. Encoder, Decoder and Message Digest (implemented; tenant probe pending).** *Prompted by the
+encoding tools in All-in-one.*
+* Sources: SAP's documentation of each step (F63), the iFlow keys from public iFlows (F62), and Camel's data
+  formats for what SAP does not document (F64). The probe for Q-E1 is prepared (`probes/encoders/`, step 9 of
+  its README, with the simulator's baseline) and not run yet; until it has, Base64's line wrapping, GZIP's
+  header, the ZIP entry's name and the digest's *None* are assumptions.
+* Current usage and binary-body handling: [Flow Steps](user-guide.md#flow-steps) and
+  [MCP result chaining](mcp.md#passing-results-on-runid). `DigestStep` uses the JDK's XML signature API;
+  native-image metadata must include its canonicalizers and resource bundle ([Building](building.md#native-image-metadata)).
+* MIME Multipart, EDI and XML Modifier stay out. Assumptions and refusals: [Fidelity](fidelity.md).
 
-Sizes are rough estimates: S is a day or two, M about a week, L more. Follow `AGENTS.md` for tests,
-fidelity evidence, status updates and changelog entries. The following are proposals, not available features.
+**W5–W6. CLI reports and comparison rules.** JUnit output was prompted by Figaf/cpictl;
+`expect.ignore` is a simulator feature. Formats: [Test cases](test-cases.md#casejson).
+XML ignores use JDK XPath 1.0 so all four engines read the same rules; JSON ignores use JSON Pointers.
+Reports from all four engines validated against Surefire's published schema with xmllint on
+2026-11-16. Reading them with a CI reporter remains unverified; the workflow does not use `--junit`.
 
-**W4. Encoder, Decoder and Message Digest as flow steps (M).** *Prompted by the encoding tools in All-in-one;
-they are CPI steps, listed as not built in §10.4.*
-* First the sources, as for the converters: SAP's documentation of each step, the iFlow keys from public
-  iFlows (as F46), and a probe for what the documentation leaves open (Q-E1).
-* Base64 encode and decode, GZIP and ZIP compress and decompress, Message Digest. MIME Multipart, EDI and the
-  XML Modifier stay out.
-* Compressed bodies are bytes, and bodies travel as text through JSON-RPC; how a binary result is shown and
-  passed on is the design question of this item.
-* The Flow Steps tab and `mcp/flow.rs` together, the iFlow import, a row in `fidelity.md`, probe baselines.
+**W7. Value Mapping and package import.** Inspired by SAP CPI Groovy Script (S34).
+`ArtifactImport` detects exports by their entries; F65/F66 record the observed formats, S52 the
+bidirectional/default interpretation. Usage and collision rules: [iFlow import](user-guide.md#iflow-import).
+Repeated values without a default remain an assumption (Q-VM1).
 
-**W5. JUnit XML from the test command (S).** *Prompted by the CI focus of Figaf and cpictl.*
-`test --junit <file>` writes the report that GitHub Actions reporters, Jenkins and GitLab read: one test
-case per case, the cases of other engines as skipped. In `TestRunner` and `Cli`; documented in
-[test cases](test-cases.md).
+**W8–W9. Run history and bundled examples.** Inspired by Contiva, XSLTDebugX and GrooveBox.
+History is intentionally session-only; examples omit dependencies on other project files.
+Usage: [User guide](user-guide.md#desktop-app).
 
-**W6. Test cases: leave out values that change per run (S to M).** *Our own idea; no tool's page describes how
-it compares.*
-`compare` knows `xml`, `text` and `trimmed`; headers and properties are checked only when named. New:
-`expect.ignore`, a list of XPaths whose nodes are removed from both sides before an `xml` comparison
-(timestamps, generated ids). JSON bodies can follow.
+**W10. External Groovy debugging.** See [Debugging](debugging.md) for JDWP setup.
+Breakpoints bind in jdb on both jars (F67); IntelliJ and VS Code remain unverified (Q-D1).
+The bundled JRE lacks `jdk.jdwp.agent`, so debugging requires a full JDK. An in-app debugger is
+not planned (see exclusions below).
 
-**W7. Import a Value Mapping artifact (S to M).** *Seen in SAP CPI Groovy Script.*
-An exported Value Mapping artifact (zip) becomes rows of `platform/value-mappings.json`, next to the iFlow
-import in `IflowImport`, with its path checks. The export format is not documented (Q-VM1); it is read from a
-sample first, best effort as the iFlow import is.
-
-**W8. Run history (S to M).** *Seen in Contiva.* The last runs of a tab in this session (time, status, output)
-and *Compare with the previous run* through the existing comparison view. In memory only.
-
-**W9. Examples without a project (S).** *Seen in XSLTDebugX and GrooveBox.* An *Examples* menu loads a mapping
-or script with its input into the editors. The installers do not ship `examples/demo-project` today, so the
-examples have to be bundled.
-
-**W10. Debugging Groovy with breakpoints (spike S; a debugger in the app: L, not planned).** *Seen in SAP CPI
-Groovy Script.*
-* Stage 1: a documented way to attach IntelliJ or VS Code to an engine jar started with the JDWP agent
-  (`java -agentlib:jdwp=… -jar cpiwb-groovy-v1.jar run --script …`). Whether breakpoints bind to the script
-  file is open (Q-D1). It needs a full JDK: the app's trimmed JRE (`engine/groovy/build-jre.sh`) has no
-  `jdk.jdwp.agent` module.
-* Stage 2, breakpoints in the app's editor, only if users ask for it.
-
-#### To decide before any work
-
-* **A chain of steps in the app.** SAP simulates up to 10 steps, and the MCP server chains runs by `runId`
-  (§10.1). Whole iFlows are out of scope (§1): what happens between steps (which headers stay, how a
-  Splitter iterates) would need evidence step by step. If it is built, then as a chain the user puts
-  together, with no claim to be the iFlow.
-* **A diagram or description of an imported iFlow** (as `iflow_render` in S44): helps to find a step, changes
-  nothing about the simulation. M.
+**W11. iFlow outline and diagram.** *Seen in cpi-saper-dev-mcp (S44) and CPI Developer Studio (S54).*
+`iflow.models` reads the model as F68 describes; `iflowmodel.ts` orders and draws it.
+The diagram uses hand-written SVG rather than bpmn-js (its licence keeps a visible mark) or Mermaid
+(which loses the exported layout). Join and parallel Multicast were not observed (F68).
+Usage: [iFlow import](user-guide.md#iflow-import).
 
 #### Not taken over
 
@@ -567,6 +507,7 @@ Groovy Script.*
 | JWT, certificate and general utility tools | S38 | Not CPI steps. |
 | Memory profiling of a simulation | S39 | Tenant limits are not reproduced (§8.4). |
 | Generating public share links | S35 | Project folders are the sharing unit. Importing CPI Helper's local links is supported (W2), but the app does not publish message data to a sharing service. |
+| A chain of steps in the app, run history in Flow Steps, breakpoints in the app's editor | S39, S36, S34 | Not wanted by the owner (2026-11-16). A chain would also need evidence for what happens between steps (§1); the MCP server chains runs by `runId`, and `docs/debugging.md` covers breakpoints. |
 | Saving a test case from the app | — | Removed on purpose (2026-10-25): test cases are written by hand and run from the CLI. |
 | A VS Code extension | S33, S34 | A second UI to maintain; the CLI and the MCP server connect editors. |
 
@@ -599,8 +540,8 @@ the Apache-2.0 licence in a public repository; the HE profiles instead of a Saxo
 first probe run (2026-11-09, F48–F52) for 0.3.0: both Groovy engines on Camel 3.14.7 and Java 21 and
 Camel 2 dropped (tenants on software 6.x / 5.x are not covered); the tenant's timezone, locale,
 bindings and libraries, in the versions it reports (F53), as the engines' defaults. With the converter
-and Message Mapping probes (F54–F61): the converters write a tenant's bytes, and mapping functions
-follow its calls and marker texts.
+and Message Mapping probes (F54–F61): converter output follows the observed examples (CSV line-end
+bytes remain unverified), and mapping functions follow the observed per-context calls and marker texts.
 Open: the questions still marked open in Appendix A (among them CSV line ends, where `ScriptLogger`
 writes, SUPPRESS in a mapping function's input).
 
@@ -630,9 +571,9 @@ writes, SUPPRESS in a mapping function's input).
 | Q-C1 | Converters: compact or indented output, the XML declaration, CSV line ends and quoting, an unmapped JSON prefix without namespace mapping (F47), the XML to JSON namespace table's cell order | Answered for the probes' cases (F54–F57); open: the XML to JSON namespace table's cell order, `\r\n` or `\n` in CSV | Save a response with `curl --output` |
 | Q-F1 | Gather's Combine with a body that is not XML (JSON or plain text after a script): failure, the text as it is (as character data in the wrapper, malformed only where the text is, e.g. `a & b`), or another form. SAP documents XML only and shows no such case | Open; the simulator keeps the text and warns | `probes/gather/` (probes/README.md, step 8) |
 | Q-P1 | Partner Directory / Keystore / Secure Store edge cases: missing parameter, unknown partner, unknown keystore alias (null or exception, which message) | Answered (F52) | — |
-| Q-E1 | Encoder, Decoder and Message Digest: line breaks in Base64 output, the entry name in a ZIP, the digest's header name, encoding and canonicalization | Open (§10.5 W4) | SAP's step documentation, then a probe iFlow |
-| Q-VM1 | Format of an exported Value Mapping artifact | Open (§10.5 W7) | Export one sample, or read one from SAP's public sample packages |
-| Q-D1 | Whether an IDE's breakpoints bind to a script that an engine jar runs under the JDWP agent | Open (§10.5 W10) | Try it with IntelliJ and VS Code on `cpiwb-groovy-v1.jar run` |
+| Q-E1 | Encoder, Decoder and Message Digest, what F62 and F63 leave open. Base64: whether long output is wrapped (and with which line end), what the decoder does with line breaks and with invalid input. GZIP: the header fields (time, name), so whether output bytes can be compared at all. ZIP: the entry's name (`CamelFileName`, the message id?), and a decompress of an archive with several entries. Digest: what *None* hashes (the body's bytes as they are?), a body that is not XML, a filter that selects several nodes or none, the header's type; the iFlow keys of the filter and of the GZIP schemes | Open (§10.5 W4); the settings and the digest's header are documented (F63); the simulator follows Camel's data formats (F64). Probe prepared, not run | `probes/encoders/` (step 9 of the probes' README); the probe iFlow's export for the keys |
+| Q-VM1 | Value Mapping export format and lookup precedence for repeated values | Partial: format observed in one Value Mapping and one package export (F65, F66). Default precedence follows S52; a repeated value without a default remains unverified (the import takes the first group). | Probe `getMappedValue` with repeated values, with and without defaults |
+| Q-D1 | Whether an IDE's breakpoints bind to a script that an engine jar runs under the JDWP agent | Partly answered (F67): jdb binds by class name on both jars; IntelliJ and VS Code not tried | Try it with IntelliJ and VS Code on `cpiwb-groovy-v1.jar run` |
 
 ## Sources
 
@@ -689,3 +630,15 @@ writes, SUPPRESS in a mapping function's input).
   the terminator): https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createprocessw ;
   Chromium Mojo URL limit (`kMaxURLChars = 2097152`): https://chromium.googlesource.com/chromium/src/+/HEAD/url/mojom/url.mojom ;
   top-level Local Network Access navigation discussion (not a compatibility guarantee): https://github.com/WICG/local-network-access/issues/48
+- S49 SAP-docs Integration Suite documentation (S25 mirror, commit 147acb7 of 2026-10-22), read on 2026-11-16: *Define an Encoder*, *Define a Decoder*, *Define Message Digest*, *Simple Integration Flow Using a Message Digest Step*, *Use the Base64 Encoder*, *Use the Base64 Decoder*. help.sap.com renders these pages with scripts and could not be read directly.
+- S50 Public iFlows on GitHub with Encoder, Decoder and Message Digest steps (code search `encoderType` and `MessageDigest canonicalizationMethod` in `.iflw` files, 2026-11-16), read for property names only: `alee536/CPI-iFlows` (Encoder and Decoder), `stevedpedersen/cpilint` (IF_LINT_NAMES), `nesun3/sap-cloud-integration-artifacts` (Zip Spliting).
+- S51 Apache Camel 3.14.7 source, read on 2026-11-16 for the defaults of the data formats behind Base64, GZIP and ZIP: `components/camel-base64` (`Base64DataFormat`), `components/camel-zip-deflater` (`GzipDeflaterDataFormat`), `components/camel-zipfile` (`ZipFileDataFormat`); no code taken: https://github.com/apache/camel/tree/camel-3.14.7/components
+- S52 SAP Help, *Integration Suite*, mirrored in SAP-docs/btp-integration-suite (commit 147acb7, 2026-10-22), read on 2026-11-16: `editing-value-mapping-6c8847f.md` (a value mapping is a bi-directional lookup table; when target values repeat for different source values, defaults are generated and can be changed in the *Default Values* tab).
+- S53 Public `.iflw` files read on 2026-11-16 for their structure: SAP/apibusinesshub-integration-recipes (the
+  recipes *Pattern IDoc Recipient – Dynamic Routing of IDoc*, *Pagination with SFSF* and the openSAP BTP week 4
+  solution, each a package export), alee536/CPI-iFlows, nesun3/sap-cloud-integration-artifacts.
+- S54 Tools that draw or describe iFlows, read on 2026-11-16: cpi-saper-dev-mcp's `iflow_render` (Apache-2.0,
+  commit 3e47ee8: Mermaid from the model, the diagram's coordinates not used); codebude/iflow-plotter (MIT, 2021:
+  the iFlow's own diagram through bpmn-js, whose licence keeps the bpmn.io mark visible); the *iFlow Documenter*
+  of CPI Developer Studio (commercial: an ordered step list in Markdown). No SAP specification of the format was
+  found.

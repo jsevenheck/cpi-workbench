@@ -261,6 +261,20 @@ class XmlBoundaryTest {
         assertTrue(Json.write(r).contains("UnsupportedInSimulator"), () -> Json.write(r));
     }
 
+    /** The Message Digest step parses the body too: an outside file must not reach the canonical text or the error. */
+    @Test
+    void digestDoesNotReadOutsideTheProject() {
+        for (String method : List.of("c14n10", "none")) {
+            Map<String, Object> r = new DigestStep().run(Json.o().with("canonicalization", method)
+                    .with("baseDir", project.toString()).with("input", Json.o().with("body", entityDoc())));
+            assertNoLeak(r);
+        }
+        Map<String, Object> r = new DigestStep().run(Json.o().with("baseDir", project.toString())
+                .with("input", Json.o().with("body", entityDoc())));
+        assertFalse(Json.bool(r, "ok", true), () -> Json.write(r));
+        assertTrue(Json.write(r).contains("outside the project"), () -> Json.write(r));
+    }
+
     @Test
     void formatDoesNotExpandExternalEntities() {
         assertNoLeak(new XPathStep().format(Json.o().with("text", entityDoc())));

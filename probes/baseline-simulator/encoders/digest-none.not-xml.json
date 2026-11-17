@@ -1,0 +1,17 @@
+{
+    "probeStep": "digest-none",
+    "bodyClass": "java.lang.String",
+    "bodyLength": 30,
+    "bodyBase64": "S2VpbiBYTUw6IG51ciBUZXh0LCDDpCDDtiDDvC4K",
+    "bodyText": "Kein XML: nur Text, \u00e4 \u00f6 \u00fc.\n",
+    "headerNames": [
+        "ProbeStep",
+        "SAPMessageDigest"
+    ],
+    "headers": {
+        "SAPMessageDigest": {
+            "value": "SulKVN8+/b3tDOy1WOOBDg==",
+            "type": "java.lang.String"
+        }
+    }
+}

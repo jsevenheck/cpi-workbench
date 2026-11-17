@@ -24,7 +24,7 @@ public final class Main {
                 "Usage:",
                 "  " + name + " run --script <file> [--in <body file>] [--function processData]",
                 "                 [-H name=value[:Type]]... [-P name=value[:Type]]... [--project <dir>] [--json]",
-                "  " + name + " test <path> [--json] [--fail-if-none]",
+                "  " + name + " test <path> [--json] [--fail-if-none] [--junit <file>]   --junit: also a JUnit XML report",
                 "  " + name + " serve --stdio | --http <port> [--ui <dir>]",
                 "  " + name + " info");
         if (args.length == 0 || args[0].equals("-h") || args[0].equals("--help")) {
@@ -64,7 +64,7 @@ public final class Main {
                 break;
             case "test":
                 String p = a.positional(1);
-                System.exit(Cli.printTestResults(engine.runTests(Path.of(p == null ? "tests" : p)), a.has("--json"), a.has("--fail-if-none")));
+                System.exit(Cli.testCommand(engine.runTests(Path.of(p == null ? "tests" : p)), a, String.valueOf(engine.describe().get("profile"))));
                 break;
             default:
                 System.err.println("Unknown command '" + args[0] + "'\n\n" + help);

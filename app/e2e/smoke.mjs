@@ -21,13 +21,20 @@ await page.goto(url);
 await page.evaluate(() => localStorage.clear());
 await page.reload();
 
-// 1) Scratch mode: the sample mapping runs on load.
-await page.locator('.badge.ok').first().waitFor({ timeout: 15000 });
-const out = await page.locator('section.output .view-lines').innerText();
-if (!out.includes('SalesOrder')) fail('sample output missing SalesOrder: ' + out.slice(0, 200));
-await page.getByRole('tab', { name: /^Headers/ }).nth(1).click();
-if (!(await page.locator('section.output tr.added').first().innerText()).includes('OrderNumber')) fail('OrderNumber header not marked as added');
-if (shots) await page.screenshot({ path: path.join(shots, '1-xslt-scratch.png') });
+// 1) Without a project the editors start empty, point to the examples, and nothing runs.
+await page.locator('.status', { hasText: 'engine(s) available' }).waitFor({ timeout: 15000 });
+await page.locator('section.mapping .empty-hint', { hasText: 'Examples' }).waitFor({ timeout: 5000 })
+  .catch(() => fail('the empty mapping editor does not point to the examples'));
+if ((await page.locator('section.mapping .view-lines').innerText()).trim()) fail('the mapping editor is not empty at start');
+if ((await page.locator('section.pane .view-lines').first().innerText()).trim()) fail('the input body is not empty at start');
+await page.waitForTimeout(1000);
+if (await page.locator('section.output .badge').count()) fail('something ran on an empty start');
+if (shots) await page.screenshot({ path: path.join(shots, '1-xslt-empty.png') });
+
+// 1a) A bundled example loads without a project and runs.
+await page.getByLabel('Examples').selectOption('xslt-batch');
+await page.locator('section.output .view-lines', { hasText: 'SalesOrderBatch' }).waitFor({ timeout: 15000 })
+  .catch(async () => fail('the example did not run: ' + (await page.locator('section.output').innerText()).slice(0, 300)));
 
 // 1b) Compare runtimes (only when the second XSLT engine is running).
 const compare = page.getByRole('button', { name: 'Compare', exact: true });
@@ -48,6 +55,15 @@ await page.locator('.badge.bad').waitFor({ timeout: 10000 });
 await page.getByRole('tab', { name: /^Body/ }).nth(1).click();
 if (!(await page.locator('.diag.error').first().innerText()).match(/line \d+/)) fail('compile error without line');
 if (shots) await page.screenshot({ path: path.join(shots, '2-xslt-error.png') });
+// 2a) History: the example's run and the failed one; the failed one is compared with the example's.
+await page.getByRole('tab', { name: /^History/ }).click();
+const historyRows = await page.locator('section.output .history tbody tr').count();
+if (historyRows < 2) fail('History lists ' + historyRows + ' runs, expected the example and the failed run');
+await page.getByRole('button', { name: 'Compare with the previous run' }).click();
+await page.locator('section.output .history .compare').waitFor({ timeout: 5000 })
+  .catch(async () => fail('no comparison with the previous run: ' + (await page.locator('section.output').innerText()).slice(0, 300)));
+if (shots) await page.screenshot({ path: path.join(shots, '1c-history.png') });
+await page.getByRole('tab', { name: /^Body/ }).nth(1).click();
 
 // 3) Open the demo project and a mapping from the tree.
 await page.getByLabel('Project folder').fill(project);
@@ -81,13 +97,16 @@ await page.locator('section.mapping h2[title="mappings/order-to-salesorder.xsl"]
 
 // 4) Open a test case: loads input, headers and runs.
 await page.locator('.tree .file', { hasText: 'standard-order/case.json' }).click();
-// The scratch result stays visible until the case's run ends, and it binds SenderSystem too (ERP_100),
-// so wait for the case's value; step 6 validates this run's output.
+// Wait for the case's value (the case's run, not an earlier one); step 6 validates this run's output.
 await page.getByRole('tab', { name: /^Parameters/ }).click();
 await page.locator('.params tr', { hasText: 'WEBSHOP' }).waitFor({ timeout: 10000 })
   .catch(() => fail('SenderSystem=WEBSHOP missing from the parameter table'));
 const params = await page.locator('.params table').innerText();
 if (!params.includes('header')) fail('parameter binding table: ' + params);
+// A header the mapping sets is marked as added.
+await page.getByRole('tab', { name: /^Headers/ }).nth(1).click();
+await page.locator('section.output tr.added', { hasText: 'SAP_ApplicationID' }).waitFor({ timeout: 5000 })
+  .catch(() => fail('SAP_ApplicationID header not marked as added'));
 if (shots) await page.screenshot({ path: path.join(shots, '3-xslt-case.png') });
 
 // 6) XSD validation of an invalid document.
@@ -132,6 +151,8 @@ if (fs.existsSync(path.join(project, 'schemas/renamed.xsd'))) fail('delete left 
 
 // 7) XPath.
 await page.getByRole('tab', { name: 'XPath' }).click();
+// The XPath tab starts empty too; the test case's input from the XSLT tab is the document.
+await page.getByRole('button', { name: 'Use XSLT input' }).click();
 await page.getByLabel('XPath expression').fill('count(//Item)');
 await page.getByTitle('Run (Ctrl+Enter)').click();
 await page.locator('.res .item').first().waitFor({ timeout: 10000 });

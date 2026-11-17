@@ -7,6 +7,11 @@ Download the installer for your platform from the
 [Installing](install.md)), install it and open a project folder. Any folder works; **Init** adds `mappings/`, `schemas/`,
 `scripts/`, `tests/` and example files in `platform/`.
 
+Without a project, **Examples…** in the sidebar loads a mapping or script of the demo project with its input
+into the editors (an XSLT 3.0 mapping, a Groovy 2.x script for an XML and one for a JSON body). The examples
+come with the app; **Save** asks where to keep them, once a project is open. As with a file, a script waits for
+**Run** or **Ctrl+Enter**.
+
 ### Files and editors
 
 * Open a `.xsl` or `.groovy` file in the tree and enter the input body, headers and properties on the left.
@@ -48,7 +53,8 @@ Download the installer for your platform from the
 * **MPL**, **Console** and **API calls** (Groovy) show message processing log entries, `println`
   output and the calls to SAP APIs with their arguments.
 * **Attachments** and **SOAP** (Groovy, next to Headers and Properties) hold what the script reads with
-  `message.getAttachments()` and `getSoapHeaders()` (Script API v1): an attachment's content is text typed
+  `message.getAttachments()` and `getSoapHeaders()` (both simulator profiles; SOAP is documented in v1
+  and observed on the v2 runtime): an attachment's content is text typed
   there, a file of the project (its path) or Base64; a test case's attachments and SOAP headers open
   there. A Message Mapping function gets no message, so the two tabs are hidden for it.
 * **Platform** (Groovy) shows the mocked platform data the script reads through `ITApiFactory` as tables:
@@ -60,13 +66,21 @@ Download the installer for your platform from the
   those. The keystore is edited as a file. Without a project the tables work in memory. A test case's own
   `platform` object wins over a table for its runs, and the tab says so. Use test-only values, never a
   tenant's real secrets.
-* Groovy scripts run like on a tenant: Java 21, Camel 3.14.7, timezone UTC and locale `en_US`
-  whatever your computer uses, and the libraries a tenant offers (commons-lang3; on 1.x also Jackson
-  and commons-codec; on 2.x yaml and toml). On 1.x, `log` and `logger` are SAP's `ScriptLogger`: `log.logInfo(…)`,
-  `logWarnings(…)` and `logErrors(…)` print to the **Console**; `log.info(…)` fails, as on a tenant. Other jars go into the iFlow's `lib/`.
+* The Groovy profiles follow one tenant's fingerprint: Java 21, Camel 3.14.7, timezone UTC and
+  locale `en_US` whatever your computer uses, with commons-lang3; on 1.x also Jackson and
+  commons-codec; on 2.x yaml and toml. On 1.x, `log` and `logger` imitate the observed `ScriptLogger`
+  methods: `log.logInfo(…)`, `logWarnings(…)` and `logErrors(…)` print to the **Console** with a note
+  because CPI's output destination is unknown; `log.info(…)` fails as on the probed tenant.
+  Extra jars go into the project's `lib/` or an imported iFlow's `src/main/resources/lib/`.
+  Versions, exclusions and unverified behaviour: [Fidelity](fidelity.md#groovy-script).
 * **Compare** also runs the input on the other runtime of the same kind (Saxon-HE 9.9 ↔ 12,
   Groovy Script 1.x ↔ 2.x) and lists what differs: status, headers, properties and a body diff.
   This helps before you move a script from 1.x to 2.x.
+* **History** (XSLT and Groovy output) lists the tab's last 20 runs of this session: time, file (and a
+  script's function), runtime and status. *Compare with the previous run*, or *Compare* on any run, shows
+  what differs from the result shown now, as **Compare** does. A run with the same outcome as the one
+  before only updates its time, so live runs while you type do not crowd the list. The history is kept in
+  memory and is gone when the app closes.
 * Test cases (see [Test cases](test-cases.md)) are written by hand and run from the command line;
   the app has no test runner. Opening a `case.json` loads the case into its editor view. A Groovy
   case's attachments and SOAP headers open in the input's **Attachments** and **SOAP** tabs; its
@@ -88,7 +102,8 @@ Download the installer for your platform from the
 ### Flow Steps
 
 * **Flow Steps** runs a **Content Modifier**, **Filter**, **Router**, **General / Iterating Splitter**,
-  **Gather** or **Converter** on an input message (body, headers, properties, namespace mapping):
+  **Gather**, **Converter**, **Encoder**, **Decoder** or **Message Digest** on an input message (body, headers,
+  properties, namespace mapping):
   * Content Modifier: header and property rows with their source types and data types, and the
     message body; the result shows each row's value and the output message.
   * Router: routes in order, XML (XPath) or Non-XML (Camel Simple, with CPI's `=`, `and`, `or` and
@@ -99,29 +114,70 @@ Download the installer for your platform from the
   * Converter: JSON to XML, XML to JSON (namespace mapping, root element options, streaming), XML to CSV
     and CSV to XML (with an XSD from the project), with the settings of CPI's converter steps. *Use as
     input* chains them with the other steps, e.g. JSON to XML, then a Router.
+  * Encoder and Decoder: *Base64 Encode* / *Decode*, *GZIP Compress* / *Decompress* and *ZIP Compress* /
+    *Decompress*, as Camel's data formats do them. That CPI does the same is not verified on a tenant, and the
+    result says so: Base64 Encode writes lines of 76 characters with CR LF, ZIP Compress names its one entry
+    after the header `CamelFileName` (set it in Headers), ZIP Decompress takes an archive with one entry.
+    A result that is no text shows its size and a hex dump of its first bytes; *Use as input* passes the
+    bytes on (to a Decoder, for instance) and *Save…* writes them to a file. A `.zip` or `.gz` file of the
+    project opens as a binary input body in the same way (click it in the tree, in any folder, or *Use as input*).
+    *MIME Multipart* is not simulated.
+  * Message Digest: the message, or the one element a *Filter (XPath)* selects, is written as canonical
+    XML (the six methods CPI offers, or *None*), and its digest (MD5, SHA1, SHA256, SHA384, SHA512) goes
+    to the *Target Header Name* as Base64 text; the body stays. The result shows the header and the
+    canonical form the digest is of, which is what to look at when two messages you took for equal have
+    different digests. The filter is XPath 1.0 with the prefixes of the Namespaces tab. Not known from
+    SAP's documentation, and therefore refused or marked as an assumption: a filter that selects several
+    nodes or none, a filter together with *None*, and what *None* hashes (here: the body's bytes as they are).
   * Gather: Combine (SAP's multi-mapping format), Combine at XPath or Concatenate. The messages are on
     the left as *Body 1*, *Body 2*, …: from the splitter's *Gather* button, *From Splitter result*, or `+`
     for the current input body. Gather combines bodies only (SAP does not aggregate headers and properties),
     so the input pane shows no header or property tabs for it; the namespaces stay for *Combine at XPath*.
 
   Each step keeps its settings and its last result when you switch between the steps or tabs; the input
-  message is shared by all steps but Gather. Nothing is kept after the app restarts.
+  message is shared by all steps but Gather. Nothing is kept after the app restarts. The steps start empty
+  (no rows, routes or expressions; SAP's defaults where a step has a choice), as do the input bodies, the
+  mapping and the script editors: without a project, **Examples…** loads something to try.
 
   In XPath, `$name` is the header of that name, else the exchange property, as Camel's XPath variable
   resolver provides them ([Fidelity](fidelity.md), F39).
 
   Camel Simple and the Content Modifier run on Camel 3.14.7, as on a tenant for both script versions
-  (tenants still on software 6.x / 5.x run Camel 2 and are not covered). XPath and the converters run on
+  (the documented software 6.x / 5.x lines use Camel 2 and are not covered; their current tenant
+  availability is unknown). XPath, the converters, the Encoder / Decoder and Message Digest run on
   an installed XML engine (Saxon-HE 9.9 by default, otherwise 12). See [Fidelity](fidelity.md#flow-steps-content-modifier-filter-router-splitter-gather-converter).
 ### iFlow import
 
 * **Import iFlow** unpacks an iFlow exported from Integration Suite (zip) into `iflows/` and lists
-  its steps. A Groovy Script or XSLT Mapping step opens its file with the step's function name and
+  its steps. A folder that differs from one already there only in letter case or trailing dots is
+  refused, since Windows takes both for one folder. A Groovy Script or XSLT Mapping step opens its file with the step's function name and
   script version; a flow step opens in Flow Steps with its settings, with `{{parameters}}` from the
-  iFlow's `parameters.prop`. Steps that choose their mapping from a header at runtime are marked. A
+  iFlow's `parameters.prop`; the line *From <iFlow> · <step>* above its settings says where they came from, and
+  its **×** gives the step its empty starting settings back (the iFlow stays as it is; closing the project does the
+  same for all its steps). Steps that choose their mapping from a header at runtime are marked. A
   **Message Mapping** step (**M**) is not simulated; clicking it opens the first Groovy script its
   `.mmap` uses, with its first mapping function. The `.iflw` format is not publicly documented, so
   it is read generically (best effort).
+* The same button takes an exported **Value Mapping**: its groups become rows of
+  `platform/value-mappings.json` in both directions (*Platform* → *Value Mappings*), replacing rows of
+  the same agencies and identifiers. A value that maps to several values gets the one marked default;
+  without a default the first group in the file is taken, and the status line says so.
+* It also takes a whole **integration package** export: each iFlow, script collection, REST API provider
+  and message mapping goes to `iflows/<its id>/`, its value mappings into the table, other artifact types
+  are named as skipped. A Groovy step whose script is in a script collection opens the script from that
+  collection's folder. If two artifacts would use the same folder after replacing unsupported characters
+  with `_` (also ignoring letter case and trailing dots), the entire package is rejected before any files or value mappings
+  are written, even when overwriting is allowed. Resolve the conflicting artifact identifiers before
+  exporting again, or export the artifacts separately and import them under distinct folder names.
+* The list under **iFlows** shows each imported iFlow whole: its adapters (⇢ from a sender, ⇠ to a
+  receiver), then each process (main, exception subprocesses, local processes) with its elements in flow
+  order. A Router's routes are indented under it with their conditions, the default marked; where routes
+  meet, the step is listed again with ↪; elements no flow reaches come last. A step a tab can run opens
+  there, as before; any other element opens in the **Diagram** tab with its settings (read-only).
+* **Diagram** (shown once iFlows are imported) draws an iFlow in the layout its export stores, without
+  SAP's icons: pools, steps, Routers, events, adapters and exception subprocesses. Scroll to zoom, drag to
+  move, **Fit** shows all of it. A click shows an element's type and settings; a step that runs in the
+  app (blue outline) opens with a double-click or **Open in …**. Nothing in the diagram can be changed.
 ### Groovy completions and Message Mapping functions
 
 * **Completions** in Groovy scripts: after `message.` (or a variable declared as `Message`),
@@ -169,8 +225,8 @@ data and puts it into a link; the app only reads that link. CPI Helper is option
 message you write as JSON just as well.
 
 * **Desktop app, one click:** under **⚙** turn on *Receive links from CPI Helper*; the app then listens on this
-  computer only (127.0.0.1, port 7778 unless you change it) and shows the *Custom URL* for each plugin:
-  `http://127.0.0.1:7778/#share/` for GroovyDebugX, `http://127.0.0.1:7778/` for xsltDebugX. Enter it in
+  computer only (127.0.0.1, port 7790 unless you change it) and shows the *Custom URL* for each plugin:
+  `http://127.0.0.1:7790/#share/` for GroovyDebugX, `http://127.0.0.1:7790/` for xsltDebugX. Enter it in
   CPI Helper's plugin settings. When you send a step, the plugin's tab hands the message to the app and says so,
   and the app asks before it imports it: the dialog names the tab, the body's size and what it replaces. Any web
   page can open such a link, so the dialog does not claim it came from CPI Helper; check what it shows. If the

@@ -19,7 +19,7 @@ import java.util.Map;
 /** RPC dispatcher of the native XML engine (XSLT, XSD, XPath, project files, test runner). */
 public final class XmlEngine implements RpcHandler {
 
-    public static final String VERSION = "0.4.0";
+    public static final String VERSION = "0.5.0";
 
     static {
         io.cpiwb.core.TenantDefaults.apply();
@@ -32,6 +32,8 @@ public final class XmlEngine implements RpcHandler {
     private final FilterStep filter = new FilterStep();
     private final GatherStep gather = new GatherStep();
     private final ConverterStep converter = new ConverterStep();
+    private final EncoderStep encoder = new EncoderStep();
+    private final DigestStep digest = new DigestStep();
     private final ProjectFiles files = new ProjectFiles();
 
     @Override
@@ -45,8 +47,8 @@ public final class XmlEngine implements RpcHandler {
                 .with("java", System.getProperty("java.vm.name") + " " + System.getProperty("java.version"))
                 .with("nativeImage", System.getProperty("org.graalvm.nativeimage.imagecode") != null)
                 .with("types", TypedValue.TYPES)
-                .with("methods", List.of("engine.info", "xslt.run", "xsd.validate", "xpath.eval", "split.run", "filter.run", "gather.run", "convert.run", "xml.format",
-                        "project.open", "project.close", "project.list", "file.read", "file.write", "file.delete", "iflow.import", "iflow.steps", "tests.run"));
+                .with("methods", List.of("engine.info", "xslt.run", "xsd.validate", "xpath.eval", "split.run", "filter.run", "gather.run", "convert.run", "encode.run", "decode.run", "digest.run", "xml.format",
+                        "project.open", "project.close", "project.list", "file.read", "file.write", "file.delete", "iflow.import", "iflow.steps", "iflow.models", "tests.run"));
     }
 
     @Override
@@ -69,6 +71,12 @@ public final class XmlEngine implements RpcHandler {
                 return gather.run(withProjectRoot(params));
             case "convert.run":
                 return converter.run(withProjectRoot(params));
+            case "encode.run":
+                return encoder.run(params, false);
+            case "decode.run":
+                return encoder.run(params, true);
+            case "digest.run":
+                return digest.run(withProjectRoot(params));
             case "xml.format":
                 return xpath.format(params);
             case "project.open":
@@ -87,6 +95,8 @@ public final class XmlEngine implements RpcHandler {
                 return files.iflowImport(params);
             case "iflow.steps":
                 return files.iflowSteps();
+            case "iflow.models":
+                return files.iflowModels();
             case "tests.run":
                 return runTests(params);
             default:

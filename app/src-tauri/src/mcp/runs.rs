@@ -1,7 +1,8 @@
 //! Results by reference, so that an agent chains steps without copying bodies through its context: every
 //! run that produces a message gets a `runId`; `messageFrom` / `messagesFrom` take that message (body,
 //! headers, properties) as the next step's input, as the message flows to the next step in an iFlow;
-//! `read_file` and `save_file` take a run's body. Large bodies come back shortened in results.
+//! `read_file` and `save_file` take a run's body. Large bodies come back shortened in results. A body that is no
+//! text (an Encoder's GZIP or ZIP result) is kept as Base64 and passed on as bytes.
 //!
 //! The ids are opaque handles of this server process (MCP 2026-07-28 on stateful tools: validate on every
 //! call, an unknown one is a tool error). The process belongs to one client; the store keeps the newest
@@ -24,7 +25,10 @@ const UNCHANGED_MIN_CHARS: usize = 200;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Message {
+    /// The body as text; empty when `body_base64` holds it.
     pub body: String,
+    /// The body's bytes as Base64, when they are no text (an engine's `binary: true` result).
+    pub body_base64: Option<String>,
     /// Rows as the engines take and give them: [{name, value, type}].
     pub headers: Value,
     pub properties: Value,
@@ -32,19 +36,36 @@ pub struct Message {
 
 impl Message {
     pub fn from_output(o: &Value) -> Option<Message> {
+        let (body, body_base64) = match o.get("bodyBase64").and_then(Value::as_str) {
+            Some(b) => (String::new(), Some(b.to_string())),
+            None => (o.get("body")?.as_str()?.to_string(), None),
+        };
         Some(Message {
-            body: o.get("body")?.as_str()?.to_string(),
+            body,
+            body_base64,
             headers: o.get("headers").filter(|v| v.is_array()).cloned().unwrap_or(json!([])),
             properties: o.get("properties").filter(|v| v.is_array()).cloned().unwrap_or(json!([])),
         })
     }
 
+    pub fn text(body: &str, headers: Value, properties: Value) -> Message {
+        Message { body: body.to_string(), body_base64: None, headers, properties }
+    }
+
     pub fn with_body(&self, body: &str) -> Message {
-        Message { body: body.to_string(), ..self.clone() }
+        Message { body: body.to_string(), body_base64: None, ..self.clone() }
+    }
+
+    /// The message as the engines take it: `body`, or `bodyBase64` for bytes.
+    pub fn to_json(&self) -> Value {
+        match &self.body_base64 {
+            Some(b) => json!({ "bodyBase64": b, "headers": self.headers, "properties": self.properties }),
+            None => json!({ "body": self.body, "headers": self.headers, "properties": self.properties }),
+        }
     }
 
     fn size(&self) -> usize {
-        self.body.len() + self.headers.to_string().len() + self.properties.to_string().len()
+        self.body.len() + self.body_base64.as_ref().map_or(0, String::len) + self.headers.to_string().len() + self.properties.to_string().len()
     }
 }
 
@@ -152,7 +173,9 @@ pub fn produced(tool: &str, input: &Message, result: &Value) -> Produced {
         // The XML Validator and the Router pass the message on unchanged.
         "validate_xsd" => p.main = Some(input.clone()),
         "run_flow_step" => match result["step"]["type"].as_str().unwrap_or_default() {
-            "contentModifier" => p.main = Message::from_output(&result["output"]),
+            // The Message Digest's output is the input with its header; the Encoder's and Decoder's may be bytes,
+            // and ZIP sets CamelFileName.
+            "contentModifier" | "messageDigest" | "encoder" | "decoder" => p.main = Message::from_output(&result["output"]),
             "router" => p.main = Some(input.clone()),
             "splitter" => {
                 for (i, m) in result["messages"].as_array().into_iter().flatten().enumerate() {
@@ -172,6 +195,17 @@ pub fn produced(tool: &str, input: &Message, result: &Value) -> Produced {
 /// out, a long one is cut, and a Splitter's messages are cut shorter (there may be many).
 pub fn shorten(result: &mut Value, id: &str, input_body: &str) {
     fn cut(holder: &mut Value, reference: &str, limit: usize, input_body: &str) {
+        if let Some(b64) = holder.get("bodyBase64").and_then(Value::as_str) {
+            // Bytes are of no use to read in a result beyond a short one; the run keeps them.
+            if b64.len() > limit {
+                let size = holder["bodySize"].as_u64().unwrap_or((b64.len() / 4 * 3) as u64);
+                holder.as_object_mut().unwrap().remove("bodyBase64");
+                holder["bodyShortened"] = json!(format!("The body is binary ({size} bytes) and left out. messageFrom \"{reference}\" \
+                    passes it to the next step (a Decoder, for instance); save_file with contentFrom \"{reference}\" saves it; \
+                    read_file with runId \"{reference}\" returns it as Base64."));
+            }
+            return;
+        }
         let Some(body) = holder.get("body").and_then(Value::as_str) else { return };
         let chars = body.chars().count();
         if body == input_body && chars > UNCHANGED_MIN_CHARS {
@@ -221,7 +255,7 @@ mod tests {
     use super::*;
 
     fn msg(body: &str) -> Message {
-        Message { body: body.into(), headers: json!([{ "name": "h", "value": "1", "type": "String" }]), properties: json!([]) }
+        Message::text(body, json!([{ "name": "h", "value": "1", "type": "String" }]), json!([]))
     }
 
     #[test]
@@ -256,6 +290,21 @@ mod tests {
         assert_eq!(r["output"]["body"].as_str().unwrap().chars().count(), PREVIEW_CHARS);
         assert!(r["output"]["bodyShortened"].as_str().unwrap().contains("run-1-1"));
         assert!(r["messages"][0].get("bodyShortened").is_none());
+    }
+
+    #[test]
+    fn bytes_are_kept_as_base64_and_long_ones_left_out_of_results() {
+        let m = Message::from_output(&json!({ "bodyBase64": "H4sI", "binary": true, "body": null, "headers": [] })).unwrap();
+        assert_eq!((m.body.as_str(), m.body_base64.as_deref()), ("", Some("H4sI")));
+        assert_eq!(m.to_json(), json!({ "bodyBase64": "H4sI", "headers": [], "properties": [] }));
+        assert_eq!(m.with_body("x").to_json()["body"], "x");
+        let mut r = json!({ "output": { "bodyBase64": "A".repeat(PREVIEW_CHARS + 4), "bodySize": 15003 } });
+        shorten(&mut r, "run-1-4", "");
+        assert!(r["output"].get("bodyBase64").is_none());
+        assert!(r["output"]["bodyShortened"].as_str().unwrap().contains("binary (15003 bytes)"));
+        let mut small = json!({ "output": { "bodyBase64": "H4sI" } });
+        shorten(&mut small, "run-1-5", "");
+        assert_eq!(small["output"]["bodyBase64"], "H4sI");
     }
 
     #[test]

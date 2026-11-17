@@ -1,0 +1,17 @@
+{
+    "probeStep": "digest-filter",
+    "bodyClass": "java.lang.String",
+    "bodyLength": 372,
+    "bodyBase64": "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz4KPCEtLSBhIGNvbW1lbnQgYmVmb3JlIHRoZSByb290IC0tPgo8bzpPcmRlciB4bWxuczpvPSJ1cm46ZXhhbXBsZTpvcmRlciIgeG1sbnM6dW51c2VkPSJ1cm46ZXhhbXBsZTp1bnVzZWQiIGlkID0gJzQ3MTEnIHhtbDpsYW5nPSJkZSI+CiAgPG86SGVhZGVyICAgYj0iMiIgICBhPSIxIj48bzpDdXN0b21lcj5Nw7xsbGVyICZhbXA7IFPDtmhuZTwvbzpDdXN0b21lcj48bzpFbXB0eS8+PC9vOkhlYWRlcj4KICA8IS0tIGEgY29tbWVudCBpbnNpZGUgLS0+CiAgPG86SXRlbSBza3U9Ik0tMTAwIj4yPC9vOkl0ZW0+CiAgPG86SXRlbSBza3U9Ik0tMjAwIj4xPC9vOkl0ZW0+CjwvbzpPcmRlcj4K",
+    "bodyText": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!-- a comment before the root -->\n<o:Order xmlns:o=\"urn:example:order\" xmlns:unused=\"urn:example:unused\" id = '4711' xml:lang=\"de\">\n  <o:Header   b=\"2\"   a=\"1\"><o:Customer>M\u00fcller &amp; S\u00f6hne</o:Customer><o:Empty/></o:Header>\n  <!-- a comment inside -->\n  <o:Item sku=\"M-100\">2</o:Item>\n  <o:Item sku=\"M-200\">1</o:Item>\n</o:Order>\n",
+    "headerNames": [
+        "ProbeStep",
+        "SAPMessageDigest"
+    ],
+    "headers": {
+        "SAPMessageDigest": {
+            "value": "U0gNiDi0zxAeYHKL3+dXuBaDMkQ=",
+            "type": "java.lang.String"
+        }
+    }
+}

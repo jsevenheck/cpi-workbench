@@ -1,7 +1,7 @@
 // Unit tests of path comparison: node --test tests/
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { pathKey, projectPath } from '../src/lib/paths.ts';
+import { isArchive, pathKey, projectPath, shownInTree } from '../src/lib/paths.ts';
 
 test('pathKey gives every spelling of a project path the same key', () => {
   const key = pathKey('scripts/new-script.groovy');
@@ -24,4 +24,16 @@ test('projectPath: a case-relative file as a project path, keeping ".." above th
   assert.equal(projectPath('tests/case', 'C:/data/x.txt'), 'C:/data/x.txt');
   assert.equal(projectPath('tests/case', '\\\\server\\share\\x.txt'), '\\\\server\\share\\x.txt');
   assert.equal(projectPath('tests/case', '..\\..\\..\\x.txt'), '../x.txt', 'backslashes as separators');
+});
+
+test('the sidebar lists the archives a Decoder reads, with the files a tab opens', () => {
+  for (const p of ['inputs/order.zip', 'inputs/long.xml.gz', 'archives/Order.ZIP', 'inputs/a.GZ']) {
+    assert.ok(shownInTree(p), p);
+    assert.ok(isArchive(p), p);
+  }
+  for (const p of ['mappings/a.xsl', 'scripts/a.groovy', 'inputs/a.csv']) {
+    assert.ok(shownInTree(p), p);
+    assert.ok(!isArchive(p), p);
+  }
+  for (const p of ['inputs/a.pdf', 'inputs/zip', 'inputs/a.gzip', 'README.md']) assert.ok(!shownInTree(p), p);
 });

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- a comment before the root -->
+<o:Order xmlns:o="urn:example:order" xmlns:unused="urn:example:unused" id = '4711' xml:lang="de">
+  <o:Header   b="2"   a="1"><o:Customer>Müller &amp; Söhne</o:Customer><o:Empty/></o:Header>
+  <!-- a comment inside -->
+  <o:Item sku="M-100">2</o:Item>
+  <o:Item sku="M-200">1</o:Item>
+</o:Order>

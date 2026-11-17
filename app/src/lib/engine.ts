@@ -170,7 +170,7 @@ export async function pickFolder(): Promise<string | null> {
 export async function pickZip(): Promise<string | null> {
   if (!isDesktop) return null;
   const { open } = await import('@tauri-apps/plugin-dialog');
-  const f = await open({ multiple: false, directory: false, title: 'Import exported iFlow',
-    filters: [{ name: 'iFlow export', extensions: ['zip'] }] });
+  const f = await open({ multiple: false, directory: false, title: 'Import an exported iFlow, Value Mapping or package',
+    filters: [{ name: 'Integration Suite export', extensions: ['zip'] }] });
   return typeof f === 'string' ? f : null;
 }

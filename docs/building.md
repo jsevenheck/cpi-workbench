@@ -104,6 +104,9 @@ macOS 11 (the app's `minimumSystemVersion`), and a CI step checks that.
 The workflow artifacts (engine jars, installers) expire after 3 days; a tag's installers stay 90 days,
 and the release keeps its own copies.
 
+CI validates the native engines' declared minimum macOS version; it does not boot macOS 11.
+Compatibility with that OS and its WKWebView still needs the manual release checks.
+
 Native images must be built on each target OS; there is no cross-compilation.
 The installers are not code-signed yet. On macOS the app is signed ad hoc (`signingIdentity: "-"`,
 without hardened runtime, so the bundled JRE loads its libraries); it is not notarized.
@@ -140,5 +143,5 @@ resource bundle were in it):
 
 The agent also rewrites entries that were there (the locales of resource bundles) and adds Saxon classes that
 `saxon-generated` covers. Keep what the failing feature needs and leave the rest as committed; then build the
-native engines and run `workload.py` on them. GraalVM Community 21 for Linux unpacks into any folder, and one
-engine builds in about two minutes, so this does not have to wait for CI.
+native engines and run `workload.py` on them. A local build needs GraalVM and the target OS's native
+compiler toolchain; build time varies by machine.

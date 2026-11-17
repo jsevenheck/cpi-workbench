@@ -5,7 +5,7 @@
 | Path | What |
 |---|---|
 | `engine/core` | Shared Java code (built for Java 17, run on 21): JSON, JSON-RPC server (stdio and HTTP), project files and path checks, iFlow import, test runner. |
-| `engine/xml`, `engine/xml-he99`, `engine/xml-he12` | CPI XSLT step, XSD validation, XPath, the XPath-based flow steps (Filter, Splitter, Gather), the converters, the Encoder and the Message Digest (XML canonicalization of the JDK). The same sources are built against Saxon-HE 9.9.1-8 and 12.9. |
+| `engine/xml`, `engine/xml-he99`, `engine/xml-he12` | CPI XSLT step, XSD validation, XPath, the XPath-based flow steps (Filter, Splitter, Gather), the converters, the Encoder / Decoder and the Message Digest (XML canonicalization of the JDK). The same sources are built against Saxon-HE 9.9.1-8 and 12.9. |
 | `engine/native` | GraalVM native-image build (`build-native.sh`), reflection metadata generator, workload smoke test. |
 | `engine/groovy`, `engine/groovy-v1`, `engine/groovy-v2` | Groovy engines: shared runner, clean-room `com.sap.*` API (`src/api-common` with the Script API v1, `src/api-v2`), and the two builds with their entry points (Groovy 2.4.21 and Groovy 4.0.29, both on Camel 3.14.7 like a tenant). `build-jre.sh` trims the Java 21 runtime. |
 | `app/` | Svelte 5 + Monaco UI (`src/`), Tauri 2 shell (`src-tauri/`, with the MCP server in `src/mcp/`), browser e2e tests (`e2e/`). |
@@ -19,10 +19,11 @@ The desktop shell starts each engine as a sidecar process on demand and talks JS
 over stdio. Every engine can also serve HTTP on localhost (`serve --http <port>`) for the
 browser mode. The main methods are:
 
-* `xslt.run`, `xsd.validate`, `xpath.eval`, `split.run`, `filter.run`, `gather.run`, `convert.run` (XML engines),
+* `xslt.run`, `xsd.validate`, `xpath.eval`, `split.run`, `filter.run`, `gather.run`, `convert.run`,
+  `encode.run`, `decode.run`, `digest.run` (XML engines),
 * `groovy.run`, `simple.eval`, `contentModifier.run` (Groovy engines); the UI evaluates a Router
   route by route with `xpath.eval` and `simple.eval`,
-* `tests.run`, and `project.*`, `file.*`, `iflow.*` for files (all engines).
+* `tests.run`, and `project.*`, `file.*`, `iflow.*` for files and imported models (all engines).
 
 File methods and XML runs stay inside the open project (`ProjectFiles`, `ProjectResolver`; `ProjectPaths` follows symbolic links). Over
 HTTP, the engines answer pages from `localhost`, `127.0.0.1` and the desktop shell only: requests
@@ -55,7 +56,7 @@ add no function of their own.
 ## CPI Helper receiver
 
 The desktop receiver is separate from the engines' HTTP servers and is **off by default**.
-`app/src-tauri/src/receiver.rs` binds `127.0.0.1` at the configured port (default 7790; 7778 up to 0.4.0, which is the Groovy engines' `--http` default). Its page
+`app/src-tauri/src/receiver.rs` binds `127.0.0.1` at the configured port (default 7790). Its page
 reads `#share/<data>` and POSTs the token to `/message` on the same origin. Host/Origin checks,
 16 KiB request headers, an 8 MiB POST limit, at most four active handlers and a 15-second read
 deadline bound HTTP input. Stopping prevents old handlers from delivering more messages.

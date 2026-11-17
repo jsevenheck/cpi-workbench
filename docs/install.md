@@ -120,7 +120,8 @@ See the [user guide](user-guide.md#command-line-ci-friendly) and [test cases](te
 ## First steps
 
 1. Start the app and open a folder as a project. A new folder gets the standard layout with **Init**.
-2. To try things out, download the repository and open
+2. Without a project, **Examples…** loads a bundled mapping or script with its input.
+   For examples with includes and platform data, download the repository and open
    [`examples/demo-project`](../examples/demo-project/README.md).
 3. Open a mapping or script, enter the input message and press **Ctrl+Enter**.
 

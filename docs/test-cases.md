@@ -99,7 +99,7 @@ or `def void f(String[] a, Output output, MappingContext c)`, runs with `args` i
 * `args` holds one entry per `String` or `String[]` parameter, in order; `Output` and
   `MappingContext` come from the simulator. A `String` argument may be `null` (the Groovy tab's
   **null** button). A `String[]` argument is a list of contexts; an entry
-  is a string, `{ "suppress": true }` or `{ "xsiNil": true }`. A flat list is one context.
+  is a string, `null`, `{ "suppress": true }` or `{ "xsiNil": true }`. A flat list is one context.
 * The signature decides how the function is called: with `String` arguments once (*Single values*),
   with `String[]` arguments once per context (*All values of a context*), which needs the same number
   of contexts in every `String[]` argument.

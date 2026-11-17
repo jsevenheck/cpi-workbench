@@ -53,7 +53,8 @@ come with the app; **Save** asks where to keep them, once a project is open. As 
 * **MPL**, **Console** and **API calls** (Groovy) show message processing log entries, `println`
   output and the calls to SAP APIs with their arguments.
 * **Attachments** and **SOAP** (Groovy, next to Headers and Properties) hold what the script reads with
-  `message.getAttachments()` and `getSoapHeaders()` (Script API v1): an attachment's content is text typed
+  `message.getAttachments()` and `getSoapHeaders()` (both simulator profiles; SOAP is documented in v1
+  and observed on the v2 runtime): an attachment's content is text typed
   there, a file of the project (its path) or Base64; a test case's attachments and SOAP headers open
   there. A Message Mapping function gets no message, so the two tabs are hidden for it.
 * **Platform** (Groovy) shows the mocked platform data the script reads through `ITApiFactory` as tables:
@@ -65,10 +66,13 @@ come with the app; **Save** asks where to keep them, once a project is open. As 
   those. The keystore is edited as a file. Without a project the tables work in memory. A test case's own
   `platform` object wins over a table for its runs, and the tab says so. Use test-only values, never a
   tenant's real secrets.
-* Groovy scripts run like on a tenant: Java 21, Camel 3.14.7, timezone UTC and locale `en_US`
-  whatever your computer uses, and the libraries a tenant offers (commons-lang3; on 1.x also Jackson
-  and commons-codec; on 2.x yaml and toml). On 1.x, `log` and `logger` are SAP's `ScriptLogger`: `log.logInfo(…)`,
-  `logWarnings(…)` and `logErrors(…)` print to the **Console**; `log.info(…)` fails, as on a tenant. Other jars go into the iFlow's `lib/`.
+* The Groovy profiles follow one tenant's fingerprint: Java 21, Camel 3.14.7, timezone UTC and
+  locale `en_US` whatever your computer uses, with commons-lang3; on 1.x also Jackson and
+  commons-codec; on 2.x yaml and toml. On 1.x, `log` and `logger` imitate the observed `ScriptLogger`
+  methods: `log.logInfo(…)`, `logWarnings(…)` and `logErrors(…)` print to the **Console** with a note
+  because CPI's output destination is unknown; `log.info(…)` fails as on the probed tenant.
+  Extra jars go into the project's `lib/` or an imported iFlow's `src/main/resources/lib/`.
+  Versions, exclusions and unverified behaviour: [Fidelity](fidelity.md#groovy-script).
 * **Compare** also runs the input on the other runtime of the same kind (Saxon-HE 9.9 ↔ 12,
   Groovy Script 1.x ↔ 2.x) and lists what differs: status, headers, properties and a body diff.
   This helps before you move a script from 1.x to 2.x.
@@ -139,8 +143,8 @@ come with the app; **Save** asks where to keep them, once a project is open. As 
   resolver provides them ([Fidelity](fidelity.md), F39).
 
   Camel Simple and the Content Modifier run on Camel 3.14.7, as on a tenant for both script versions
-  (tenants still on software 6.x / 5.x run Camel 2 and are not covered). XPath, the converters, the Encoder, the Decoder and the Message
-  Digest run on
+  (the documented software 6.x / 5.x lines use Camel 2 and are not covered; their current tenant
+  availability is unknown). XPath, the converters, the Encoder / Decoder and Message Digest run on
   an installed XML engine (Saxon-HE 9.9 by default, otherwise 12). See [Fidelity](fidelity.md#flow-steps-content-modifier-filter-router-splitter-gather-converter).
 ### iFlow import
 

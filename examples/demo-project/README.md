@@ -12,10 +12,12 @@ Open this folder in CPI Workbench and click a file in `inputs/` to load it as th
 | `scripts/route-by-partner.groovy` (2.x) | `inputs/order.xml` with header `SalesChannel` = `web-eu` | Partner Directory from `platform/`. |
 | `scripts/mapping-functions.groovy` (1.x), **Function** `countPerContext` or `getHeader` | *Function arguments*: values `A`, `B` in the first context and `C` in the second (**Text**: `["A", "B"]` and `["C"]` on two lines) | Custom functions of a Message Mapping: `Output` with context changes, `MappingContext` reading a header. |
 | `schemas/salesorder.xsd` | output of `order-to-salesorder.xsl` | XSD validation. |
-| Flow Steps tab (sample settings) | the tab's own sample body | Content Modifier (XPath and Camel Simple rows), Filter (`/Order/Item[@qty > 1]`), Router (CPI's `=` in a Non-XML condition), Splitter, then *Gather* on its result (SAP's multi-mapping format). |
+| Flow Steps: add a Content Modifier header row with XPath `/Order/@number`, or set Filter XPath `/Order/Items/Item[@qty > 1]`; try a Router Non-XML condition `${header.SenderSystem} = 'ERP'` with that header set | `inputs/order.xml` | Header extraction, filtering and CPI-style Camel Simple. Step settings start empty and must be entered by hand. |
 | Flow Steps → Converter: XML to JSON, then *Use as input* and JSON to XML; or XML to CSV with path `/Order/Items/Item` | `inputs/order.xml` | JSON with `@` attributes and back; one CSV line per item. |
 | Flow Steps → Splitter, General, XPath `/src:Orders/src:Order xmlns:src="urn:demo:integration:orders:source:v1"` | `inputs/orders.xml` | One message per order; each keeps the envelope and `SourceSystem`. |
 
 Press **Run** or **Ctrl+Enter** after opening a Groovy script; it does not execute automatically.
+Flow Steps run with **Run step** after you enter their settings. Without a project, **Examples…**
+offers the first three mapping/script examples above with their input bundled in the app.
 The files in `platform/` hold test data only, no real credentials. This demo has no test cases;
 CI/regression cases are in `testdata/regression-project`. Full usage: [User guide](../../docs/user-guide.md).

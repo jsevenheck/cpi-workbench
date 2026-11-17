@@ -7,7 +7,9 @@ your script: at a line, with the arguments (`message`) and local variables in vi
 
 * A full JDK 21 or newer (`java` and, for the check below, `jdb`). The runtime the app ships has no debug agent.
 * The engine jar of the script's version: `cpiwb-groovy-v1.jar` (Groovy Script 1.x) or `cpiwb-groovy-v2.jar`
-  (2.x), from a release or built with `mvn -f engine/pom.xml package -pl groovy-v1,groovy-v2 -am`.
+  (2.x), built with `mvn -f engine/pom.xml package -pl groovy-v1,groovy-v2 -am`.
+  Build jars lie under `engine/groovy-v1/target/` and `engine/groovy-v2/target/`; release jars are named
+  `cpiwb-groovy-v1-<version>.jar` and `cpiwb-groovy-v2-<version>.jar`. Adjust the command below to their path.
 
 ## Start the script under the debug agent
 

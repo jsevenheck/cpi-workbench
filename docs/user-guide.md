@@ -5,7 +5,7 @@
 Download the installer for your platform from the
 [latest release](https://github.com/jsevenheck/cpi-workbench/releases/latest) (see
 [Installing](install.md)), install it and open a project folder. Any folder works; **Init** adds `mappings/`, `schemas/`,
-`scripts/`, `tests/` and example files in `platform/`.
+`scripts/` and example files in `platform/` ([Project files](project-files.md)).
 
 Without a project, **Examples…** in the sidebar loads a mapping or script of the demo project with its input
 into the editors (an XSLT 3.0 mapping, a Groovy 2.x script for an XML and one for a JSON body). The examples
@@ -27,7 +27,7 @@ come with the app; **Save** asks where to keep them, once a project is open. As 
 * Right-click a file in the tree to open, rename, copy or delete it, or to copy its path.
 * The **×** next to a file name closes that file; the file on disk stays as it is. It asks first when there
   are unsaved changes. In the mapping, script and schema panes it leaves an empty editor without a path, so
-  **Save** asks for a new name; for a test case it also drops the case's input and its attachments. Next to
+  **Save** asks for a new name. Next to
   the input file it empties the input body; headers and properties stay. The **File** tab closes the same way, also from the × on its
   tab in the tool bar.
 * Drag the bars between input, mapping or script and output to resize them; double-click a bar to reset.
@@ -37,7 +37,7 @@ come with the app; **Save** asks where to keep them, once a project is open. As 
 * Other files, such as `platform/*.json` or `cpi-workbench.json`, open in a **File** tab with their own
   editor rather than replacing the input body.
 * The output updates live, or press **Ctrl+Enter**. Compile and runtime errors are marked in the editor.
-* Opening a Groovy script, a Groovy test case or a stylesheet with reflexive `java:` calls does not
+* Opening a Groovy script or a stylesheet with reflexive `java:` calls does not
   execute it until **Run** or **Ctrl+Enter**; afterwards Live follows your edits. Such code runs with
   your rights, so trust the source of imported iFlows and shared projects. Other stylesheets run
   automatically when opened. Code imported from a message link always waits for a manual run.
@@ -55,16 +55,14 @@ come with the app; **Save** asks where to keep them, once a project is open. As 
 * **Attachments** and **SOAP** (Groovy, next to Headers and Properties) hold what the script reads with
   `message.getAttachments()` and `getSoapHeaders()` (both simulator profiles; SOAP is documented in v1
   and observed on the v2 runtime): an attachment's content is text typed
-  there, a file of the project (its path) or Base64; a test case's attachments and SOAP headers open
-  there. A Message Mapping function gets no message, so the two tabs are hidden for it.
+  there, a file of the project (its path) or Base64. A Message Mapping function gets no message, so the two tabs are hidden for it.
 * **Platform** (Groovy) shows the mocked platform data the script reads through `ITApiFactory` as tables:
   value mappings, the Secure Store's credentials, Partner Directory parameters and number ranges, from
-  the project's `platform/*.json` files ([format](test-cases.md#mocked-platform-data-platform)). A changed
+  the project's `platform/*.json` files ([format](project-files.md#mocked-platform-data-platform)). A changed
   table applies to the next run at once and is marked with a dot until **Save** writes its file, as
   indented JSON (numbers keep their spelling). What a table does not show stays in the file as it is: a credential's properties and
   OAuth2 tokens, binary parameters, alternative partners and authorized users; **Open file** edits
-  those. The keystore is edited as a file. Without a project the tables work in memory. A test case's own
-  `platform` object wins over a table for its runs, and the tab says so. Use test-only values, never a
+  those. The keystore is edited as a file. Without a project the tables work in memory. Use test-only values, never a
   tenant's real secrets.
 * The Groovy profiles follow one tenant's fingerprint: Java 21, Camel 3.14.7, timezone UTC and
   locale `en_US` whatever your computer uses, with commons-lang3; on 1.x also Jackson and
@@ -81,10 +79,6 @@ come with the app; **Save** asks where to keep them, once a project is open. As 
   what differs from the result shown now, as **Compare** does. A run with the same outcome as the one
   before only updates its time, so live runs while you type do not crowd the list. The history is kept in
   memory and is gone when the app closes.
-* Test cases (see [Test cases](test-cases.md)) are written by hand and run from the command line;
-  the app has no test runner. Opening a `case.json` loads the case into its editor view. A Groovy
-  case's attachments and SOAP headers open in the input's **Attachments** and **SOAP** tabs; its
-  `platform` overrides apply to its runs while it is open, and the **Platform** tab says so.
 ### XSD and XPath
 
 * **XSD** validates a document against a schema; **XPath** evaluates an expression (3.1 by default, or 1.0).
@@ -197,8 +191,7 @@ come with the app; **Save** asks where to keep them, once a project is open. As 
   field as the mapping passes them in: one box per context (a context change starts the next one, e.g. per
   parent element), with **+ Value**, **+ Context** and per value *text* (the field's value), *SUPPRESS*
   (a suppressed value: no content, but still a place in the context), *xsi:nil* or *null*. **Text** shows the
-  same as one context per line in JSON (`["A", "B"]`; `{"suppress": true}` and `{"xsiNil": true}`), as
-  in `case.json`. `Output` and `MappingContext` come from the simulator. A `String[]` function runs once
+  same as one context per line in JSON (`["A", "B"]`; `{"suppress": true}` and `{"xsiNil": true}`). `Output` and `MappingContext` come from the simulator. A `String[]` function runs once
   per context, a `String` function once (a tenant calls it once per value). A script with only mapping
   functions opens with its first one;
   each script keeps its function and arguments while the app is open, also when you switch to
@@ -301,15 +294,13 @@ XPath, Flow Steps) over the Model Context Protocol, plus reading and saving proj
 a reference of the Script API, so it can write a step and try it on the simulator. Setup, tools and what the
 server can access: [MCP server](mcp.md).
 
-## Command line (CI-friendly)
+## Command line
 
 ```sh
 java -jar cpiwb-groovy-v1.jar run --script scripts/enrich.groovy --in input.xml -H SenderSystem=ERP
-java -jar cpiwb-groovy-v2.jar test testdata/regression-project/tests
 java -jar cpiwb-xml-he99.jar xslt --xsl mappings/order.xsl --in input.xml -H SenderSystem=ERP -P Count=3:Integer
 java -jar cpiwb-xml-he99.jar validate --xsd schemas/order.xsd --in output.xml
 java -jar cpiwb-xml-he99.jar xpath --expr "//Item/@sku" --in input.xml --version 3.1
-java -jar cpiwb-xml-he99.jar test testdata/regression-project/tests   # exit code 1 if a case fails
 ```
 
 These examples use the build-output jar names; release jars include `-<version>` before `.jar`.
@@ -320,7 +311,7 @@ commands do not have the shell's supervised timeout; use the app/MCP or a superv
 when running potentially non-terminating code.
 
 `-H` sets a header and `-P` an exchange property, as `name=value[:Type]`. The types are listed in
-[Test cases](test-cases.md). Each engine runs only the cases of its own kind and skips the others.
+[Project files](project-files.md#header-and-property-types).
 
 ## Browser mode (no desktop shell needed)
 

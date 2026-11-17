@@ -250,7 +250,7 @@ runs within 100 ms (1 MB input for XSLT). Re-measure before claiming those budge
 
 **Type conversion**: our `Message` wraps a real Camel `DefaultExchange`, so `getBody(String)`, `getHeader(name, Type)` etc. use Camel's actual converters — the same rules as on CPI.
 
-**Platform APIs** (`ITApiFactory`): mocks fed from `platform/` files in the project (credentials, value mappings, partner directory, keystore, number ranges; [test cases](test-cases.md)). Other services raise `InvalidContextException`, as SAP's Javadoc says (F27).
+**Platform APIs** (`ITApiFactory`): mocks fed from `platform/` files in the project (credentials, value mappings, partner directory, keystore, number ranges; [project files](project-files.md)). Other services raise `InvalidContextException`, as SAP's Javadoc says (F27).
 
 ### 6.4 Linting
 v1 imports in a v2 profile; Groovy 2→4 breaking changes (e.g. `groovy.util.XmlSlurper` → `groovy.xml.XmlSlurper`); wildcard imports (discouraged by SAP's upgrade guidance, S3). *Compare* runs a script on 1.x and 2.x side by side.
@@ -316,10 +316,12 @@ my-project/
       input.xml
       expected-output.xml # optional → regression assertion
 ```
-Plain, git-friendly files. The engines' `test` command (`cpiwb-xml-he99 test tests/`,
-`java -jar cpiwb-groovy-v1.jar test tests/`) runs the cases and exits non-zero on failure.
-Format: [test cases](test-cases.md). MPL-export-to-case import (format unknown, F18) and flow-step
-test cases are not implemented; neither is currently scheduled.
+Plain, git-friendly files: [Project files](project-files.md). Since 2026-11-17 test cases are this
+repository's regression tests only (`testdata/regression-project/tests`), not a user feature; users test a
+step by running it in the app. The engines' `test` command (`cpiwb-xml-he99 test tests/`,
+`java -jar cpiwb-groovy-v1.jar test tests/`) runs the cases in CI and exits non-zero on failure.
+Format: [Regression test cases](test-cases.md). MPL-export-to-case import (format unknown, F18) and flow-step
+test cases are not planned.
 
 ---
 
@@ -399,7 +401,7 @@ SAP excludes it from Message Mapping (F41). Queue-wide execution is not offered 
 Single-value functions are intentionally called once with the supplied values, rather than once
 per queue value. Marker identity remains an assumption (Q-M1).
 Usage: [Mapping functions](user-guide.md#groovy-completions-and-message-mapping-functions);
-case format: [Test cases](test-cases.md#message-mapping-functions).
+case format: [Regression test cases](test-cases.md#message-mapping-functions).
 
 ### 10.4 Converter design
 
@@ -443,7 +445,7 @@ Apache-2.0 repository.
 **W1–W2. Platform inputs and CPI Helper hand-over.** Inspired by GrooveBox and CPI Helper (S37,
 S47). Current usage: [Groovy/platform inputs](user-guide.md#groovy-xslt-and-platform-data) and
 [CPI Helper](user-guide.md#a-message-from-a-tenants-trace-cpi-helper); data formats:
-[test cases](test-cases.md). Windows hand-over evidence and the upstream cut-off body remain
+[project files](project-files.md). Windows hand-over evidence and the upstream cut-off body remain
 recorded in Q-T2/Q-T3.
 
 **W2b. Desktop receiver design.** An opt-in loopback page transfers the URL fragment by a

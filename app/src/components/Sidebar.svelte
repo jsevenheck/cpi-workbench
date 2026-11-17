@@ -119,7 +119,7 @@
         <button class="small" onclick={() => newFile('xsd')}>+ Schema</button>
         <button class="small" onclick={() => newFile('groovy')}>+ Script</button>
         <button class="small" onclick={importZip} title="Import an iFlow, a Value Mapping or a whole integration package exported from Integration Suite (zip)">Import iFlow</button>
-        <button class="small" onclick={initProject} title="Create mappings/, schemas/, tests/ and cpi-workbench.json">Init</button>
+        <button class="small" onclick={initProject} title="Create mappings/, schemas/, scripts/, platform/ and cpi-workbench.json">Init</button>
         <button class="small" onclick={() => void closeProject()} title="Close project">✕</button>
       </div>
       <input class="filter" placeholder="Filter files" bind:value={filter} aria-label="Filter files" />

@@ -46,7 +46,7 @@ in `docs/building.md` (*Releasing*).
 * `app/src`: the UI. `app/src-tauri`: the Rust shell; `src/mcp/` is the MCP server (`cpi-workbench mcp`).
   `mcp/flow.rs` repeats the Flow Steps tab's calls (`app/src/lib/store.svelte.ts`), including the converter
   defaults; change both together. `mcp/reference.rs` builds its topics from `app/src/lib/completions.ts`,
-  the clean-room platform classes and `docs/test-cases.md` / `docs/fidelity.md`; its test names what it expects.
+  the clean-room platform classes and `docs/project-files.md` / `docs/fidelity.md`; its test names what it expects.
 * CPI Helper hand-over: `app/src/lib/share.ts` parses messages, `receiver.svelte.ts` coordinates
   confirmation/settings, and `app/src-tauri/src/receiver.rs` serves the opt-in loopback page.
   Receiver imports must not execute code, including already-open code and pending Live callbacks.

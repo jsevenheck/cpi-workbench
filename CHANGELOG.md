@@ -6,6 +6,14 @@ of its version.
 
 ## [Unreleased]
 
+### Changed
+
+- **Test cases are internal.** `case.json` test cases are this repository's regression tests and no longer a
+  documented user feature; a step is tested by running it in the app. *Init* no longer creates `tests/`. The
+  project layout, header types, script libraries and the `platform/` formats moved to the new page
+  [Project files and platform data](docs/project-files.md); the `case.json` format stays in
+  [Regression test cases](docs/test-cases.md) for contributors.
+
 ## [0.5.0] - 2026-11-17
 
 ### Added

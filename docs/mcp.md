@@ -100,8 +100,8 @@ other runtime of that kind when the default is not installed, as the app does. F
 on Camel 3.14.7 with any installed Groovy engine.
 
 A message is `body` (or `bodyPath`, a project file) and, where the tab has them, `headers` and `properties`. A header or
-property is a string, or `{"value": "…", "type": "Integer"}` for another type (the types of
-[test cases](test-cases.md)). Results are the engines' JSON, the same data the app shows: the output
+property is a string, or `{"value": "…", "type": "Integer"}` for another type (the types in
+[Project files](project-files.md#header-and-property-types)). Results are the engines' JSON, the same data the app shows: the output
 message, diagnostics with lines, `xsl:message` output, the message log, timings.
 
 ### Passing results on (`runId`)

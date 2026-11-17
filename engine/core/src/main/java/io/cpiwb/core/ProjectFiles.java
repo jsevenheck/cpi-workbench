@@ -44,7 +44,7 @@ public final class ProjectFiles {
     }
 
     private static void init(Path dir) throws IOException {
-        for (String sub : List.of("mappings", "schemas", "scripts", "tests", "platform")) {
+        for (String sub : List.of("mappings", "schemas", "scripts", "platform")) {
             Files.createDirectories(dir.resolve(sub));
         }
         // Mocked platform data for the Groovy simulator (secure store, value mappings, partner directory,

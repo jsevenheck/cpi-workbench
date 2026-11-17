@@ -5,13 +5,13 @@
 //! * `script-api`: the Script API members the app's completions list (`app/src/lib/completions.ts`,
 //!   checked against the Java sources by `app/tests/completions.test.mts`) and the public methods of the
 //!   clean-room platform classes the Groovy engines run (`engine/groovy/src/api-common`).
-//! * `platform`: the formats of the mocked platform data, from `docs/test-cases.md`.
+//! * `platform`: the formats of the mocked platform data, from `docs/project-files.md`.
 //! * `fidelity`: what matches CPI and what does not, `docs/fidelity.md`.
 
 pub const TOPICS: &[&str] = &["script-api", "platform", "fidelity"];
 
 const COMPLETIONS: &str = include_str!("../../../src/lib/completions.ts");
-const TEST_CASES: &str = include_str!("../../../../docs/test-cases.md");
+const PROJECT_FILES: &str = include_str!("../../../../docs/project-files.md");
 const FIDELITY: &str = include_str!("../../../../docs/fidelity.md");
 
 /// The clean-room classes behind `ITApiFactory` and Message Mapping functions, in the order shown.
@@ -42,9 +42,9 @@ const MEMBER_LISTS: &[(&str, &str)] = &[
 pub fn topic(name: &str) -> Result<String, String> {
     match name {
         "script-api" => Ok(script_api()),
-        "platform" => section(TEST_CASES, "## Mocked platform data")
+        "platform" => section(PROJECT_FILES, "## Mocked platform data")
             .map(|s| format!("{s}\nThe files lie in the project's platform/ folder; save_file writes them.\n"))
-            .ok_or_else(|| "The platform section is missing from docs/test-cases.md.".into()),
+            .ok_or_else(|| "The platform section is missing from docs/project-files.md.".into()),
         "fidelity" => Ok(FIDELITY.to_string()),
         other => Err(format!("Unknown topic '{other}'. Topics: {}.", TOPICS.join(", "))),
     }

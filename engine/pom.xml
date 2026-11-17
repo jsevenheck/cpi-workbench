@@ -6,7 +6,7 @@
 
   <groupId>io.cpiwb</groupId>
   <artifactId>cpiwb-engine-parent</artifactId>
-  <version>0.5.0</version>
+  <version>0.6.0</version>
   <packaging>pom</packaging>
   <name>CPI Workbench engine</name>
 

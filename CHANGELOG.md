@@ -6,6 +6,8 @@ of its version.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-17
+
 ### Added
 
 - **Fidelity indicator.** Next to the runtime and next to *Run step* in Flow Steps, a button says how well the
@@ -402,7 +404,8 @@ First public release.
   supported.
 - The installers and engine jars include the licence texts and notices of the bundled components.
 
-[Unreleased]: https://github.com/jsevenheck/cpi-workbench/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/jsevenheck/cpi-workbench/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/jsevenheck/cpi-workbench/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/jsevenheck/cpi-workbench/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/jsevenheck/cpi-workbench/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/jsevenheck/cpi-workbench/compare/v0.3.0...v0.3.1

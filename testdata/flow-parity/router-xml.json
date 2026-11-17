@@ -1,0 +1,92 @@
+{
+  "name": "router-xml",
+  "from": "iflow",
+  "step": {
+    "type": "router",
+    "config": {
+      "routes": [
+        {
+          "name": "XPath",
+          "expressionType": "xml",
+          "condition": "//b = 1",
+          "default": false
+        },
+        {
+          "name": "Never",
+          "expressionType": "xml",
+          "condition": "//c",
+          "default": false
+        }
+      ],
+      "throwException": true
+    }
+  },
+  "input": {
+    "body": "<a><b>1</b></a>",
+    "headers": {
+      "h0": "x"
+    },
+    "properties": {
+      "p0": "y"
+    }
+  },
+  "namespaces": {
+    "o": "urn:example:order"
+  },
+  "answers": {
+    "xpath.eval": [
+      {
+        "ok": true,
+        "value": "false"
+      },
+      {
+        "ok": true,
+        "value": "false"
+      }
+    ]
+  },
+  "calls": [
+    {
+      "engine": "xml",
+      "method": "xpath.eval",
+      "params": {
+        "expression": "//b = 1",
+        "version": "3.1",
+        "as": "boolean",
+        "namespaces": {
+          "o": "urn:example:order"
+        },
+        "input": {
+          "body": "<a><b>1</b></a>",
+          "headers": {
+            "h0": "x"
+          },
+          "properties": {
+            "p0": "y"
+          }
+        }
+      }
+    },
+    {
+      "engine": "xml",
+      "method": "xpath.eval",
+      "params": {
+        "expression": "//c",
+        "version": "3.1",
+        "as": "boolean",
+        "namespaces": {
+          "o": "urn:example:order"
+        },
+        "input": {
+          "body": "<a><b>1</b></a>",
+          "headers": {
+            "h0": "x"
+          },
+          "properties": {
+            "p0": "y"
+          }
+        }
+      }
+    }
+  ]
+}

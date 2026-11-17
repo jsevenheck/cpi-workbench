@@ -10,7 +10,7 @@ import { attachmentInput, attachmentRows, parsePlatformFile, platformDoc, platfo
   soapHeaderInput, soapHeaderRows, type AttachmentRow, type PlatformKey, type PlatformRows, type SoapHeaderRow } from './platform';
 import { toRows } from './rows';
 import { isArchive, pathKey, projectPath } from './paths';
-import { resolveSimpleFunctions } from './simple';
+import { flowConfigKey, flowStepDefaults, runStep, settingsFromIflowStep, type FlowRun, type FlowStep, type RouteResult } from './flowcalls';
 import { callsJava } from './trust';
 
 export type StepTool = 'xslt' | 'groovy' | 'xsd' | 'xpath' | 'flow';
@@ -209,70 +209,8 @@ export const xpath = $state({
   running: false,
 });
 
-export type FlowStep = 'contentModifier' | 'filter' | 'router' | 'splitter' | 'gather' | 'converter' | 'encoder' | 'decoder' | 'messageDigest';
+export type { CmRow, FlowStep, Route, RouteResult } from './flowcalls';
 
-/** A Content Modifier row in the iFlow's encoding (type: constant, header, property, xpath, expression, ...). */
-export interface CmRow {
-  action: 'Create' | 'Delete';
-  name: string;
-  type: string;
-  value: string;
-  datatype: string;
-  default: string;
-}
-
-export interface Route {
-  name: string;
-  expressionType: 'xml' | 'nonxml';
-  condition: string;
-  default: boolean;
-}
-
-export interface RouteResult {
-  status: 'true' | 'false' | 'error' | 'not evaluated' | 'default';
-  message?: string;
-  /** The Camel spelling of a Non-XML condition, when CPI's had to be rewritten. */
-  camel?: string;
-}
-
-/**
- * JSON ↔ XML and XML ↔ CSV converters; mapping and array paths are text, one entry per line. The MCP server uses
- * the same defaults (`converter_defaults` in `mcp/flow.rs`); change both together.
- */
-function converterDefaults() {
-  return {
-    conversion: 'xmlToJson' as 'jsonToXml' | 'xmlToJson' | 'xmlToCsv' | 'csvToXml',
-    useNamespaces: false, separator: ':', namespaceMapping: '',
-    addRootElement: false, rootElementName: 'root', rootNamespace: '',
-    suppressRoot: false, streaming: false, streamingElements: 'all' as 'all' | 'specific', arrayPaths: '', outputEncoding: '',
-    sourcePath: '', fieldSeparator: ',', csvHeader: 'xml' as 'none' | 'xml' | 'xsd', includeParent: false, parentPath: '',
-    includeAttributes: false,
-    schema: '', targetPath: '', recordMarker: '', firstLineHeader: true, headerMapping: 'xsd' as 'xsd' | 'csv',
-  };
-}
-
-/**
- * The settings each flow step starts with, keyed as in `flow`: empty where the user fills them in (rows, routes,
- * expressions), SAP's defaults where the step has a choice (scheme, method, header name). Closing a step taken from
- * an iFlow brings them back.
- */
-function flowStepDefaults() {
-  return {
-    cm: { headers: [] as CmRow[], properties: [] as CmRow[], bodyType: 'constant' as 'constant' | 'expression', body: '' },
-    router: { routes: [] as Route[], throwException: false },
-    splitter: { splitter: 'general' as 'general' | 'iterating', expressionType: 'xpath' as 'xpath' | 'token' | 'lineBreak',
-      expression: '', grouping: '', streaming: true },
-    filter: { expression: '', valueType: 'nodelist' },
-    /** Gather's settings; its messages are not settings and are not part of this. */
-    gather: { messageType: 'sameXml', algorithm: 'combine', sourceXPath: '', targetXPath: '' },
-    converter: converterDefaults(),
-    /** Encoder and Decoder. The MCP server uses the same defaults (`mcp/flow.rs`); an imported step keeps its scheme. */
-    encoder: { scheme: 'base64Encode' },
-    decoder: { scheme: 'base64Decode' },
-    /** Message Digest. The MCP server uses the same defaults (`message_digest` in `mcp/flow.rs`); change both together. */
-    digest: { filter: '', canonicalization: 'c14n10', algorithm: 'SHA512', targetHeader: 'SAPMessageDigest' },
-  };
-}
 
 export const flow = $state({
   step: 'contentModifier' as FlowStep,
@@ -1635,9 +1573,7 @@ export async function runXpath() {
 }
 
 // ------------------------------------------------------------------ flow steps
-// XPath runs in the XML engine (Saxon, XPath 3.1 as SAP documents for the Content Modifier), Camel Simple and
-// the Content Modifier in the Groovy engine's Camel. The Router is evaluated here, route by route.
-// The MCP server repeats these calls (app/src-tauri/src/mcp/flow.rs); change the two together.
+// The calls live in flowcalls.ts, which the MCP server's flow.rs repeats; this keeps the tab's state.
 
 function namespaceMap() {
   const ns: Record<string, string> = {};
@@ -1656,162 +1592,27 @@ function flowInput() {
   return flow.binary ? { bodyBase64: flow.binary.base64, ...rows } : { body: flow.body, ...rows };
 }
 
-/**
- * Everything a flow run reads, taken when it starts: the message, the namespaces, the engines and the step's
- * settings. Edits while the run waits for the engines do not leak into it (the MCP server's Ctx does the same).
- */
-interface FlowRun {
-  input: ReturnType<typeof flowInput>;
-  namespaces: Record<string, string>;
-  xml: Profile;
-  camel: Profile;
-}
-
-async function xpathValue(run: FlowRun, expression: string, as: 'boolean' | 'string' | 'nodes', input = run.input) {
-  // Headers and properties are XPath variables ($name), as Camel's XPath resolver provides them (F39).
-  const r = await call('xpath.eval', { expression, version: '3.1', as, namespaces: run.namespaces, input }, run.xml);
-  if (!r.ok) throw new Error(r.diagnostics?.[0]?.message ?? 'XPath failed');
-  return r.value as string;
-}
-
-async function simpleEval(run: FlowRun, expression: string, mode: 'condition' | 'expression') {
-  const r = await call('simple.eval', { expression, mode, input: run.input }, run.camel);
-  if (!r.ok) throw new Error(r.diagnostics?.[0]?.message ?? 'Camel Simple failed');
-  return r as { value: string | null; evaluated?: string };
-}
-
 // A run's result goes to the step it was started for, and only if no newer run or newly opened step came since.
 let flowSeq = 0;
 const flowResultKey = { contentModifier: 'cmResult', filter: 'filterResult', router: 'routerResult', splitter: 'splitResult', gather: 'gatherResult',
   converter: 'converterResult', encoder: 'encoderResult', decoder: 'decoderResult', messageDigest: 'digestResult' } as const;
-const flowConfigKey = { contentModifier: 'cm', filter: 'filter', router: 'router', splitter: 'splitter', gather: 'gather', converter: 'converter',
-  encoder: 'encoder', decoder: 'decoder', messageDigest: 'digest' } as const;
 
 export async function runFlowStep() {
   const seq = ++flowSeq;
   const step = flow.step;
-  const run: FlowRun = { input: $state.snapshot(flowInput()), namespaces: namespaceMap(), xml: flowXmlProfile(), camel: flow.camel };
+  const run: FlowRun = { input: $state.snapshot(flowInput()), namespaces: namespaceMap(), xml: flowXmlProfile(), camel: flow.camel,
+    call: (method, params, profile) => call(method, params, profile) };
   const config: any = $state.snapshot(flow[flowConfigKey[step]]);
   flow.running = true;
   app.error = '';
   try {
-    const r = step === 'contentModifier' ? await runContentModifier(run, config)
-      : step === 'filter' ? await runFilter(run, config)
-      : step === 'router' ? await runRouter(run, config)
-      : step === 'splitter' ? await runSplitter(run, config)
-      : step === 'converter' ? await runConverter(run, config)
-      : step === 'encoder' ? await call('encode.run', { scheme: config.scheme, input: run.input }, run.xml)
-      : step === 'decoder' ? await call('decode.run', { scheme: config.scheme, input: run.input }, run.xml)
-      : step === 'messageDigest' ? await call('digest.run', { ...config, namespaces: run.namespaces, input: run.input }, run.xml)
-      : await runGather(run, config);
+    const r = await runStep(run, step, config);
     if (seq === flowSeq) flow[flowResultKey[step]] = r;
   } catch (e) {
     if (seq === flowSeq) fail(e);
   } finally {
     if (seq === flowSeq) flow.running = false;
   }
-}
-
-async function runContentModifier(run: FlowRun, cm: typeof flow.cm) {
-  // XPath rows read the incoming body, which the step changes only after all header and property rows. Rows run
-  // top to bottom (SAP), so an XPath that uses $name sees the headers and properties of the rows above it.
-  const input = run.input;
-  let state = input;
-  const done: Record<'headers' | 'properties', any[]> = { headers: [], properties: [] };
-  let pending: Record<'headers' | 'properties', any[]> = { headers: [], properties: [] };
-  for (const table of ['headers', 'properties'] as const) {
-    for (const r of cm[table]) {
-      let row: any = { ...r };
-      if (r.action === 'Create' && r.type === 'xpath') {
-        if (r.value.includes('$') && (pending.headers.length || pending.properties.length)) {
-          const s = await call('contentModifier.run', { ...pending, bodyType: 'constant', body: '', input: state }, run.camel);
-          if (s.ok) state = { ...input, headers: s.output.headers, properties: s.output.properties };
-          pending = { headers: [], properties: [] };
-        }
-        try {
-          row = { ...r, resolved: await xpathValue(run, r.value, r.datatype.startsWith('org.w3c.dom.') ? 'nodes' : 'string', state) };
-        } catch (e) {
-          throw new Error(`XPath of ${r.name}: ${(e as Error).message}`);
-        }
-      }
-      done[table].push(row);
-      pending[table].push(row);
-    }
-  }
-  return await call('contentModifier.run', {
-    ...done, bodyType: cm.bodyType, body: cm.body, input,
-  }, run.camel);
-}
-
-async function runRouter(run: FlowRun, router: typeof flow.router) {
-  const routes: RouteResult[] = router.routes.map((r) => ({ status: r.default ? 'default' : 'not evaluated' }));
-  if (new Set(router.routes.filter((r) => !r.default).map((r) => r.expressionType)).size > 1) {
-    return { routes, diagnostics: [],
-      taken: 'Error: the routes mix XML and Non-XML conditions; SAP: "the evaluation fails" (Define Router).' };
-  }
-  // Whether a route was taken, apart from its name: a route's name may be empty.
-  let taken = '';
-  let decided = false;
-  for (const [i, r] of router.routes.entries()) {
-    if (r.default) continue;
-    try {
-      const s = r.expressionType === 'xml' ? { value: await xpathValue(run, r.condition, 'boolean') } : await simpleEval(run, r.condition, 'condition');
-      routes[i] = { status: s.value === 'true' ? 'true' : 'false', camel: (s as { evaluated?: string }).evaluated };
-    } catch (e) {
-      routes[i] = { status: 'error', message: (e as Error).message };
-      taken = 'Error: the route condition failed, so CPI raises an exception.';
-      decided = true;
-      break;
-    }
-    if (routes[i].status === 'true') {
-      taken = r.name || `Route ${i + 1}`;
-      decided = true;
-      break;
-    }
-  }
-  if (!decided) {
-    const d = router.routes.find((r) => r.default);
-    taken = router.throwException ? 'No route matched: Throw Exception is set, so the Router raises an exception.'
-      : d ? d.name + ' (default route)' : 'No route matched and there is no default route.';
-  }
-  return { routes, taken, diagnostics: [] };
-}
-
-async function runSplitter(run: FlowRun, s: typeof flow.splitter) {
-  // XPath and grouping may refer to a header or property (SAP); Camel Simple resolves the reference first.
-  const resolve = async (v: string) => (v.includes('${') ? (await simpleEval(run, v, 'expression')).value ?? '' : v);
-  return await call('split.run', {
-    splitter: s.splitter, expressionType: s.expressionType, expression: await resolve(s.expression),
-    grouping: await resolve(String(s.grouping ?? '')), streaming: s.streaming, namespaces: run.namespaces,
-    input: 'bodyBase64' in run.input ? { bodyBase64: run.input.bodyBase64 } : { body: run.input.body },
-  }, run.xml);
-}
-
-async function runFilter(run: FlowRun, f: typeof flow.filter) {
-  return await call('filter.run', {
-    expression: await resolveSimpleFunctions(f.expression, async (e) => (await simpleEval(run, e, 'expression')).value ?? ''),
-    valueType: f.valueType, namespaces: run.namespaces, input: run.input,
-  }, run.xml);
-}
-
-async function runGather(run: FlowRun, g: typeof flow.gather) {
-  return await call('gather.run', {
-    messageType: g.messageType, algorithm: g.algorithm, sourceXPath: g.sourceXPath, targetXPath: g.targetXPath,
-    namespaces: run.namespaces, messages: g.messages,
-  }, run.xml);
-}
-
-async function runConverter(run: FlowRun, c: typeof flow.converter) {
-  // SAP (CSV to XML 1.4): schema, target path and record marker may come from a header or property.
-  const resolve = async (v: string) => (v.includes('${') ? (await simpleEval(run, v, 'expression')).value ?? '' : v);
-  const csv = c.conversion === 'csvToXml';
-  return await call('convert.run', {
-    ...c,
-    schema: csv ? await resolve(c.schema) : c.schema,
-    targetPath: csv ? await resolve(c.targetPath) : c.targetPath,
-    recordMarker: csv ? await resolve(c.recordMarker) : c.recordMarker,
-    namespaces: run.namespaces, input: run.input,
-  }, run.xml);
 }
 
 /** The splitter's messages go to the Gather step, as in an iFlow's Splitter → … → Gather. */
@@ -1837,36 +1638,11 @@ export function useAsFlowInput(body: string | { bodyBase64: string; bodySize: nu
 }
 
 function openFlowStep(step: IflowStep) {
-  const c = step.config ?? {};
-  const row = (r: any): CmRow => ({ action: r.action === 'Delete' ? 'Delete' : 'Create', name: r.name ?? '', type: r.type ?? 'constant',
-    value: r.value ?? '', datatype: r.datatype ?? '', default: r.default ?? '' });
-  if (step.type === 'contentModifier') {
-    flow.cm = { headers: (c.headers ?? []).map(row), properties: (c.properties ?? []).map(row),
-      bodyType: c.bodyType === 'expression' ? 'expression' : 'constant', body: c.body ?? '' };
-  } else if (step.type === 'router') {
-    flow.router = { routes: c.routes ?? [], throwException: !!c.throwException };
-  } else if (step.type === 'filter') {
-    flow.filter = { expression: c.expression ?? '', valueType: c.valueType ?? 'nodelist' };
-  } else if (step.type === 'converter') {
-    // The iFlow's lists become the tab's text fields (one entry per line). Settings the step does not have start
-    // from the defaults, not from a converter opened before.
-    flow.converter = { ...converterDefaults(), ...c,
-      namespaceMapping: Array.isArray(c.namespaceMapping) ? c.namespaceMapping.map((m: any) => `${m.prefix} = ${m.namespace}`).join('\n') : c.namespaceMapping ?? '',
-      arrayPaths: Array.isArray(c.arrayPaths) ? c.arrayPaths.join('\n') : c.arrayPaths ?? '' };
-  } else if (step.type === 'encoder') {
-    flow.encoder = { scheme: c.scheme ?? '' };
-  } else if (step.type === 'decoder') {
-    flow.decoder = { scheme: c.scheme ?? '' };
-  } else if (step.type === 'messageDigest') {
-    flow.digest = { filter: c.filter ?? '', canonicalization: c.canonicalization ?? '', algorithm: c.algorithm ?? '', targetHeader: c.targetHeader ?? '' };
-  } else if (step.type === 'gather') {
-    // The messages stay: they come from the splitter, not from the iFlow.
-    flow.gather = { ...flow.gather, messageType: c.messageType ?? 'sameXml', algorithm: c.algorithm ?? 'combine',
-      sourceXPath: c.sourceXPath ?? '', targetXPath: c.targetXPath ?? '' };
-  } else {
-    flow.splitter = { splitter: c.splitter, expressionType: c.expressionType, expression: c.expression ?? '',
-      grouping: c.grouping ?? '', streaming: c.streaming !== false };
-  }
+  const type = step.type as FlowStep;
+  const settings = settingsFromIflowStep(type, step.config ?? {});
+  // Gather's messages stay: they come from the splitter, not from the iFlow.
+  if (type === 'gather') flow.gather = { ...settings, messages: flow.gather.messages };
+  else (flow as any)[flowConfigKey[type]] = settings;
   flow.step = step.type as FlowStep;
   flow.sources[step.type as FlowStep] = `${step.iflow} · ${step.name || step.id}`;
   // Only this step's result is out of date; the other steps keep theirs.

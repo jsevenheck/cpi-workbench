@@ -14,6 +14,15 @@ of its version.
   [Project files and platform data](docs/project-files.md); the `case.json` format stays in
   [Regression test cases](docs/test-cases.md) for contributors.
 
+### Fixed
+
+- **A flow step from an iFlow without some settings** now runs with the step's defaults in the app, as it already
+  did over MCP: an Encoder or Decoder without a scheme (Base64), a Message Digest without canonicalization, algorithm
+  or target header, a Splitter without its type or expression type. Before, the app sent empty values.
+- **Converter lists over MCP**: an iFlow's namespace mapping and array paths reach the engine as the app sends them,
+  one entry per line. The Flow Steps tab and the MCP server now replay shared fixtures in their tests
+  (`testdata/flow-parity`), so the two cannot drift apart unnoticed.
+
 ## [0.5.0] - 2026-11-17
 
 ### Added

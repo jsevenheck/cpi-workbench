@@ -171,4 +171,5 @@ lists what is verified against CPI.
   `app/scripts/mcp-smoke.mjs`, which CI runs on the release build on Windows and macOS).
 
 The code is in `app/src-tauri/src/mcp/`. `flow.rs` follows the Flow Steps tab
-(`app/src/lib/store.svelte.ts`) call for call; change the two together.
+(`app/src/lib/flowcalls.ts`) call for call; the fixtures in `testdata/flow-parity` hold the calls both must
+make, and a test on each side replays them without engines.

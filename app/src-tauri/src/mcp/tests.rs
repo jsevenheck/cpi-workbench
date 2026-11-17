@@ -237,6 +237,35 @@ fn function_simple_becomes_a_string_literal() {
     assert_eq!(flow::resolve_simple_functions("function:simple(oops)", |_| Ok("".into())).unwrap(), "function:simple(oops)");
 }
 
+/// The MCP server's side of the parity fixtures (`testdata/flow-parity`): each step run makes exactly the engine
+/// calls the fixture lists, as the Flow Steps tab does (`app/tests/flowparity.test.mts`). No engine runs.
+#[test]
+fn flow_parity() {
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testdata/flow-parity");
+    let mut files: Vec<_> = std::fs::read_dir(&dir).unwrap().map(|e| e.unwrap().path())
+        .filter(|p| p.extension().is_some_and(|x| x == "json")).collect();
+    files.sort();
+    assert!(files.len() >= 10, "{files:?}");
+    for file in files {
+        let f: Value = serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
+        let answers = std::cell::RefCell::new(f["answers"].as_object().cloned().unwrap_or_default());
+        let calls = std::cell::RefCell::new(Vec::<Value>::new());
+        let call = |engine: &str, method: &str, params: Value| -> Result<Value, String> {
+            calls.borrow_mut().push(json!({ "engine": engine, "method": method, "params": params }));
+            let mut a = answers.borrow_mut();
+            Ok(match a.get_mut(method).and_then(Value::as_array_mut).filter(|l| !l.is_empty()) {
+                Some(list) => list.remove(0),
+                None => json!({ "ok": true }),
+            })
+        };
+        let ctx = flow::Ctx { call: &call, xml: "xml", camel: "camel", namespaces: f["namespaces"].clone(), input: f["input"].clone() };
+        let kind = f["step"]["type"].as_str().unwrap();
+        flow::run_step(&ctx, kind, &f["step"]["config"], f.get("messages").cloned())
+            .unwrap_or_else(|e| panic!("{}: {e}", file.display()));
+        assert_eq!(Value::Array(calls.into_inner()), f["calls"], "{}", file.display());
+    }
+}
+
 // ------------------------------------------------------------------ with engines
 
 /// A copy of the regression project with the iFlow test fixture under iflows/.

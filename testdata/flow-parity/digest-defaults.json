@@ -1,0 +1,47 @@
+{
+  "name": "digest-defaults",
+  "from": "iflow",
+  "step": {
+    "type": "messageDigest",
+    "config": {
+      "algorithm": "SHA256"
+    }
+  },
+  "input": {
+    "body": "<a><b>1</b></a>",
+    "headers": {
+      "h0": "x"
+    },
+    "properties": {
+      "p0": "y"
+    }
+  },
+  "namespaces": {
+    "o": "urn:example:order"
+  },
+  "answers": {},
+  "calls": [
+    {
+      "engine": "xml",
+      "method": "digest.run",
+      "params": {
+        "filter": "",
+        "canonicalization": "c14n10",
+        "algorithm": "SHA256",
+        "targetHeader": "SAPMessageDigest",
+        "namespaces": {
+          "o": "urn:example:order"
+        },
+        "input": {
+          "body": "<a><b>1</b></a>",
+          "headers": {
+            "h0": "x"
+          },
+          "properties": {
+            "p0": "y"
+          }
+        }
+      }
+    }
+  ]
+}

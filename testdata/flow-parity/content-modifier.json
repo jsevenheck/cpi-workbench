@@ -1,0 +1,202 @@
+{
+  "name": "content-modifier",
+  "from": "iflow",
+  "step": {
+    "type": "contentModifier",
+    "config": {
+      "headers": [
+        {
+          "name": "h1",
+          "value": "v"
+        },
+        {
+          "name": "h2",
+          "type": "xpath",
+          "value": "/a/b || $h1",
+          "datatype": "java.lang.String"
+        },
+        {
+          "action": "Delete",
+          "name": "h0"
+        }
+      ],
+      "properties": [
+        {
+          "name": "p1",
+          "type": "xpath",
+          "value": "/a",
+          "datatype": "org.w3c.dom.NodeList"
+        }
+      ],
+      "body": "${header.h1}",
+      "bodyType": "expression"
+    }
+  },
+  "input": {
+    "body": "<a><b>1</b></a>",
+    "headers": {
+      "h0": "x"
+    },
+    "properties": {
+      "p0": "y"
+    }
+  },
+  "namespaces": {
+    "o": "urn:example:order"
+  },
+  "answers": {
+    "contentModifier.run": [
+      {
+        "ok": true,
+        "output": {
+          "headers": {
+            "h0": "x",
+            "h1": "v"
+          },
+          "properties": {
+            "p0": "y"
+          }
+        }
+      }
+    ],
+    "xpath.eval": [
+      {
+        "ok": true,
+        "value": "1v"
+      },
+      {
+        "ok": true,
+        "value": "<a><b>1</b></a>"
+      }
+    ]
+  },
+  "calls": [
+    {
+      "engine": "camel",
+      "method": "contentModifier.run",
+      "params": {
+        "headers": [
+          {
+            "action": "Create",
+            "name": "h1",
+            "type": "constant",
+            "value": "v",
+            "datatype": "",
+            "default": ""
+          }
+        ],
+        "properties": [],
+        "bodyType": "constant",
+        "body": "",
+        "input": {
+          "body": "<a><b>1</b></a>",
+          "headers": {
+            "h0": "x"
+          },
+          "properties": {
+            "p0": "y"
+          }
+        }
+      }
+    },
+    {
+      "engine": "xml",
+      "method": "xpath.eval",
+      "params": {
+        "expression": "/a/b || $h1",
+        "version": "3.1",
+        "as": "string",
+        "namespaces": {
+          "o": "urn:example:order"
+        },
+        "input": {
+          "body": "<a><b>1</b></a>",
+          "headers": {
+            "h0": "x",
+            "h1": "v"
+          },
+          "properties": {
+            "p0": "y"
+          }
+        }
+      }
+    },
+    {
+      "engine": "xml",
+      "method": "xpath.eval",
+      "params": {
+        "expression": "/a",
+        "version": "3.1",
+        "as": "nodes",
+        "namespaces": {
+          "o": "urn:example:order"
+        },
+        "input": {
+          "body": "<a><b>1</b></a>",
+          "headers": {
+            "h0": "x",
+            "h1": "v"
+          },
+          "properties": {
+            "p0": "y"
+          }
+        }
+      }
+    },
+    {
+      "engine": "camel",
+      "method": "contentModifier.run",
+      "params": {
+        "headers": [
+          {
+            "action": "Create",
+            "name": "h1",
+            "type": "constant",
+            "value": "v",
+            "datatype": "",
+            "default": ""
+          },
+          {
+            "action": "Create",
+            "name": "h2",
+            "type": "xpath",
+            "value": "/a/b || $h1",
+            "datatype": "java.lang.String",
+            "default": "",
+            "resolved": "1v"
+          },
+          {
+            "action": "Delete",
+            "name": "h0",
+            "type": "constant",
+            "value": "",
+            "datatype": "",
+            "default": ""
+          }
+        ],
+        "properties": [
+          {
+            "action": "Create",
+            "name": "p1",
+            "type": "xpath",
+            "value": "/a",
+            "datatype": "org.w3c.dom.NodeList",
+            "default": "",
+            "resolved": "<a><b>1</b></a>"
+          }
+        ],
+        "bodyType": "expression",
+        "body": "${header.h1}",
+        "input": {
+          "body": "<a><b>1</b></a>",
+          "headers": {
+            "h0": "x"
+          },
+          "properties": {
+            "p0": "y"
+          }
+        }
+      }
+    }
+  ]
+}

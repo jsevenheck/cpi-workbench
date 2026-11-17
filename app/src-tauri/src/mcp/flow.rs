@@ -1,5 +1,6 @@
-//! Flow steps for the MCP server. The Flow Steps tab leads (`app/src/lib/store.svelte.ts`, section "flow steps");
-//! this follows it call for call, so that both give the same result. Change the tab first, then this:
+//! Flow steps for the MCP server. The Flow Steps tab leads (`app/src/lib/flowcalls.ts`); this follows it call for
+//! call, so that both give the same result. The fixtures in `testdata/flow-parity` hold the calls both must make, and
+//! `flow_parity` in `tests.rs` and `app/tests/flowparity.test.mts` replay them without engines.
 //! * XPath (Content Modifier rows, XML Router conditions, Filter, Splitter, Gather), the converters, the Encoder,
 //!   the Decoder and the Message Digest run on the XML engine, 9.9 when installed; headers and properties are XPath variables (F39).
 //! * Camel Simple and the Content Modifier run on the Camel of a Groovy engine.
@@ -8,12 +9,16 @@ use super::tools::{self, engine_call, str_arg, Args};
 use super::Server;
 use serde_json::{json, Value};
 
-struct Ctx<'a> {
-    server: &'a Server,
-    xml: &'static str,
-    camel: &'a str,
-    namespaces: Value,
-    input: Value,
+/// An engine call: runtime, method, parameters.
+pub(super) type EngineCall<'a> = &'a dyn Fn(&str, &str, Value) -> Result<Value, String>;
+
+/// Everything a step reads, taken when it starts (the tab's `FlowRun`).
+pub(super) struct Ctx<'a> {
+    pub call: EngineCall<'a>,
+    pub xml: &'a str,
+    pub camel: &'a str,
+    pub namespaces: Value,
+    pub input: Value,
 }
 
 pub fn run(server: &Server, args: &Args) -> Result<Value, String> {
@@ -42,8 +47,9 @@ pub fn run(server: &Server, args: &Args) -> Result<Value, String> {
             }
         }
     }
+    let call = |runtime: &str, method: &str, params: Value| engine_call(server, runtime, method, params);
     let ctx = Ctx {
-        server,
+        call: &call,
         xml: tools::xml_runtime(server),
         camel: tools::camel_runtime(server),
         namespaces: args.get("namespaces").cloned().unwrap_or(json!({})),
@@ -52,22 +58,8 @@ pub fn run(server: &Server, args: &Args) -> Result<Value, String> {
     if kind != "gather" && (args.contains_key("messages") || args.contains_key("messagesFrom")) {
         return Err("messages and messagesFrom are for a Gather step; the other steps take body, bodyPath or messageFrom.".into());
     }
-    let mut result = match kind.as_str() {
-        "contentModifier" => content_modifier(&ctx, &config)?,
-        "filter" => filter(&ctx, &config)?,
-        "router" => router(&ctx, &config)?,
-        "splitter" => splitter(&ctx, &config)?,
-        "gather" => gather(&ctx, &config, args)?,
-        "converter" => converter(&ctx, &config)?,
-        "encoder" => engine_call(ctx.server, ctx.xml, "encode.run", json!({
-            "scheme": or(&config, "scheme", "base64Encode"), "input": ctx.input }))?,
-        "decoder" => engine_call(ctx.server, ctx.xml, "decode.run", json!({
-            "scheme": or(&config, "scheme", "base64Decode"), "input": ctx.input }))?,
-        "messageDigest" => message_digest(&ctx, &config)?,
-        "" => return Err("The step has no type.".into()),
-        other => return Err(format!("UnsupportedInSimulator: the step type '{other}' (simulated: contentModifier, filter, \
-            router, splitter, gather, converter, encoder, decoder, messageDigest).")),
-    };
+    let messages = if kind == "gather" { Some(gather_messages(server, args)?) } else { None };
+    let mut result = run_step(&ctx, &kind, &config, messages)?;
     result["step"] = json!({ "type": kind, "name": step.get("name"), "config": config });
     // What the import could not read from the iFlow (a Message Digest's filter, F62).
     if let Some(note) = step.get("note").filter(|n| n.is_string()) {
@@ -76,7 +68,27 @@ pub fn run(server: &Server, args: &Args) -> Result<Value, String> {
     Ok(result)
 }
 
-/// The settings of each step type in the Flow Steps tab (`flow` in `store.svelte.ts`).
+/// Runs a step with its config; a Gather gets its messages. No engine is reached except through `ctx.call`.
+pub(super) fn run_step(ctx: &Ctx, kind: &str, config: &Value, messages: Option<Value>) -> Result<Value, String> {
+    match kind {
+        "contentModifier" => content_modifier(ctx, config),
+        "filter" => filter(ctx, config),
+        "router" => router(ctx, config),
+        "splitter" => splitter(ctx, config),
+        "gather" => gather(ctx, config, messages.unwrap_or(json!([]))),
+        "converter" => converter(ctx, config),
+        "encoder" => (ctx.call)(ctx.xml, "encode.run", json!({
+            "scheme": or(config, "scheme", "base64Encode"), "input": ctx.input })),
+        "decoder" => (ctx.call)(ctx.xml, "decode.run", json!({
+            "scheme": or(config, "scheme", "base64Decode"), "input": ctx.input })),
+        "messageDigest" => message_digest(ctx, config),
+        "" => Err("The step has no type.".into()),
+        other => Err(format!("UnsupportedInSimulator: the step type '{other}' (simulated: contentModifier, filter, \
+            router, splitter, gather, converter, encoder, decoder, messageDigest).")),
+    }
+}
+
+/// The settings of each step type in the Flow Steps tab (`flowStepDefaults` in `flowcalls.ts`).
 fn config_keys(kind: &str) -> Option<&'static [&'static str]> {
     Some(match kind {
         "contentModifier" => &["headers", "properties", "bodyType", "body"],
@@ -91,7 +103,7 @@ fn config_keys(kind: &str) -> Option<&'static [&'static str]> {
     })
 }
 
-/// The converter's settings (`flow.converter` in `store.svelte.ts`); `ConverterStep.java` reads them.
+/// The converter's settings (`converterDefaults` in `flowcalls.ts`); `ConverterStep.java` reads them.
 const CONVERTER_KEYS: [&str; 23] = ["conversion", "useNamespaces", "separator", "namespaceMapping", "addRootElement",
     "rootElementName", "rootNamespace", "suppressRoot", "streaming", "streamingElements", "arrayPaths", "outputEncoding",
     "sourcePath", "fieldSeparator", "csvHeader", "includeParent", "parentPath", "includeAttributes", "schema", "targetPath",
@@ -131,7 +143,7 @@ fn first_message(r: &Value, fallback: &str) -> String {
 
 impl Ctx<'_> {
     fn xpath_value(&self, expression: &str, as_: &str, input: &Value) -> Result<String, String> {
-        let r = engine_call(self.server, self.xml, "xpath.eval", json!({
+        let r = (self.call)(self.xml, "xpath.eval", json!({
             "expression": expression, "version": "3.1", "as": as_, "namespaces": self.namespaces, "input": input,
         }))?;
         if r["ok"] != true {
@@ -141,7 +153,7 @@ impl Ctx<'_> {
     }
 
     fn simple(&self, expression: &str, mode: &str) -> Result<Value, String> {
-        let r = engine_call(self.server, self.camel, "simple.eval",
+        let r = (self.call)(self.camel, "simple.eval",
             json!({ "expression": expression, "mode": mode, "input": self.input }))?;
         if r["ok"] != true {
             return Err(first_message(&r, "Camel Simple failed"));
@@ -150,7 +162,7 @@ impl Ctx<'_> {
     }
 }
 
-/// A row as the Flow Steps tab keeps it (`openFlowStep`).
+/// A row as the Flow Steps tab keeps it (`settingsFromIflowStep`).
 fn cm_row(r: &Value) -> Value {
     json!({
         "action": if s(r, "action") == "Delete" { "Delete" } else { "Create" },
@@ -180,7 +192,7 @@ fn content_modifier(ctx: &Ctx, config: &Value) -> Result<Value, String> {
                     p["bodyType"] = json!("constant");
                     p["body"] = json!("");
                     p["input"] = state.clone();
-                    let st = engine_call(ctx.server, ctx.camel, "contentModifier.run", p)?;
+                    let st = (ctx.call)(ctx.camel, "contentModifier.run", p)?;
                     if st["ok"] == true {
                         // The incoming body (text or bytes) with the rows so far.
                         state = input.clone();
@@ -198,7 +210,7 @@ fn content_modifier(ctx: &Ctx, config: &Value) -> Result<Value, String> {
         }
     }
     let body_type = if s(config, "bodyType") == "expression" { "expression" } else { "constant" };
-    engine_call(ctx.server, ctx.camel, "contentModifier.run", json!({
+    (ctx.call)(ctx.camel, "contentModifier.run", json!({
         "headers": done["headers"], "properties": done["properties"],
         "bodyType": body_type, "body": s(config, "body"), "input": input,
     }))
@@ -274,7 +286,7 @@ fn splitter(ctx: &Ctx, config: &Value) -> Result<Value, String> {
         Value::String(g) => g.clone(),
         other => other.to_string(),
     };
-    engine_call(ctx.server, ctx.xml, "split.run", json!({
+    (ctx.call)(ctx.xml, "split.run", json!({
         "splitter": or(config, "splitter", "general"), "expressionType": or(config, "expressionType", "xpath"),
         "expression": resolve(s(config, "expression").to_string())?, "grouping": resolve(grouping)?,
         "streaming": config["streaming"] != false,
@@ -292,42 +304,46 @@ pub(super) fn body_only(input: &Value) -> Value {
 
 fn filter(ctx: &Ctx, config: &Value) -> Result<Value, String> {
     let expression = resolve_simple_functions(s(config, "expression"), |e| Ok(s(&ctx.simple(e, "expression")?, "value").to_string()))?;
-    engine_call(ctx.server, ctx.xml, "filter.run", json!({
+    (ctx.call)(ctx.xml, "filter.run", json!({
         "expression": expression, "valueType": or(config, "valueType", "nodelist"),
         "namespaces": ctx.namespaces, "input": ctx.input,
     }))
 }
 
-fn gather(ctx: &Ctx, config: &Value, args: &Args) -> Result<Value, String> {
-    let messages = match (args.get("messages"), args.get("messagesFrom")) {
+/// A Gather's messages: given, or a Splitter run's (`messagesFrom`).
+fn gather_messages(server: &Server, args: &Args) -> Result<Value, String> {
+    Ok(match (args.get("messages"), args.get("messagesFrom")) {
         (Some(_), Some(_)) => return Err("Give messages or messagesFrom, not both.".into()),
         (Some(m), None) => m.clone(),
         (None, Some(_)) => {
-            let ms = tools::messages_from(ctx.server, args)?;
+            let ms = tools::messages_from(server, args)?;
             if ms.iter().any(|m| m.body_base64.is_some()) {
                 return Err("UnsupportedInSimulator: a Gather of binary messages (Zip / Tar Gather is not simulated).".into());
             }
             json!(ms.into_iter().map(|m| m.body).collect::<Vec<_>>())
         }
         (None, None) => return Err("A Gather step needs messages (the bodies to gather) or messagesFrom (a Splitter's runId).".into()),
-    };
-    engine_call(ctx.server, ctx.xml, "gather.run", json!({
+    })
+}
+
+fn gather(ctx: &Ctx, config: &Value, messages: Value) -> Result<Value, String> {
+    (ctx.call)(ctx.xml, "gather.run", json!({
         "messageType": or(config, "messageType", "sameXml"), "algorithm": or(config, "algorithm", "combine"),
         "sourceXPath": s(config, "sourceXPath"), "targetXPath": s(config, "targetXPath"),
         "namespaces": ctx.namespaces, "messages": messages,
     }))
 }
 
-/// Message Digest; keys the config leaves out take the tab's defaults (`flow.digest` in `store.svelte.ts`).
+/// Message Digest; keys the config leaves out take the tab's defaults (`flowStepDefaults` in `flowcalls.ts`).
 fn message_digest(ctx: &Ctx, config: &Value) -> Result<Value, String> {
-    engine_call(ctx.server, ctx.xml, "digest.run", json!({
+    (ctx.call)(ctx.xml, "digest.run", json!({
         "filter": s(config, "filter"), "canonicalization": or(config, "canonicalization", "c14n10"),
         "algorithm": or(config, "algorithm", "SHA512"), "targetHeader": or(config, "targetHeader", "SAPMessageDigest"),
         "namespaces": ctx.namespaces, "input": ctx.input,
     }))
 }
 
-/// The Flow Steps tab's converter settings before any change (`converterDefaults()` in `store.svelte.ts`).
+/// The Flow Steps tab's converter settings before any change (`converterDefaults()` in `flowcalls.ts`).
 fn converter_defaults() -> Value {
     json!({
         "conversion": "xmlToJson",
@@ -343,7 +359,7 @@ fn converter_defaults() -> Value {
 /// JSON ↔ XML, XML ↔ CSV. CSV to XML's schema, target path and record marker may name a header or property
 /// (SAP, version 1.4); Camel Simple resolves them first, as in the tab's `runConverter`.
 fn converter(ctx: &Ctx, config: &Value) -> Result<Value, String> {
-    // Keys the config leaves out (or sets null) take the tab's defaults (`converterDefaults()` in the store).
+    // Keys the config leaves out (or sets null) take the tab's defaults (`converterDefaults()` in flowcalls.ts).
     let mut params = converter_defaults();
     if let Some(given) = config.as_object() {
         for (k, v) in given {
@@ -351,6 +367,15 @@ fn converter(ctx: &Ctx, config: &Value) -> Result<Value, String> {
                 params[k.as_str()] = v.clone();
             }
         }
+    }
+    // An iFlow's lists become the tab's text, one `prefix = namespace` or path per line (`settingsFromIflowStep`).
+    if let Some(list) = params["namespaceMapping"].as_array() {
+        let text: Vec<String> = list.iter().map(|m| format!("{} = {}", s(m, "prefix"), s(m, "namespace"))).collect();
+        params["namespaceMapping"] = json!(text.join("\n"));
+    }
+    if let Some(list) = params["arrayPaths"].as_array() {
+        let text: Vec<&str> = list.iter().map(|p| p.as_str().unwrap_or_default()).collect();
+        params["arrayPaths"] = json!(text.join("\n"));
     }
     if s(&params, "conversion") == "csvToXml" {
         for key in ["schema", "targetPath", "recordMarker"] {
@@ -362,7 +387,7 @@ fn converter(ctx: &Ctx, config: &Value) -> Result<Value, String> {
     }
     params["namespaces"] = ctx.namespaces.clone();
     params["input"] = ctx.input.clone();
-    engine_call(ctx.server, ctx.xml, "convert.run", params)
+    (ctx.call)(ctx.xml, "convert.run", params)
 }
 
 /// SAP: `function:simple('${property.x}')` in a Filter XPath. Camel Simple gives the value, which goes into

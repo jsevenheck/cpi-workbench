@@ -86,7 +86,8 @@ class IflowIndexTest {
         Map<String, Object> defined = in.get("Defined Only");
         assertEquals(false, defined.get("required"));
         assertNull(defined.get("description"), "an empty description is none");
-        assertEquals(true, defined.get("unresolved"));
+        assertEquals(true, defined.get("unused"));
+        assertEquals(false, defined.get("unresolved"), "defined, but nothing uses it: no value is missing");
 
         Map<String, Map<String, Object>> out = params((Map<String, Object>) iflows.get(1));
         Map<String, Object> url = out.get("BackendUrl");

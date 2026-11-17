@@ -17,3 +17,13 @@ test('highlight marks every match ignoring case, and nothing for an empty query'
     [{ text: 'sftp://', match: false }, { text: 'Host', match: true }, { text: '/', match: false }, { text: 'host', match: true }]);
   assert.deepEqual(highlight('abc', ' '), [{ text: 'abc', match: false }]);
 });
+
+test('a diagram value is searched whole, a cut one up to the cut, a skipped key not at all', async () => {
+  const { whereUsedQuery } = await import('../src/lib/whereused.ts');
+  assert.equal(whereUsedQuery('address', 'https://x'), 'https://x');
+  const cut = 'a'.repeat(2000) + '…';
+  assert.equal(whereUsedQuery('table', cut), 'a'.repeat(2000));
+  assert.equal(whereUsedQuery('note', 'and so on…'), 'and so on…');
+  assert.equal(whereUsedQuery('componentNS', 'sap'), null);
+  assert.equal(whereUsedQuery('address', ''), null);
+});

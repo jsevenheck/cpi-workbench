@@ -3,6 +3,7 @@
   // opens there (double-click, or Open in the details); the others show their settings.
   import { untrack } from 'svelte';
   import { app, iflowStepFor, openIflowStep, selectIflowNode, showWhereUsed } from '../lib/store.svelte';
+  import { SKIPPED_KEYS, whereUsedQuery } from '../lib/whereused';
   import { extent, flowPath, shapeOf, typeLabel, type Box, type IflowModel, type IflowNode } from '../lib/iflowmodel';
 
   const TAB: Record<string, string> = { groovy: 'Groovy Script', xslt: 'XSLT Mapping', xsd: 'XSD Validation', mmap: 'Groovy Script' };
@@ -142,8 +143,14 @@
   let adapters = $derived(selected && (selected.kind === 'sender' || selected.kind === 'receiver')
     ? (model?.flows ?? []).filter((f) => f.kind === 'message' && (f.source === selected!.id || f.target === selected!.id))
     : []);
-  const META = new Set(['cmdVariantUri', 'componentVersion', 'ComponentType', 'direction']);
+  // Already in the adapter's heading, or metadata the index leaves out.
+  const ADAPTER_SHOWN = new Set(['ComponentType', 'direction', ...SKIPPED_KEYS]);
 </script>
+
+{#snippet find(k: string, v: unknown)}
+  {@const q = whereUsedQuery(k, v)}
+  {#if q}<button class="icon" onclick={() => showWhereUsed(q)} title="Where else is this value used?" aria-label="Where else is {k} used">⌕</button>{/if}
+{/snippet}
 
 <div class="diagram">
   <header class="bar">
@@ -246,8 +253,7 @@
           <table>
             <tbody>
               {#each properties as [k, v]}<tr><td class="mono key">{k}</td><td class="mono">{v}</td>
-                <td>{#if v && k !== 'cmdVariantUri' && k !== 'componentVersion'}<button class="icon" onclick={() => showWhereUsed(String(v))}
-                  title="Where else is this value used?" aria-label="Where else is {k} used">⌕</button>{/if}</td></tr>{/each}
+                <td>{@render find(k, v)}</td></tr>{/each}
             </tbody>
           </table>
         {/if}
@@ -255,9 +261,8 @@
           <h4 class="adapter">{f.adapter} {f.direction === 'Receiver' ? 'receiver' : 'sender'} adapter</h4>
           <table>
             <tbody>
-              {#each Object.entries(f.properties ?? {}).filter(([k, v]) => v && !META.has(k)) as [k, v]}<tr><td class="mono key">{k}</td><td class="mono">{v}</td>
-                <td><button class="icon" onclick={() => showWhereUsed(String(v))}
-                  title="Where else is this value used?" aria-label="Where else is {k} used">⌕</button></td></tr>{/each}
+              {#each Object.entries(f.properties ?? {}).filter(([k, v]) => v && !ADAPTER_SHOWN.has(k)) as [k, v]}<tr><td class="mono key">{k}</td><td class="mono">{v}</td>
+                <td>{@render find(k, v)}</td></tr>{/each}
             </tbody>
           </table>
         {/each}

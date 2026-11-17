@@ -44,6 +44,19 @@ export interface IndexedIflow {
 export const KINDS: [string, string][] = [['', 'Anything'], ['address', 'Address'], ['credential', 'Credential'],
   ['queue', 'Queue'], ['key', 'Key alias'], ['file', 'File'], ['parameter', 'Parameter']];
 
+/** Keys the index leaves out (IflowIndex.SKIPPED): searching for their values finds nothing. Keep both in step. */
+export const SKIPPED_KEYS = new Set(['cmdVariantUri', 'componentVersion', 'componentNS', 'componentSWCVName', 'componentSWCVId']);
+
+/**
+ * What to search for a property value shown in the diagram. `iflow.models` cuts long values and ends them with `…`;
+ * the index holds them whole, so the part before the cut is searched. Null for a key the index leaves out.
+ */
+export function whereUsedQuery(key: string, value: unknown): string | null {
+  const v = value == null ? '' : String(value);
+  if (!v || SKIPPED_KEYS.has(key)) return null;
+  return v.length > 2000 && v.endsWith('…') ? v.slice(0, -1) : v;
+}
+
 export interface HitGroup {
   iflow: string;
   elements: { element: string; node: string; name: string; label: string; hits: IndexEntry[] }[];

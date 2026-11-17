@@ -249,7 +249,7 @@ public final class IflowIndex {
             out.add(Json.o().with("name", name).with("value", values.getProperty(name)).with("type", d.get("type"))
                     .with("required", d.containsKey("isRequired") ? "true".equals(d.get("isRequired")) : null)
                     .with("description", description == null || description.isEmpty() ? null : description)
-                    .with("uses", u).with("unused", u.isEmpty()).with("unresolved", values.getProperty(name) == null));
+                    .with("uses", u).with("unused", u.isEmpty()).with("unresolved", !u.isEmpty() && values.getProperty(name) == null));
         });
         return out;
     }

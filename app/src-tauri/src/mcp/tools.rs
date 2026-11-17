@@ -253,7 +253,7 @@ CPI, per step type, and what is not." })),
              imported iFlows' steps; their files open with read_file and run with the tools above.",
             import, &["zip"], Effect::WritesProject),
         tool("iflow_where_used", "Where used in the imported iFlows",
-            "Searches the iFlows under iflows/ (read-only, nothing connects to a tenant): which adapters, steps and routes use a              value (a host, credential alias, queue, file or {{parameter}}), with the iFlow, element and property key of each              place. With parameters: true, lists each iFlow's externalized parameters, their values, uses, and those unused              or without a value. Give query, kind, or both; or parameters.",
+            "Searches the iFlows under iflows/ (read-only, nothing connects to a tenant): which adapters, steps and routes use a \n             value (a host, credential alias, queue, file or {{parameter}}), with the iFlow, element and property key of each \n             place. With parameters: true, lists each iFlow's externalized parameters, their values, uses, and those unused \n             or without a value. Give query, kind, or both; or parameters.",
             where_used, &[], Effect::ReadOnly),
         tool("reference", "Simulator reference",
             "What the simulator offers, generated from its sources: the Script API (script-api), the platform/ data formats \

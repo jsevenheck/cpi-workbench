@@ -51,7 +51,10 @@ export const whereUsed = $state({
   error: '',
 });
 
+// Each search and each index load counts up; a late answer whose count is not the latest is dropped (also after a
+// project was closed, which counts both up).
 let whereUsedSeq = 0;
+let indexSeq = 0;
 
 /** Runs the Where used search for the tab's query, kind and iFlow. */
 export async function searchIflows() {
@@ -77,11 +80,14 @@ export async function searchIflows() {
 /** The parameters of the imported iFlows, for the Where used tab's Parameters view. */
 export async function loadIflowIndex() {
   if (!app.project) return;
+  const seq = ++indexSeq;
   try {
-    whereUsed.index = (await call('iflow.index')).iflows;
+    const iflows = (await call('iflow.index')).iflows;
+    if (seq !== indexSeq) return;
+    whereUsed.index = iflows;
     whereUsed.error = '';
   } catch (e) {
-    whereUsed.error = (e as Error).message;
+    if (seq === indexSeq) whereUsed.error = (e as Error).message;
   }
 }
 
@@ -742,9 +748,9 @@ export async function closeProject() {
   app.iflowSelected = null;
   closeIflowFlowSteps();
   if (app.tool === 'diagram' || app.tool === 'whereused') app.tool = app.stepTool;
-  whereUsed.hits = [];
-  whereUsed.index = [];
-  whereUsed.searched = '';
+  whereUsedSeq++;
+  indexSeq++;
+  Object.assign(whereUsed, { view: 'search', query: '', kind: '', iflow: '', hits: [], searched: '', index: [], error: '' });
 }
 
 export async function refreshFiles() {
@@ -773,6 +779,7 @@ export async function loadIflowModels() {
   }
   if (!app.iflowModels.length && (app.tool === 'diagram' || app.tool === 'whereused')) app.tool = app.stepTool;
   // Results of the iFlows before a rescan or import would point at elements that may be gone.
+  if (whereUsed.iflow && !app.iflowModels.some((m) => m.iflow === whereUsed.iflow)) whereUsed.iflow = '';
   if (whereUsed.searched || whereUsed.kind) void searchIflows();
   if (whereUsed.index.length) void loadIflowIndex();
 }

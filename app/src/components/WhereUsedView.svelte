@@ -88,7 +88,7 @@
       {/if}
     {:else}
       <p class="muted small">Externalized parameters (<code>{'{{'}name{'}}'}</code>) with their values from each export's
-        <code>parameters.prop</code>, type and description from <code>parameters.propdef</code>. <b>Unused</b>: a value nothing uses. <b>No value</b>: used, but the export has no value for it.</p>
+        <code>parameters.prop</code>, type and description from <code>parameters.propdef</code>. <b>Unused</b>: given a value or a definition, but nothing uses it. <b>No value</b>: used, but the export has no value for it.</p>
       {#each shownIndex as i (i.iflow)}
         <section>
           <h3>{i.name ?? i.iflow}</h3>

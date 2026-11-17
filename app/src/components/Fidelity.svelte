@@ -21,9 +21,10 @@
 </script>
 
 {#if rows.length}
-  <button class="small fid {basis === 'Tenant' ? 'tenant' : basis === 'Documented' ? 'doc' : 'assume'}" onclick={() => (open = true)}
-    title="Fidelity of {label}: {basis ? TEXT[basis] : ''}. Click for details." aria-label="Fidelity of {label}: {basis}">
-    Fidelity: {basis === 'Tenant' ? 'tenant-verified' : basis === 'Documented' ? 'documented' : 'assumptions'}
+  <!-- No basis: every row of the step is "Not supported", which says what the simulator lacks, not how it is backed. -->
+  <button class="small fid {basis === 'Tenant' ? 'tenant' : basis === 'Documented' ? 'doc' : basis ? 'assume' : ''}" onclick={() => (open = true)}
+    title="Fidelity of {label}: {TEXT[basis ?? 'Not supported']}. Click for details." aria-label="Fidelity of {label}: {basis ?? 'Not supported'}">
+    Fidelity: {basis === 'Tenant' ? 'tenant-verified' : basis === 'Documented' ? 'documented' : basis ? 'assumptions' : 'gaps only'}
   </button>
 {/if}
 

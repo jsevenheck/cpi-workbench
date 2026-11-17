@@ -394,7 +394,9 @@ fn converter(ctx: &Ctx, config: &Value) -> Result<Value, String> {
     }
     // An iFlow's lists become the tab's text, one `prefix = namespace` or path per line (`settingsFromIflowStep`).
     if let Some(list) = params["namespaceMapping"].as_array() {
-        let text: Vec<String> = list.iter().map(|m| format!("{} = {}", s(m, "prefix"), s(m, "namespace"))).collect();
+        // A pair without prefix or namespace is left out, as the engine does with a list (`ConverterStep.mapping`).
+        let text: Vec<String> = list.iter().map(|m| (s(m, "prefix").trim(), s(m, "namespace").trim()))
+            .filter(|(p, n)| !p.is_empty() && !n.is_empty()).map(|(p, n)| format!("{p} = {n}")).collect();
         params["namespaceMapping"] = json!(text.join("\n"));
     }
     if let Some(list) = params["arrayPaths"].as_array() {

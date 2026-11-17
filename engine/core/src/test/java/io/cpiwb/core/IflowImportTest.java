@@ -13,6 +13,7 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -232,5 +233,17 @@ class IflowImportTest {
         more.put("empty", " ");
         String note = (String) FlowSteps.of(act, more, params).get("note");
         assertTrue(note.contains("does not read: xpathFilter.") && note.contains("F62"), note);
+
+        // A choice the export leaves out stays out, so the tab and the MCP server take their default and name it as
+        // assumed; an empty string would reach the engine as a scheme or header name instead.
+        assertEquals("{}", Json.write(FlowSteps.of(act, Map.of("activityType", "Encoder"), params).get("config")));
+        assertEquals("{\"filter\":\"\"}", Json.write(FlowSteps.of(act, Map.of("activityType", "MessageDigest"), params).get("config")));
+        assertEquals("{\"sourceXPath\":\"\",\"targetXPath\":\"\"}",
+                Json.write(FlowSteps.of(act, Map.of("activityType", "Gather"), params).get("config")));
+        assertEquals("{\"expression\":\"\"}", Json.write(FlowSteps.of(act, Map.of("activityType", "Filter"), params).get("config")));
+        Map<String, Object> split = Json.obj(FlowSteps.of(act, Map.of("activityType", "Splitter", "splitType", "GeneralSplitter",
+                "splitExprValue", "/a"), params), "config");
+        assertFalse(split.containsKey("expressionType"));
+        assertEquals("/a", split.get("expression"));
     }
 }

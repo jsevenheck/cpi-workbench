@@ -719,6 +719,21 @@ if (process.env.CPIWB_IFLOW_ZIP) {
     if ((await page.locator('.diagram .bar .file').innerText()) !== modelPath) throw new Error('background deselection changed the rendered iFlow');
     if (shots) await page.screenshot({ path: path.join(shots, 'g6b-diagram-deselected.png') });
     console.log('diagram regressions passed: selected pan, Close details, background deselection on second iFlow');
+    // Where used: an iFlow chosen in Parameters narrows the search hits shown on going back to Search.
+    await page.getByRole('tab', { name: 'Where used', exact: true }).click();
+    await page.getByRole('tab', { name: 'Search' }).click();
+    const wuPicker = page.locator('.wu select[aria-label="iFlow"]');
+    await wuPicker.selectOption('');
+    await page.getByLabel('Search the iFlows').fill('s4.example');
+    const summary = page.locator('.wu .body p.small').first();
+    await page.locator('.wu section', { hasText: 'SOAP receiver' }).nth(1).waitFor({ timeout: 10000 })
+      .catch(() => fail('Where used did not find s4.example in both iFlows'));
+    await page.waitForTimeout(600); // the typed search's debounce (250 ms) must not run after the iFlow is chosen
+    await page.getByRole('tab', { name: 'Parameters' }).click();
+    await wuPicker.selectOption(shown);
+    await page.getByRole('tab', { name: 'Search' }).click();
+    await page.waitForFunction(() => document.querySelectorAll('.wu .body section').length === 1, null, { timeout: 10000 })
+      .catch(async () => fail('Search kept the hits for all iFlows after one was chosen in Parameters: ' + (await summary.innerText())));
   } finally {
     fs.rmSync(secondZip, { force: true });
   }

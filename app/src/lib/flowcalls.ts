@@ -138,7 +138,11 @@ export function defaultedSettings(type: FlowStep, c: any = {}): string[] {
 /** A converter list as the tab's text: one `prefix = namespace` or path per line. */
 function converterText(v: unknown, key: 'namespaceMapping' | 'arrayPaths'): string {
   if (!Array.isArray(v)) return (v as string) ?? '';
-  return key === 'namespaceMapping' ? v.map((m: any) => `${m.prefix} = ${m.namespace}`).join('\n') : v.join('\n');
+  // A pair without prefix or namespace is left out, as the engine does with a list (ConverterStep.mapping).
+  return key === 'namespaceMapping'
+    ? v.map((m: any) => [String(m?.prefix ?? '').trim(), String(m?.namespace ?? '').trim()]).filter(([p, n]) => p && n)
+      .map(([p, n]) => `${p} = ${n}`).join('\n')
+    : v.join('\n');
 }
 
 /** An engine call: method, parameters and the engine (profile) that runs it. */

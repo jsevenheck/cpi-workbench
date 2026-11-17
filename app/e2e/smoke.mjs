@@ -31,6 +31,22 @@ await page.waitForTimeout(1000);
 if (await page.locator('section.output .badge').count()) fail('something ran on an empty start');
 if (shots) await page.screenshot({ path: path.join(shots, '1-xslt-empty.png') });
 
+// 1-) The Fidelity dialog is modal for the keyboard: focus moves in, Tab stays in, Escape closes and gives focus back.
+const fid = page.getByRole('button', { name: /^Fidelity of XSLT Mapping/ });
+await fid.focus();
+await page.keyboard.press('Enter');
+const fidDialog = page.getByRole('dialog', { name: 'Fidelity of XSLT Mapping' });
+await fidDialog.waitFor({ timeout: 5000 });
+const focusedText = () => page.evaluate(() => document.activeElement?.textContent?.trim() ?? '');
+await page.waitForFunction(() => document.activeElement?.closest('[role="dialog"]'), null, { timeout: 5000 })
+  .catch(() => fail('opening the Fidelity dialog did not move focus into it'));
+await page.keyboard.press('Tab');
+await page.keyboard.press('Shift+Tab');
+if ((await focusedText()) !== 'Close') fail('Tab left the Fidelity dialog: ' + (await focusedText()));
+await page.keyboard.press('Escape');
+await fidDialog.waitFor({ state: 'detached', timeout: 5000 }).catch(() => fail('Escape did not close the Fidelity dialog'));
+if (!(await fid.evaluate((b) => b === document.activeElement))) fail('closing the Fidelity dialog did not return focus to its button');
+
 // 1a) A bundled example loads without a project and runs.
 await page.getByLabel('Examples').selectOption('xslt-batch');
 await page.locator('section.output .view-lines', { hasText: 'SalesOrderBatch' }).waitFor({ timeout: 15000 })

@@ -18,20 +18,36 @@
   let rows = $derived(rowsFor(ALL, step));
   let basis = $derived(weakest(rows));
   let open = $state(false);
+  let trigger: HTMLButtonElement | undefined = $state();
+  let closeBtn: HTMLButtonElement | undefined = $state();
+  $effect(() => {
+    if (open) queueMicrotask(() => closeBtn?.focus());
+  });
+
+  function close() {
+    open = false;
+    trigger?.focus();
+  }
+
+  function keydown(e: KeyboardEvent) {
+    if (e.key === 'Escape') close();
+    // Close is the dialog's only control: Tab stays on it, so focus cannot leave the modal dialog.
+    else if (e.key === 'Tab') { e.preventDefault(); closeBtn?.focus(); }
+  }
 </script>
 
 {#if rows.length}
   <!-- No basis: every row of the step is "Not supported", which says what the simulator lacks, not how it is backed. -->
-  <button class="small fid {basis === 'Tenant' ? 'tenant' : basis === 'Documented' ? 'doc' : basis ? 'assume' : ''}" onclick={() => (open = true)}
+  <button bind:this={trigger} class="small fid {basis === 'Tenant' ? 'tenant' : basis === 'Documented' ? 'doc' : basis ? 'assume' : ''}" onclick={() => (open = true)}
     title="Fidelity of {label}: {TEXT[basis ?? 'Not supported']}. Click for details." aria-label="Fidelity of {label}: {basis ?? 'Not supported'}">
     Fidelity: {basis === 'Tenant' ? 'tenant-verified' : basis === 'Documented' ? 'documented' : basis ? 'assumptions' : 'gaps only'}
   </button>
 {/if}
 
 {#if open}
-  <div class="backdrop" role="presentation" onclick={() => (open = false)}>
+  <div class="backdrop" role="presentation" onclick={close}>
     <div class="dlg" role="dialog" aria-modal="true" aria-label="Fidelity of {label}" tabindex="-1"
-      onclick={(e) => e.stopPropagation()} onkeydown={(e) => { if (e.key === 'Escape') open = false; }}>
+      onclick={(e) => e.stopPropagation()} onkeydown={keydown}>
       <h2>Fidelity: {label}</h2>
       <p class="hint">How the simulator's behaviour compares with CPI, from the fidelity page. F… and Q… are findings and
         questions in the project's plan.</p>
@@ -43,7 +59,7 @@
           </li>
         {/each}
       </ul>
-      <div class="btns"><button class="primary" onclick={() => (open = false)}>Close</button></div>
+      <div class="btns"><button class="primary" bind:this={closeBtn} onclick={close}>Close</button></div>
     </div>
   </div>
 {/if}

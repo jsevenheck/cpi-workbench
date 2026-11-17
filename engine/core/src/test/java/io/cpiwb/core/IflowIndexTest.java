@@ -66,6 +66,9 @@ class IflowIndexTest {
         assertEquals(List.of("Inbound_Files/MessageFlow_1/path"), where(hits(Map.of("query", "PATH"))));
         assertEquals(List.of(), hits(Map.of("query", "AdapterVariant")));
         assertThrows(IllegalArgumentException.class, () -> IflowIndex.search(project(), Map.of()));
+        // A route: its condition and its other settings.
+        assertEquals(List.of("Outbound_Orders/SequenceFlow_2/condition"), where(hits(Map.of("query", "header.Region"))));
+        assertEquals(List.of("Outbound_Orders/SequenceFlow_2/expressionType"), where(hits(Map.of("query", "expressionType"))));
     }
 
     @Test
@@ -93,6 +96,27 @@ class IflowIndexTest {
         Map<String, Object> url = out.get("BackendUrl");
         assertEquals(true, url.get("unresolved"), "used, but the export has no parameters.prop value");
         assertEquals("MessageFlow_2", ((Map<String, Object>) ((List<Object>) url.get("uses")).get(0)).get("element"));
+    }
+
+    @Test
+    void aBrokenParameterFileIsThatIflowsError(@org.junit.jupiter.api.io.TempDir Path dir) throws Exception {
+        Path src = project();
+        try (var files = java.nio.file.Files.walk(src)) {
+            for (Path f : files.toList()) {
+                Path to = dir.resolve(src.relativize(f).toString());
+                if (java.nio.file.Files.isDirectory(f)) java.nio.file.Files.createDirectories(to);
+                else java.nio.file.Files.copy(f, to);
+            }
+        }
+        // An invalid \\u escape makes Properties.load throw.
+        java.nio.file.Files.writeString(dir.resolve("iflows/Outbound_Orders/src/main/resources/parameters.prop"), "BackendUrl=\\uZZZZ\n");
+        List<Object> iflows = (List<Object>) IflowIndex.index(dir).get("iflows");
+        assertEquals(2, iflows.size());
+        assertNull(((Map<String, Object>) iflows.get(0)).get("error"));
+        assertEquals("sftp.partner.example.com:22", params((Map<String, Object>) iflows.get(0)).get("SftpHost").get("value"));
+        Map<String, Object> broken = (Map<String, Object>) iflows.get(1);
+        assertTrue(String.valueOf(broken.get("error")).startsWith("Cannot read the parameters"), String.valueOf(broken.get("error")));
+        assertEquals(List.of(), broken.get("parameters"));
     }
 
     private static Map<String, Map<String, Object>> params(Map<String, Object> iflow) {

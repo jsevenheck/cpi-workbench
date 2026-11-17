@@ -80,12 +80,27 @@ export function highlight(value: string, query: string): { text: string; match: 
   const q = query.trim().toLowerCase();
   if (!q) return [{ text: value, match: false }];
   const out: { text: string; match: boolean }[] = [];
-  const lower = value.toLowerCase();
+  // Lower case can change a character's length ('İ' becomes two units): `from` maps each unit of `lower` to the
+  // value's index of the character it came from.
+  let lower = '';
+  const from: number[] = [];
+  for (let i = 0; i < value.length; ) {
+    const ch = String.fromCodePoint(value.codePointAt(i)!);
+    const lc = ch.toLowerCase();
+    lower += lc;
+    for (let k = 0; k < lc.length; k++) from.push(i);
+    i += ch.length;
+  }
+  from.push(value.length);
   let at = 0;
-  for (let i = lower.indexOf(q); i >= 0; i = lower.indexOf(q, at)) {
-    if (i > at) out.push({ text: value.slice(at, i), match: false });
-    out.push({ text: value.slice(i, i + q.length), match: true });
-    at = i + q.length;
+  for (let i = lower.indexOf(q); i >= 0; i = lower.indexOf(q, i + q.length)) {
+    let e = i + q.length;
+    while (e < lower.length && from[e] === from[e - 1]) e++; // a match ending inside a character marks all of it
+    const start = Math.max(from[i], at), end = from[e];
+    if (end <= start) continue;
+    if (start > at) out.push({ text: value.slice(at, start), match: false });
+    out.push({ text: value.slice(start, end), match: true });
+    at = end;
   }
   if (at < value.length) out.push({ text: value.slice(at), match: false });
   return out;

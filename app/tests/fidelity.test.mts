@@ -22,6 +22,23 @@ test('every step the app shows has rows with a ranked basis', () => {
   for (const id of STEP_IDS) assert.ok(weakest(rowsFor(rows, id)), `no Tenant / Documented / Assumption row for ${id}`);
 });
 
+test('every table outside the simulator-only section is read, row for row', () => {
+  // The parser skips a table without Applies to / Basis columns; a renamed column must fail here, not hide rows.
+  let section = '';
+  let inTable = false;
+  let expected = 0;
+  for (const line of md.split(/\r?\n/)) {
+    if (line.startsWith('## ')) section = line.slice(3).trim();
+    if (!line.startsWith('|')) { inTable = false; continue; }
+    if (section.startsWith('Local workflow')) continue;
+    if (!inTable) {
+      inTable = true;
+      assert.match(line, /\| Applies to \|.*\bBasis \|/, `table header under '${section}': ${line}`);
+    } else if (!/^\|[\s|:-]+\|$/.test(line)) expected++;
+  }
+  assert.equal(rows.length, expected);
+});
+
 test('the simulator-only table is not read as CPI fidelity', () => {
   assert.ok(!rows.some((r) => r.section.startsWith('Local workflow')));
 });

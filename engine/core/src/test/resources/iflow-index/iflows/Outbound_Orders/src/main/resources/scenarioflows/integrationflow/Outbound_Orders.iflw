@@ -16,7 +16,7 @@
     <bpmn2:serviceTask id="CallActivity_2" name="Store order"><bpmn2:extensionElements><ifl:property><key>activityType</key><value>ExternalCall</value></ifl:property></bpmn2:extensionElements></bpmn2:serviceTask>
     <bpmn2:endEvent id="EndEvent_1" name="End"><bpmn2:messageEventDefinition/></bpmn2:endEvent>
     <bpmn2:sequenceFlow id="SequenceFlow_1" sourceRef="StartEvent_1" targetRef="CallActivity_1"/>
-    <bpmn2:sequenceFlow id="SequenceFlow_2" sourceRef="CallActivity_1" targetRef="CallActivity_2"/>
+    <bpmn2:sequenceFlow id="SequenceFlow_2" name="EU" sourceRef="CallActivity_1" targetRef="CallActivity_2"><bpmn2:extensionElements><ifl:property><key>componentVersion</key><value>1.0</value></ifl:property><ifl:property><key>expressionType</key><value>NonXML</value></ifl:property></bpmn2:extensionElements><bpmn2:conditionExpression>${header.Region} = 'EU'</bpmn2:conditionExpression></bpmn2:sequenceFlow>
     <bpmn2:sequenceFlow id="SequenceFlow_3" sourceRef="CallActivity_2" targetRef="EndEvent_1"/>
   </bpmn2:process>
 </bpmn2:definitions>

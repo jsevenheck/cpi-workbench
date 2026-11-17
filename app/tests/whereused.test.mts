@@ -16,6 +16,9 @@ test('highlight marks every match ignoring case, and nothing for an empty query'
   assert.deepEqual(highlight('sftp://Host/host', 'host'),
     [{ text: 'sftp://', match: false }, { text: 'Host', match: true }, { text: '/', match: false }, { text: 'host', match: true }]);
   assert.deepEqual(highlight('abc', ' '), [{ text: 'abc', match: false }]);
+  // 'İ' lower-cases to two units; the mark must still cover 'host', not 'ost'.
+  assert.deepEqual(highlight('İhost', 'host'), [{ text: 'İ', match: false }, { text: 'host', match: true }]);
+  assert.deepEqual(highlight('İx', 'i'), [{ text: 'İ', match: true }, { text: 'x', match: false }]);
 });
 
 test('a diagram value is searched whole, a cut one up to the cut, a skipped key not at all', async () => {

@@ -120,7 +120,7 @@ public final class IflowModel {
                 Element cond = first(el, "conditionExpression");
                 Map<String, String> pr = props(el);
                 flows.add(flow(el, "sequence", waypoints).with("condition", cond == null ? null : cond.getTextContent().trim())
-                        .with("expressionType", pr.get("expressionType")));
+                        .with("expressionType", pr.get("expressionType")).with("properties", limited(pr, maxValue)));
                 continue;
             }
             if (NOT_NODES.contains(ln) || el.getAttribute("id").isEmpty()) {

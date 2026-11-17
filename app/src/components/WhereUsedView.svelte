@@ -45,7 +45,7 @@
       </select>
     {/if}
     {#if app.iflowModels.length > 1}
-      <select bind:value={whereUsed.iflow} onchange={() => whereUsed.view === 'search' && searchIflows()} aria-label="iFlow">
+      <select bind:value={whereUsed.iflow} onchange={() => searchIflows()} aria-label="iFlow">
         <option value="">All iFlows</option>
         {#each app.iflowModels as m}<option value={m.iflow}>{m.name ?? m.iflow}</option>{/each}
       </select>
@@ -58,7 +58,9 @@
       {#if !whereUsed.searched && !whereUsed.kind}
         <p class="muted">Type a value to find every adapter, step and route of the imported iFlows that uses it: a host,
           a credential alias, a queue, a script, an externalized parameter. A key name (<code>address</code>) finds that
-          property everywhere. <i>Kind</i> narrows to addresses, credentials, queues, key aliases, files or parameters where the key says what it holds.</p>
+          property everywhere. <i>Kind</i> narrows to addresses, credentials, queues, key aliases, files or parameters where the key says what it holds.
+          Settings are searched as the export writes them: one that holds a <code>{'{{'}parameter{'}}'}</code> is found by the
+          parameter's name, not by its value from <code>parameters.prop</code> (<i>Parameters</i> shows the values).</p>
       {:else if !groups.length}
         <p class="muted">Nothing in the imported iFlows uses “{whereUsed.searched}”{whereUsed.kind ? ` as ${whereUsed.kind}` : ''}.</p>
       {:else}

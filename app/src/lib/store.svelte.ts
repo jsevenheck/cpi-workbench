@@ -717,6 +717,7 @@ export async function open(dir: string, initProject = false) {
   app.project = { root: r.root, files: r.files };
   if (other) resetPlatform(); // at once: no run of the opened project uses rows typed before it
   if (other) closeIflowFlowSteps(); // their iFlows belong to the other project
+  if (other) resetWhereUsed();
   safeSet('cpiwb.project', r.root);
   await loadIflowSteps();
   if (!r.isProject && !initProject) app.status = 'Folder has no cpi-workbench.json – it still works; use "Init" to add the standard folders.';
@@ -750,6 +751,11 @@ export async function closeProject() {
   app.iflowSelected = null;
   closeIflowFlowSteps();
   if (app.tool === 'diagram' || app.tool === 'whereused') app.tool = app.stepTool;
+  resetWhereUsed();
+}
+
+/** Empties the Where used tab and drops answers still on their way: they belong to the project before. */
+function resetWhereUsed() {
   whereUsedSeq++;
   indexSeq++;
   Object.assign(whereUsed, { view: 'search', query: '', kind: '', iflow: '', hits: [], searched: '', index: [], error: '' });

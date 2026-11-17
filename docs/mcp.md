@@ -171,6 +171,7 @@ lists what is verified against CPI.
   2025-11-25) and, for 2026-07-28, with the repository's own tests (`app/src-tauri/src/mcp/tests.rs`,
   `app/scripts/mcp-smoke.mjs`, which CI runs on the release build on Windows and macOS).
 
-The code is in `app/src-tauri/src/mcp/`. `flow.rs` follows the Flow Steps tab
-(`app/src/lib/flowcalls.ts`) call for call; the fixtures in `testdata/flow-parity` hold the calls both must
-make, and a test on each side replays them without engines.
+The code is in `app/src-tauri/src/mcp/`. `flow.rs` repeats the Flow Steps tab's calls
+(`app/src/lib/flowcalls.ts`); the fixtures in `testdata/flow-parity` hold the calls both must make for a
+step's settings and message, and a test on each side replays them without engines. They do not cover how the
+tab's editors or the MCP tool's arguments become those settings and that message.

@@ -17,7 +17,8 @@ of its version.
   alias, queue, file, parameter or any value, and lists each iFlow's externalized parameters with value, type,
   description and uses, marking unused ones and ones without a value. The ⌕ next to a diagram setting searches
   for it. A sender or receiver in the diagram now also shows its adapters' settings. Over MCP: the tool
-  `iflow_where_used`.
+  `iflow_where_used`. Settings are searched as the export writes them (`{{SftpHost}}`, not its value); an
+  unreadable `parameters.prop` is shown as that iFlow's error.
 
 ### Changed
 
@@ -31,11 +32,12 @@ of its version.
 
 - **A flow step from an iFlow without some settings** now runs with the step's defaults in the app, as it already
   did over MCP: an Encoder or Decoder without a scheme (Base64), a Message Digest without canonicalization, algorithm
-  or target header, a Splitter without its type or expression type. Before, the app sent empty values. Whether CPI
+  or target header, a Splitter without its type or expression type, a Filter without its value type, a Gather
+  without its message type or algorithm. Before, the import filled them with empty values. Whether CPI
   uses the same defaults is not known: the app names them under the step's *From* line, and the MCP server returns
   them as `step.defaulted`.
 - **Converter lists over MCP**: an iFlow's namespace mapping and array paths reach the engine as the app sends them,
-  one entry per line. The Flow Steps tab and the MCP server now replay shared fixtures in their tests
+  one entry per line; a namespace pair without prefix or namespace is left out, as before. The Flow Steps tab and the MCP server now replay shared fixtures in their tests
   (`testdata/flow-parity`), so the two cannot drift apart unnoticed.
 
 ## [0.5.0] - 2026-11-17

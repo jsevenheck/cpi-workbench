@@ -66,23 +66,26 @@ final class FlowSteps {
                     .with("body", param(props.getOrDefault("wrapContent", ""), params)));
         }
         if ("Filter".equals(activity)) {
-            return step(act, "filter", props).with("config", Json.o()
-                    .with("expression", param(props.getOrDefault("wrapContent", ""), params))
-                    .with("valueType", param(props.getOrDefault("xpathType", "Nodelist"), params).toLowerCase()));
+            return step(act, "filter", props).with("config", opt(Json.o()
+                    .with("expression", param(props.getOrDefault("wrapContent", ""), params)), "valueType", props.get("xpathType"), params,
+                    String::toLowerCase));
         }
         if ("Encoder".equals(activity) || "Decoder".equals(activity)) {
             // The scheme as the tab names it: "Base64 Encode" becomes base64Encode, "ZIP Decompress" zipDecompress.
             // A Decoder keeps its scheme in encoderType as well (plan F62).
-            String[] words = param(props.getOrDefault("encoderType", ""), params).trim().split("\\s+");
-            words[0] = words[0].toLowerCase(Locale.ROOT);
-            return step(act, activity.toLowerCase(Locale.ROOT), props).with("config", Json.o().with("scheme", String.join("", words)));
+            return step(act, activity.toLowerCase(Locale.ROOT), props).with("config", opt(Json.o(), "scheme", props.get("encoderType"), params,
+                    v -> {
+                        String[] words = v.trim().split("\\s+");
+                        words[0] = words[0].toLowerCase(Locale.ROOT);
+                        return String.join("", words);
+                    }));
         }
         if ("MessageDigest".equals(activity)) {
-            Json.Obj step = step(act, "messageDigest", props).with("config", Json.o()
-                    .with("filter", "")
-                    .with("canonicalization", param(props.getOrDefault("canonicalizationMethod", ""), params))
-                    .with("algorithm", param(props.getOrDefault("digestAlgorithm", ""), params))
-                    .with("targetHeader", param(props.getOrDefault("targetHeader", ""), params)));
+            Json.Obj config = Json.o().with("filter", "");
+            opt(config, "canonicalization", props.get("canonicalizationMethod"), params, v -> v);
+            opt(config, "algorithm", props.get("digestAlgorithm"), params, v -> v);
+            opt(config, "targetHeader", props.get("targetHeader"), params, v -> v);
+            Json.Obj step = step(act, "messageDigest", props).with("config", config);
             // No sample with a filter was seen, so its key is unknown: a step that has one must not look complete.
             List<String> unread = new ArrayList<>();
             for (Map.Entry<String, String> e : props.entrySet()) {
@@ -98,14 +101,13 @@ final class FlowSteps {
             return step;
         }
         if ("Gather".equals(activity)) {
-            String format = param(props.getOrDefault("messageType", "SameXMLFormat"), params);
-            String algorithm = param(props.getOrDefault("aggregationAlgorithm", ""), params);
-            return step(act, "gather", props).with("config", Json.o()
-                    .with("messageType", format.equals("PlainText") ? "plainText" : format.equals("DiffXMLFormat") ? "differentXml"
-                            : format.equals("SameXMLFormat") ? "sameXml" : format)
-                    .with("algorithm", algorithm.equals("concatenate-strategy") ? "concatenate"
-                            : algorithm.equals("xpath-merge-strategy") ? "combineAtXPath"
-                            : algorithm.endsWith("multi-mapping") ? "combine" : algorithm)
+            Json.Obj config = Json.o();
+            opt(config, "messageType", props.get("messageType"), params, format -> format.equals("PlainText") ? "plainText"
+                    : format.equals("DiffXMLFormat") ? "differentXml" : format.equals("SameXMLFormat") ? "sameXml" : format);
+            opt(config, "algorithm", props.get("aggregationAlgorithm"), params, algorithm -> algorithm.equals("concatenate-strategy")
+                    ? "concatenate" : algorithm.equals("xpath-merge-strategy") ? "combineAtXPath"
+                    : algorithm.endsWith("multi-mapping") ? "combine" : algorithm);
+            return step(act, "gather", props).with("config", config
                     .with("sourceXPath", param(props.getOrDefault("sourceXPath", ""), params))
                     .with("targetXPath", param(props.getOrDefault("targetXPath", ""), params)));
         }
@@ -115,11 +117,13 @@ final class FlowSteps {
         }
         String split = props.getOrDefault("splitType", "");
         if ("Splitter".equals(activity) && (split.equals("GeneralSplitter") || split.equals("IteratingSplitter"))) {
-            String expr = props.getOrDefault("exprType", "XPath");
-            String type = expr.equals("Token") ? "token" : expr.equals("Line Break") ? "lineBreak" : "xpath";
-            return step(act, "splitter", props).with("config", Json.o()
-                    .with("splitter", split.equals("GeneralSplitter") ? "general" : "iterating")
-                    .with("expressionType", type)
+            String expr = props.get("exprType");
+            String type = "Token".equals(expr) ? "token" : "Line Break".equals(expr) ? "lineBreak" : "xpath";
+            Json.Obj config = Json.o().with("splitter", split.equals("GeneralSplitter") ? "general" : "iterating");
+            if (expr != null) {
+                config.with("expressionType", type);
+            }
+            return step(act, "splitter", props).with("config", config
                     .with("expression", param(props.getOrDefault("token".equals(type) ? "tokenValue" : "splitExprValue", ""), params))
                     .with("grouping", param(props.getOrDefault("grouping", ""), params))
                     .with("streaming", !"false".equals(param(props.getOrDefault("Streaming", "true"), params))));
@@ -279,6 +283,14 @@ final class FlowSteps {
             out.add(row);
         }
         return out;
+    }
+
+    /**
+     * Puts a choice the step makes, mapped to the tab's value; a choice the export leaves out stays out, so the tab and
+     * the MCP server give it their default and name it as assumed. An empty value stays, for the step to report.
+     */
+    private static Json.Obj opt(Json.Obj o, String key, String value, Properties params, java.util.function.UnaryOperator<String> map) {
+        return value == null ? o : o.with(key, map.apply(param(value, params)));
     }
 
     private static String param(String value, Properties params) {

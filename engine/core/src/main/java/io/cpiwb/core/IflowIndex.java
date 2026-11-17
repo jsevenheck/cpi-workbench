@@ -83,8 +83,17 @@ public final class IflowIndex {
     public static Map<String, Object> index(Path projectRoot) throws IOException {
         List<Object> out = new ArrayList<>();
         for (IflowEntries e : read(projectRoot)) {
-            out.add(Json.o().with("iflow", e.iflow).with("name", e.name).with("file", e.file).with("error", e.error)
-                    .with("entries", e.entries).with("parameters", parameters(e)));
+            // A broken parameters.prop or .propdef is this iFlow's error; the other iFlows keep their parameters.
+            List<Object> parameters = List.of();
+            String error = e.error;
+            try {
+                parameters = parameters(e);
+            } catch (IOException | RuntimeException x) {
+                String msg = "Cannot read the parameters: " + x.getMessage();
+                error = error == null ? msg : error + " " + msg;
+            }
+            out.add(Json.o().with("iflow", e.iflow).with("name", e.name).with("file", e.file).with("error", error)
+                    .with("entries", e.entries).with("parameters", parameters));
         }
         return Json.o().with("iflows", out);
     }
@@ -197,8 +206,10 @@ public final class IflowIndex {
                 // A Router's route: the gateway it leaves.
                 String gateway = (String) f.get("source");
                 String name = (String) f.get("name");
-                add(out, iflow, id, gateway, name == null || name.isEmpty() ? id : name, "route", "Route", "condition",
-                        (String) f.get("condition"), null);
+                String shown = name == null || name.isEmpty() ? id : name;
+                add(out, iflow, id, gateway, shown, "route", "Route", "condition", (String) f.get("condition"), null);
+                ((Map<String, Object>) f.get("properties")).forEach((k, v) ->
+                        add(out, iflow, id, gateway, shown, "route", "Route", k, String.valueOf(v), null));
             }
         }
     }

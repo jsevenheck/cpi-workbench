@@ -33,8 +33,8 @@ of its version.
   That CPI's steps behave the same is not verified on a tenant yet, and the result says so. MIME Multipart is not
   simulated.
 - **Flow Steps: binary bodies.** A result that is no text (GZIP, ZIP) shows its size and a hex dump; *Use as input*
-  passes the bytes to the next step and *Save…* writes them to a file. A `.zip` or `.gz` file of the project opens
-  as a binary input body. The MCP server passes such a body on by `runId` and as `bodyPath`, `read_file` returns
+  passes the bytes to the next step and *Save…* writes them to a file. A `.zip` or `.gz` file of the project is listed
+  in the file tree, wherever it is, and opens from there as a binary input body. The MCP server passes such a body on by `runId` and as `bodyPath`, `read_file` returns
   bytes with `binary: true` and `save_file` writes them (`contentBase64`, or `contentFrom` a binary run). A Groovy
   script gets a body that is no text as `byte[]` instead of garbled text.
 

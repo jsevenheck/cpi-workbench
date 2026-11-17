@@ -9,7 +9,7 @@ import { bodyWarning, readShared, sharedSummary, type SharedMessage } from './sh
 import { attachmentInput, attachmentRows, parsePlatformFile, platformDoc, platformFileText, platformRows, platformRunData, PLATFORM_FILES, PLATFORM_KEYS,
   soapHeaderInput, soapHeaderRows, type AttachmentRow, type PlatformKey, type PlatformRows, type SoapHeaderRow } from './platform';
 import { toRows } from './rows';
-import { pathKey, projectPath } from './paths';
+import { isArchive, pathKey, projectPath } from './paths';
 import { resolveSimpleFunctions } from './simple';
 import { callsJava } from './trust';
 
@@ -966,7 +966,7 @@ export async function openFile(path: string, opts: OpenOptions = {}) {
     // take the file's content if it changed on disk while the editor has no unsaved changes.
     if (!opts.functionName && !opts.profile && isOpenInItsTab(path)) return await reopen(path);
     if (!opts.discardChecked && !(await mayDiscard(editorFor(path)))) return;
-    const content = path.startsWith('inputs/') ? await readInputFile(path) : await readFile(path);
+    const content = path.startsWith('inputs/') || isArchive(path) ? await readInputFile(path) : await readFile(path);
     if (content === null) return await setBinaryInput(path);
     if (lower.endsWith('.xsl') || lower.endsWith('.xslt')) {
       xslt.mappingPath = path;

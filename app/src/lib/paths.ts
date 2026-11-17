@@ -13,6 +13,16 @@ export function pathKey(path: string): string {
   return parts.join('/').toLowerCase();
 }
 
+/** An archive a Decoder reads (GZIP, ZIP): it opens as the Flow Steps' binary input, wherever it is in the project. */
+export function isArchive(path: string): boolean {
+  return /\.(gz|zip)$/i.test(path);
+}
+
+/** Files the sidebar lists: what a tab opens, and archives for a Decoder. */
+export function shownInTree(path: string): boolean {
+  return /\.(xsl|xslt|xsd|xml|json|groovy|txt|csv)$/i.test(path) || isArchive(path);
+}
+
 /** `rel` relative to `dir`, as a project path; above the project root it keeps its leading `..` parts. */
 export function projectPath(dir: string, rel: string): string {
   // An absolute path (/x, C:\x, C:/x, \\server\share) stays as written: the engine refuses it as outside the

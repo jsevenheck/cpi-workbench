@@ -116,7 +116,7 @@ come with the app; **Save** asks where to keep them, once a project is open. As 
     after the header `CamelFileName` (set it in Headers), ZIP Decompress takes an archive with one entry.
     A result that is no text shows its size and a hex dump of its first bytes; *Use as input* passes the
     bytes on (to a Decoder, for instance) and *Save…* writes them to a file. A `.zip` or `.gz` file of the
-    project opens as a binary input body in the same way (click it under `inputs/`, or *Use as input*).
+    project opens as a binary input body in the same way (click it in the tree, in any folder, or *Use as input*).
     *MIME Multipart* is not simulated.
   * Message Digest: the message, or the one element a *Filter (XPath)* selects, is written as canonical
     XML (the six methods CPI offers, or *None*), and its digest (MD5, SHA1, SHA256, SHA384, SHA512) goes

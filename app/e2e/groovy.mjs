@@ -544,6 +544,17 @@ await page.getByRole('button', { name: 'Run step' }).click();
 await page.locator('.res h3', { hasText: 'binary' }).waitFor({ timeout: 10000 })
   .catch(async () => fail('GZIP Compress: ' + (await page.locator('.res').innerText()).slice(0, 300)));
 if (!/^00000000 +1f 8b 08/.test(await page.getByLabel('Binary output').innerText())) fail('GZIP Compress: no GZIP header in the hex view');
+// A saved archive is listed in the file tree, also outside inputs/, and opens from there as the binary input.
+await page.locator('.res h3', { hasText: 'binary' }).getByRole('button', { name: 'Save…' }).click();
+await page.locator('.dlg input.mono').fill('archives/order.gz');
+await page.locator('.dlg').getByRole('button', { name: 'OK' }).click();
+const savedGz = page.locator('nav.tree button.file[title="archives/order.gz"]');
+await savedGz.waitFor({ timeout: 5000 }).catch(() => fail('the saved archives/order.gz is not listed in the file tree'));
+if (await savedGz.count()) {
+  await savedGz.click();
+  await page.getByLabel('Binary input body').filter({ hasText: 'archives/order.gz' }).waitFor({ timeout: 5000 })
+    .catch(async () => fail('archives/order.gz did not open as the binary input: ' + await page.locator('.status, .error').allInnerTexts()));
+}
 await page.locator('.res h3', { hasText: 'binary' }).getByRole('button', { name: 'Use as input' }).click();
 await page.getByLabel('Binary input body').waitFor({ timeout: 5000 }).catch(() => fail('The GZIP result did not become a binary input'));
 await page.getByRole('tab', { name: 'Decoder' }).click();

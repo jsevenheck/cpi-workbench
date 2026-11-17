@@ -211,7 +211,8 @@ fn reference_topics_come_from_the_sources() {
     let platform = reference::topic("platform").unwrap();
     assert!(platform.starts_with("## Mocked platform data") && platform.contains("value-mappings.json"), "{platform}");
     assert!(!platform.contains("## Further"), "one section only: {platform}");
-    assert!(reference::topic("fidelity").unwrap().contains("## Groovy Script"));
+    let fidelity = reference::topic("fidelity").unwrap();
+    assert!(fidelity.contains("## Groovy Script") && fidelity.contains("| Area | Applies to | Basis | Status |"), "{fidelity}");
     assert!(reference::topic("nope").is_err());
 }
 

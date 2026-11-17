@@ -4,6 +4,7 @@
   import Editor from './Editor.svelte';
   import KeyValueTable from './KeyValueTable.svelte';
   import CmTable from './CmTable.svelte';
+  import Fidelity from './Fidelity.svelte';
   import { app, flow, groovy, xpath, runFlowStep, useAsFlowInput, gatherSplitResult, saveInput, closeInput, ask, mayOverwrite, writeBytes,
     refreshFiles, closeFlowStep, type FlowStep } from '../lib/store.svelte';
 
@@ -156,6 +157,7 @@
         {/each}
       </div>
       <div class="spacer"></div>
+      <Fidelity step={flow.step} label={STEPS.find(([id]) => id === flow.step)?.[1] ?? flow.step} />
       <button class="primary small" onclick={runFlowStep} disabled={flow.running}>Run step</button>
     </header>
     {#if flow.sources[flow.step]}<p class="hint src">From {flow.sources[flow.step]}<button class="close-file" onclick={() => closeFlowStep(flow.step)}
@@ -196,7 +198,7 @@
             {#if !schemes.some(([id]) => id === coding.scheme)}<option value={coding.scheme}>{coding.scheme || '(none given)'} (from the iFlow)</option>{/if}
           </select>
         </label>
-        <p class="hint">As Camel 3.14.7's data formats with their defaults, which is an assumption about CPI (not verified on a tenant):
+        <p class="hint">As Camel 3.14.7's data formats with their defaults (<i>Fidelity</i> above lists what is not verified):
           Base64 Encode writes lines of 76 characters ending in CR LF, Base64 Decode skips what is not Base64; ZIP Compress names its one entry after
           the header <code>CamelFileName</code>, ZIP Decompress takes an archive with one entry. A result that is no text is shown as bytes;
           <i>Use as input</i> passes it to the next step. MIME Multipart is not simulated.</p>

@@ -67,7 +67,7 @@ in `docs/building.md` (*Releasing*).
   Label assumptions as assumptions, in code comments and docs. Do not present unverified behaviour as "like CPI".
 * **When behaviour changes:**
   * Update the tests.
-  * Update `docs/fidelity.md` and `docs/status.md`.
+  * Update `docs/fidelity.md` (a row's *Basis* too: the app shows it per step) and `docs/status.md`.
   * Add a line under *Unreleased* in `CHANGELOG.md` for changes users notice.
   * If a probe's output changes, update the probe and its baseline in `probes/baseline-simulator/`.
 * **Test-only secrets** in `platform/` files, test resources and examples. Never use real tenant credentials or keys.

@@ -6,6 +6,12 @@ of its version.
 
 ## [Unreleased]
 
+### Added
+
+- **Fidelity indicator.** Next to the runtime and next to *Run step* in Flow Steps, a button says how well the
+  open step's behaviour is backed: tenant-verified, documented or partly an assumption. A click lists the rows of
+  the [Fidelity](docs/fidelity.md) page for that step, which now gives each row the steps it applies to and its basis.
+
 ### Changed
 
 - **Test cases are internal.** `case.json` test cases are this repository's regression tests and no longer a

@@ -10,9 +10,10 @@
   import Dialog from './components/Dialog.svelte';
   import FileView from './components/FileView.svelte';
   import SettingsMenu from './components/SettingsMenu.svelte';
+  import Fidelity from './components/Fidelity.svelte';
   import { isDesktop } from './lib/engine';
   import { initReceiver } from './lib/receiver.svelte';
-  import { app, xslt, xpath, groovy, fileView, init, runXslt, runXsd, runXpath, runFlowStep, runGroovy, closeFileTab, importFromAddress, autoRunXslt, autoRunGroovy, onGroovyProfileChange } from './lib/store.svelte';
+  import { app, xslt, xpath, groovy, fileView, init, runXslt, runXsd, runXpath, runFlowStep, runGroovy, closeFileTab, importFromAddress, autoRunXslt, autoRunGroovy, onGroovyProfileChange, selectedMapping } from './lib/store.svelte';
 
   onMount(async () => {
     await init();
@@ -113,6 +114,11 @@
         </select>
         {/if}
       </label>
+    {/if}
+    {#if app.tool === 'xslt' || app.tool === 'xsd' || app.tool === 'xpath'}
+      <Fidelity step={app.tool} label={app.tool === 'xslt' ? 'XSLT Mapping' : app.tool === 'xsd' ? 'XSD validation' : 'XPath'} />
+    {:else if app.tool === 'groovy'}
+      <Fidelity step={selectedMapping() ? 'mapping' : 'groovy'} label={selectedMapping() ? 'Message Mapping function' : 'Groovy Script'} />
     {/if}
     {#if app.tool === 'xslt'}
       <label class="live" title="Re-run on every change"><input type="checkbox" bind:checked={xslt.live} /> Live</label>

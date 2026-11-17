@@ -583,8 +583,8 @@ behaviour is backed, derived from `docs/fidelity.md` so there is one source.
    app uses them: `xslt`, `xsd`, `xpath`, `groovy`, `mapping`, `contentModifier`, `filter`, `router`,
    `splitter`, `gather`, `converter`, `encoder`, `decoder`, `messageDigest`, `camelSimple`) and *Basis*,
    one of **Tenant** (seen on a tenant, with its F id), **Documented** (SAP's docs or Camel's / Saxon's
-   behaviour, not seen on a tenant), **Assumption** and **Not supported** (`UnsupportedInSimulator`). Rows
-   that hold several statuses (Gather) are split. Existing prose stays as the *Status* text.
+   behaviour, not seen on a tenant), **Assumption** and **Not supported** (`UnsupportedInSimulator`). A row
+   that holds several statuses (Gather) takes its weakest. Existing prose stays as the *Status* text.
 2. **Parse it once.** `app/src/lib/fidelity.ts` parses the tables from `fidelity.md` imported with Vite's
    `?raw` (the docs folder is added to `server.fs.allow`). A unit test checks every row has a valid
    *Basis* and every step id has rows. `mcp/tests.rs` checks the same for the MCP `fidelity` topic.

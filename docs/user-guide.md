@@ -14,6 +14,10 @@ come with the app; **Save** asks where to keep them, once a project is open. As 
 
 ### Files and editors
 
+* **Fidelity** (next to **Runtime**, and next to **Run step** in Flow Steps) says how well the open step's
+  behaviour is backed: *Tenant-verified*, *Documented* (SAP's documentation or Camel's / Saxon's behaviour, not seen
+  on a tenant) or *Assumptions*, the weakest of its rows on the [Fidelity](fidelity.md) page. A click lists the
+  rows, also what the simulator refuses. The page is part of the app; nothing is fetched.
 * Open a `.xsl` or `.groovy` file in the tree and enter the input body, headers and properties on the left.
   Opening a Groovy script picks the runtime from its Script API import; for a pasted script, choose
   it under **Runtime**.

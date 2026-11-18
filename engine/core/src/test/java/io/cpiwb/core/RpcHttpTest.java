@@ -127,8 +127,17 @@ class RpcHttpTest {
                 InputStream input = socket.getInputStream();
                 assertEquals(-1, input.read());
             }
-            assertEquals("ping", Json.parseObject(send(post(server, "/project/rpc", PING)).body()).get("result"));
-            assertEquals(pings + 1, calls.get());
+            // The client sees the close before the handler threads have released their admission slots
+            // (slow on CI runners), so a ping right after can still be refused; it must succeed shortly after.
+            HttpResponse<String> ok;
+            var freed = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+            do {
+                ok = send(post(server, "/project/rpc", PING));
+                if (ok.statusCode() != 503) break;
+                Thread.sleep(20);
+            } while (System.nanoTime() < freed);
+            assertEquals("ping", Json.parseObject(ok.body()).get("result"), ok.body());
+            assertEquals(pings + 1, calls.get(), "refused pings must not reach the engine");
         } finally {
             for (Socket socket : uploads) socket.close();
             server.stop(0);

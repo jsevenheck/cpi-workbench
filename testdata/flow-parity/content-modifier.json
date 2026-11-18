@@ -5,198 +5,78 @@
     "type": "contentModifier",
     "config": {
       "headers": [
-        {
-          "name": "h1",
-          "value": "v"
-        },
-        {
-          "name": "h2",
-          "type": "xpath",
-          "value": "/a/b || $h1",
-          "datatype": "java.lang.String"
-        },
-        {
-          "action": "Delete",
-          "name": "h0"
-        }
+        { "name": "h1", "type": "expression", "value": "${exchangeId}" },
+        { "name": "h2", "type": "xpath", "value": "$h1", "datatype": "java.lang.String" },
+        { "action": "Delete", "name": "h0" }
       ],
       "properties": [
-        {
-          "name": "p1",
-          "type": "xpath",
-          "value": "/a",
-          "datatype": "org.w3c.dom.NodeList"
-        }
+        { "name": "p1", "type": "xpath", "value": "/a", "datatype": "org.w3c.dom.NodeList" }
       ],
-      "body": "${header.h1}",
+      "body": "${header.h2}",
       "bodyType": "expression"
     }
   },
-  "input": {
-    "body": "<a><b>1</b></a>",
-    "headers": {
-      "h0": "x"
-    },
-    "properties": {
-      "p0": "y"
-    }
-  },
-  "namespaces": {
-    "o": "urn:example:order"
-  },
+  "input": { "body": "<a><b>1</b></a>", "headers": { "h0": "x" }, "properties": { "p0": "y" } },
+  "namespaces": { "o": "urn:example:order" },
   "answers": {
-    "contentModifier.run": [
-      {
-        "ok": true,
-        "output": {
-          "headers": {
-            "h0": "x",
-            "h1": "v"
-          },
-          "properties": {
-            "p0": "y"
-          }
-        }
-      }
+    "contentModifier.advance": [
+      { "ok": true, "continuation": "first", "variables": { "headers": { "h0": "x", "h1": "id-1" }, "properties": { "p0": "y" } } },
+      { "ok": true, "continuation": "second" }
     ],
-    "xpath.eval": [
-      {
-        "ok": true,
-        "value": "1v"
-      },
-      {
-        "ok": true,
-        "value": "<a><b>1</b></a>"
-      }
+    "xpath.eval": [ { "ok": true, "value": "id-1" }, { "ok": true, "value": "<a><b>1</b></a>" } ],
+    "contentModifier.run": [
+      { "ok": true, "output": { "body": "id-1", "headers": { "h1": "id-1", "h2": "id-1" }, "properties": { "p0": "y", "p1": "<a><b>1</b></a>" } } }
     ]
   },
   "calls": [
     {
       "engine": "camel",
-      "method": "contentModifier.run",
+      "method": "contentModifier.advance",
+      "params": {
+        "headers": [ { "action": "Create", "name": "h1", "type": "expression", "value": "${exchangeId}", "datatype": "", "default": "" } ],
+        "properties": [],
+        "input": { "body": "<a><b>1</b></a>", "headers": { "h0": "x" }, "properties": { "p0": "y" } },
+        "variables": true
+      }
+    },
+    {
+      "engine": "xml",
+      "method": "xpath.eval",
+      "params": {
+        "expression": "$h1", "version": "3.1", "as": "string", "namespaces": { "o": "urn:example:order" },
+        "input": { "body": "<a><b>1</b></a>", "headers": { "h0": "x", "h1": "id-1" }, "properties": { "p0": "y" } }
+      }
+    },
+    {
+      "engine": "camel",
+      "method": "contentModifier.advance",
       "params": {
         "headers": [
-          {
-            "action": "Create",
-            "name": "h1",
-            "type": "constant",
-            "value": "v",
-            "datatype": "",
-            "default": ""
-          }
+          { "action": "Create", "name": "h2", "type": "xpath", "value": "$h1", "datatype": "java.lang.String", "default": "", "resolved": "id-1" },
+          { "action": "Delete", "name": "h0", "type": "constant", "value": "", "datatype": "", "default": "" }
         ],
-        "properties": [],
-        "bodyType": "constant",
-        "body": "",
-        "input": {
-          "body": "<a><b>1</b></a>",
-          "headers": {
-            "h0": "x"
-          },
-          "properties": {
-            "p0": "y"
-          }
-        }
+        "properties": [], "continuation": "first", "variables": false
       }
     },
     {
       "engine": "xml",
       "method": "xpath.eval",
       "params": {
-        "expression": "/a/b || $h1",
-        "version": "3.1",
-        "as": "string",
-        "namespaces": {
-          "o": "urn:example:order"
-        },
-        "input": {
-          "body": "<a><b>1</b></a>",
-          "headers": {
-            "h0": "x",
-            "h1": "v"
-          },
-          "properties": {
-            "p0": "y"
-          }
-        }
-      }
-    },
-    {
-      "engine": "xml",
-      "method": "xpath.eval",
-      "params": {
-        "expression": "/a",
-        "version": "3.1",
-        "as": "nodes",
-        "namespaces": {
-          "o": "urn:example:order"
-        },
-        "input": {
-          "body": "<a><b>1</b></a>",
-          "headers": {
-            "h0": "x",
-            "h1": "v"
-          },
-          "properties": {
-            "p0": "y"
-          }
-        }
+        "expression": "/a", "version": "3.1", "as": "nodes", "namespaces": { "o": "urn:example:order" },
+        "input": { "body": "<a><b>1</b></a>", "headers": { "h0": "x" }, "properties": { "p0": "y" } }
       }
     },
     {
       "engine": "camel",
       "method": "contentModifier.run",
       "params": {
-        "headers": [
-          {
-            "action": "Create",
-            "name": "h1",
-            "type": "constant",
-            "value": "v",
-            "datatype": "",
-            "default": ""
-          },
-          {
-            "action": "Create",
-            "name": "h2",
-            "type": "xpath",
-            "value": "/a/b || $h1",
-            "datatype": "java.lang.String",
-            "default": "",
-            "resolved": "1v"
-          },
-          {
-            "action": "Delete",
-            "name": "h0",
-            "type": "constant",
-            "value": "",
-            "datatype": "",
-            "default": ""
-          }
-        ],
-        "properties": [
-          {
-            "action": "Create",
-            "name": "p1",
-            "type": "xpath",
-            "value": "/a",
-            "datatype": "org.w3c.dom.NodeList",
-            "default": "",
-            "resolved": "<a><b>1</b></a>"
-          }
-        ],
-        "bodyType": "expression",
-        "body": "${header.h1}",
-        "input": {
-          "body": "<a><b>1</b></a>",
-          "headers": {
-            "h0": "x"
-          },
-          "properties": {
-            "p0": "y"
-          }
-        }
+        "headers": [],
+        "properties": [ { "action": "Create", "name": "p1", "type": "xpath", "value": "/a", "datatype": "org.w3c.dom.NodeList", "default": "", "resolved": "<a><b>1</b></a>" } ],
+        "continuation": "second", "body": "${header.h2}", "bodyType": "expression"
       }
     }
-  ]
+  ],
+  "result": {
+    "ok": true, "output": { "body": "id-1", "headers": { "h1": "id-1", "h2": "id-1" }, "properties": { "p0": "y", "p1": "<a><b>1</b></a>" } }
+  }
 }

@@ -1,6 +1,7 @@
 package io.cpiwb.core;
 
 import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 
 import java.io.BufferedReader;
@@ -17,10 +18,13 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
@@ -30,17 +34,32 @@ import java.util.concurrent.TimeoutException;
  *
  * <p>Request: {@code {"id": 1, "method": "xslt.run", "params": {...}}}<br>
  * Response: {@code {"id": 1, "result": {...}}} or {@code {"id": 1, "error": {"message": "..."}}}
+ * Browser requests to {@code /project/rpc} also carry a top-level {@code projectRoot} (absolute path or null).
+ * Desktop stdio calls wrap that same request in {@code project.request}; plain stdio calls remain stateful.
  */
 public final class RpcServer {
 
     /** Exit code signalling the shell that the engine stopped after a timed-out call. */
     public static final int EXIT_TIMEOUT = 3;
 
+    private static final int HTTP_CONNECTIONS = 24;
+    private static final int HTTP_THREADS = 12;
+    private static final int HTTP_IN_FLIGHT = 4;
+    private static final int HTTP_BODY_LIMIT = 32 * 1024 * 1024;
+    private static final long HTTP_QUEUE_MS = 5_000;
+
     private final RpcHandler handler;
     private final long defaultTimeoutMs;
+    private final int bodyLimit;
+    private final long queueMs;
+    // Admission covers uploads, queueing, executions and RPC replies. Leave HTTP threads for preflights,
+    // static assets and overload replies. Only the holder of httpExecution can submit to the worker over HTTP.
+    private final Semaphore httpAdmission = new Semaphore(HTTP_IN_FLIGHT);
+    private final Semaphore httpExecution = new Semaphore(1, true);
     /** Over HTTP the engine is started again after a timeout only by {@link #supervise}; over stdio the desktop shell does it. */
     private volatile boolean http;
     private volatile boolean supervised = true;
+    private volatile boolean retiring;
 
     /** Whether something starts this engine again after it exits with {@link #EXIT_TIMEOUT}. */
     public RpcServer supervised(boolean value) {
@@ -54,24 +73,60 @@ public final class RpcServer {
     });
 
     public RpcServer(RpcHandler handler, long defaultTimeoutMs) {
+        this(handler, defaultTimeoutMs, HTTP_BODY_LIMIT, HTTP_QUEUE_MS);
+    }
+
+    RpcServer(RpcHandler handler, long defaultTimeoutMs, int bodyLimit, long queueMs) {
         this.handler = handler;
         this.defaultTimeoutMs = defaultTimeoutMs;
+        this.bodyLimit = bodyLimit;
+        this.queueMs = queueMs;
     }
 
     /** Handles one request object and returns the response object. Never throws. */
     public Map<String, Object> handle(Map<String, Object> request) {
+        if (!"project.request".equals(request.get("method"))) {
+            return handle(request, false);
+        }
+        Map<String, Object> scoped = Json.obj(request, "params");
+        if (scoped == null) {
+            return Json.o().with("id", request.get("id"))
+                    .with("error", Json.o().with("message", "project.request expects a scoped request object"));
+        }
+        // Use the outer correlation ID and the inner method's parameters (including its timeout).
+        Json.Obj inner = Json.o();
+        inner.putAll(scoped);
+        return handle(inner.with("id", request.get("id")), true);
+    }
+
+    private Map<String, Object> handle(Map<String, Object> request, boolean scoped) {
         Object id = request.get("id");
+        if (retiring) {
+            return error(id, "The engine is stopping after a timed-out call. Try again once it is ready.");
+        }
         String method = Json.str(request, "method", "");
         Map<String, Object> params = Json.obj(request, "params");
         long timeout = Json.num(params, "timeoutMs", defaultTimeoutMs);
-        Future<Object> f = worker.submit(() -> handler.call(method, params == null ? Map.of() : params));
+        Map<String, Object> args = params == null ? Map.of() : params;
+        Future<Object> f = worker.submit(() -> {
+            if (!scoped) {
+                return handler.call(method, args);
+            }
+            Object root = request.get("projectRoot");
+            if (!request.containsKey("projectRoot") || (root != null && !(root instanceof String))) {
+                throw new IllegalArgumentException("Scoped RPC requires projectRoot (an absolute path or null)");
+            }
+            if (args.containsKey("baseDir")) {
+                throw new IllegalArgumentException("Scoped RPC uses projectRoot, not a baseDir override");
+            }
+            return handler.call(method, args, ProjectFiles.scoped((String) root));
+        });
         try {
             Object result = f.get(timeout, TimeUnit.MILLISECONDS);
             return Json.o().with("id", id).with("result", result);
         } catch (TimeoutException e) {
-            f.cancel(true);
-            // A running transformation cannot be stopped safely; tell the caller and restart.
-            scheduleExit();
+            // A running transformation cannot be stopped safely. Do not admit another call before exit.
+            retire(f);
             return Json.o().with("id", id).with("error", Json.o()
                     .with("message", "Timeout: the call did not finish within " + timeout + " ms. "
                             + (http && !supervised ? "The engine stops; start it again." : "The engine restarts."))
@@ -82,9 +137,20 @@ public final class RpcServer {
                     .with("message", cause.getMessage() == null ? cause.toString() : cause.getMessage())
                     .with("type", cause.getClass().getSimpleName()));
         } catch (InterruptedException e) {
+            retire(f);
             Thread.currentThread().interrupt();
-            return Json.o().with("id", id).with("error", Json.o().with("message", "Interrupted"));
+            return error(id, "Interrupted");
         }
+    }
+
+    private void retire(Future<?> active) {
+        retiring = true;
+        active.cancel(true);
+        scheduleExit();
+    }
+
+    private static Map<String, Object> error(Object id, String message) {
+        return Json.o().with("id", id).with("error", Json.o().with("message", message));
     }
 
     private static void scheduleExit() {
@@ -221,9 +287,65 @@ public final class RpcServer {
     }
 
     public HttpServer serveHttp(int port, Path uiDir) throws IOException {
-        HttpServer server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), port), 0);
+        // The JDK server snapshots these at first use. Its request timer covers both headers and body and
+        // closes the socket to unblock reads. OpenJDK 17u/21u/25u use seconds for maxReqTime (timerMillis is ms).
+        // Defaults only: a value the user passed with -D stays.
+        defaultProperty("jdk.httpserver.maxConnections", Integer.toString(HTTP_CONNECTIONS));
+        defaultProperty("sun.net.httpserver.maxIdleConnections", "8");
+        defaultProperty("sun.net.httpserver.maxReqHeaderSize", "16384");
+        defaultProperty("sun.net.httpserver.maxReqTime", "10");
+        defaultProperty("sun.net.httpserver.timerMillis", "250");
+        // Do not drain an unread upload on close after a rejection: the connection will be closed instead.
+        defaultProperty("sun.net.httpserver.drainAmount", "0");
+        HttpServer server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), port), HTTP_CONNECTIONS);
         http = true;
-        server.createContext("/rpc", ex -> {
+        server.createContext("/rpc", rpcHandler(false)); // compatibility for local RPC clients
+        server.createContext("/project/rpc", rpcHandler(true));
+        server.createContext("/", ex -> {
+            try {
+                if (!isLocalHost(ex.getRequestHeaders().getFirst("Host"))) {
+                    send(ex, 403, "text/plain", "Requests from this machine only".getBytes(StandardCharsets.UTF_8));
+                    return;
+                }
+                serveStatic(ex, uiDir);
+            } finally {
+                ex.close();
+            }
+        });
+        ThreadPoolExecutor executor = new ThreadPoolExecutor(HTTP_THREADS, HTTP_THREADS, 30, TimeUnit.SECONDS,
+                new ArrayBlockingQueue<>(HTTP_CONNECTIONS), r -> {
+                    Thread t = new Thread(r, "cpiwb-http");
+                    t.setDaemon(true);
+                    return t;
+                });
+        executor.allowCoreThreadTimeOut(true);
+        server.setExecutor(executor); // on transport saturation the JDK closes the rejected socket
+        server.start();
+        return server;
+    }
+
+    /** Sets a system property unless it is set already (for example with -D on the command line). */
+    static void defaultProperty(String key, String value) {
+        if (System.getProperty(key) == null) {
+            System.setProperty(key, value);
+        }
+    }
+
+    /** The declared body length, null when none is declared, or -1 when the header is no non-negative number. */
+    static Long declaredLength(String header) {
+        if (header == null) {
+            return null;
+        }
+        try {
+            long n = Long.parseLong(header.trim());
+            return n < 0 ? -1L : n;
+        } catch (NumberFormatException e) {
+            return -1L;
+        }
+    }
+
+    private HttpHandler rpcHandler(boolean scoped) {
+        return ex -> {
             try {
                 // DNS rebinding: a foreign page whose name now resolves to 127.0.0.1 is same-origin for the
                 // browser, so no preflight protects the engine. Such a request still names the foreign host.
@@ -247,32 +369,78 @@ public final class RpcServer {
                     send(ex, 403, "text/plain", "Missing X-Cpiwb header".getBytes(StandardCharsets.UTF_8));
                     return;
                 }
-                String body = new String(ex.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
-                Map<String, Object> response;
-                try {
-                    response = handle(Json.parseObject(body));
-                } catch (IllegalArgumentException e) {
-                    response = Json.o().with("error", Json.o().with("message", "Bad request: " + e.getMessage()));
-                }
-                send(ex, 200, "application/json", Json.write(response).getBytes(StandardCharsets.UTF_8));
-            } finally {
-                ex.close();
-            }
-        });
-        server.createContext("/", ex -> {
-            try {
-                if (!isLocalHost(ex.getRequestHeaders().getFirst("Host"))) {
-                    send(ex, 403, "text/plain", "Requests from this machine only".getBytes(StandardCharsets.UTF_8));
+                Long declaredLength = declaredLength(ex.getRequestHeaders().getFirst("Content-Length"));
+                if (declaredLength != null && declaredLength < 0) {
+                    rejectHttp(ex, 400, null, "Bad request: Content-Length is not a non-negative number.");
                     return;
                 }
-                serveStatic(ex, uiDir);
+                if (declaredLength != null && declaredLength > bodyLimit) {
+                    rejectHttp(ex, 413, null, bodyLimitMessage());
+                    return;
+                }
+                if (!httpAdmission.tryAcquire()) {
+                    rejectHttp(ex, 503, null, "Engine busy: too many HTTP requests in progress. Try again shortly.");
+                    return;
+                }
+                try {
+                    handleHttpRpc(ex, scoped);
+                } finally {
+                    httpAdmission.release();
+                }
             } finally {
                 ex.close();
             }
-        });
-        server.setExecutor(Executors.newFixedThreadPool(4));
-        server.start();
-        return server;
+        };
+    }
+
+    private String bodyLimitMessage() {
+        return "UnsupportedInSimulator: the browser RPC request exceeds " + bodyLimit
+                + " bytes (including JSON). Use a smaller message or run it in the desktop app.";
+    }
+
+    private void handleHttpRpc(HttpExchange ex, boolean scoped) throws IOException {
+        byte[] body = ex.getRequestBody().readNBytes(bodyLimit + 1);
+        if (body.length > bodyLimit) {
+            rejectHttp(ex, 413, null, bodyLimitMessage());
+            return;
+        }
+        Map<String, Object> request;
+        try {
+            request = Json.parseObject(new String(body, StandardCharsets.UTF_8));
+        } catch (IllegalArgumentException e) {
+            sendJson(ex, 400, error(null, "Bad request: " + e.getMessage()));
+            return;
+        }
+        Object id = request.get("id");
+        Map<String, Object> response;
+        try {
+            if (!httpExecution.tryAcquire(queueMs, TimeUnit.MILLISECONDS)) {
+                rejectHttp(ex, 503, id, "Engine busy: timed out waiting for a turn. The request did not run. Try again shortly.");
+                return;
+            }
+            try {
+                response = handle(request, scoped); // the execution timeout starts here, not during admission
+            } finally {
+                httpExecution.release();
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            rejectHttp(ex, 503, id, "Interrupted while waiting for the engine. The request did not run.");
+            return;
+        }
+        sendJson(ex, 200, response);
+    }
+
+    private static void rejectHttp(HttpExchange ex, int status, Object id, String message) throws IOException {
+        ex.getResponseHeaders().set("Connection", "close");
+        if (status == 503) {
+            ex.getResponseHeaders().set("Retry-After", "1");
+        }
+        sendJson(ex, status, error(id, message));
+    }
+
+    private static void sendJson(HttpExchange ex, int status, Map<String, Object> response) throws IOException {
+        send(ex, status, "application/json", Json.write(response).getBytes(StandardCharsets.UTF_8));
     }
 
     private static void cors(HttpExchange ex) {

@@ -25,9 +25,12 @@ come with the app; **Save** asks where to keep them, once a project is open. As 
   result: text in XSLT, `xsl:text`, `xml:space="preserve"`, CDATA, literal attribute values and
   multi-line Groovy strings keep theirs.
 * **Save** writes the open mapping, script or schema; **Save as…** writes it under a new name
-  (`<name>-copy` is suggested) and leaves the open file as it is. Saving or creating a file under a
-  name that exists asks before it overwrites the file, and opening another file asks before it
-  drops unsaved changes (the dot after the file name).
+  (`<name>-copy` is suggested) and leaves the original on disk. When you choose a destination to save,
+  create, copy or rename a file, the filesystem checks whether it exists, even if the file is not in
+  the tree. An existing destination is replaced only after you choose **Overwrite**; **Save as…** onto
+  the open file's own path saves it without asking. Opening another
+  file asks before dropping unsaved changes (the dot after the file name). You can keep typing during
+  a save; edits made after the write started keep the dot until you save them too.
 * Right-click a file in the tree to open, rename, copy or delete it, or to copy its path.
 * The **×** next to a file name closes that file; the file on disk stays as it is. It asks first when there
   are unsaved changes. In the mapping, script and schema panes it leaves an empty editor without a path, so
@@ -41,10 +44,11 @@ come with the app; **Save** asks where to keep them, once a project is open. As 
 * Other files, such as `platform/*.json` or `cpi-workbench.json`, open in a **File** tab with their own
   editor rather than replacing the input body.
 * The output updates live, or press **Ctrl+Enter**. Compile and runtime errors are marked in the editor.
-* Opening a Groovy script or a stylesheet with reflexive `java:` calls does not
-  execute it until **Run** or **Ctrl+Enter**; afterwards Live follows your edits. Such code runs with
-  your rights, so trust the source of imported iFlows and shared projects. Other stylesheets run
-  automatically when opened. Code imported from a message link always waits for a manual run.
+* A newly opened Groovy script waits for **Run** or **Ctrl+Enter**; afterwards Live follows your edits.
+  XSLT Live previews never enable reflexive `java:` calls, including in included or imported modules.
+  Use **Run** or **Ctrl+Enter** each time a mapping needs Java. Such code runs with your rights, so trust
+  the source of imported iFlows and shared projects. Other stylesheets can preview when opened.
+  Code imported from a message link always waits for a manual first run.
 * A message or file whose XML declaration names an encoding (`<?xml version="1.0" encoding="ISO-8859-1"?>`)
   is handled in that encoding: the body reaches the parser, or a script's `InputStream` / `byte[]`,
   in it, and the file is read and saved in it. A character the
@@ -101,13 +105,17 @@ come with the app; **Save** asks where to keep them, once a project is open. As 
 
 * **Flow Steps** runs a **Content Modifier**, **Filter**, **Router**, **General / Iterating Splitter**,
   **Gather**, **Converter**, **Encoder**, **Decoder** or **Message Digest** on an input message (body, headers,
-  properties, namespace mapping):
+  properties, namespace mapping). With only a Saxon engine, XML-only steps such as the Encoder still
+  run; the tab names the missing runtime if the current settings also require Camel:
   * Content Modifier: header and property rows with their source types and data types, and the
-    message body; the result shows each row's value and the output message.
+    message body; the result shows each row's value and the output message. Leave *Message Body* empty
+    to keep the incoming body, including binary bytes. *Use as input* passes them on with the updated
+    headers and properties; *Save…* writes the bytes to a file.
   * Router: routes in order, XML (XPath) or Non-XML (Camel Simple, with CPI's `=`, `and`, `or` and
     `${property.x}`) conditions, default route; the result shows which route the message takes.
   * Filter: an XPath and its Value Type (String, Integer, Boolean, Node, Nodelist); the result is the
-    new body. `function:simple('${property.x}')` takes the value from Camel Simple.
+    new body. `function:simple('${property.x}')` takes the value from Camel Simple; inside the XPath's own
+    string literals and `(: :)` comments it is plain text.
   * Splitter: XPath, Line Break or Token, grouping; the result lists the messages. *Gather* passes them on.
   * Converter: JSON to XML, XML to JSON (namespace mapping, root element options, streaming), XML to CSV
     and CSV to XML (with an XSD from the project), with the settings of CPI's converter steps. *Use as
@@ -284,7 +292,8 @@ with the message, can stay in the browser's history.
   outside the project, on both Saxon versions (Saxon 9.9 alone would go on with an empty `document()`). XPath runs (the XPath tab and flow
   steps) also refuse `fn:transform()`, and on Saxon 12 `fn:function-lookup()`: with a configuration of
   its own, a nested transformation would not be bound to the project. In XSLT, reflexive `java:` calls
-  and `fn:transform()` are the exception: they are not restricted.
+  and `fn:transform()` are exceptions to the project file access rules. Reflexive Java calls are
+  available only on a manual run, not in Live previews.
 * XPath runs see no environment variables: `environment-variable()` returns nothing.
 * Groovy scripts run as ordinary Java code with your user's rights; there is no sandbox. Run only
   scripts you trust.
@@ -295,7 +304,9 @@ The installers are not code-signed yet; [Installing](install.md) shows how to st
 first time. The Windows `setup.exe` installs per user and needs no admin rights; the `.msi` installs
 per machine and needs admin rights.
 
-The Groovy runtime starts only when the Groovy or Flow Steps tab is used and stops after 10 idle minutes. Closing the app stops all engines; if the app ends without closing (a crash, Task Manager), the engines stop on their own as soon as it is gone.
+The Groovy runtime starts on demand and stops after 10 idle minutes. The next run still uses the selected
+project and its mock data. If a worker stops during a run, start the run again yourself; the app does not
+replay it. Closing the app stops all engines; if the app ends without closing, the engines stop on their own.
 
 **⚙** (bottom left, next to the status) shows the installed version. **Check for updates** asks github.com for the latest
 release and links to its page if it is newer; download and install it from there.
@@ -339,9 +350,14 @@ cpiwb-xml-he99 serve --http 7777 --ui app/dist    # then open http://127.0.0.1:7
 Web mode listens on localhost only and answers only requests that name this machine (`localhost`,
 `127.0.0.1` or `[::1]` in the Host header, and a local origin), so a foreign web page cannot drive an
 engine, not even one whose name is re-pointed to 127.0.0.1 (DNS rebinding). The engine that serves the
-page also handles the project's files. After a timed-out call an engine starts again by itself, as in the desktop app (the command you start
-only watches over a second process that serves); it then has no project open until the page's next call.
-To add more engines, pass them in a URL parameter (engines on this machine only):
+page also handles the project's files. Each tab sends its own project with each call, so opening or closing
+a project in one tab does not change another tab's project. Tabs opened later can still restore the last
+project from browser settings. A browser request can carry up to 32 MiB, including JSON and Base64
+encoding. Use the desktop app or a smaller message if a request exceeds this limit. If the engine is
+busy or the wait exceeds five seconds, the waiting request is refused without running it. Try again
+when the active call finishes. Only a timeout during execution restarts the engine; the next call
+carries the project as usual. Failed calls are not retried automatically.
+To add more engines, use jars from the same build as the UI and pass them in a URL parameter (local engines only):
 
 ```sh
 java -jar cpiwb-groovy-v1.jar serve --http 7778 &

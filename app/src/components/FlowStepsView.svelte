@@ -5,8 +5,8 @@
   import KeyValueTable from './KeyValueTable.svelte';
   import CmTable from './CmTable.svelte';
   import Fidelity from './Fidelity.svelte';
-  import { app, flow, groovy, xpath, runFlowStep, useAsFlowInput, gatherSplitResult, saveInput, closeInput, ask, mayOverwrite, writeBytes,
-    refreshFiles, closeFlowStep, type FlowStep } from '../lib/store.svelte';
+  import { app, flow, groovy, xpath, runFlowStep, useAsFlowInput, gatherSplitResult, saveInput, closeInput, ask, writeNewFile,
+    refreshFiles, closeFlowStep, missingFlowRuntime, type FlowStep } from '../lib/store.svelte';
 
   const panes = paneSizes('flow', [1, 1.2, 1]);
   const STEPS: [FlowStep, string][] = [['contentModifier', 'Content Modifier'], ['filter', 'Filter'], ['router', 'Router'],
@@ -63,12 +63,14 @@
   let coding = $derived(flow.step === 'decoder' ? flow.decoder : flow.encoder);
   let schemes = $derived(flow.step === 'decoder' ? DECODINGS : ENCODINGS);
 
-  /** A binary result (GZIP, ZIP) saved as a file of the project. */
-  async function saveBytes(base64: string, scheme: string) {
+  /** A binary result saved as a file of the project. */
+  async function saveBytes(base64: string, scheme?: string) {
+    const project = app.project;
+    if (!project) return;
     const r = await ask('Save the result as (path inside the project)', 'inputs/result.' + (scheme === 'gzipCompress' ? 'gz' : scheme === 'zipCompress' ? 'zip' : 'bin'));
-    if (!r || !(await mayOverwrite(r.value))) return;
+    if (!r) return;
     try {
-      await writeBytes(r.value, base64);
+      if (!(await writeNewFile(project, r.value, { contentBase64: base64 })) || app.project !== project) return;
       app.status = 'Saved ' + r.value;
       await refreshFiles();
     } catch (e) {
@@ -137,7 +139,7 @@
       {:else if shownTab === 'body' && flow.binary}
         <div class="pad binary" aria-label="Binary input body">
           <p><b>Binary body</b> · {flow.binary.size} bytes{#if app.inputPaths.flow} · {app.inputPaths.flow}{/if}</p>
-          <p class="hint">Bytes that are no text, for a Decoder (or an Encoder). They have no text to edit; <i>Save…</i> writes them to a file.</p>
+          <p class="hint">Use a Decoder for compressed input, or leave the Content Modifier's Message Body empty to pass the bytes on. <i>Save…</i> writes them to a file.</p>
           <button class="small" onclick={() => useAsFlowInput('')}>Clear</button>
         </div>
       {:else if shownTab === 'body'}<Editor bind:value={flow.body} {language} onrun={runFlowStep} label="Input body" />
@@ -160,6 +162,7 @@
       <Fidelity step={flow.step} label={STEPS.find(([id]) => id === flow.step)?.[1] ?? flow.step} />
       <button class="primary small" onclick={runFlowStep} disabled={flow.running}>Run step</button>
     </header>
+    {#if missingFlowRuntime()}<p class="hint src" role="status">{missingFlowRuntime()}</p>{/if}
     {#if flow.sources[flow.step]}<p class="hint src">From {flow.sources[flow.step]}<button class="close-file" onclick={() => closeFlowStep(flow.step)}
       title="Close the iFlow step: this step starts over with empty settings (the iFlow stays as it is)" aria-label="Close iFlow step">×</button></p>
       {#if flow.defaulted[flow.step]}<p class="hint src assumed">Not in the iFlow, so the default is used (an assumption: whether CPI does the same is not known): {flow.defaulted[flow.step]}</p>{/if}{/if}
@@ -383,12 +386,16 @@
       {#if flow.step === 'contentModifier' && cm}
         {#each cm.diagnostics as d}<div class="d {d.severity}">{d.message}</div>{/each}
         {#if cm.ok}
+          {@const output = cm.output}
           <h3>Rows <span class="muted">· {cm.engine}</span></h3>
           {#each cm.trace as t}
             <div class="row"><span class="k">{t.table}</span> <b>{t.name}</b> {#if t.deleted}<span class="muted">deleted</span>{:else}= <code>{t.value ?? 'null'}</code> <span class="muted">{t.type ?? ''}</span>{/if}</div>
           {/each}
-          <h3>Output <button class="small" onclick={() => useAsFlowInput(cm.output.body, cm.output.headers, cm.output.properties)}>Use as input</button></h3>
-          <pre>{cm.output.body}</pre>
+          <h3>Output{#if output.binary}<span class="muted">· {output.bodySize} bytes, binary</span>{/if}
+            <button class="small" onclick={() => useAsFlowInput(output.binary ? output : output.body, output.headers, output.properties)}>Use as input</button>
+            {#if output.binary}<button class="small" onclick={() => saveBytes(output.bodyBase64)} disabled={!app.project}
+              title={app.project ? 'Save the bytes as a file of the project' : 'Open a project to save'}>Save…</button>{/if}</h3>
+          {#if !output.binary}<pre>{output.body}</pre>{/if}
           <h3>Headers</h3>
           <KeyValueTable rows={cm.output.headers} readOnly added={cm.changes.headers.added} changed={cm.changes.headers.changed} removed={cm.changes.headers.removed} emptyText="No headers" />
           <h3>Properties</h3>

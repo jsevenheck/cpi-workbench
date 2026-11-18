@@ -73,7 +73,7 @@
     { id: 'groovy', label: 'Groovy Script', needs: 'groovy' },
     { id: 'xsd', label: 'XSD Validation', needs: 'xslt' },
     { id: 'xpath', label: 'XPath', needs: 'xslt' },
-    { id: 'flow', label: 'Flow Steps', needs: 'groovy' },
+    { id: 'flow', label: 'Flow Steps', needs: null },
   ] as const;
 </script>
 
@@ -82,8 +82,8 @@
     <div class="tools" role="tablist" aria-label="Tools">
       {#each tools as t}
         <button role="tab" class:active={app.tool === t.id} onclick={() => selectTool(t.id)}
-          disabled={app.profiles.length > 0 && t.needs !== null && !hasKind(t.needs)}
-          title={app.profiles.length > 0 && t.needs !== null && !hasKind(t.needs) ? 'The engine for this tool is not installed or not running' : ''}>{t.label}</button>
+          disabled={app.profiles.length > 0 && (t.needs ? !hasKind(t.needs) : !hasKind('xslt') && !hasKind('groovy'))}
+          title={app.profiles.length > 0 && (t.needs ? !hasKind(t.needs) : !hasKind('xslt') && !hasKind('groovy')) ? 'The engine for this tool is not installed or not running' : ''}>{t.label}</button>
       {/each}
       {#if fileView.path}
         <button role="tab" class="file-tab" class:active={app.tool === 'file'} onclick={() => (app.tool = 'file')}
@@ -142,7 +142,7 @@
 
   <div class="main">
     <Sidebar />
-    <main class="content">
+    <main class="content" tabindex="-1">
       {#if app.tool === 'xslt'}<XsltView />
       {:else if app.tool === 'groovy'}<GroovyView />
       {:else if app.tool === 'xsd'}<XsdView />
@@ -187,6 +187,8 @@
   .banner.error { background: var(--err-bg); color: var(--err); border-bottom: 1px solid var(--border); }
   .main { flex: 1; display: flex; min-height: 0; }
   .content { flex: 1; min-width: 0; min-height: 0; }
+  /* Focusable only as the fallback target when a dialog's opener is gone; the region itself is not a control. */
+  .content:focus { outline: none; }
   .status { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); padding: 3px 10px; border-top: 1px solid var(--border); background: var(--surface); }
   .err { color: var(--err); }
   @media (max-width: 800px) { .main { flex-direction: column; } .app { height: auto; min-height: 100vh; } .content { height: 140vh; } }

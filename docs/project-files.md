@@ -13,7 +13,28 @@ my-project/
 ```
 
 **Init** in the app creates `mappings/`, `schemas/`, `scripts/` and `platform/` with example files, and
-`cpi-workbench.json`. Any folder can be opened as a project.
+`cpi-workbench.json`. Any folder can be opened as a project, including a symlink or Windows junction
+that points to the intended root. Init checks its destinations before writing and never replaces existing
+files. Links below the selected root must resolve inside it. The file tree omits paths it cannot follow;
+iFlow discovery reports blocked branches or files without reading them. A link to another folder inside the
+project (for example `iflows/Alias` to `iflows/Local`) shows both names in the file tree, but Steps, Diagram
+and Where used read each iFlow once, under the name that comes first in path order. If the project folder is
+deleted or renamed while open, calls that need it fail with *Project folder is unavailable*; reopen the project.
+
+Imports stage and check archives before writing to the project. An import can unpack up to 200 MiB
+across its artifacts and count up to 10,000 ZIP entries, including those of an outer package. A bad
+archive or a limit error during staging leaves the project unchanged. Packages are not filesystem
+transactions: if publication fails, review the named folders before retrying. A create-new import that
+fails while writing tries to remove only the entries it created, not files added by another writer. If
+cleanup cannot remove the folder, the error tells you to review its contents. An archive with two entries for
+one file (the same name twice, or names that differ only in letter case on a file system that does not
+tell them apart) is refused. The Value Mapping table is replaced atomically, after the package's folders
+have been published, and keeps its file permissions.
+
+**Overwrite imports do not delete files.** They replace the files the export contains and keep every other
+file in the artifact's folder, such as a script or `.iflw` the tenant no longer has, or files of your own.
+Kept files still appear in Steps, Diagram and Where used. The import result lists them (`kept`, as
+project-relative paths); delete the ones you no longer need, or import into a new folder.
 
 ## Header and property types
 

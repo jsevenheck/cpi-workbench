@@ -96,22 +96,26 @@ impl Default for Runs {
 }
 
 impl Runs {
-    /// Keeps what a run produced and returns its id, or None when it produced no message.
-    pub fn keep(&self, produced: Produced) -> Option<String> {
+    /// Keeps a run only if its payload fits the cache; a refused run does not evict existing results.
+    pub fn keep(&self, produced: Produced) -> Result<Option<String>, String> {
         if produced.main.is_none() && produced.parts.is_empty() {
-            return None;
+            return Ok(None);
         }
-        let size = produced.main.iter().chain(produced.parts.iter().map(|(_, m)| m)).map(Message::size).sum();
+        let size = produced.main.iter().chain(produced.parts.iter().map(|(_, m)| m))
+            .fold(0usize, |n, m| n.saturating_add(m.size()));
+        if size > MAX_BYTES {
+            return Err("UnsupportedInSimulator: the step ran, but its result exceeds the 64 MiB MCP run cache. No runId was stored. Use smaller inputs or the desktop app.".into());
+        }
         let mut g = self.inner.lock().unwrap();
         g.0 += 1;
         let id = format!("{}-{}", self.prefix, g.0);
         g.1.push_back(Run { id: id.clone(), produced, size });
         g.2 += size;
-        while g.1.len() > MAX_RUNS || (g.2 > MAX_BYTES && g.1.len() > 1) {
+        while g.1.len() > MAX_RUNS || g.2 > MAX_BYTES {
             let old = g.1.pop_front().unwrap();
             g.2 -= old.size;
         }
-        Some(id)
+        Ok(Some(id))
     }
 
     /// One message: `id` (a run with one message) or `id/part`.
@@ -192,17 +196,22 @@ pub fn produced(tool: &str, input: &Message, result: &Value) -> Produced {
 }
 
 /// Shortens a result's bodies, saying where the whole body is: a body that is the input body unchanged is left
-/// out, a long one is cut, and a Splitter's messages are cut shorter (there may be many).
-pub fn shorten(result: &mut Value, id: &str, input_body: &str) {
-    fn cut(holder: &mut Value, reference: &str, limit: usize, input_body: &str) {
+/// out, a long one is cut, and a Splitter's messages are cut shorter (there may be many). Without a runId (the run
+/// did not fit the cache) the notes say that the rest of the body is not available.
+pub fn shorten(result: &mut Value, id: Option<&str>, input_body: &str) {
+    const NO_RUN: &str = "No runId was stored (see runNotice), so the whole body is not available from this run.";
+    fn cut(holder: &mut Value, reference: Option<&str>, limit: usize, input_body: &str) {
         if let Some(b64) = holder.get("bodyBase64").and_then(Value::as_str) {
             // Bytes are of no use to read in a result beyond a short one; the run keeps them.
             if b64.len() > limit {
                 let size = holder["bodySize"].as_u64().unwrap_or((b64.len() / 4 * 3) as u64);
                 holder.as_object_mut().unwrap().remove("bodyBase64");
-                holder["bodyShortened"] = json!(format!("The body is binary ({size} bytes) and left out. messageFrom \"{reference}\" \
-                    passes it to the next step (a Decoder, for instance); save_file with contentFrom \"{reference}\" saves it; \
-                    read_file with runId \"{reference}\" returns it as Base64."));
+                holder["bodyShortened"] = json!(match reference {
+                    Some(r) => format!("The body is binary ({size} bytes) and left out. messageFrom \"{r}\" \
+                        passes it to the next step (a Decoder, for instance); save_file with contentFrom \"{r}\" saves it; \
+                        read_file with runId \"{r}\" returns it as Base64."),
+                    None => format!("The body is binary ({size} bytes) and left out. {NO_RUN}"),
+                });
             }
             return;
         }
@@ -210,7 +219,10 @@ pub fn shorten(result: &mut Value, id: &str, input_body: &str) {
         let chars = body.chars().count();
         if body == input_body && chars > UNCHANGED_MIN_CHARS {
             holder.as_object_mut().unwrap().remove("body");
-            holder["bodyUnchanged"] = json!(format!("The body is the input body, unchanged ({chars} characters); read_file with runId \"{reference}\" reads it, messageFrom \"{reference}\" passes it on."));
+            holder["bodyUnchanged"] = json!(match reference {
+                Some(r) => format!("The body is the input body, unchanged ({chars} characters); read_file with runId \"{r}\" reads it, messageFrom \"{r}\" passes it on."),
+                None => format!("The body is the input body, unchanged ({chars} characters)."),
+            });
             return;
         }
         if chars <= limit {
@@ -218,12 +230,16 @@ pub fn shorten(result: &mut Value, id: &str, input_body: &str) {
         }
         let short: String = body.chars().take(limit).collect();
         holder["body"] = json!(short);
-        holder["bodyShortened"] = json!(format!("The body has {chars} characters; the first {limit} are shown. read_file with runId \"{reference}\" reads it all; messageFrom \"{reference}\" passes it to the next step."));
+        holder["bodyShortened"] = json!(match reference {
+            Some(r) => format!("The body has {chars} characters; the first {limit} are shown. read_file with runId \"{r}\" reads it all; messageFrom \"{r}\" passes it to the next step."),
+            None => format!("The body has {chars} characters; the first {limit} are shown. {NO_RUN}"),
+        });
     }
+    let sub = |part: &str| id.map(|i| format!("{i}/{part}"));
     if let Some(runs) = result.get_mut("runs").and_then(Value::as_array_mut) {
         for r in runs {
             let rt = r["runtime"].as_str().unwrap_or_default().to_string();
-            cut(&mut r["result"]["output"], &format!("{id}/{rt}"), PREVIEW_CHARS, input_body);
+            cut(&mut r["result"]["output"], sub(&rt).as_deref(), PREVIEW_CHARS, input_body);
         }
         return;
     }
@@ -233,7 +249,7 @@ pub fn shorten(result: &mut Value, id: &str, input_body: &str) {
     cut(result, id, PREVIEW_CHARS, input_body);
     if let Some(ms) = result.get_mut("messages").and_then(Value::as_array_mut) {
         for (i, m) in ms.iter_mut().enumerate() {
-            cut(m, &format!("{id}/{}", i + 1), PART_PREVIEW_CHARS, "");
+            cut(m, sub(&(i + 1).to_string()).as_deref(), PART_PREVIEW_CHARS, "");
         }
     }
 }
@@ -261,21 +277,30 @@ mod tests {
     #[test]
     fn ids_are_opaque_bounded_and_per_process() {
         let runs = Runs::default();
-        let first = runs.keep(Produced { main: Some(msg("a")), parts: vec![] }).unwrap();
+        let first = runs.keep(Produced { main: Some(msg("a")), parts: vec![] }).unwrap().unwrap();
         assert!(first.starts_with("run-") && first.ends_with("-1"), "{first}");
         assert_eq!(runs.message(&first).unwrap().body, "a");
         for i in 0..MAX_RUNS {
-            runs.keep(Produced { main: Some(msg(&i.to_string())), parts: vec![] });
+            runs.keep(Produced { main: Some(msg(&i.to_string())), parts: vec![] }).unwrap();
         }
         assert!(runs.message(&first).unwrap_err().contains("Unknown run"), "the oldest is gone");
         assert!(runs.message("run-zzzz-1").unwrap_err().contains("earlier server process"));
-        assert!(runs.keep(Produced::default()).is_none(), "no message, no id");
+        assert!(runs.keep(Produced::default()).unwrap().is_none(), "no message, no id");
+    }
+
+    #[test]
+    fn oversized_run_does_not_get_a_handle_or_evict_a_previous_run() {
+        let runs = Runs::default();
+        let id = runs.keep(Produced { main: Some(msg("keep me")), parts: vec![] }).unwrap().unwrap();
+        let large = Message { body: "x".repeat(MAX_BYTES), body_base64: None, headers: json!([]), properties: json!([]) };
+        assert!(runs.keep(Produced { main: Some(large), parts: vec![] }).unwrap_err().contains("64 MiB"));
+        assert_eq!(runs.message(&id).unwrap().body, "keep me");
     }
 
     #[test]
     fn parts_are_named_and_gathered_in_order() {
         let runs = Runs::default();
-        let id = runs.keep(Produced { main: None, parts: vec![("1".into(), msg("x")), ("2".into(), msg("y"))] }).unwrap();
+        let id = runs.keep(Produced { main: None, parts: vec![("1".into(), msg("x")), ("2".into(), msg("y"))] }).unwrap().unwrap();
         assert!(runs.message(&id).unwrap_err().contains(&format!("{id}/1, {id}/2")));
         assert_eq!(runs.message(&format!("{id}/2")).unwrap().body, "y");
         assert!(runs.message(&format!("{id}/3")).unwrap_err().contains("no message '3'"));
@@ -286,7 +311,7 @@ mod tests {
     #[test]
     fn long_bodies_are_shortened_with_a_pointer() {
         let mut r = json!({ "output": { "body": "é".repeat(PREVIEW_CHARS + 5) }, "messages": [{ "body": "short" }] });
-        shorten(&mut r, "run-1-1", "");
+        shorten(&mut r, Some("run-1-1"), "");
         assert_eq!(r["output"]["body"].as_str().unwrap().chars().count(), PREVIEW_CHARS);
         assert!(r["output"]["bodyShortened"].as_str().unwrap().contains("run-1-1"));
         assert!(r["messages"][0].get("bodyShortened").is_none());
@@ -299,22 +324,34 @@ mod tests {
         assert_eq!(m.to_json(), json!({ "bodyBase64": "H4sI", "headers": [], "properties": [] }));
         assert_eq!(m.with_body("x").to_json()["body"], "x");
         let mut r = json!({ "output": { "bodyBase64": "A".repeat(PREVIEW_CHARS + 4), "bodySize": 15003 } });
-        shorten(&mut r, "run-1-4", "");
+        shorten(&mut r, Some("run-1-4"), "");
         assert!(r["output"].get("bodyBase64").is_none());
         assert!(r["output"]["bodyShortened"].as_str().unwrap().contains("binary (15003 bytes)"));
         let mut small = json!({ "output": { "bodyBase64": "H4sI" } });
-        shorten(&mut small, "run-1-5", "");
+        shorten(&mut small, Some("run-1-5"), "");
         assert_eq!(small["output"]["bodyBase64"], "H4sI");
+    }
+
+    #[test]
+    fn without_a_run_id_the_notes_say_the_body_is_not_kept() {
+        let body = "x".repeat(PREVIEW_CHARS + 1);
+        let mut r = json!({ "output": { "body": body }, "messages": [{ "body": "y".repeat(PART_PREVIEW_CHARS + 1) }] });
+        shorten(&mut r, None, "");
+        assert_eq!(r["output"]["body"].as_str().unwrap().len(), PREVIEW_CHARS);
+        for note in [&r["output"]["bodyShortened"], &r["messages"][0]["bodyShortened"]] {
+            let note = note.as_str().unwrap();
+            assert!(note.contains("No runId was stored") && !note.contains("read_file"), "{note}");
+        }
     }
 
     #[test]
     fn an_unchanged_body_is_left_out() {
         let body = "<a>".to_string() + &"x".repeat(500) + "</a>";
         let mut r = json!({ "output": { "body": body, "headers": [] } });
-        shorten(&mut r, "run-1-2", &body);
+        shorten(&mut r, Some("run-1-2"), &body);
         assert!(r["output"].get("body").is_none() && r["output"]["bodyUnchanged"].as_str().unwrap().contains("run-1-2"));
         let mut small = json!({ "output": { "body": "<a/>" } });
-        shorten(&mut small, "run-1-3", "<a/>");
+        shorten(&mut small, Some("run-1-3"), "<a/>");
         assert_eq!(small["output"]["body"], "<a/>", "a short body stays");
     }
 

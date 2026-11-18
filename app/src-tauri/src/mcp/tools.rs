@@ -292,12 +292,25 @@ pub fn call(server: &Server, name: &str, args: &Args) -> Result<Value, String> {
     if runs_step && result["ok"] != false && result["valid"] != false {
         let input = runs::Message::from_output(&args[RESOLVED_INPUT])
             .unwrap_or_else(|| runs::Message::text("", json!([]), json!([])));
-        if let Some(id) = server.runs().keep(runs::produced(name, &input, &result)) {
-            runs::shorten(&mut result, &id, &input.body);
-            result["runId"] = json!(id);
-        }
+        keep_run(server, name, &input, &mut result);
     }
     Ok(result)
+}
+
+/// Keeps the message a run produced under a runId and shortens the result's bodies. A run too large for the
+/// cache still returns its (shortened) result, without a runId and with `runNotice` saying why.
+pub(super) fn keep_run(server: &Server, name: &str, input: &runs::Message, result: &mut Value) {
+    match server.runs().keep(runs::produced(name, input, result)) {
+        Ok(Some(id)) => {
+            runs::shorten(result, Some(&id), &input.body);
+            result["runId"] = json!(id);
+        }
+        Ok(None) => {}
+        Err(notice) => {
+            runs::shorten(result, None, &input.body);
+            result["runNotice"] = json!(notice);
+        }
+    }
 }
 
 fn dispatch(server: &Server, name: &str, args: &Args) -> Result<Value, String> {

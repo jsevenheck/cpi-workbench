@@ -30,7 +30,7 @@ export interface Changes {
 
 export interface XsltResult {
   ok: boolean;
-  failedPhase?: 'compile' | 'parameters' | 'runtime';
+  failedPhase?: 'compile' | 'parameters' | 'runtime' | 'approval';
   diagnostics: Diagnostic[];
   messages: { text: string; terminate: boolean; line?: number }[];
   parameters: { name: string; source: string; required: boolean; value?: string; type?: string }[];

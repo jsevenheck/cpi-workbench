@@ -17,9 +17,10 @@ struct AppState {
 
 /// Forwards one RPC call to the engine for `profile`.
 #[tauri::command]
-async fn engine_call(state: State<'_, AppState>, profile: String, method: String, params: Value) -> Result<Value, String> {
+async fn engine_call(state: State<'_, AppState>, profile: String, method: String, params: Value,
+                     project_root: Option<String>) -> Result<Value, String> {
     let engines = state.engines.clone();
-    tauri::async_runtime::spawn_blocking(move || engines.call(&profile, &method, params))
+    tauri::async_runtime::spawn_blocking(move || engines.call_desktop(&profile, &method, params, project_root))
         .await
         .map_err(|e| e.to_string())?
 }

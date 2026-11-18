@@ -128,7 +128,7 @@ class CoreTest {
         files.write(Map.of("path", "sub/a.txt", "content", "first", "createNew", true));
         IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
                 () -> files.write(Map.of("path", "sub/a.txt", "content", "second", "createNew", true)));
-        assertTrue(e.getMessage().contains("exists already"), e.getMessage());
+        assertEquals("exists already: sub/a.txt", e.getMessage());
         assertEquals("first", Files.readString(tmp.resolve("sub/a.txt")));
         files.write(Map.of("path", "sub/a.txt", "content", "third"));
         assertEquals("third", Files.readString(tmp.resolve("sub/a.txt")));
@@ -195,6 +195,102 @@ class CoreTest {
         } finally {
             server.stop(0);
         }
+    }
+
+    @Test
+    void scopedHttpRequestsNeverFallBackToTheOpenProject(@TempDir Path tmp) throws Exception {
+        ProjectFiles legacy = new ProjectFiles();
+        Files.writeString(tmp.resolve("data.txt"), "legacy");
+        legacy.open(Map.of("dir", tmp.toString()));
+        Path other = Files.createDirectory(tmp.resolve("other"));
+        Files.writeString(other.resolve("data.txt"), "other");
+        RpcHandler handler = new RpcHandler() {
+            public Object call(String method, Map<String, Object> params) throws Exception {
+                return call(method, params, legacy);
+            }
+
+            public Object call(String method, Map<String, Object> params, ProjectFiles project) throws Exception {
+                return project.read(params);
+            }
+
+            public Map<String, Object> describe() {
+                return Json.o();
+            }
+        };
+        var server = new RpcServer(handler, 5000).serveHttp(0, null);
+        try {
+            var uri = new java.net.URI("http", null, server.getAddress().getHostString(), server.getAddress().getPort(),
+                    "/project/rpc", null, null);
+            var client = java.net.http.HttpClient.newHttpClient();
+            Json.Obj request = Json.o().with("method", "file.read").with("params", Map.of("path", "data.txt"));
+            assertTrue(scopedPost(client, uri, request).contains("requires projectRoot"));
+            assertTrue(scopedPost(client, uri, request.with("projectRoot", true)).contains("requires projectRoot"));
+            assertTrue(scopedPost(client, uri, request.with("projectRoot", null)).contains("No project folder is open"));
+            assertTrue(scopedPost(client, uri, request.with("projectRoot", tmp.resolve("missing").toString()))
+                    .contains("Project folder is unavailable"));
+            var response = Json.parseObject(scopedPost(client, uri, request.with("projectRoot", other.toString())));
+            assertEquals("other", Json.obj(response, "result").get("content"));
+            request.with("params", Map.of("path", "data.txt", "baseDir", tmp.toString()));
+            assertTrue(scopedPost(client, uri, request).contains("not a baseDir override"));
+            assertEquals("legacy", legacy.read(Map.of("path", "data.txt")).get("content"));
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    /**
+     * A deleted or renamed project folder fails only the calls that need it: engine.info and calls without project
+     * files still answer, and nothing falls back to the engine's open project.
+     */
+    @Test
+    void anUnavailableProjectFolderFailsOnlyProjectCalls(@TempDir Path tmp) throws Exception {
+        ProjectFiles legacy = new ProjectFiles();
+        Files.writeString(tmp.resolve("data.txt"), "legacy");
+        legacy.open(Map.of("dir", tmp.toString()));
+        RpcHandler handler = new RpcHandler() {
+            public Object call(String method, Map<String, Object> params) throws Exception {
+                return call(method, params, legacy);
+            }
+
+            public Object call(String method, Map<String, Object> params, ProjectFiles project) throws Exception {
+                return switch (method) {
+                    case "engine.info" -> describe();
+                    case "format" -> "formatted"; // a call without project files
+                    case "run" -> String.valueOf(project.root()); // a run that takes the project as its base folder
+                    default -> project.read(params);
+                };
+            }
+
+            public Map<String, Object> describe() {
+                return Json.o().with("name", "test-engine");
+            }
+        };
+        var server = new RpcServer(handler, 5000);
+        String missing = tmp.resolve("renamed").toString();
+        java.util.function.Function<String, Map<String, Object>> call = method -> server.handle(Json.o().with("id", 1)
+                .with("method", "project.request").with("params", Json.o().with("method", method)
+                        .with("params", Map.of("path", "data.txt")).with("projectRoot", missing)));
+        assertEquals("test-engine", Json.obj(call.apply("engine.info"), "result").get("name"));
+        assertEquals("formatted", call.apply("format").get("result"));
+        for (String method : List.of("run", "file.read")) {
+            var error = Json.obj(call.apply(method), "error");
+            assertTrue(Json.str(error, "message", "").startsWith("Project folder is unavailable: " + missing), error::toString);
+        }
+        var files = ProjectFiles.scoped(missing);
+        assertThrows(IllegalArgumentException.class, files::root);
+        assertThrows(IllegalArgumentException.class, files::listing);
+        assertThrows(IllegalArgumentException.class, () -> files.resolve("data.txt"));
+        assertThrows(IllegalArgumentException.class, ProjectFiles.scoped("relative/path")::root);
+        assertNull(ProjectFiles.scoped(null).root());
+    }
+
+    private static String scopedPost(java.net.http.HttpClient client, java.net.URI uri, Json.Obj request) throws Exception {
+        var httpRequest = java.net.http.HttpRequest.newBuilder(uri).header("X-Cpiwb", "1")
+                .header("Content-Type", "application/json").timeout(java.time.Duration.ofSeconds(5))
+                .POST(java.net.http.HttpRequest.BodyPublishers.ofString(Json.write(request))).build();
+        var response = client.send(httpRequest, java.net.http.HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, response.statusCode());
+        return response.body();
     }
 
     /** A raw request: java.net.http does not let a caller set Host. */

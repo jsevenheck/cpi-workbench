@@ -1,5 +1,11 @@
 package io.cpiwb.xml;
 
+import org.xml.sax.Attributes;
+import org.xml.sax.InputSource;
+import org.xml.sax.helpers.DefaultHandler;
+
+import javax.xml.parsers.SAXParserFactory;
+import java.io.StringReader;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Executable;
 import java.lang.reflect.InvocationTargetException;
@@ -25,7 +31,7 @@ import java.util.regex.Pattern;
  */
 public final class JavaExtensions {
 
-    private static final Pattern JAVA_NS = Pattern.compile("xmlns:[\\w.-]+\\s*=\\s*[\"']java:([\\w.$]+)[\"']");
+    static final Pattern JAVA_NS = Pattern.compile("xmlns:[\\w.-]+\\s*=\\s*[\"']java:([\\w.$]+)[\"']");
     public static final int MAX_ARGS = 20;
 
     /** Registers one function (namespace, local name) with the XSLT engine. */
@@ -44,6 +50,56 @@ public final class JavaExtensions {
 
     public JavaExtensions(Registrar registrar) {
         this.registrar = registrar;
+    }
+
+    /**
+     * This check does not load or register any classes. Besides the plain declaration, it parses the module, so a
+     * namespace written with character or entity references ({@code jav&#97;:}) or an EQName ({@code Q{java:...}})
+     * in an attribute or text counts too. External entities and DTDs are not read; a module that does not parse is
+     * left to Saxon's own error.
+     */
+    static boolean declaresJava(String moduleText) {
+        if (moduleText == null) {
+            return false;
+        }
+        if (JAVA_NS.matcher(moduleText).find()) {
+            return true;
+        }
+        boolean[] found = {false};
+        StringBuilder text = new StringBuilder();
+        try {
+            SAXParserFactory factory = SAXParserFactory.newInstance();
+            factory.setNamespaceAware(true);
+            factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+            factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+            factory.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
+            factory.newSAXParser().parse(new InputSource(new StringReader(moduleText)), new DefaultHandler() {
+                @Override
+                public void startPrefixMapping(String prefix, String uri) {
+                    found[0] |= uri != null && uri.trim().startsWith("java:");
+                }
+
+                @Override
+                public void startElement(String uri, String localName, String qName, Attributes attributes) {
+                    for (int i = 0; i < attributes.getLength(); i++) {
+                        found[0] |= attributes.getValue(i).contains("Q{java:");
+                    }
+                }
+
+                @Override
+                public void characters(char[] ch, int start, int length) {
+                    text.append(ch, start, length);
+                }
+
+                @Override
+                public InputSource resolveEntity(String publicId, String systemId) {
+                    return new InputSource(new StringReader(""));
+                }
+            });
+        } catch (Exception e) {
+            return found[0];
+        }
+        return found[0] || text.indexOf("Q{java:") >= 0;
     }
 
     /**

@@ -71,6 +71,25 @@ class FilterStepTest {
     }
 
     @Test
+    void onlyCallsOutsideLiteralsAndCommentsNeedCamel() {
+        // A substituted value is a string literal; call-like text in it stays literal.
+        assertFalse(FilterStep.needsCamel("//star[class = 'function:simple(${property.x})']"));
+        assertFalse(FilterStep.needsCamel("//star[class = \"function:simple('a')\"]"));
+        // Escaped quotes do not end the literal.
+        assertFalse(FilterStep.needsCamel("//star[class = 'it''s function:simple(1)']"));
+        assertFalse(FilterStep.needsCamel("//star[class = \"say \"\"function:simple(1)\"\"\"]"));
+        // XPath comments, also nested, are skipped.
+        assertFalse(FilterStep.needsCamel("//star (: function:simple('x') :)"));
+        assertFalse(FilterStep.needsCamel("//star (: outer (: inner :) function:simple('x') :)"));
+        // A call outside literals and comments is rejected, also after an escaped quote or a closed comment.
+        assertTrue(FilterStep.needsCamel("//star[class = function:simple('${property.class}')]"));
+        assertTrue(FilterStep.needsCamel("//star[name = 'it''s' or class = function:simple('x')]"));
+        assertTrue(FilterStep.needsCamel("//star (: note :)[class = function:simple('x')]"));
+        String literal = body(filter("concat('function:simple(', 'x)')", "string", STARS));
+        assertEquals("function:simple(x)", literal);
+    }
+
+    @Test
     void errors() {
         assertFalse(Json.bool(filter("count(//star)", "node", STARS), "ok", true));
         Map<String, Object> simple = filter("//star[class = function:simple('${property.class}')]", "nodelist", STARS);

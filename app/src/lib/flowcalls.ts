@@ -72,6 +72,36 @@ export function flowStepDefaults() {
 
 type Defaults = ReturnType<typeof flowStepDefaults>;
 
+/** What the selected configuration may call; used to explain missing runtimes before dispatch. */
+export function flowRequirements(step: FlowStep, settings: Defaults): { xml: boolean; camel: boolean } {
+  const simple = (v: string | number) => String(v).includes('${');
+  switch (step) {
+    case 'contentModifier': return { camel: true, xml: [settings.cm.headers, settings.cm.properties]
+      .some((rows) => rows.some((r) => r.action === 'Create' && r.type === 'xpath')) };
+    case 'router': {
+      const types = new Set(settings.router.routes.filter((r) => !r.default).map((r) => r.expressionType));
+      // Mixed condition types are rejected by runStep without calling an engine.
+      return { xml: types.size === 1 && types.has('xml'), camel: types.size === 1 && types.has('nonxml') };
+    }
+    case 'filter': return { xml: true, camel: simpleCalls(settings.filter.expression).length > 0 };
+    case 'splitter': return { xml: true, camel: simple(settings.splitter.expression) || simple(settings.splitter.grouping) };
+    case 'converter': {
+      const c = settings.converter;
+      return { xml: true, camel: c.conversion === 'csvToXml' && [c.schema, c.targetPath, c.recordMarker].some(simple) };
+    }
+    default: return { xml: true, camel: false };
+  }
+}
+
+/** Why the selected configuration cannot run with the engines at hand ('' when it can). */
+export function missingFlowRuntime(step: FlowStep, settings: Defaults, available: { xml: boolean; camel: boolean }): string {
+  const required = flowRequirements(step, settings);
+  const missing = [];
+  if (required.xml && !available.xml) missing.push('a Saxon XML engine');
+  if (required.camel && !available.camel) missing.push('a Groovy engine (Camel)');
+  return missing.length ? `This step configuration requires ${missing.join(' and ')}. Install or start the missing engine.` : '';
+}
+
 /** The key of each step's settings in `flowStepDefaults()` and the store's `flow`. */
 export const flowConfigKey = { contentModifier: 'cm', filter: 'filter', router: 'router', splitter: 'splitter', gather: 'gather',
   converter: 'converter', encoder: 'encoder', decoder: 'decoder', messageDigest: 'digest' } as const;
@@ -193,31 +223,43 @@ async function runContentModifier(run: FlowRun, cm: Defaults['cm']) {
   // XPath rows read the incoming body, which the step changes only after all header and property rows. Rows run
   // top to bottom (SAP), so an XPath that uses $name sees the headers and properties of the rows above it.
   const input = run.input;
-  let state = input;
-  const done: Record<'headers' | 'properties', any[]> = { headers: [], properties: [] };
+  let continuation: string | undefined;
   let pending: Record<'headers' | 'properties', any[]> = { headers: [], properties: [] };
-  for (const table of ['headers', 'properties'] as const) {
-    for (const r of cm[table]) {
-      let row: any = { ...r };
-      if (r.action === 'Create' && r.type === 'xpath') {
-        if (r.value.includes('$') && (pending.headers.length || pending.properties.length)) {
-          const s = await run.call('contentModifier.run', { ...pending, bodyType: 'constant', body: '', input: state }, run.camel);
-          if (s.ok) state = { ...input, headers: s.output.headers, properties: s.output.properties };
-          pending = { headers: [], properties: [] };
+  const startingPoint = () => continuation === undefined ? { input } : { continuation };
+  try {
+    for (const table of ['headers', 'properties'] as const) {
+      for (const r of cm[table]) {
+        let row: any = { ...r };
+        if (r.action === 'Create' && r.type === 'xpath') {
+          let xpathInput = input;
+          if (pending.headers.length || pending.properties.length) {
+            const variables = r.value.includes('$');
+            const s = await run.call('contentModifier.advance', { ...pending, ...startingPoint(), variables }, run.camel);
+            continuation = undefined; // the engine consumed the previous token
+            if (!s.ok) return s;
+            if (typeof s.continuation !== 'string') throw new Error('Content Modifier did not return a continuation.');
+            continuation = s.continuation;
+            pending = { headers: [], properties: [] };
+            if (variables) xpathInput = { ...input, ...s.variables };
+          }
+          try {
+            row.resolved = await xpathValue(run, r.value, r.datatype.startsWith('org.w3c.dom.') ? 'nodes' : 'string', xpathInput);
+          } catch (e) {
+            throw new Error(`XPath of ${r.name}: ${(e as Error).message}`);
+          }
         }
-        try {
-          row = { ...r, resolved: await xpathValue(run, r.value, r.datatype.startsWith('org.w3c.dom.') ? 'nodes' : 'string', state) };
-        } catch (e) {
-          throw new Error(`XPath of ${r.name}: ${(e as Error).message}`);
-        }
+        pending[table].push(row);
       }
-      done[table].push(row);
-      pending[table].push(row);
     }
+    const result = await run.call('contentModifier.run', {
+      ...pending, ...startingPoint(), bodyType: cm.bodyType, body: cm.body,
+    }, run.camel);
+    continuation = undefined;
+    return result;
+  } finally {
+    // A failed XPath must release the paused exchange without hiding the original failure.
+    if (continuation !== undefined) await run.call('contentModifier.discard', { continuation }, run.camel).catch(() => {});
   }
-  return await run.call('contentModifier.run', {
-    ...done, bodyType: cm.bodyType, body: cm.body, input,
-  }, run.camel);
 }
 
 async function runRouter(run: FlowRun, router: Defaults['router']) {
@@ -293,15 +335,65 @@ async function runConverter(run: FlowRun, c: Defaults['converter']) {
 
 // SAP: `function:simple('${property.x}')` in a Filter XPath. Camel Simple gives the value, which goes into the
 // XPath as a string literal. The MCP server does the same (resolve_simple_functions in mcp/flow.rs).
-const SIMPLE_CALL = /function:simple\(\s*(?:'([^']*)'|"([^"]*)")\s*\)/g;
+const SIMPLE_CALL = 'function:simple(';
+const isXPathSpace = (c: string | undefined) => c === ' ' || c === '\t' || c === '\r' || c === '\n';
+
+/** `function:simple('…')` or `("…")` at `at`, with XPath whitespace around the argument; null if it is not one. */
+function simpleCallAt(xpath: string, at: number): { start: number; end: number; expression: string } | null {
+  let j = at + SIMPLE_CALL.length;
+  while (isXPathSpace(xpath[j])) j++;
+  const quote = xpath[j];
+  if (quote !== "'" && quote !== '"') return null;
+  const close = xpath.indexOf(quote, j + 1);
+  if (close < 0) return null;
+  let k = close + 1;
+  while (isXPathSpace(xpath[k])) k++;
+  return xpath[k] === ')' ? { start: at, end: k + 1, expression: xpath.slice(j + 1, close) } : null;
+}
+
+/**
+ * The function:simple(...) calls of an XPath, outside its string literals and `(: :)` comments. Scanned like the
+ * engine's check (FilterStep.needsCamel): literals first (a doubled quote stays inside), then nested comments.
+ */
+export function simpleCalls(xpath: string): { start: number; end: number; expression: string }[] {
+  const calls: { start: number; end: number; expression: string }[] = [];
+  let quote = '';
+  let comment = 0;
+  for (let i = 0; i < xpath.length; i++) {
+    const c = xpath[i];
+    if (quote) {
+      if (c === quote) {
+        if (xpath[i + 1] === quote) i++;
+        else quote = '';
+      }
+    } else if (xpath.startsWith('(:', i)) {
+      comment++;
+      i++;
+    } else if (comment > 0) {
+      if (xpath.startsWith(':)', i)) {
+        comment--;
+        i++;
+      }
+    } else if (c === "'" || c === '"') {
+      quote = c;
+    } else if (xpath.startsWith(SIMPLE_CALL, i)) {
+      const call = simpleCallAt(xpath, i);
+      if (call) calls.push(call);
+      i = (call ? call.end : i + SIMPLE_CALL.length) - 1;
+    }
+  }
+  return calls;
+}
 
 /** The XPath with each function:simple(...) replaced by its value as an XPath string literal. */
 export async function resolveSimpleFunctions(xpath: string, evaluate: (expression: string) => Promise<string>) {
-  let out = xpath;
-  for (const m of xpath.matchAll(SIMPLE_CALL)) {
-    const v = await evaluate(m[1] ?? m[2]);
-    // A function, not a string: in a replacement string, $$, $& and $1 are patterns, and the value would change.
-    out = out.replace(m[0], () => "'" + v.replaceAll("'", "''") + "'");
+  let out = '';
+  let offset = 0;
+  for (const call of simpleCalls(xpath)) {
+    const v = await evaluate(call.expression);
+    // Use original offsets, not replacement text (which may itself contain a later call).
+    out += xpath.slice(offset, call.start) + "'" + v.replaceAll("'", "''") + "'";
+    offset = call.end;
   }
-  return out;
+  return out + xpath.slice(offset);
 }

@@ -204,6 +204,123 @@ class IflowImportTest {
         assertEquals("x", Files.readString(project.resolve("iflows/f/a.txt")));
     }
 
+    private static Path zipWith(Path zip, Map<String, String> entries) throws Exception {
+        try (ZipOutputStream z = new ZipOutputStream(Files.newOutputStream(zip))) {
+            for (var e : entries.entrySet()) {
+                z.putNextEntry(new ZipEntry(e.getKey()));
+                z.write(e.getValue().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                z.closeEntry();
+            }
+        }
+        return zip;
+    }
+
+    /** Two entries for one file are refused with both names, before anything is written to the project. */
+    @Test
+    void duplicateEntriesAreAClearError(@TempDir Path tmp) throws Exception {
+        // ZipOutputStream refuses a second entry of one name, so rename the second one in the archive's bytes.
+        Map<String, String> entries = new java.util.LinkedHashMap<>();
+        entries.put("dup-1.txt", "first");
+        entries.put("dup-2.txt", "second");
+        Path zip = zipWith(tmp.resolve("twice.zip"), entries);
+        byte[] bytes = Files.readAllBytes(zip);
+        String latin = new String(bytes, java.nio.charset.StandardCharsets.ISO_8859_1).replace("dup-2.txt", "dup-1.txt");
+        Files.write(zip, latin.getBytes(java.nio.charset.StandardCharsets.ISO_8859_1));
+        Path project = Files.createDirectories(tmp.resolve("project"));
+        var e = assertThrows(java.io.IOException.class, () -> IflowImport.importZip(zip, project, "f", true));
+        assertTrue(e.getMessage().contains("Duplicate ZIP entry: dup-1.txt (the archive holds this entry twice)"), e::getMessage);
+        assertTrue(Files.notExists(project.resolve("iflows")));
+        // Letter case only: one file on a case-insensitive file system, two elsewhere.
+        entries.clear();
+        entries.put("Script.groovy", "first");
+        entries.put("script.groovy", "second");
+        Path cased = zipWith(tmp.resolve("cased.zip"), entries);
+        Path probe = Files.writeString(tmp.resolve("CaseProbe"), "");
+        if (Files.exists(tmp.resolve("caseprobe"))) {
+            var c = assertThrows(java.io.IOException.class, () -> IflowImport.importZip(cased, project, "g", true));
+            assertTrue(c.getMessage().contains("script.groovy (it collides with the entry Script.groovy"), c::getMessage);
+            assertTrue(Files.notExists(project.resolve("iflows/g")));
+        } else {
+            IflowImport.importZip(cased, project, "g", true);
+            assertEquals("second", Files.readString(project.resolve("iflows/g/script.groovy")));
+        }
+        Files.delete(probe);
+    }
+
+    /** A create-new import that fails while writing removes the folder it created, so that a retry can create it. */
+    @Test
+    void aFailedCreateNewPublishRemovesItsFolder(@TempDir Path tmp) throws Exception {
+        Path zip = zipWith(tmp.resolve("ok.zip"), Map.of("a.txt", "x", "sub/b.txt", "y"));
+        Path project = Files.createDirectories(tmp.resolve("project"));
+        try (var staging = new IflowImport.Staging()) {
+            var staged = IflowImport.stage(zip, staging.dir, "f", new ImportBudget());
+            Files.delete(staged.source().resolve("sub/b.txt")); // the copy of this one fails
+            var e = assertThrows(java.io.IOException.class, () -> IflowImport.publish(project, staged, true));
+            assertTrue(e.getMessage().contains("was removed again"), e::getMessage);
+            assertTrue(Files.notExists(project.resolve("iflows/f")));
+            assertTrue(Files.isDirectory(project.resolve("iflows")), "only the artifact folder is removed");
+        }
+        IflowImport.importZip(zip, project, "f", true);
+        assertEquals("y", Files.readString(project.resolve("iflows/f/sub/b.txt")));
+        // In overwrite mode the folder was there before, so it is never removed.
+        try (var staging = new IflowImport.Staging()) {
+            var staged = IflowImport.stage(zip, staging.dir, "f", new ImportBudget());
+            Files.delete(staged.source().resolve("sub/b.txt"));
+            var e = assertThrows(java.io.IOException.class, () -> IflowImport.publish(project, staged, false));
+            assertTrue(e.getMessage().contains("partially written"), e::getMessage);
+            assertEquals("y", Files.readString(project.resolve("iflows/f/sub/b.txt")));
+        }
+    }
+
+    @Test
+    void rollbackLeavesFilesAddedByAnotherWriter(@TempDir Path root) throws Exception {
+        Path folder = Files.createDirectory(root.resolve("flow")).toRealPath();
+        var recordedFolder = new IflowImport.CreatedEntry(folder);
+        Path written = Files.writeString(folder.resolve("imported.txt"), "from the import");
+        var recordedFile = new IflowImport.CreatedEntry(written);
+        Path userFile = Files.writeString(folder.resolve("notes.txt"), "from the user");
+
+        assertFalse(IflowImport.rollback(root, List.of(recordedFolder, recordedFile)));
+        assertTrue(Files.notExists(written));
+        assertEquals("from the user", Files.readString(userFile));
+    }
+
+    /** Overwriting keeps files the new export no longer has, and lists them in the result. */
+    @Test
+    void overwriteListsTheFilesItKeeps(@TempDir Path tmp) throws Exception {
+        Path project = Files.createDirectories(tmp.resolve("project"));
+        IflowImport.importZip(zipWith(tmp.resolve("v1.zip"), Map.of("a.txt", "1", "old/Gone.groovy", "1")), project, "f", true);
+        Files.writeString(project.resolve("iflows/f/notes.md"), "mine");
+        Map<String, Object> r = IflowImport.importZip(zipWith(tmp.resolve("v2.zip"), Map.of("a.txt", "2")), project, "f", false);
+        assertEquals(List.of("iflows/f/notes.md", "iflows/f/old/Gone.groovy"), r.get("kept"));
+        assertEquals("2", Files.readString(project.resolve("iflows/f/a.txt")));
+        assertEquals("mine", Files.readString(project.resolve("iflows/f/notes.md")));
+        assertTrue(Files.exists(project.resolve("iflows/f/old/Gone.groovy")));
+        Map<String, Object> fresh = ArtifactImport.importZip(zipWith(tmp.resolve("n.zip"), Map.of("a.txt", "3")), project, "n", true);
+        assertEquals(List.of(), fresh.get("kept"));
+    }
+
+    /** Temporary files another process holds (a virus scanner on Windows) do not fail the import. */
+    @Test
+    void stagingCleanupIsBestEffort() throws Exception {
+        var staging = new IflowImport.Staging();
+        Path sub = Files.createDirectory(staging.dir.resolve("held"));
+        Path file = Files.writeString(sub.resolve("file.txt"), "x");
+        boolean windows = System.getProperty("os.name").toLowerCase(java.util.Locale.ROOT).startsWith("windows");
+        try (var held = new java.io.FileInputStream(file.toFile())) { // java.io does not share delete access on Windows
+            if (!windows) {
+                Files.setPosixFilePermissions(sub, java.nio.file.attribute.PosixFilePermissions.fromString("r-x------"));
+            }
+            staging.close(); // does not throw, whether or not the file could be removed
+        } finally {
+            if (!windows) {
+                Files.setPosixFilePermissions(sub, java.nio.file.attribute.PosixFilePermissions.fromString("rwx------"));
+            }
+        }
+        assertTrue(IflowImport.deleteTree(staging.dir));
+        assertTrue(Files.notExists(staging.dir));
+    }
+
     /** Encoder and Message Digest, with the keys of the public iFlows of plan F62. */
     @Test
     void encoderAndMessageDigestStepsAreRead() throws Exception {

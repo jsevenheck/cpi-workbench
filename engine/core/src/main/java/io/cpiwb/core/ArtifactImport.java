@@ -2,6 +2,8 @@ package io.cpiwb.core;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.zip.CRC32;
+import java.util.zip.CheckedInputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -30,13 +32,16 @@ public final class ArtifactImport {
 
     /** Artifact types of a package that are unpacked as a folder under iflows/. */
     private static final Set<String> FOLDERS = Set.of("IFlow", "RESTAPIProvider", "ScriptCollection", "MessageMapping");
-    private static final long MAX_PACKAGE = 200L * 1024 * 1024;
 
     private ArtifactImport() {
     }
 
     /** {@code iflow.import}: the result of the import with {@code kind}, the steps of all iFlows and {@code iflows}. */
     public static Map<String, Object> importZip(Path zip, Path projectRoot, String name, boolean createNew) throws Exception {
+        return importZip(zip, projectRoot, name, createNew, new ImportBudget());
+    }
+
+    static Map<String, Object> importZip(Path zip, Path projectRoot, String name, boolean createNew, ImportBudget budget) throws Exception {
         if (!Files.isRegularFile(zip)) {
             throw new IllegalArgumentException("Not a file: " + zip);
         }
@@ -44,18 +49,23 @@ public final class ArtifactImport {
         try (ZipFile z = new ZipFile(zip.toFile())) {
             kind = kind(z);
             if ("valueMapping".equals(kind)) {
-                Json.Obj vm = ValueMappingImport.importXml(read(z, z.getEntry("value_mapping.xml"), MAX_PACKAGE), projectRoot, createNew,
+                budget.entries(z.size());
+                Json.Obj vm = ValueMappingImport.importXml(read(z, z.getEntry("value_mapping.xml"), budget), projectRoot, createNew,
                         zip.getFileName().toString());
-                return result(projectRoot, kind, List.of(), List.of(vm), List.of(), ValueMappingImport.FILE, 1);
+                return result(projectRoot, kind, List.of(), List.of(vm), List.of(), ValueMappingImport.FILE, 1, List.of());
             }
             if ("package".equals(kind)) {
-                return importPackage(z, projectRoot, createNew);
+                budget.entries(z.size());
+                return importPackage(z, projectRoot, createNew, budget);
             }
         } catch (java.util.zip.ZipException e) {
             throw new IllegalArgumentException("Not a zip archive: " + zip.getFileName() + " (" + e.getMessage() + ")");
         }
-        IflowImport.Extracted x = IflowImport.extract(zip, projectRoot, name, createNew);
-        return result(projectRoot, "iflow", List.of(x.folder()), List.of(), List.of(), x.folder(), x.files());
+        try (var staging = new IflowImport.Staging()) {
+            var artifact = IflowImport.stage(zip, staging.dir, name, budget);
+            var x = IflowImport.publish(projectRoot, artifact, createNew);
+            return result(projectRoot, "iflow", List.of(x.folder()), List.of(), List.of(), x.folder(), x.files(), x.kept());
+        }
     }
 
     /** iflow, valueMapping or package, by the zip's entries. */
@@ -70,8 +80,9 @@ public final class ArtifactImport {
     }
 
     @SuppressWarnings("unchecked")
-    private static Map<String, Object> importPackage(ZipFile z, Path projectRoot, boolean createNew) throws Exception {
-        Object parsed = Json.parse(new String(Base64.getMimeDecoder().decode(read(z, z.getEntry("resources.cnt"), MAX_PACKAGE)),
+    private static Map<String, Object> importPackage(ZipFile z, Path projectRoot, boolean createNew, ImportBudget budget) throws Exception {
+        var wrapped = new ImportBudget(); // the outer zip's manifest and nested ZIP streams also have an aggregate byte limit
+        Object parsed = Json.parse(new String(Base64.getMimeDecoder().decode(read(z, z.getEntry("resources.cnt"), wrapped)),
                 StandardCharsets.UTF_8));
         if (!(parsed instanceof Map) || !(((Map<String, Object>) parsed).get("resources") instanceof List)) {
             throw new IllegalArgumentException("resources.cnt lists no resources; the package export format may have changed.");
@@ -119,41 +130,50 @@ public final class ArtifactImport {
                 throw new IllegalArgumentException("exists already: iflows/" + folder);
             }
         }
-        long budget = MAX_PACKAGE;
-        // The package's value mappings as one table: nothing is written when one of them exists (createNew), and
-        // none replaces the rows of another for the same agencies and identifiers.
-        List<List<ValueMappingImport.Entry>> groups = new ArrayList<>();
-        List<String> names = new ArrayList<>();
-        for (Map<String, Object> r : valueMappings) {
-            byte[] inner = read(z, z.getEntry(Json.str(r, "id", "") + "_content"), budget);
-            budget -= inner.length;
-            groups.addAll(ValueMappingImport.groups(valueMappingXml(inner, artifactName(r))));
-            names.add(artifactName(r));
-        }
-        List<Object> vmResults = new ArrayList<>();
-        if (!names.isEmpty()) {
-            vmResults.add(ValueMappingImport.importGroups(groups, projectRoot, createNew, String.join(", ", names)));
-        }
-        List<String> imported = new ArrayList<>();
-        int files = 0;
-        for (String[] f : folders) {
-            byte[] inner = read(z, z.getEntry(f[0] + "_content"), budget);
-            budget -= inner.length;
-            Path tmp = Files.createTempFile("cpiwb-artifact-", ".zip");
-            try {
-                Files.write(tmp, inner);
-                IflowImport.Extracted x = IflowImport.extract(tmp, projectRoot, f[1], createNew);
-                imported.add(x.folder());
-                files += x.files();
-            } finally {
-                Files.deleteIfExists(tmp);
+        try (var staging = new IflowImport.Staging()) {
+            List<List<ValueMappingImport.Entry>> groups = new ArrayList<>();
+            List<String> names = new ArrayList<>();
+            for (Map<String, Object> r : valueMappings) {
+                String artifact = artifactName(r);
+                var vm = stage(z, Json.str(r, "id", ""), artifact, staging.dir, wrapped, budget);
+                Path xml = vm.source().resolve("value_mapping.xml");
+                if (!Files.isRegularFile(xml)) {
+                    throw new IllegalArgumentException("The value mapping " + artifact + " in the package has no value_mapping.xml.");
+                }
+                groups.addAll(ValueMappingImport.groups(Files.readAllBytes(xml)));
+                names.add(artifact);
             }
+            List<IflowImport.Staged> prepared = new ArrayList<>();
+            for (String[] f : folders) {
+                var artifact = stage(z, f[0], f[1], staging.dir, wrapped, budget);
+                IflowImport.checkDestination(projectRoot, artifact, createNew);
+                prepared.add(artifact);
+            }
+            var table = names.isEmpty() ? null : ValueMappingImport.prepare(groups, projectRoot, createNew, String.join(", ", names));
+
+            // Validate all archives before publishing. A filesystem failure during publication can still leave
+            // committed folders; report those explicitly and leave the atomic table replacement until last.
+            List<String> imported = new ArrayList<>();
+            List<Object> vmResults = new ArrayList<>();
+            List<String> kept = new ArrayList<>();
+            int files = 0;
+            try {
+                for (var artifact : prepared) {
+                    var x = IflowImport.publish(projectRoot, artifact, createNew);
+                    imported.add(x.folder());
+                    files += x.files();
+                    kept.addAll(x.kept());
+                }
+                if (table != null) vmResults.add(table.publish());
+            } catch (IOException | RuntimeException e) {
+                if (imported.isEmpty()) throw e;
+                throw new IOException("Import stopped after publishing: " + String.join(", ", imported)
+                        + ". Review those folders before retrying in overwrite mode. " + e.getMessage(), e);
+            }
+            List<String> all = new ArrayList<>(imported);
+            if (!vmResults.isEmpty()) all.add(ValueMappingImport.FILE);
+            return result(projectRoot, "package", imported, vmResults, skipped, String.join(", ", all), files, kept);
         }
-        List<String> all = new ArrayList<>(imported);
-        if (!vmResults.isEmpty()) {
-            all.add(ValueMappingImport.FILE);
-        }
-        return result(projectRoot, "package", imported, vmResults, skipped, String.join(", ", all), files);
     }
 
     /** The folder name of a package's artifact: its id in the tenant (uniqueId), else its file name. */
@@ -162,31 +182,43 @@ public final class ArtifactImport {
         return unique.isBlank() ? Json.str(r, "name", "artifact").replaceFirst("(?i)\\.zip$", "") : unique;
     }
 
-    /** The value_mapping.xml inside a package's Value Mapping artifact (itself a zip). */
-    private static byte[] valueMappingXml(byte[] artifact, String name) throws IOException {
-        try (java.util.zip.ZipInputStream in = new java.util.zip.ZipInputStream(new java.io.ByteArrayInputStream(artifact))) {
-            ZipEntry e;
-            while ((e = in.getNextEntry()) != null) {
-                if ("value_mapping.xml".equals(e.getName())) {
-                    return in.readNBytes((int) MAX_PACKAGE);
-                }
+    private static IflowImport.Staged stage(ZipFile z, String id, String name, Path work,
+                                            ImportBudget wrapped, ImportBudget unpacked) throws IOException {
+        ZipEntry entry = z.getEntry(id + "_content");
+        Path archive = Files.createTempFile(work, "inner-", ".zip");
+        try {
+            try (var in = checkedStream(z, entry, wrapped); var out = Files.newOutputStream(archive)) {
+                in.transferTo(out);
+                checkCrc(entry, in);
             }
+            return IflowImport.stage(archive, work, name, unpacked);
+        } catch (IOException e) {
+            throw new IOException("Cannot stage artifact " + name + ": " + e.getMessage(), e);
+        } finally {
+            IflowImport.deleteQuietly(archive); // best effort; the staging folder's cleanup tries again
         }
-        throw new IllegalArgumentException("The value mapping " + name + " in the package has no value_mapping.xml.");
     }
 
-    private static byte[] read(ZipFile z, ZipEntry e, long budget) throws IOException {
-        try (InputStream in = z.getInputStream(e)) {
-            byte[] b = in.readNBytes((int) Math.min(Integer.MAX_VALUE - 8, budget + 1));
-            if (b.length > budget) {
-                throw new IOException("The export is larger than " + (MAX_PACKAGE >> 20) + " MB unpacked");
-            }
-            return b;
+    private static CheckedInputStream checkedStream(ZipFile z, ZipEntry entry, ImportBudget budget) throws IOException {
+        return new CheckedInputStream(budget.bounded(z.getInputStream(entry)), new CRC32());
+    }
+
+    private static void checkCrc(ZipEntry entry, CheckedInputStream in) throws IOException {
+        if (entry.getCrc() != in.getChecksum().getValue()) {
+            throw new IOException("ZIP checksum mismatch: " + entry.getName());
+        }
+    }
+
+    private static byte[] read(ZipFile z, ZipEntry e, ImportBudget budget) throws IOException {
+        try (var in = checkedStream(z, e, budget)) {
+            byte[] bytes = in.readAllBytes();
+            checkCrc(e, in);
+            return bytes;
         }
     }
 
     private static Map<String, Object> result(Path projectRoot, String kind, List<String> iflows, List<?> valueMappings,
-                                              List<Object> skipped, String imported, int files) throws IOException {
+                                              List<Object> skipped, String imported, int files, List<String> kept) throws IOException {
         Map<String, Object> r = IflowImport.steps(projectRoot);
         r.put("kind", kind);
         r.put("imported", imported);
@@ -194,6 +226,8 @@ public final class ArtifactImport {
         r.put("iflows", new ArrayList<Object>(iflows));
         r.put("valueMappings", new ArrayList<Object>(valueMappings));
         r.put("skipped", skipped);
+        // Overwrite imports keep files the export no longer has; they are listed, never deleted (docs/project-files.md).
+        r.put("kept", new ArrayList<Object>(kept));
         return r;
     }
 }

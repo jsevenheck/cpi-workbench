@@ -9,7 +9,7 @@
   import QueueEditor from './QueueEditor.svelte';
   import RowTable from './RowTable.svelte';
   import PlatformPanel from './PlatformPanel.svelte';
-  import { app, groovy, runGroovy, autoRunGroovy, saveScript, saveScriptAs, formatXml, otherProfile, saveInput, askImportMessage, closeInput, closeEditorFile, selectedMapping, platformDirty, setGroovyFunction } from '../lib/store.svelte';
+  import { app, groovy, runGroovy, autoRunGroovy, saveScript, saveScriptAs, savingEditor, formatXml, otherProfile, saveInput, askImportMessage, closeInput, closeEditorFile, selectedMapping, platformDirty, setGroovyFunction } from '../lib/store.svelte';
   import { reindentGroovy } from '../lib/indent';
   import { formatQueue, type QueueEntry } from '../lib/queue';
   import { scriptFunctions, kindLabel, type ParamKind } from '../lib/functions';
@@ -260,10 +260,10 @@
           oninput={(e) => setGroovyFunction((e.currentTarget as HTMLInputElement).value)} aria-label="Function name" placeholder="processData" />
       {/if}
       <div class="spacer"></div>
-      <button class="small" onclick={saveScript} disabled={!app.project} title={app.project ? 'Save (Ctrl+S)' : 'Open a project to save'}>Save</button>
+      <button class="small" onclick={saveScript} disabled={!app.project || savingEditor.groovy} title={app.project ? 'Save (Ctrl+S)' : 'Open a project to save'}>Save</button>
       <button class="small" onclick={() => { groovy.script = reindentGroovy(groovy.script); changed(); }}
         title="Re-indent by bracket depth; strings and comments keep their text">Format</button>
-      <button class="small" onclick={saveScriptAs} disabled={!app.project} title="Save under a new name; the open file stays as it is">Save as…</button>
+      <button class="small" onclick={saveScriptAs} disabled={!app.project || savingEditor.groovy} title="Save under a new name; the open file stays as it is">Save as…</button>
     </header>
     <div class="body">
       {#if !groovy.script}<p class="empty-hint">{app.project ? "Open a script from the project" : "Open a project, or load a script under Examples… on the left"}, or type or paste one here.</p>{/if}

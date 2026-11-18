@@ -23,7 +23,10 @@ for (const file of files) {
       },
     };
     const settings = f.from === 'iflow' ? settingsFromIflowStep(f.step.type, f.step.config) : f.step.config;
-    await runStep(run, f.step.type, f.step.type === 'gather' ? { ...settings, messages: f.messages } : settings);
+    const result = runStep(run, f.step.type, f.step.type === 'gather' ? { ...settings, messages: f.messages } : settings);
+    if (f.error !== undefined) await assert.rejects(result, { message: f.error });
+    else if (f.result !== undefined) assert.deepEqual(await result, f.result);
+    else await result;
     assert.deepEqual(calls, f.calls);
   });
 }

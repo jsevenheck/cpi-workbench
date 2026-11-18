@@ -5,7 +5,7 @@
   import KeyValueTable from './KeyValueTable.svelte';
   import CompareView from './CompareView.svelte';
   import HistoryView from './HistoryView.svelte';
-  import { app, xslt, runXslt, autoRunXslt, saveMapping, saveMappingAs, formatXml, otherProfile, saveInput, askImportMessage, closeInput, closeEditorFile } from '../lib/store.svelte';
+  import { app, xslt, runXslt, autoRunXslt, scheduleXsltPreview as changed, saveMapping, saveMappingAs, savingEditor, formatXml, otherProfile, saveInput, askImportMessage, closeInput, closeEditorFile } from '../lib/store.svelte';
   import { reindentXml } from '../lib/indent';
   import { languageFor } from '../lib/monaco';
   import type { Diagnostic } from '../lib/types';
@@ -16,13 +16,6 @@
   let outputTab = $state<'body' | 'headers' | 'properties' | 'parameters' | 'console' | 'compare' | 'history'>('body');
   let showDiff = $state(false);
   let mappingEditor: Editor | undefined = $state();
-
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  function changed() {
-    if (!xslt.live) return;
-    clearTimeout(timer);
-    timer = setTimeout(autoRunXslt, 450);
-  }
 
   let result = $derived(xslt.result);
   let errors = $derived(result?.diagnostics.filter((d) => d.severity === 'error') ?? []);
@@ -102,10 +95,10 @@
       {#if xslt.mappingPath || xslt.casePath || xslt.mapping}<button class="close-file" onclick={() => closeEditorFile('xslt')}
         title="Close this file (it stays on disk)" aria-label="Close file">×</button>{/if}
       <div class="spacer"></div>
-      <button class="small" onclick={saveMapping} disabled={!app.project} title={app.project ? 'Save (Ctrl+S)' : 'Open a project to save'}>Save</button>
+      <button class="small" onclick={saveMapping} disabled={!app.project || savingEditor.xslt} title={app.project ? 'Save (Ctrl+S)' : 'Open a project to save'}>Save</button>
       <button class="small" onclick={() => { xslt.mapping = reindentXml(xslt.mapping); changed(); }}
         title="Re-indent by element depth; whitespace that reaches the output stays as it is">Format</button>
-      <button class="small" onclick={saveMappingAs} disabled={!app.project} title="Save under a new name; the open file stays as it is">Save as…</button>
+      <button class="small" onclick={saveMappingAs} disabled={!app.project || savingEditor.xslt} title="Save under a new name; the open file stays as it is">Save as…</button>
     </header>
     <div class="body">
       {#if !xslt.mapping}<p class="empty-hint">{app.project ? "Open a mapping from the project" : "Open a project, or load a mapping under Examples… on the left"}, or type or paste one here.</p>{/if}
@@ -120,7 +113,9 @@
     <header>
       <h2>Output
         {#if xslt.running}<span class="badge run">running…</span>
-        {:else if result}<span class="badge" class:ok={result.ok} class:bad={!result.ok}>{result.ok ? 'OK' : (result.failedPhase ?? 'error') + ' error'}</span>{/if}
+        {:else if result}<span class="badge" class:ok={result.ok} class:bad={!result.ok}>
+          {result.ok ? 'OK' : result.failedPhase === 'approval' ? 'Run required' : (result.failedPhase ?? 'error') + ' error'}
+        </span>{/if}
       </h2>
       <div class="tabs" role="tablist">
         <button role="tab" class:active={outputTab === 'body'} onclick={() => (outputTab = 'body')}>Body</button>
@@ -141,7 +136,7 @@
       {#if outputTab === 'history'}
         <HistoryView history={xslt.history} {result} resultAt={xslt.resultAt} profile={app.profile} language={outLanguage} />
       {:else if !result}
-        <p class="hint">Press <kbd>Ctrl</kbd>+<kbd>Enter</kbd> or <b>Run</b>. With <b>Live</b> on, every change re-runs the mapping.</p>
+        <p class="hint">Press <kbd>Ctrl</kbd>+<kbd>Enter</kbd> or <b>Run</b>. <b>Live</b> previews changes without Java extensions.</p>
       {:else if outputTab === 'compare'}
         <CompareView profile={app.profile} {result} compare={xslt.compare} language={outLanguage} />
       {:else if outputTab === 'body'}

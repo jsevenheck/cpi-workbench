@@ -201,43 +201,60 @@ fn cm_row(r: &Value) -> Value {
 /// XPath rows read the incoming body, which the step changes only after all header and property rows.
 /// Rows run top to bottom (SAP), so an XPath that uses $name sees the headers and properties above it.
 fn content_modifier(ctx: &Ctx, config: &Value) -> Result<Value, String> {
-    let input = &ctx.input;
-    let mut state = input.clone();
-    let mut done = json!({ "headers": [], "properties": [] });
-    let mut pending = json!({ "headers": [], "properties": [] });
-    for table in ["headers", "properties"] {
-        for r in config[table].as_array().into_iter().flatten() {
-            let mut row = cm_row(r);
-            if row["action"] == "Create" && row["type"] == "xpath" {
-                let value = s(&row, "value").to_string();
-                let has_pending = pending.as_object().unwrap().values().any(|v| !v.as_array().unwrap().is_empty());
-                if value.contains('$') && has_pending {
-                    let mut p = pending.clone();
-                    p["bodyType"] = json!("constant");
-                    p["body"] = json!("");
-                    p["input"] = state.clone();
-                    let st = (ctx.call)(ctx.camel, "contentModifier.run", p)?;
-                    if st["ok"] == true {
-                        // The incoming body (text or bytes) with the rows so far.
-                        state = input.clone();
-                        state["headers"] = st["output"]["headers"].clone();
-                        state["properties"] = st["output"]["properties"].clone();
-                    }
-                    pending = json!({ "headers": [], "properties": [] });
-                }
-                let as_ = if s(&row, "datatype").starts_with("org.w3c.dom.") { "nodes" } else { "string" };
-                let v = ctx.xpath_value(&value, as_, &state).map_err(|e| format!("XPath of {}: {e}", s(&row, "name")))?;
-                row["resolved"] = json!(v);
-            }
-            done[table].as_array_mut().unwrap().push(row.clone());
-            pending[table].as_array_mut().unwrap().push(row);
+    let mut continuation: Option<String> = None;
+    let start_from = |p: &mut Value, token: &Option<String>| {
+        if let Some(token) = token {
+            p["continuation"] = json!(token);
+        } else {
+            p["input"] = ctx.input.clone();
         }
+    };
+    let result = (|| {
+        let mut pending = json!({ "headers": [], "properties": [] });
+        for table in ["headers", "properties"] {
+            for r in config[table].as_array().into_iter().flatten() {
+                let mut row = cm_row(r);
+                if row["action"] == "Create" && row["type"] == "xpath" {
+                    let value = s(&row, "value");
+                    let mut input = ctx.input.clone();
+                    let has_pending = pending.as_object().unwrap().values().any(|v| !v.as_array().unwrap().is_empty());
+                    if has_pending {
+                        let variables = value.contains('$');
+                        let mut p = std::mem::replace(&mut pending, json!({ "headers": [], "properties": [] }));
+                        start_from(&mut p, &continuation);
+                        p["variables"] = json!(variables);
+                        let st = (ctx.call)(ctx.camel, "contentModifier.advance", p)?;
+                        continuation = None; // the engine consumed the previous token
+                        if st["ok"] != true {
+                            return Ok(st);
+                        }
+                        continuation = Some(st["continuation"].as_str()
+                            .ok_or("Content Modifier did not return a continuation.")?.to_string());
+                        if variables {
+                            input["headers"] = st["variables"]["headers"].clone();
+                            input["properties"] = st["variables"]["properties"].clone();
+                        }
+                    }
+                    let as_ = if s(&row, "datatype").starts_with("org.w3c.dom.") { "nodes" } else { "string" };
+                    let v = ctx.xpath_value(value, as_, &input).map_err(|e| format!("XPath of {}: {e}", s(&row, "name")))?;
+                    row["resolved"] = json!(v);
+                }
+                pending[table].as_array_mut().unwrap().push(row);
+            }
+        }
+        let body_type = if s(config, "bodyType") == "expression" { "expression" } else { "constant" };
+        start_from(&mut pending, &continuation);
+        pending["bodyType"] = json!(body_type);
+        pending["body"] = json!(s(config, "body"));
+        let r = (ctx.call)(ctx.camel, "contentModifier.run", pending)?;
+        continuation = None;
+        Ok(r)
+    })();
+    // A failed XPath must release the paused exchange without hiding the original failure.
+    if let Some(token) = continuation {
+        let _ = (ctx.call)(ctx.camel, "contentModifier.discard", json!({ "continuation": token }));
     }
-    let body_type = if s(config, "bodyType") == "expression" { "expression" } else { "constant" };
-    (ctx.call)(ctx.camel, "contentModifier.run", json!({
-        "headers": done["headers"], "properties": done["properties"],
-        "bodyType": body_type, "body": s(config, "body"), "input": input,
-    }))
+    result
 }
 
 fn router(ctx: &Ctx, config: &Value) -> Result<Value, String> {
@@ -419,33 +436,77 @@ fn converter(ctx: &Ctx, config: &Value) -> Result<Value, String> {
 /// SAP: `function:simple('${property.x}')` in a Filter XPath. Camel Simple gives the value, which goes into
 /// the XPath as a string literal (the tab's `resolveSimpleFunctions`).
 pub fn resolve_simple_functions(xpath: &str, mut eval: impl FnMut(&str) -> Result<String, String>) -> Result<String, String> {
-    const CALL: &str = "function:simple(";
     let mut out = String::new();
-    let mut rest = xpath;
-    while let Some(at) = rest.find(CALL) {
-        let after = &rest[at + CALL.len()..];
-        let trimmed = after.trim_start();
-        let quote = trimmed.chars().next().filter(|c| *c == '\'' || *c == '"');
-        let parsed = quote.and_then(|q| {
-            let inner = &trimmed[1..];
-            let end = inner.find(q)?;
-            let tail = inner[end + 1..].trim_start();
-            tail.strip_prefix(')').map(|t| (&inner[..end], t))
-        });
-        match parsed {
-            Some((expr, tail)) => {
-                out.push_str(&rest[..at]);
-                out.push('\'');
-                out.push_str(&eval(expr)?.replace('\'', "''"));
-                out.push('\'');
-                rest = tail;
-            }
-            None => {
-                out.push_str(&rest[..at + CALL.len()]);
-                rest = after;
-            }
-        }
+    let mut offset = 0;
+    for (start, end, expr) in simple_calls(xpath) {
+        out.push_str(&xpath[offset..start]);
+        out.push('\'');
+        out.push_str(&eval(expr)?.replace('\'', "''"));
+        out.push('\'');
+        offset = end;
     }
-    out.push_str(rest);
+    out.push_str(&xpath[offset..]);
     Ok(out)
+}
+
+const SIMPLE_CALL: &str = "function:simple(";
+
+fn is_xpath_space(b: Option<&u8>) -> bool {
+    matches!(b, Some(b' ' | b'\t' | b'\r' | b'\n'))
+}
+
+/// `function:simple('…')` or `("…")` at `at`, with XPath whitespace around the argument: (start, end, expression).
+fn simple_call_at(xpath: &str, at: usize) -> Option<(usize, usize, &str)> {
+    let b = xpath.as_bytes();
+    let mut j = at + SIMPLE_CALL.len();
+    while is_xpath_space(b.get(j)) {
+        j += 1;
+    }
+    let quote = *b.get(j).filter(|c| **c == b'\'' || **c == b'"')?;
+    let close = j + 1 + xpath[j + 1..].bytes().position(|c| c == quote)?;
+    let mut k = close + 1;
+    while is_xpath_space(b.get(k)) {
+        k += 1;
+    }
+    (b.get(k) == Some(&b')')).then(|| (at, k + 1, &xpath[j + 1..close]))
+}
+
+/// The function:simple(...) calls of an XPath, outside its string literals and `(: :)` comments (the tab's
+/// `simpleCalls`). Scanned like the engine's check (FilterStep.needsCamel): literals first (a doubled quote stays
+/// inside), then nested comments. Byte offsets: every marker is ASCII, so they fall on character boundaries.
+fn simple_calls(xpath: &str) -> Vec<(usize, usize, &str)> {
+    let b = xpath.as_bytes();
+    let mut calls = Vec::new();
+    let mut quote = 0u8;
+    let mut comment = 0usize;
+    let mut i = 0;
+    while i < b.len() {
+        let c = b[i];
+        let rest = &b[i..];
+        if quote != 0 {
+            if c == quote {
+                if b.get(i + 1) == Some(&quote) {
+                    i += 1;
+                } else {
+                    quote = 0;
+                }
+            }
+        } else if rest.starts_with(b"(:") {
+            comment += 1;
+            i += 1;
+        } else if comment > 0 {
+            if rest.starts_with(b":)") {
+                comment -= 1;
+                i += 1;
+            }
+        } else if c == b'\'' || c == b'"' {
+            quote = c;
+        } else if rest.starts_with(SIMPLE_CALL.as_bytes()) {
+            let call = simple_call_at(xpath, i);
+            i = call.map_or(i + SIMPLE_CALL.len(), |(_, end, _)| end) - 1;
+            calls.extend(call);
+        }
+        i += 1;
+    }
+    calls
 }

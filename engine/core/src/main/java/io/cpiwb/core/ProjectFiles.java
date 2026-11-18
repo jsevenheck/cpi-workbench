@@ -6,15 +6,15 @@ import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
-import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Stream;
 
 /**
- * File access for the UI, restricted to the currently opened project folder. Used in desktop and
- * web mode alike, so there is exactly one implementation of the sandbox rules.
+ * File access for the UI, restricted to a selected project folder. The desktop engine keeps an open
+ * project; browser calls each get their own instance. Both use the same path checks.
  */
 public final class ProjectFiles {
 
@@ -22,6 +22,26 @@ public final class ProjectFiles {
     private static final long MAX_READ = 64L * 1024 * 1024;
 
     private Path root;
+    /**
+     * Why a scoped request's project folder cannot be used (deleted, renamed, not absolute), or null. Checked when
+     * the method needs the project, so that {@code engine.info} and other calls without project files still work.
+     * Such a request never falls back to the engine's open project or to no project.
+     */
+    private String unavailable;
+
+    /** A request-local context: no listing or initialization is needed to use an already selected root. */
+    static ProjectFiles scoped(String dir) {
+        ProjectFiles files = new ProjectFiles();
+        if (dir != null) {
+            Path project = Path.of(dir);
+            if (!project.isAbsolute() || !Files.isDirectory(project)) {
+                files.unavailable = "Project folder is unavailable: " + dir + ". Reopen the project to continue.";
+            } else {
+                files.root = project.normalize();
+            }
+        }
+        return files;
+    }
 
     public synchronized Map<String, Object> open(Map<String, Object> p) throws IOException {
         Path dir = Path.of(Json.str(p, "dir", "")).toAbsolutePath().normalize();
@@ -32,50 +52,53 @@ public final class ProjectFiles {
             init(dir);
         }
         root = dir;
+        unavailable = null;
+        Path marker = root.resolve("cpi-workbench.json");
         return Json.o().with("root", root.toString())
-                .with("isProject", Files.isRegularFile(root.resolve("cpi-workbench.json")))
+                .with("isProject", ProjectPaths.inside(root, marker) && Files.isRegularFile(marker))
                 .with("files", list());
     }
 
     /** Forgets the open project, so runs no longer see its files or platform data. */
     public synchronized Map<String, Object> close() {
         root = null;
+        unavailable = null;
         return Json.o().with("closed", true);
     }
 
     private static void init(Path dir) throws IOException {
-        for (String sub : List.of("mappings", "schemas", "scripts", "platform")) {
-            Files.createDirectories(dir.resolve(sub));
+        List<String> folders = List.of("mappings", "schemas", "scripts", "platform");
+        // Mocked platform data for the Groovy simulator. A keystore is optional.
+        Map<String, String> defaults = new LinkedHashMap<>();
+        defaults.put("platform/credentials.json", "{\n  \"EXAMPLE_ALIAS\": { \"username\": \"demo-user\", \"password\": \"demo-password\" }\n}\n");
+        defaults.put("platform/value-mappings.json", "[\n  { \"sourceAgency\": \"S4\", \"sourceIdentifier\": \"Plant\", \"sourceValue\": \"1000\",\n"
+                + "    \"targetAgency\": \"Shop\", \"targetIdentifier\": \"Warehouse\", \"targetValue\": \"WH-A\" }\n]\n");
+        defaults.put("platform/partner-directory.json", "{\n  \"partners\": {\n    \"EXAMPLE_PARTNER\": {\n"
+                + "      \"parameters\": { \"RECEIVER_URL\": \"https://example.invalid/receiver\" },\n"
+                + "      \"alternativePartners\": [ { \"agency\": \"SAP\", \"scheme\": \"GLN\", \"id\": \"4000000000001\" } ]\n"
+                + "    }\n  }\n}\n");
+        defaults.put("platform/number-ranges.json", "{\n  \"EXAMPLE_RANGE\": { \"next\": 1, \"min\": 1, \"max\": 999999, \"fieldLength\": 6, \"rotate\": false }\n}\n");
+        defaults.put("cpi-workbench.json", "{\n  \"name\": " + Json.write(String.valueOf(dir.getFileName())) + "\n}\n");
+        // A pre-existing link outside the project should not leave even a partially initialized project.
+        for (String folder : folders) {
+            ProjectPaths.checked(dir, dir.resolve(folder));
         }
-        // Mocked platform data for the Groovy simulator (secure store, value mappings, partner directory,
-        // number ranges).
-        // A keystore is optional: platform/keystore.json naming a PKCS#12 or JKS file next to it.
-        Path creds = dir.resolve("platform/credentials.json");
-        if (!Files.exists(creds)) {
-            Files.writeString(creds, "{\n  \"EXAMPLE_ALIAS\": { \"username\": \"demo-user\", \"password\": \"demo-password\" }\n}\n",
-                    StandardCharsets.UTF_8);
+        for (String path : defaults.keySet()) {
+            ProjectPaths.checked(dir, dir.resolve(path));
         }
-        Path vm = dir.resolve("platform/value-mappings.json");
-        if (!Files.exists(vm)) {
-            Files.writeString(vm, "[\n  { \"sourceAgency\": \"S4\", \"sourceIdentifier\": \"Plant\", \"sourceValue\": \"1000\",\n"
-                    + "    \"targetAgency\": \"Shop\", \"targetIdentifier\": \"Warehouse\", \"targetValue\": \"WH-A\" }\n]\n",
-                    StandardCharsets.UTF_8);
+        for (String folder : folders) {
+            Files.createDirectories(ProjectPaths.checked(dir, dir.resolve(folder)));
         }
-        Path pd = dir.resolve("platform/partner-directory.json");
-        if (!Files.exists(pd)) {
-            Files.writeString(pd, "{\n  \"partners\": {\n    \"EXAMPLE_PARTNER\": {\n"
-                    + "      \"parameters\": { \"RECEIVER_URL\": \"https://example.invalid/receiver\" },\n"
-                    + "      \"alternativePartners\": [ { \"agency\": \"SAP\", \"scheme\": \"GLN\", \"id\": \"4000000000001\" } ]\n"
-                    + "    }\n  }\n}\n", StandardCharsets.UTF_8);
-        }
-        Path nr = dir.resolve("platform/number-ranges.json");
-        if (!Files.exists(nr)) {
-            Files.writeString(nr, "{\n  \"EXAMPLE_RANGE\": { \"next\": 1, \"min\": 1, \"max\": 999999, \"fieldLength\": 6, \"rotate\": false }\n}\n",
-                    StandardCharsets.UTF_8);
-        }
-        Path cfg = dir.resolve("cpi-workbench.json");
-        if (!Files.exists(cfg)) {
-            Files.writeString(cfg, "{\n  \"name\": " + Json.write(String.valueOf(dir.getFileName())) + "\n}\n", StandardCharsets.UTF_8);
+        for (var entry : defaults.entrySet()) {
+            Path path = ProjectPaths.checked(dir, dir.resolve(entry.getKey()));
+            try {
+                Files.writeString(path, entry.getValue(), StandardCharsets.UTF_8, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
+            } catch (FileAlreadyExistsException e) {
+                // Init never replaces an existing file, even if another process created it after the check.
+                if (!Files.isRegularFile(path)) {
+                    throw new IOException("Not a regular project file: " + entry.getKey(), e);
+                }
+            }
         }
     }
 
@@ -85,24 +108,9 @@ public final class ProjectFiles {
     }
 
     private List<Object> list() throws IOException {
-        List<Object> out = new ArrayList<>();
-        try (Stream<Path> s = Files.walk(root, 8)) {
-            s.filter(x -> !x.equals(root))
-                    .filter(x -> {
-                        for (Path part : root.relativize(x)) {
-                            if (SKIP.contains(part.toString())) {
-                                return false;
-                            }
-                        }
-                        return true;
-                    })
-                    .sorted()
-                    .limit(5000)
-                    .forEach(x -> out.add(Json.o()
-                            .with("path", root.relativize(x).toString().replace('\\', '/'))
-                            .with("dir", Files.isDirectory(x))));
-        }
-        return out;
+        return ProjectPaths.scan(root, root, 8, path -> path.equals(root) || !SKIP.contains(path.getFileName().toString()))
+                .stream().filter(e -> e.error() == null && !e.path().equals(root)).limit(5000)
+                .<Object>map(e -> Json.o().with("path", ProjectPaths.label(root, e.path())).with("dir", e.directory())).toList();
     }
 
     public synchronized Map<String, Object> read(Map<String, Object> p) throws IOException {
@@ -132,6 +140,7 @@ public final class ProjectFiles {
             try {
                 Files.write(f, content, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
             } catch (FileAlreadyExistsException e) {
+                // Stable RPC conflict message: the UI and MCP use this to distinguish refusal from other errors.
                 throw new IllegalArgumentException("exists already: " + Json.str(p, "path", ""));
             }
         } else {
@@ -186,11 +195,24 @@ public final class ProjectFiles {
         return IflowIndex.search(root, p);
     }
 
+    /**
+     * The project folder, or null when none is open.
+     *
+     * @throws IllegalArgumentException for a scoped request whose project folder is unavailable
+     */
     public synchronized Path root() {
+        checkAvailable();
         return root;
     }
 
+    private void checkAvailable() {
+        if (unavailable != null) {
+            throw new IllegalArgumentException(unavailable);
+        }
+    }
+
     private void requireRoot() {
+        checkAvailable();
         if (root == null) {
             throw new IllegalStateException("No project folder is open");
         }

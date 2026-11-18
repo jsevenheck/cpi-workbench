@@ -29,7 +29,7 @@ public final class GroovyEngine implements RpcHandler {
     private final SimpleStep simple = new SimpleStep();
     private final ContentModifierStep contentModifier = new ContentModifierStep();
     private final String profile;
-    private final ProjectFiles files = new ProjectFiles();
+    private final ProjectFiles sessionFiles = new ProjectFiles();
 
     public GroovyEngine(String apiVersion, Class<? extends MessageSupport> messageClass) {
         this.runner = new ScriptRunner(apiVersion, messageClass);
@@ -50,22 +50,31 @@ public final class GroovyEngine implements RpcHandler {
                 .with("java", System.getProperty("java.vm.name") + " " + System.getProperty("java.version"))
                 .with("nativeImage", false)
                 .with("types", TypedValue.TYPES)
-                .with("methods", List.of("engine.info", "groovy.run", "simple.eval", "contentModifier.run", "project.open", "project.close", "project.list", "file.read",
+                .with("methods", List.of("engine.info", "groovy.run", "simple.eval", "contentModifier.run", "contentModifier.advance", "contentModifier.discard", "project.open", "project.close", "project.list", "file.read",
                         "file.write", "file.delete", "iflow.import", "iflow.steps", "iflow.models", "iflow.index", "iflow.search", "tests.run"));
     }
 
     @Override
     public Object call(String method, Map<String, Object> params) throws Exception {
+        return call(method, params, sessionFiles);
+    }
+
+    @Override
+    public Object call(String method, Map<String, Object> params, ProjectFiles files) throws Exception {
         switch (method) {
             case "engine.info":
             case "ping":
                 return describe();
             case "groovy.run":
-                return runner.run(withProjectRoot(params));
+                return runner.run(withProjectRoot(params, files.root()));
             case "simple.eval":
                 return simple.run(params);
             case "contentModifier.run":
-                return contentModifier.run(params);
+                return contentModifier.run(params, files.root());
+            case "contentModifier.advance":
+                return contentModifier.advance(params, files.root());
+            case "contentModifier.discard":
+                return contentModifier.discard(params, files.root());
             case "project.open":
                 return files.open(params);
             case "project.close":
@@ -90,7 +99,7 @@ public final class GroovyEngine implements RpcHandler {
                 return files.iflowSearch(params);
             case "tests.run":
                 String p = Json.str(params, "path", null);
-                Path target = p == null ? files.root().resolve("tests")
+                Path target = p == null ? files.resolve("tests")
                         : (files.root() != null && !Path.of(p).isAbsolute() ? files.resolve(p) : Path.of(p));
                 return runTests(target);
             default:
@@ -102,17 +111,17 @@ public final class GroovyEngine implements RpcHandler {
      * Adds the open project as base directory. A test case opened in the app sends its attachments as
      * written in case.json; {"file"} entries are read here, relative to {@code caseDir}.
      */
-    private Map<String, Object> withProjectRoot(Map<String, Object> params) throws IOException {
-        if (files.root() == null) {
+    private static Map<String, Object> withProjectRoot(Map<String, Object> params, Path root) throws IOException {
+        if (root == null) {
             return params;
         }
         Map<String, Object> copy = new LinkedHashMap<>(params);
-        copy.putIfAbsent("baseDir", files.root().toString());
+        copy.putIfAbsent("baseDir", root.toString());
         Map<String, Object> in = Json.obj(params, "input");
         if (in != null && in.get("attachments") != null) {
             Map<String, Object> input = new LinkedHashMap<>(in);
-            Path dir = files.root().resolve(Json.str(params, "caseDir", "")).normalize();
-            input.put("attachments", attachments(Json.arr(in, "attachments"), dir, files.root()));
+            Path dir = root.resolve(Json.str(params, "caseDir", "")).normalize();
+            input.put("attachments", attachments(Json.arr(in, "attachments"), dir, root));
             copy.put("input", input);
         }
         return copy;

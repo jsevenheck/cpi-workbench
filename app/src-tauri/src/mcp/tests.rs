@@ -14,6 +14,128 @@ fn session(server: Server, lines: &[Value]) -> Vec<Value> {
     msgs
 }
 
+#[test]
+fn a_slow_writer_does_not_block_cancellation_or_admission() {
+    let out = Arc::new(Mutex::new(Vec::new()));
+    let held = out.lock().unwrap();
+    let blocked = out.clone();
+    let (done, ready) = std::sync::mpsc::channel();
+    let reader = std::thread::spawn(move || {
+        let lines = (1..=12).map(|id| json!({ "jsonrpc": "2.0", "id": id, "method": "ping" }))
+            .chain((1..=8).map(|id| json!({ "jsonrpc": "2.0", "method": "notifications/cancelled", "params": {"requestId": id} })))
+            .map(|v| format!("{v}\n")).collect::<String>();
+        done.send(serve(Arc::new(bare()), Cursor::new(lines), blocked)).unwrap();
+    });
+    let handles = ready.recv_timeout(Duration::from_secs(3));
+    drop(held);
+    for handle in handles.expect("input reader blocked on the writer") { handle.join().unwrap(); }
+    reader.join().unwrap();
+    let msgs = out.lock().unwrap().split(|b| *b == b'\n').filter(|l| !l.is_empty())
+        .map(|l| serde_json::from_slice(l).unwrap()).collect::<Vec<Value>>();
+    // The writer can free one slot before blocking. Any of the later requests (not necessarily id 9)
+    // can claim it, depending on when the writer takes its first reply.
+    let mut overflow_admitted = 0;
+    for id in 9..=12 {
+        let response = by_id(&msgs, id);
+        if response.get("result").is_some() { overflow_admitted += 1; }
+        else { assert_eq!(response["error"]["code"], SERVER_BUSY, "{response}"); }
+    }
+    assert!(overflow_admitted <= 1, "at most one queued reply frees a slot before stdout blocks");
+    let survived = msgs.iter().filter(|m| m.get("result").is_some() && m["id"].as_i64().is_some_and(|id| id <= 8)).count();
+    assert!(survived <= 1, "only a reply already writing can survive cancellation");
+}
+
+#[test]
+fn oversized_tool_previews_do_not_duplicate_the_payload() {
+    let r = tool_result("run_xslt", json!({ "output": "a".repeat(MAX_TOOL_JSON), "runId": "run-test" }));
+    assert_eq!(r["isError"], true);
+    let text = r["content"][0]["text"].as_str().unwrap();
+    assert!(text.starts_with("UnsupportedInSimulator: run_xslt completed") && text.contains("run-test"), "{text}");
+    assert!(r.get("structuredContent").is_none());
+    let r = tool_result("import_iflow", json!({ "kind": "iflow", "files": "a".repeat(MAX_TOOL_JSON) }));
+    assert!(r["content"][0]["text"].as_str().unwrap().contains("files were written"), "{r}");
+}
+
+#[test]
+fn preview_ranks_lists_by_encoded_bytes_without_materializing_them() {
+    let escaped = json!(["\u{0000}".repeat(60)]);
+    let plain = json!(["x".repeat(100), "ä".repeat(100)]);
+    assert_eq!(compact_size(&escaped), escaped.to_string().len());
+    assert_eq!(compact_size(&plain), plain.to_string().len());
+    assert!(compact_size(&escaped) > compact_size(&plain));
+}
+
+/// An import that wrote its files reports success; a step list over the preview limit is cut, not an error.
+#[test]
+fn an_oversized_list_is_shortened_not_an_error() {
+    let steps: Vec<Value> = (0..20_000).map(|i| json!({ "iflow": "Big", "id": format!("CallActivity_{i}"), "name": "x".repeat(60) })).collect();
+    let r = tool_result("import_iflow", json!({ "kind": "iflow", "imported": ["Big"], "files": ["iflows/Big/a.iflw"], "steps": steps }));
+    assert_eq!(r["isError"], false, "{}", r["content"][0]["text"]);
+    let v = &r["structuredContent"];
+    let shown = v["steps"].as_array().unwrap().len();
+    assert!(shown > 0 && shown < 20_000, "{shown}");
+    assert_eq!(v["files"], json!(["iflows/Big/a.iflw"]), "the small lists stay whole");
+    let note = v["resultShortened"].as_str().unwrap();
+    assert!(note.starts_with("UnsupportedInSimulator") && note.contains(&format!("steps: {shown} of 20000")), "{note}");
+    assert!(r["content"][0]["text"].as_str().unwrap().len() <= MAX_TOOL_JSON);
+}
+
+/// A run too large for the run cache still returns its result, shortened, without a runId.
+#[test]
+fn an_oversized_run_returns_its_result_without_a_run_id() {
+    let server = bare();
+    let input = runs::Message::text("", json!([]), json!([]));
+    let mut result = json!({ "ok": true, "output": { "body": "x".repeat(64 * 1024 * 1024 + 1), "headers": [] } });
+    tools::keep_run(&server, "run_xslt", &input, &mut result);
+    assert!(result.get("runId").is_none(), "{}", result["runNotice"]);
+    assert!(result["runNotice"].as_str().unwrap().starts_with("UnsupportedInSimulator") && result["runNotice"].as_str().unwrap().contains("No runId"));
+    assert!(result["output"]["bodyShortened"].as_str().unwrap().contains("No runId was stored"));
+    assert_eq!(tool_result("run_xslt", result)["isError"], false);
+}
+
+/// The id is free again before its answer is written: a client that reuses it right after reading the answer
+/// gets a second answer, not "already in use".
+#[test]
+fn an_answered_id_can_be_reused_at_once() {
+    struct Lines(std::sync::mpsc::Receiver<Vec<u8>>, Vec<u8>);
+    impl std::io::Read for Lines {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            if self.1.is_empty() {
+                match self.0.recv() { Ok(l) => self.1 = l, Err(_) => return Ok(0) }
+            }
+            let n = buf.len().min(self.1.len());
+            buf[..n].copy_from_slice(&self.1[..n]);
+            self.1.drain(..n);
+            Ok(n)
+        }
+    }
+    /// Hands each answer to the client as it is flushed, then holds the writer a moment longer.
+    struct Client(std::sync::mpsc::Sender<Value>, Vec<u8>);
+    impl Write for Client {
+        fn write(&mut self, data: &[u8]) -> std::io::Result<usize> { self.1.extend_from_slice(data); Ok(data.len()) }
+        fn flush(&mut self) -> std::io::Result<()> {
+            for l in self.1.split(|b| *b == b'\n').filter(|l| !l.is_empty()) {
+                let _ = self.0.send(serde_json::from_slice(l).unwrap());
+            }
+            self.1.clear();
+            std::thread::sleep(Duration::from_millis(200));
+            Ok(())
+        }
+    }
+    let (lines, input) = std::sync::mpsc::channel();
+    let (answers, answered) = std::sync::mpsc::channel();
+    let out = Arc::new(Mutex::new(Client(answers, Vec::new())));
+    let reader = std::thread::spawn(move || serve(Arc::new(bare()), std::io::BufReader::new(Lines(input, Vec::new())), out));
+    let ping = format!("{}\n", json!({ "jsonrpc": "2.0", "id": 1, "method": "ping" })).into_bytes();
+    lines.send(ping.clone()).unwrap();
+    assert_eq!(answered.recv_timeout(Duration::from_secs(3)).unwrap()["result"], json!({}));
+    lines.send(ping).unwrap();
+    let second = answered.recv_timeout(Duration::from_secs(3)).unwrap();
+    assert_eq!(second["result"], json!({}), "{second}");
+    drop(lines);
+    for w in reader.join().unwrap() { w.join().unwrap(); }
+}
+
 fn bare() -> Server {
     Server::new(Arc::new(Engines::default()), None)
 }
@@ -261,13 +383,53 @@ fn flow_parity() {
         };
         let ctx = flow::Ctx { call: &call, xml: "xml", camel: "camel", namespaces: f["namespaces"].clone(), input: f["input"].clone() };
         let kind = f["step"]["type"].as_str().unwrap();
-        flow::run_step(&ctx, kind, &f["step"]["config"], f.get("messages").cloned())
-            .unwrap_or_else(|e| panic!("{}: {e}", file.display()));
+        let result = flow::run_step(&ctx, kind, &f["step"]["config"], f.get("messages").cloned());
+        if let Some(error) = f["error"].as_str() {
+            assert_eq!(result.unwrap_err(), error, "{}", file.display());
+        } else {
+            let result = result.unwrap_or_else(|e| panic!("{}: {e}", file.display()));
+            if let Some(expected) = f.get("result") {
+                assert_eq!(&result, expected, "{}", file.display());
+            }
+        }
         assert_eq!(Value::Array(calls.into_inner()), f["calls"], "{}", file.display());
     }
 }
 
 // ------------------------------------------------------------------ with engines
+
+#[test]
+fn content_modifier_uses_one_exchange_across_xpath_on_both_pairs() {
+    let Some(engines) = engines() else { return };
+    let call = |profile: &str, method: &str, params: Value| engines.call(profile, method, params);
+    for (xml, camel) in [("saxon-he-9.9", "groovy-1.x"), ("saxon-he-12", "groovy-2.x")] {
+        let ctx = flow::Ctx { call: &call, xml, camel, namespaces: json!({}),
+            input: json!({ "body": "<a/>", "headers": { "removeMe": "original" }, "properties": {} }), };
+        let r = flow::run_step(&ctx, "contentModifier", &json!({
+            "headers": [
+                { "name": "firstId", "type": "expression", "value": "${exchangeId}" },
+                { "name": "copiedId", "type": "xpath", "value": "$firstId" },
+                { "name": "removeMe", "action": "Delete" }
+            ],
+            "properties": [
+                { "name": "lastId", "type": "expression", "value": "${exchangeId}" },
+                { "name": "rootName", "type": "xpath", "value": "name(/*)" }
+            ],
+            "bodyType": "expression", "body": "${property.lastId}"
+        }), None).unwrap();
+        assert_eq!(r["ok"], true, "{xml}/{camel}: {r}");
+        let id = r["output"]["body"].as_str().unwrap();
+        assert!(!id.is_empty());
+        let trace = r["trace"].as_array().unwrap();
+        assert_eq!(trace.len(), 6, "{r}");
+        for i in [0, 1, 3, 5] {
+            assert_eq!(trace[i]["value"], id, "{r}");
+        }
+        assert_eq!(trace[4]["value"], "a", "{r}");
+        assert_eq!(r["changes"]["headers"]["removed"], json!(["removeMe"]), "{r}");
+    }
+    engines.shutdown();
+}
 
 /// A copy of the regression project with the iFlow test fixture under iflows/.
 fn project(tag: &str) -> PathBuf {

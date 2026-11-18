@@ -522,8 +522,10 @@ Usage: [iFlow import](user-guide.md#iflow-import).
 Decided with the owner on 2026-11-17, after a second review of other CPI tools. Work happens on the branch
 `feature/0.6.0` in the order below; each part is finished with its tests and docs before the next starts.
 Ideas from that review that were *not* taken: test cases for flow steps, an MCP `run_tests` tool (both
-would make test cases a user feature, see P1), atomic import beyond today's collision preflight, trace
+would make test cases a user feature, see P1), transactional publication of whole packages, trace
 redaction, an architecture document generator, schema / contract diffs and change-impact reports.
+The review follow-up stages and validates archives before publishing and atomically replaces the Value
+Mapping table; filesystem failures while publishing folders can still leave a partial package.
 
 #### P1. Test cases are internal
 

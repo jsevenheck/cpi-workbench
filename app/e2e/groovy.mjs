@@ -6,6 +6,7 @@
 import { createRequire } from 'node:module';
 import fs from 'node:fs';
 import path from 'node:path';
+import { gunzipSync } from 'node:zlib';
 
 const { chromium } = createRequire(import.meta.url)('playwright');
 const project = path.resolve(process.argv[2] ?? 'testdata/regression-project');
@@ -317,7 +318,7 @@ await page.locator('section.output .badge.run').waitFor({ state: 'detached', tim
 let releaseFirst, releaseLater;
 const first = new Promise((r) => (releaseFirst = r));
 const later = new Promise((r) => (releaseLater = r));
-const groovyRpc = /127\.0\.0\.1:777[89]\/rpc/;
+const groovyRpc = /127\.0\.0\.1:777[89]\/project\/rpc$/;
 let heldRuns = 0;
 await page.route(groovyRpc, async (route) => {
   if (route.request().postData()?.includes('groovy.run')) await (++heldRuns === 1 ? first : later);
@@ -479,7 +480,7 @@ if ((await page.getByLabel('Argument 2', { exact: true }).inputValue()) !== 'C-v
 let releaseOld;
 const oldHeld = new Promise((r) => (releaseOld = r));
 let heldOld = 0;
-await page.route(/127\.0\.0\.1:777[89]\/rpc/, async (route) => {
+await page.route(groovyRpc, async (route) => {
   if (route.request().postData()?.includes('"getHeader"') && ++heldOld === 1) await oldHeld;
   await route.continue().catch(() => {});
 });
@@ -491,7 +492,7 @@ await page.getByLabel('Argument 1', { exact: true }).fill('P');
 await page.getByLabel('Argument 2', { exact: true }).fill('D-value');
 releaseOld();
 await page.waitForTimeout(1000);
-await page.unroute(/127\.0\.0\.1:777[89]\/rpc/);
+await page.unroute(groovyRpc);
 if (heldOld === 0) fail('the late-answer check held no run');
 await runIt();
 await page.locator('section.output pre', { hasText: 'D-value' }).waitFor({ timeout: 20000 })
@@ -548,6 +549,20 @@ await page.getByRole('button', { name: 'Run step' }).click();
 // The imported iFlow's Content Modifier (or the row above) sets the header OrderId from /Order/@id.
 await page.locator('.res .row', { hasText: 'OrderId' }).filter({ hasText: '4711' }).waitFor({ timeout: 20000 })
   .catch(() => fail('Content Modifier: header OrderId is not 4711'));
+// A variable-dependent XPath and a later Simple row must see the same exchange as the first Simple row.
+for (const [name, type, value] of [['FirstExchangeId', 'expression', '${exchangeId}'],
+  ['CopiedExchangeId', 'xpath', '$FirstExchangeId'], ['LastExchangeId', 'expression', '${exchangeId}']]) {
+  await config.getByRole('button', { name: '+ Add' }).click();
+  await config.getByLabel('Name', { exact: true }).last().fill(name);
+  await config.getByLabel('Source Type').last().selectOption(type);
+  await config.getByLabel('Source Value').last().fill(value);
+}
+await page.getByRole('button', { name: 'Run step' }).click();
+const rowValue = (name) => page.locator('.res .row', { has: page.locator('b', { hasText: name }) }).locator('code').innerText({ timeout: 10000 });
+const firstId = await rowValue('FirstExchangeId');
+if (!firstId || firstId !== await rowValue('CopiedExchangeId') || firstId !== await rowValue('LastExchangeId')) {
+  fail('Content Modifier did not keep one exchange across the XPath row');
+}
 await page.getByRole('tab', { name: 'Router' }).click();
 if (await config.getByLabel('Route name').count()) fail('the Router does not start empty');
 for (const [name, condition] of [['ERP', "${header.SenderId} = 'ERP_100'"], ['Default', '']]) {
@@ -583,6 +598,17 @@ await page.getByLabel('Value Type').selectOption('nodelist');
 await page.getByRole('button', { name: 'Run step' }).click();
 await page.locator('.res h3', { hasText: '1 item(s) selected' }).waitFor({ timeout: 10000 })
   .catch(() => fail('Filter did not select the one item with qty > 1'));
+// A substituted literal may contain the next Simple call's source; it must stay literal.
+await flowInput.getByRole('tab', { name: /^Headers/ }).click();
+for (const [name, value] of [['First', `marker function:simple('\${header.Qty}') and "quotes"`], ['Qty', '1']]) {
+  await flowInput.getByRole('button', { name: '+ Add' }).click();
+  await flowInput.getByLabel('Name').last().fill(name);
+  await flowInput.getByLabel('Value').last().fill(value);
+}
+await flowInput.getByRole('tab', { name: /^Body/ }).click();
+await page.getByLabel('Filter XPath').fill(`//Item[contains(function:simple("\${header.First}"), 'marker')][@qty = function:simple('\${header.Qty}')][@qty = function:simple('\${header.Qty}')]`);
+await page.getByRole('button', { name: 'Run step' }).click();
+await page.locator('.res pre', { hasText: 'M-200' }).waitFor({ timeout: 10000 });
 // Message Digest: the header with the digest and the canonical form it is of; the body stays.
 await page.getByRole('tab', { name: 'Message Digest' }).click();
 await page.getByLabel('Digest Algorithm').selectOption('SHA256');
@@ -597,8 +623,8 @@ await page.getByRole('button', { name: 'Run step' }).click();
 await page.locator('.res .d.error', { hasText: 'UnsupportedInSimulator' }).waitFor({ timeout: 10000 })
   .catch(() => fail('Message Digest: a filter that selects several nodes must be refused'));
 await page.getByLabel('Digest filter XPath').fill('');
-// Encoder: Base64 of the body in lines; GZIP gives bytes, which go on as the input of a Decoder and come back as the
-// body. MIME Multipart is refused.
+// Encoder: Base64 in lines; GZIP gives bytes, which travel through a Content Modifier to a Decoder.
+// MIME Multipart is refused.
 await page.getByRole('tab', { name: 'Encoder' }).click();
 await page.getByRole('button', { name: 'Run step' }).click();
 await page.locator('.res pre', { hasText: /^(PD94|PE9y)[A-Za-z0-9+/=\s]+$/ }).waitFor({ timeout: 10000 })
@@ -612,10 +638,17 @@ await page.getByRole('button', { name: 'Run step' }).click();
 await page.locator('.res h3', { hasText: 'binary' }).waitFor({ timeout: 10000 })
   .catch(async () => fail('GZIP Compress: ' + (await page.locator('.res').innerText()).slice(0, 300)));
 if (!/^00000000 +1f 8b 08/.test(await page.getByLabel('Binary output').innerText())) fail('GZIP Compress: no GZIP header in the hex view');
-// A saved archive is listed in the file tree, also outside inputs/, and opens from there as the binary input.
+// Binary output must use the same create-new confirmation. The replacement then opens as binary input.
+const gzipFile = path.join(project, 'archives/order.gz');
+fs.mkdirSync(path.dirname(gzipFile), { recursive: true });
+fs.writeFileSync(gzipFile, Buffer.from([0, 255, 7]));
 await page.locator('.res h3', { hasText: 'binary' }).getByRole('button', { name: 'Save…' }).click();
 await page.locator('.dlg input.mono').fill('archives/order.gz');
 await page.locator('.dlg').getByRole('button', { name: 'OK' }).click();
+const replaceGzip = page.getByRole('dialog').filter({ hasText: 'archives/order.gz exists. Overwrite it?' });
+await replaceGzip.waitFor({ timeout: 5000 });
+if (!fs.readFileSync(gzipFile).equals(Buffer.from([0, 255, 7]))) fail('binary output changed an existing archive before confirmation');
+await replaceGzip.getByRole('button', { name: 'Overwrite', exact: true }).click();
 const savedGz = page.locator('nav.tree button.file[title="archives/order.gz"]');
 await savedGz.waitFor({ timeout: 5000 }).catch(() => fail('the saved archives/order.gz is not listed in the file tree'));
 if (await savedGz.count()) {
@@ -625,11 +658,43 @@ if (await savedGz.count()) {
 }
 await page.locator('.res h3', { hasText: 'binary' }).getByRole('button', { name: 'Use as input' }).click();
 await page.getByLabel('Binary input body').waitFor({ timeout: 5000 }).catch(() => fail('The GZIP result did not become a binary input'));
+await page.getByRole('tab', { name: 'Content Modifier' }).click();
+// The previous result survived switching tabs. Replace XML-dependent rows with one header-only change.
+await page.locator('.res .row', { hasText: 'OrderId' }).filter({ hasText: '4711' }).waitFor({ timeout: 5000 })
+  .catch(() => fail('the Content Modifier result was lost after running the other steps'));
+await config.getByRole('tab', { name: 'Message Header' }).click();
+const removeHeader = config.getByRole('button', { name: 'Remove', exact: true });
+while (await removeHeader.count()) await removeHeader.first().click();
+await config.getByRole('button', { name: '+ Add' }).click();
+await config.getByLabel('Name', { exact: true }).fill('ArchiveEncoding');
+await config.getByLabel('Source Value').fill('gzip');
+await config.getByRole('tab', { name: 'Exchange Property' }).click();
+const removeProperty = config.getByRole('button', { name: 'Remove', exact: true });
+while (await removeProperty.count()) await removeProperty.first().click();
+await config.getByRole('tab', { name: 'Message Body' }).click();
+await config.locator('textarea').fill('');
+await page.getByRole('button', { name: 'Run step' }).click();
+const binaryCm = page.locator('.res h3', { hasText: 'bytes, binary' });
+await binaryCm.waitFor({ timeout: 10000 });
+await binaryCm.getByRole('button', { name: 'Save…' }).click();
+await page.locator('.dlg input.mono').fill('archives/modified.gz');
+await page.locator('.dlg').getByRole('button', { name: 'OK' }).click();
+await page.locator('nav.tree button.file[title="archives/modified.gz"]').waitFor({ timeout: 5000 });
+if (!fs.readFileSync(path.join(project, 'archives/modified.gz')).equals(fs.readFileSync(gzipFile))) {
+  fail('Header-only Content Modifier did not preserve the exact GZIP bytes');
+}
+await binaryCm.getByRole('button', { name: 'Use as input' }).click();
+await page.getByLabel('Binary input body').waitFor({ timeout: 5000 });
 await page.getByRole('tab', { name: 'Decoder' }).click();
 await page.getByLabel('Decoding Scheme').selectOption('gzipDecompress');
 await page.getByRole('button', { name: 'Run step' }).click();
-await page.locator('.res pre', { hasText: '<Order id="4711"' }).waitFor({ timeout: 10000 })
-  .catch(async () => fail('GZIP Decompress: ' + (await page.locator('.res').innerText()).slice(0, 300)));
+const gunzipped = page.locator('.res pre', { hasText: '<Order id="4711"' });
+const original = gunzipSync(fs.readFileSync(gzipFile)).toString('utf8');
+if (await gunzipped.textContent({ timeout: 10000 }) !== original) fail('GZIP Decoder did not restore the exact text');
+for (const [name, value] of [['ArchiveEncoding', 'gzip'], ['SenderId', 'ERP_100']]) {
+  const header = page.locator('.res tr', { has: page.getByRole('cell', { name, exact: true }) });
+  if (await header.locator('td.value').innerText({ timeout: 5000 }) !== value) fail(`Decoder did not receive header ${name}`);
+}
 // The decoded body back as the text input, for the steps below.
 await page.locator('.res h3', { hasText: 'bytes' }).getByRole('button', { name: 'Use as input' }).click();
 await page.getByLabel('Binary input body').waitFor({ state: 'detached', timeout: 5000 }).catch(() => fail('The decoded text did not replace the binary input'));
@@ -649,9 +714,6 @@ await page.locator('.res pre', { hasText: "<?xml version='1.0' encoding='UTF-8'?
   .catch(async () => fail('JSON to XML: ' + (await page.locator('.res').innerText()).slice(0, 300)));
 await page.locator('.res h3').getByRole('button', { name: 'Use as input' }).click();
 // Jumping between the steps keeps each step's settings and result.
-await page.getByRole('tab', { name: 'Content Modifier' }).click();
-await page.locator('.res .row', { hasText: 'OrderId' }).filter({ hasText: '4711' }).waitFor({ timeout: 5000 })
-  .catch(() => fail('the Content Modifier result was lost after running the other steps'));
 await page.getByRole('tab', { name: 'Gather' }).click();
 await page.locator('.res pre', { hasText: 'multimap:Message1' }).waitFor({ timeout: 5000 })
   .catch(() => fail('the Gather result was lost after switching steps'));
@@ -750,12 +812,11 @@ if (process.env.CPIWB_IFLOW_ZIP) {
     if (await page.locator('.src').count()) fail(`${step} still shows "${await page.locator('.src').innerText()}" after Close project`);
   }
 }
-const afterClose = await page.evaluate(async () => {
-  const r = await fetch('http://127.0.0.1:7778/rpc', { method: 'POST', headers: { 'content-type': 'application/json', 'x-cpiwb': '1' },
-    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'project.list', params: {} }) });
-  return (await r.json()).error?.message ?? 'still open';
-});
-if (!/No project folder is open/.test(afterClose)) fail('Groovy 1.x engine after Close project: ' + afterClose);
+// A scratch Groovy run after Close project must not carry the project's root to either engine.
+await page.getByRole('tab', { name: 'Groovy Script', exact: true }).click();
+const afterClose = page.waitForRequest((req) => groovyRpc.test(req.url()) && req.postDataJSON()?.method === 'groovy.run');
+await runIt();
+if ((await afterClose).postDataJSON().projectRoot !== null) fail('Groovy run after Close project still names a project');
 
 if (errors.length) fail('browser errors: ' + errors.join(' | '));
 await browser.close();

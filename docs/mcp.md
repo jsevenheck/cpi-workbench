@@ -92,7 +92,7 @@ agent without file access of its own what the app's file tree and **Import iFlow
 | `evaluate_xpath` | XPath (1.0 or 3.1, with namespaces). A node of the body also says where it is (`at`: the element positions from the root, its name, an attribute's name). |
 | `run_flow_step` | Flow Steps: a Content Modifier, Filter, Router, Splitter, Gather, converter (JSON ↔ XML, XML ↔ CSV), Encoder, Decoder (Base64, GZIP, ZIP) or Message Digest step from an iFlow (`iflowStep`: name or id, with `iflow` when several iFlows share it) or from a configuration (`step`). For an iFlow step, `step.defaulted` names the choices the iFlow leaves out, which ran with the default (an assumption). |
 | `save_file` | **Save as…**: writes a file (`content`, bytes as `contentBase64`, or a run's output with `contentFrom`, binary or not) into the project, creating folders. An existing file is replaced only with `overwrite: true`. |
-| `import_iflow` | **Import iFlow**: an iFlow, Value Mapping or integration package exported from the tenant (`.zip`, any path): iFlows into `iflows/<name>/`, value mappings into `platform/value-mappings.json`; returns `kind`, the imported iFlows' steps, `valueMappings` and `skipped`. An existing folder or value mapping is replaced only with `overwrite: true`. |
+| `import_iflow` | **Import iFlow**: an iFlow, Value Mapping or integration package exported from the tenant (`.zip`, any path): iFlows into `iflows/<name>/`, value mappings into `platform/value-mappings.json`; returns `kind`, the imported iFlows' steps, `valueMappings`, `skipped` and `kept` (with `overwrite: true`, files of the earlier version that the export does not contain; they are not deleted). An existing folder or value mapping is replaced only with `overwrite: true`. |
 | `iflow_where_used` | **Where used**: which adapters, steps and routes of the imported iFlows use a value (`query`: a host, credential alias, queue, file or `{{parameter}}`), optionally only of a `kind` (`address`, `credential`, `queue`, `key`, `file`, `parameter`) or one `iflow`; with `parameters: true` each iFlow's externalized parameters, their values and uses, and those unused or without a value. Read-only. |
 | `reference` | No tab: what the simulator offers, generated from its sources. `script-api`: the Script API, Message Mapping and platform service methods; `platform`: the formats of the `platform/` files; `fidelity`: [Fidelity](fidelity.md). |
 
@@ -118,8 +118,17 @@ replace the body or the rows of the same name. A Gather takes `messagesFrom` (a 
 
 To keep results small, a body the step left as it was (from 200 characters) is left out, with
 `bodyUnchanged` saying so; bodies longer than 20,000 characters, and a Splitter's messages longer than 2,000,
-come back shortened, with `bodyShortened`; a binary body (an Encoder's GZIP or ZIP result) longer than that is left out, and `messageFrom` passes it on as bytes, as `bodyPath` does with a `.zip` or `.gz` file. The run keeps the whole body: `read_file` with `runId` reads it, `save_file` with `contentFrom` saves it. The server keeps the
-last 50 runs (at most 64 MB) of its process; an older or unknown `runId` is an error that says to run again.
+come back shortened, with `bodyShortened`; a long binary body is left out. `messageFrom` still passes it on
+as bytes, as `bodyPath` does with a `.zip` or `.gz` file. A Content Modifier with an empty Message Body
+preserves those bytes along with its header and property changes. The run keeps the whole body:
+`read_file` with `runId` reads it, `save_file` with `contentFrom` saves it. The server keeps the
+last 50 runs, up to 64 MiB of retained message data. A run too large to fit still returns its result,
+shortened, but without a `runId`: `runNotice` (starting with `UnsupportedInSimulator`) says so, and older
+runs stay. A tool response whose JSON preview would exceed 1 MiB has its longest lists cut (an imported
+iFlow's `steps`, for instance), with `resultShortened` naming what was cut; the call itself, such as an
+import's file writes, has completed. A result that cannot be cut down is an error that says the call
+completed, names the `runId` of a retained run and, for `save_file` and `import_iflow`, that the files were
+written.
 
 Calls can run concurrently. Without `overwrite`, file/iFlow creation is checked atomically by the
 file system, so another server on the same project cannot replace an existing destination either.
@@ -158,7 +167,12 @@ lists what is verified against CPI.
 
 ## Protocol
 
-* Transport: stdio, one JSON-RPC message per line. Logs go to stderr.
+* Transport: stdio, one JSON-RPC message per line (input frames up to 32 MiB). Logs go to stderr.
+* Up to eight requests can be running or waiting for the writer, in addition to the one reply the
+  writer may already be sending. An excess request gets a busy error and does not run. Replies use a
+  bounded queue; a client that continually submits while not reading may lose the session rather than
+  accumulate replies. Cancellation can drop a queued reply independently of stdout. The writer releases
+  the request ID before sending the reply, so the client can reuse it as soon as it reads that reply.
 * Revisions: dual-era as the [2026-07-28 specification](https://modelcontextprotocol.io/specification/2026-07-28/basic/versioning)
   describes it. Requests that carry `_meta["io.modelcontextprotocol/protocolVersion"]` are served
   statelessly under 2026-07-28 (`server/discover`, `resultType`, caching hints on lists). A client
@@ -166,12 +180,15 @@ lists what is verified against CPI.
 * Features: tools, with `structuredContent` and the same JSON as text; one prompt (`develop_step`);
   `instructions` that tell the agent how to work with the tools. No resources, logging, sampling or roots. `notifications/cancelled` drops the answer; the engine finishes the run.
 * Engines start on first use and stop after 10 idle minutes (Groovy); an engine that hits the
-  30-second timeout restarts with the project open again. The server stops when its stdin closes.
+  30-second execution timeout restarts with the project open again. The supervisor also bounds queue
+  wait, startup and pipe I/O independently (see [Architecture](architecture.md#engines-and-protocol)).
+  The server stops when its stdin closes.
 * Tested with the official TypeScript SDK 1.32.2 and Python SDK 2.3.0 clients (both negotiate
   2025-11-25) and, for 2026-07-28, with the repository's own tests (`app/src-tauri/src/mcp/tests.rs`,
   `app/scripts/mcp-smoke.mjs`, which CI runs on the release build on Windows and macOS).
 
 The code is in `app/src-tauri/src/mcp/`. `flow.rs` repeats the Flow Steps tab's calls
 (`app/src/lib/flowcalls.ts`); the fixtures in `testdata/flow-parity` hold the calls both must make for a
-step's settings and message, and a test on each side replays them without engines. They do not cover how the
+step's settings and message, and a test on each side replays them without engines. Content Modifier
+fixtures also check results and early failures. They do not cover how the
 tab's editors or the MCP tool's arguments become those settings and that message.

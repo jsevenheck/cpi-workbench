@@ -14,7 +14,6 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.stream.Stream;
 
 /**
  * Where-used and parameter overview over the imported iFlows ({@code iflow.index}, {@code iflow.search}): every
@@ -87,7 +86,9 @@ public final class IflowIndex {
             List<Object> parameters = List.of();
             String error = e.error;
             try {
-                parameters = parameters(e);
+                if (error == null) {
+                    parameters = parameters(projectRoot, e);
+                }
             } catch (IOException | RuntimeException x) {
                 String msg = "Cannot read the parameters: " + x.getMessage();
                 error = error == null ? msg : error + " " + msg;
@@ -111,12 +112,16 @@ public final class IflowIndex {
         }
         String q = query.toLowerCase(Locale.ROOT);
         List<Object> hits = new ArrayList<>();
+        List<String> warnings = new ArrayList<>();
         int iflows = 0;
         for (IflowEntries e : read(projectRoot)) {
             if (only != null && !only.equals(e.iflow)) {
                 continue;
             }
             iflows++;
+            if (e.error != null) {
+                warnings.add(e.file + ": " + e.error);
+            }
             for (Json.Obj entry : e.entries) {
                 String value = String.valueOf(entry.get("value"));
                 String key = String.valueOf(entry.get("key"));
@@ -128,7 +133,8 @@ public final class IflowIndex {
                 }
             }
         }
-        return Json.o().with("query", query).with("kind", kind).with("iflows", iflows).with("hits", hits);
+        Json.Obj result = Json.o().with("query", query).with("kind", kind).with("iflows", iflows).with("hits", hits);
+        return warnings.isEmpty() ? result : result.with("warnings", warnings);
     }
 
     // ------------------------------------------------------------------ reading
@@ -139,29 +145,24 @@ public final class IflowIndex {
     @SuppressWarnings("unchecked")
     static List<IflowEntries> read(Path projectRoot) throws IOException {
         Path iflows = projectRoot.resolve("iflows");
-        List<Path> files = new ArrayList<>();
-        if (Files.isDirectory(iflows)) {
-            try (Stream<Path> s = Files.walk(iflows, 12)) {
-                s.filter(f -> f.toString().endsWith(".iflw")).sorted().forEach(files::add);
-            }
-        }
+        List<ProjectPaths.Entry> files = IflowImport.models(projectRoot);
         // The files the script, mapping and schema steps use, as iflow.steps resolves them (also script collections).
         Map<String, Object> fileOf = new LinkedHashMap<>();
-        for (Object o : (List<Object>) IflowImport.steps(projectRoot).get("steps")) {
+        for (Object o : (List<Object>) IflowImport.steps(projectRoot, files).get("steps")) {
             Map<String, Object> s = (Map<String, Object>) o;
             if (s.get("file") != null) {
                 fileOf.put(s.get("iflow") + "\u0000" + s.get("id"), s.get("file"));
             }
         }
         List<IflowEntries> out = new ArrayList<>();
-        for (Path file : files) {
-            Path rel = iflows.relativize(file);
-            String iflow = rel.getNameCount() > 0 ? rel.getName(0).toString() : "";
-            Path flowRoot = iflows.resolve(iflow);
-            String path = projectRoot.relativize(file).toString().replace('\\', '/');
+        for (ProjectPaths.Entry file : files) {
+            String iflow = IflowImport.iflowName(iflows, file.path());
+            Path flowRoot = IflowImport.flowRoot(iflows, file.path());
+            String path = ProjectPaths.label(projectRoot, file.path());
             List<Json.Obj> entries = new ArrayList<>();
             try {
-                Json.Obj model = IflowModel.read(file, Integer.MAX_VALUE);
+                file.requireReadable();
+                Json.Obj model = IflowModel.read(projectRoot, file.path(), Integer.MAX_VALUE);
                 entries(iflow, model, fileOf, entries);
                 out.add(new IflowEntries(iflow, (String) model.get("name"), path, null, entries, flowRoot));
             } catch (Exception ex) {
@@ -230,10 +231,11 @@ public final class IflowIndex {
      * from {@code parameters.propdef} (F69), every {@code {{name}}} use, and which ones are unused (a value nothing
      * uses) or unresolved (used without a value).
      */
-    private static List<Object> parameters(IflowEntries e) throws IOException {
-        Map<String, Map<String, String>> defs = definitions(e.flowRoot.resolve("src/main/resources/parameters.propdef"));
+    private static List<Object> parameters(Path projectRoot, IflowEntries e) throws IOException {
+        Path defsPath = ProjectPaths.checked(projectRoot, e.flowRoot.resolve("src/main/resources/parameters.propdef"));
+        Map<String, Map<String, String>> defs = definitions(defsPath);
         Properties values = new Properties();
-        Path prop = e.flowRoot.resolve("src/main/resources/parameters.prop");
+        Path prop = ProjectPaths.checked(projectRoot, e.flowRoot.resolve("src/main/resources/parameters.prop"));
         if (Files.isRegularFile(prop)) {
             try (InputStream in = Files.newInputStream(prop)) {
                 values.load(in);

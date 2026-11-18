@@ -6,7 +6,6 @@ import org.w3c.dom.Node;
 
 import javax.xml.parsers.DocumentBuilderFactory;
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -14,7 +13,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Stream;
 
 /**
  * The whole of an imported iFlow, for the app's iFlow list and its Diagram tab: processes, every element (also
@@ -38,18 +36,12 @@ public final class IflowModel {
     public static Map<String, Object> models(Path projectRoot) throws IOException {
         List<Object> out = new ArrayList<>();
         Path iflows = projectRoot.resolve("iflows");
-        List<Path> files = new ArrayList<>();
-        if (Files.isDirectory(iflows)) {
-            try (Stream<Path> s = Files.walk(iflows, 12)) {
-                s.filter(p -> p.toString().endsWith(".iflw")).sorted().forEach(files::add);
-            }
-        }
-        for (Path file : files) {
-            Path rel = iflows.relativize(file);
-            String iflow = rel.getNameCount() > 0 ? rel.getName(0).toString() : "";
-            String path = projectRoot.relativize(file).toString().replace('\\', '/');
+        for (ProjectPaths.Entry file : IflowImport.models(projectRoot)) {
+            String iflow = IflowImport.iflowName(iflows, file.path());
+            String path = ProjectPaths.label(projectRoot, file.path());
             try {
-                out.add(read(file).with("iflow", iflow).with("file", path));
+                file.requireReadable();
+                out.add(read(projectRoot, file.path(), MAX_VALUE).with("iflow", iflow).with("file", path));
             } catch (Exception ex) {
                 out.add(Json.o().with("iflow", iflow).with("file", path).with("error", "Cannot read the iFlow model: " + ex.getMessage()));
             }
@@ -57,16 +49,12 @@ public final class IflowModel {
         return Json.o().with("models", out);
     }
 
-    static Json.Obj read(Path file) throws Exception {
-        return read(file, MAX_VALUE);
-    }
-
     /** The model with property values cut at {@code maxValue} characters ({@link IflowIndex} reads them whole). */
-    static Json.Obj read(Path file, int maxValue) throws Exception {
+    static Json.Obj read(Path projectRoot, Path file, int maxValue) throws Exception {
         DocumentBuilderFactory f = DocumentBuilderFactory.newDefaultInstance();
         f.setNamespaceAware(true);
         f.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
-        Document doc = f.newDocumentBuilder().parse(file.toFile());
+        Document doc = f.newDocumentBuilder().parse(ProjectPaths.checked(projectRoot, file).toFile());
         Element root = doc.getDocumentElement();
         Map<String, double[]> bounds = new LinkedHashMap<>();
         Map<String, List<Object>> waypoints = new LinkedHashMap<>();

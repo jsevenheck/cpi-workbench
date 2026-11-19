@@ -44,9 +44,9 @@ in `docs/building.md` (*Releasing*).
   * `src/api-v2`: the Script API v2.
   * `groovy-v1`, `groovy-v2`: the two builds and their entry points.
 * `app/src`: the UI. `app/src-tauri`: the Rust shell; `src/mcp/` is the MCP server (`cpi-workbench mcp`).
-  `mcp/flow.rs` repeats the Flow Steps tab's calls (`app/src/lib/store.svelte.ts`), including the converter
-  defaults; change both together. `mcp/reference.rs` builds its topics from `app/src/lib/completions.ts`,
-  the clean-room platform classes and `docs/test-cases.md` / `docs/fidelity.md`; its test names what it expects.
+  `mcp/flow.rs` repeats the Flow Steps tab's calls (`app/src/lib/flowcalls.ts`), including the defaults;
+  change both together and add or adjust a fixture in `testdata/flow-parity`, which both sides' tests replay. `mcp/reference.rs` builds its topics from `app/src/lib/completions.ts`,
+  the clean-room platform classes and `docs/project-files.md` / `docs/fidelity.md`; its test names what it expects.
 * CPI Helper hand-over: `app/src/lib/share.ts` parses messages, `receiver.svelte.ts` coordinates
   confirmation/settings, and `app/src-tauri/src/receiver.rs` serves the opt-in loopback page.
   Receiver imports must not execute code, including already-open code and pending Live callbacks.
@@ -67,7 +67,7 @@ in `docs/building.md` (*Releasing*).
   Label assumptions as assumptions, in code comments and docs. Do not present unverified behaviour as "like CPI".
 * **When behaviour changes:**
   * Update the tests.
-  * Update `docs/fidelity.md` and `docs/status.md`.
+  * Update `docs/fidelity.md` (a row's *Basis* too: the app shows it per step) and `docs/status.md`.
   * Add a line under *Unreleased* in `CHANGELOG.md` for changes users notice.
   * If a probe's output changes, update the probe and its baseline in `probes/baseline-simulator/`.
 * **Test-only secrets** in `platform/` files, test resources and examples. Never use real tenant credentials or keys.

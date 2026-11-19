@@ -1,0 +1,25 @@
+{
+  "from": "iflow",
+  "step": { "type": "contentModifier", "config": {
+    "headers": [ { "name": "first", "value": "one" }, { "name": "broken", "type": "xpath", "value": "[" } ]
+  } },
+  "input": { "body": "<a/>", "headers": [], "properties": [] },
+  "namespaces": {},
+  "answers": {
+    "contentModifier.advance": [ { "ok": true, "continuation": "pause" } ],
+    "xpath.eval": [ { "ok": false, "diagnostics": [ { "message": "Invalid expression" } ] } ]
+  },
+  "calls": [
+    { "engine": "camel", "method": "contentModifier.advance", "params": {
+      "headers": [ { "action": "Create", "name": "first", "type": "constant", "value": "one", "datatype": "", "default": "" } ],
+      "properties": [], "variables": false,
+      "input": { "body": "<a/>", "headers": [], "properties": [] }
+    } },
+    { "engine": "xml", "method": "xpath.eval", "params": {
+      "expression": "[", "version": "3.1", "as": "string", "namespaces": {},
+      "input": { "body": "<a/>", "headers": [], "properties": [] }
+    } },
+    { "engine": "camel", "method": "contentModifier.discard", "params": { "continuation": "pause" } }
+  ],
+  "error": "XPath of broken: Invalid expression"
+}

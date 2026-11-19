@@ -109,7 +109,7 @@ pub struct Server {
     engines: Arc<Engines>,
     project: Option<PathBuf>,
     runs: runs::Runs,
-    /// Held from the check whether a file exists to the write: requests run in parallel (one thread each), and
+    /// Held from the check whether a file exists to the write: admitted requests can run in parallel, and
     /// without it two calls without `overwrite` could both find a path free and both write it.
     writes: Mutex<()>,
 }
@@ -140,6 +140,7 @@ pub fn main(args: &[String], resource_dir: Option<PathBuf>, cache_dir: Option<Pa
     let server = Arc::new(Server::new(engines.clone(), project));
     // Requests still running when stdin closes are dropped: the client no longer reads their answers.
     drop(serve(server, std::io::stdin().lock(), Arc::new(Mutex::new(std::io::stdout()))));
+    engines.shutdown();
     0
 }
 
@@ -165,40 +166,70 @@ fn parse_args(args: &[String]) -> Result<Option<PathBuf>, String> {
     Ok(Some(engine::plain_path(dir)))
 }
 
-/// Reads requests until stdin closes. Each request runs on its own thread, so a long Groovy run does
-/// not hold up `tools/list`; the engines serialise calls per runtime. Returns the requests still running.
-pub fn serve<R: BufRead, W: Write + Send + 'static>(server: Arc<Server>, input: R, out: Arc<Mutex<W>>) -> Vec<JoinHandle<()>> {
-    // Requests in flight, by id, and whether the client cancelled them.
+const MAX_IN_FLIGHT: usize = 8;
+const MAX_INPUT_FRAME: u64 = 32 * 1024 * 1024;
+const MAX_TOOL_JSON: usize = 1024 * 1024;
+const SERVER_BUSY: i64 = -32000;
+
+/// Reads requests and cancellation notifications independently of the single stdout writer.
+pub fn serve<R: BufRead, W: Write + Send + 'static>(server: Arc<Server>, mut input: R, out: Arc<Mutex<W>>) -> Vec<JoinHandle<()>> {
     let in_flight: Arc<Mutex<HashMap<String, bool>>> = Arc::default();
-    let mut workers = Vec::new();
-    for line in input.lines() {
-        let Ok(line) = line else { break };
-        if line.trim().is_empty() {
-            continue;
+    // Accepted requests keep their slot until the writer takes their response. Reserve queue space
+    // for overload/protocol errors as well. If that fills, close the session instead of buffering.
+    let (replies, received) = std::sync::mpsc::sync_channel::<(Option<String>, Value)>(2 * MAX_IN_FLIGHT);
+    let writing = in_flight.clone();
+    let writer = std::thread::spawn(move || {
+        while let Ok((key, message)) = received.recv() {
+            // Free the id before the answer goes out: a client may reuse it as soon as it reads the answer.
+            // Whether the request was cancelled is read in the same step, so a later cancel cannot be lost.
+            let cancelled = key.as_ref().is_some_and(|key| writing.lock().unwrap().remove(key).unwrap_or(true));
+            if !cancelled && send(&out, message).is_err() { break; }
         }
-        let msg: Value = match serde_json::from_str(&line) {
+    });
+    let mut workers = Vec::new();
+    let mut line = Vec::new();
+    macro_rules! reject {
+        ($message:expr) => {
+            if replies.try_send((None, $message)).is_err() {
+                eprintln!("cpi-workbench mcp: closing session: the client is not reading responses");
+                break;
+            }
+        };
+    }
+    loop {
+        line.clear();
+        let mut bounded = std::io::Read::take(&mut input, MAX_INPUT_FRAME + 1);
+        let Ok(n) = bounded.read_until(b'\n', &mut line) else { break };
+        if n == 0 { break; }
+        if n as u64 > MAX_INPUT_FRAME {
+            reject!(error(Value::Null, INVALID_REQUEST, "UnsupportedInSimulator: MCP input frame exceeds 32 MiB; session closed", None));
+            eprintln!("cpi-workbench mcp: closing session: input frame exceeds 32 MiB");
+            break;
+        }
+        if line.iter().all(u8::is_ascii_whitespace) { continue; }
+        let msg: Value = match serde_json::from_slice(&line) {
             Ok(v) => v,
             Err(e) => {
-                send(&out, error(Value::Null, PARSE_ERROR, &format!("Parse error: {e}"), None));
+                reject!(error(Value::Null, PARSE_ERROR, &format!("Parse error: {e}"), None));
                 continue;
             }
         };
         let Some(obj) = msg.as_object() else {
-            send(&out, error(Value::Null, INVALID_REQUEST, "Invalid Request: expected one JSON-RPC object per line", None));
+            reject!(error(Value::Null, INVALID_REQUEST, "Invalid Request: expected one JSON-RPC object per line", None));
             continue;
         };
         let Some(method) = obj.get("method").and_then(Value::as_str).map(str::to_string) else {
             // A response (this server sends no requests, so it is ignored), or no valid message at all.
             if !obj.contains_key("result") && !obj.contains_key("error") {
-                let id = obj.get("id").filter(|i| i.is_string() || i.is_i64() || i.is_u64()).cloned().unwrap_or(Value::Null);
-                send(&out, error(id, INVALID_REQUEST, "Invalid Request: no method", None));
+                let id = obj.get("id").filter(|i| valid_id(i)).cloned().unwrap_or(Value::Null);
+                reject!(error(id, INVALID_REQUEST, "Invalid Request: no method", None));
             }
             continue;
         };
         if obj.get("jsonrpc").and_then(Value::as_str) != Some("2.0") {
             // A notification gets no answer, even an error (JSON-RPC 2.0).
-            if let Some(id) = obj.get("id").filter(|i| i.is_string() || i.is_i64() || i.is_u64()) {
-                send(&out, error(id.clone(), INVALID_REQUEST, "Invalid Request: jsonrpc must be \"2.0\"", None));
+            if let Some(id) = obj.get("id").filter(|i| valid_id(i)) {
+                reject!(error(id.clone(), INVALID_REQUEST, "Invalid Request: jsonrpc must be \"2.0\"", None));
             }
             continue;
         }
@@ -213,19 +244,23 @@ pub fn serve<R: BufRead, W: Write + Send + 'static>(server: Arc<Server>, input: 
             }
             continue; // notifications/initialized and others need no answer
         };
-        if !(id.is_string() || id.is_i64() || id.is_u64()) {
-            send(&out, error(Value::Null, INVALID_REQUEST, "Invalid Request: the id must be a string or an integer", None));
+        if !valid_id(&id) {
+            reject!(error(Value::Null, INVALID_REQUEST, "Invalid Request: expected an integer id or a string up to 1024 bytes", None));
+            continue;
+        }
+        if method.len() > 1024 {
+            reject!(error(id, INVALID_REQUEST, "Invalid Request: method exceeds 1024 bytes", None));
             continue;
         }
         // JSON-RPC: params is an object or an array; MCP requests take an object.
         match &params {
             Value::Null | Value::Object(_) => {}
             Value::Array(_) => {
-                send(&out, error(id, INVALID_PARAMS, "Invalid params: MCP requests take an object", None));
+                reject!(error(id, INVALID_PARAMS, "Invalid params: MCP requests take an object", None));
                 continue;
             }
             _ => {
-                send(&out, error(id, INVALID_REQUEST, "Invalid Request: params must be an object", None));
+                reject!(error(id, INVALID_REQUEST, "Invalid Request: params must be an object", None));
                 continue;
             }
         }
@@ -235,34 +270,41 @@ pub fn serve<R: BufRead, W: Write + Send + 'static>(server: Arc<Server>, input: 
             let mut flight = in_flight.lock().unwrap();
             if flight.contains_key(&key) {
                 drop(flight);
-                send(&out, error(id, INVALID_REQUEST, "Invalid Request: this id is already in use by a running request", None));
+                reject!(error(id, INVALID_REQUEST, "Invalid Request: this id is already in use by a running request", None));
+                continue;
+            }
+            if flight.len() >= MAX_IN_FLIGHT {
+                drop(flight);
+                reject!(error(id, SERVER_BUSY, "MCP server busy: at most eight requests in flight. This request did not run.", None));
                 continue;
             }
             flight.insert(key.clone(), false);
         }
-        let (server, out, in_flight) = (server.clone(), out.clone(), in_flight.clone());
+        let (server, replies) = (server.clone(), replies.clone());
+        workers.retain(|w: &JoinHandle<()>| !w.is_finished());
         workers.push(std::thread::spawn(move || {
             let response = server.handle(id, &method, &params);
-            // A cancelled request gets no further messages (MCP cancellation).
-            let mut flight = in_flight.lock().unwrap();
-            if !flight.remove(&key).unwrap_or(false) {
-                send(&out, response);
-            }
+            let _ = replies.send((Some(key), response));
         }));
-        workers.retain(|w| !w.is_finished());
     }
     // stdin closed: the client is shutting us down. Stop the engines unless a call still runs; the engines
     // then exit on their own when their stdin closes with this process.
     if in_flight.lock().unwrap().is_empty() {
         server.engines.shutdown();
     }
+    drop(replies);
+    workers.push(writer);
     workers
 }
 
-fn send<W: Write>(out: &Mutex<W>, msg: Value) {
+fn send<W: Write>(out: &Mutex<W>, msg: Value) -> std::io::Result<()> {
     let mut w = out.lock().unwrap();
-    let _ = writeln!(w, "{msg}");
-    let _ = w.flush();
+    writeln!(w, "{msg}")?;
+    w.flush()
+}
+
+fn valid_id(id: &Value) -> bool {
+    id.as_str().is_some_and(|s| s.len() <= 1024) || id.is_i64() || id.is_u64()
 }
 
 fn error(id: Value, code: i64, message: &str, data: Option<Value>) -> Value {
@@ -380,16 +422,90 @@ impl Server {
         }
         // Wrong arguments and failed runs are tool results with isError, so the model can correct them.
         Ok(match tools::call(self, name, &args) {
-            Ok(v) => tool_result(v),
-            Err(e) => json!({ "content": [{ "type": "text", "text": e }], "isError": true }),
+            Ok(v) => tool_result(name, v),
+            Err(e) => json!({ "content": [{ "type": "text", "text": if e.len() <= MAX_TOOL_JSON { e }
+                else { "UnsupportedInSimulator: the tool diagnostic exceeds the 1 MiB MCP preview limit.".into() } }], "isError": true }),
         })
     }
 }
 
 /// Structured content plus the same JSON as text, for clients that read only `content` (MCP Tools).
-fn tool_result(v: Value) -> Value {
-    let text = serde_json::to_string_pretty(&v).unwrap_or_default();
+/// The call has already happened (an import has written its files), so a result over the preview limit is
+/// shortened rather than turned into an error: its longest lists are cut, with `resultShortened` saying so.
+fn tool_result(tool: &str, v: Value) -> Value {
+    let (v, text) = match fit(v) {
+        Ok(fitted) => fitted,
+        Err(v) => {
+            let mut message = format!("UnsupportedInSimulator: {tool} completed, but its result exceeds the 1 MiB MCP \
+                preview limit and cannot be shortened. Use smaller inputs, file ranges, or the desktop app.");
+            if matches!(tool, "save_file" | "import_iflow") {
+                message.push_str(" The files were written to the project; project_info and read_file show them.");
+            }
+            if let Some(id) = v.get("runId").and_then(Value::as_str) {
+                message.push_str(&format!(" The run was kept as {id}."));
+            }
+            return json!({ "content": [{ "type": "text", "text": message }], "isError": true });
+        }
+    };
     json!({ "content": [{ "type": "text", "text": text }], "structuredContent": v, "isError": false })
+}
+
+/// The pretty JSON of `v` within the preview limit, cutting the longest top-level list in half until it
+/// fits. `Err` gives `v` back when no list is left to cut.
+fn fit(mut v: Value) -> Result<(Value, String), Value> {
+    let mut cut: Vec<(String, usize)> = Vec::new(); // list name, its full length
+    loop {
+        if !cut.is_empty() {
+            let shown: Vec<String> = cut.iter().map(|(k, n)| format!("{k}: {} of {n}", v[k].as_array().map_or(0, Vec::len))).collect();
+            v["resultShortened"] = json!(format!("UnsupportedInSimulator: the result exceeds the 1 MiB MCP preview limit, so lists were cut ({}). The call itself completed in full.", shown.join(", ")));
+        }
+        if let Some(text) = pretty_within(&v, MAX_TOOL_JSON) {
+            return Ok((v, text));
+        }
+        let longest = v.as_object().and_then(|o| o.iter()
+            .filter(|(_, x)| x.as_array().is_some_and(|a| !a.is_empty()))
+            .max_by_key(|(_, x)| compact_size(x))
+            .map(|(k, _)| k.clone()));
+        let Some(key) = longest else { return Err(v) };
+        let list = v[&key].as_array_mut().unwrap();
+        if !cut.iter().any(|(k, _)| *k == key) {
+            cut.push((key.clone(), list.len()));
+        }
+        list.truncate(list.len() / 2);
+    }
+}
+
+/// Rank lists by encoded size without retaining a second serialized copy of an oversized result.
+fn compact_size(v: &Value) -> usize {
+    #[derive(Default)]
+    struct Count(usize);
+    impl Write for Count {
+        fn write(&mut self, data: &[u8]) -> std::io::Result<usize> {
+            self.0 = self.0.saturating_add(data.len());
+            Ok(data.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> { Ok(()) }
+    }
+    let mut count = Count::default();
+    serde_json::to_writer(&mut count, v).expect("serializing JSON to a counter cannot fail");
+    count.0
+}
+
+fn pretty_within(v: &Value, max: usize) -> Option<String> {
+    struct Limited(Vec<u8>, usize);
+    impl Write for Limited {
+        fn write(&mut self, data: &[u8]) -> std::io::Result<usize> {
+            if data.len() > self.1 - self.0.len() {
+                return Err(std::io::Error::other("MCP result too large"));
+            }
+            self.0.extend_from_slice(data);
+            Ok(data.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> { Ok(()) }
+    }
+    let mut text = Limited(Vec::new(), max);
+    serde_json::to_writer_pretty(&mut text, v).ok()?;
+    Some(String::from_utf8(text.0).expect("JSON serializer writes UTF-8"))
 }
 
 /// Legacy handshake: the client's version if this server knows it, else the newest legacy one.

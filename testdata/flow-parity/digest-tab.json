@@ -1,0 +1,50 @@
+{
+  "name": "digest-tab",
+  "from": "tab",
+  "step": {
+    "type": "messageDigest",
+    "config": {
+      "filter": "/o:a",
+      "canonicalization": "c14n11",
+      "algorithm": "MD5",
+      "targetHeader": "Hash"
+    }
+  },
+  "input": {
+    "body": "<a><b>1</b></a>",
+    "headers": {
+      "h0": "x"
+    },
+    "properties": {
+      "p0": "y"
+    }
+  },
+  "namespaces": {
+    "o": "urn:example:order"
+  },
+  "answers": {},
+  "calls": [
+    {
+      "engine": "xml",
+      "method": "digest.run",
+      "params": {
+        "filter": "/o:a",
+        "canonicalization": "c14n11",
+        "algorithm": "MD5",
+        "targetHeader": "Hash",
+        "namespaces": {
+          "o": "urn:example:order"
+        },
+        "input": {
+          "body": "<a><b>1</b></a>",
+          "headers": {
+            "h0": "x"
+          },
+          "properties": {
+            "p0": "y"
+          }
+        }
+      }
+    }
+  ]
+}

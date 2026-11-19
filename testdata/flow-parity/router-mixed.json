@@ -1,0 +1,44 @@
+{
+  "name": "router-mixed",
+  "from": "iflow",
+  "step": {
+    "type": "router",
+    "config": {
+      "routes": [
+        {
+          "name": "Simple",
+          "expressionType": "nonxml",
+          "condition": "${header.h0} = 'z'",
+          "default": false
+        },
+        {
+          "name": "XPath",
+          "expressionType": "xml",
+          "condition": "//b = 1",
+          "default": false
+        },
+        {
+          "name": "Other",
+          "expressionType": "nonxml",
+          "condition": "",
+          "default": true
+        }
+      ],
+      "throwException": false
+    }
+  },
+  "input": {
+    "body": "<a><b>1</b></a>",
+    "headers": {
+      "h0": "x"
+    },
+    "properties": {
+      "p0": "y"
+    }
+  },
+  "namespaces": {
+    "o": "urn:example:order"
+  },
+  "answers": {},
+  "calls": []
+}

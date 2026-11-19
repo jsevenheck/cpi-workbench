@@ -19,13 +19,14 @@ import java.util.Map;
 /** RPC dispatcher of the native XML engine (XSLT, XSD, XPath, project files, test runner). */
 public final class XmlEngine implements RpcHandler {
 
-    public static final String VERSION = "0.5.0";
+    public static final String VERSION = "0.6.0";
 
     static {
         io.cpiwb.core.TenantDefaults.apply();
     }
 
     private final XsltStep xslt = new XsltStep();
+    private XsltStep preview;
     private final XsdStep xsd = new XsdStep();
     private final XPathStep xpath = new XPathStep();
     private final SplitStep split = new SplitStep();
@@ -34,7 +35,7 @@ public final class XmlEngine implements RpcHandler {
     private final ConverterStep converter = new ConverterStep();
     private final EncoderStep encoder = new EncoderStep();
     private final DigestStep digest = new DigestStep();
-    private final ProjectFiles files = new ProjectFiles();
+    private final ProjectFiles sessionFiles = new ProjectFiles();
 
     @Override
     public Map<String, Object> describe() {
@@ -47,36 +48,43 @@ public final class XmlEngine implements RpcHandler {
                 .with("java", System.getProperty("java.vm.name") + " " + System.getProperty("java.version"))
                 .with("nativeImage", System.getProperty("org.graalvm.nativeimage.imagecode") != null)
                 .with("types", TypedValue.TYPES)
-                .with("methods", List.of("engine.info", "xslt.run", "xsd.validate", "xpath.eval", "split.run", "filter.run", "gather.run", "convert.run", "encode.run", "decode.run", "digest.run", "xml.format",
-                        "project.open", "project.close", "project.list", "file.read", "file.write", "file.delete", "iflow.import", "iflow.steps", "iflow.models", "tests.run"));
+                .with("methods", List.of("engine.info", "xslt.run", "xslt.preview", "xsd.validate", "xpath.eval", "split.run", "filter.run", "gather.run", "convert.run", "encode.run", "decode.run", "digest.run", "xml.format",
+                        "project.open", "project.close", "project.list", "file.read", "file.write", "file.delete", "iflow.import", "iflow.steps", "iflow.models", "iflow.index", "iflow.search", "tests.run"));
     }
 
     @Override
     public Object call(String method, Map<String, Object> params) throws Exception {
+        return call(method, params, sessionFiles);
+    }
+
+    @Override
+    public Object call(String method, Map<String, Object> params, ProjectFiles files) throws Exception {
         switch (method) {
             case "engine.info":
             case "ping":
                 return describe();
             case "xslt.run":
-                return xslt.run(withProjectRoot(params));
+                return xslt.run(withProjectRoot(params, files.root()));
+            case "xslt.preview":
+                return previewStep().run(withProjectRoot(params, files.root()));
             case "xsd.validate":
-                return xsd.run(withProjectRoot(params));
+                return xsd.run(withProjectRoot(params, files.root()));
             case "xpath.eval":
-                return xpath.run(withProjectRoot(params));
+                return xpath.run(withProjectRoot(params, files.root()));
             case "split.run":
-                return split.run(withProjectRoot(params));
+                return split.run(withProjectRoot(params, files.root()));
             case "filter.run":
-                return filter.run(withProjectRoot(params));
+                return filter.run(withProjectRoot(params, files.root()));
             case "gather.run":
-                return gather.run(withProjectRoot(params));
+                return gather.run(withProjectRoot(params, files.root()));
             case "convert.run":
-                return converter.run(withProjectRoot(params));
+                return converter.run(withProjectRoot(params, files.root()));
             case "encode.run":
                 return encoder.run(params, false);
             case "decode.run":
                 return encoder.run(params, true);
             case "digest.run":
-                return digest.run(withProjectRoot(params));
+                return digest.run(withProjectRoot(params, files.root()));
             case "xml.format":
                 return xpath.format(params);
             case "project.open":
@@ -97,26 +105,37 @@ public final class XmlEngine implements RpcHandler {
                 return files.iflowSteps();
             case "iflow.models":
                 return files.iflowModels();
+            case "iflow.index":
+                return files.iflowIndex();
+            case "iflow.search":
+                return files.iflowSearch(params);
             case "tests.run":
-                return runTests(params);
+                return runTests(params, files);
             default:
                 throw new IllegalArgumentException("Unknown method '" + method + "'");
         }
     }
 
+    private synchronized XsltStep previewStep() {
+        if (preview == null) {
+            preview = new XsltStep(true);
+        }
+        return preview;
+    }
+
     /** Uses the open project as baseDir when the caller did not pass one. */
-    private Map<String, Object> withProjectRoot(Map<String, Object> params) {
-        if (params.get("baseDir") == null && files.root() != null) {
+    private static Map<String, Object> withProjectRoot(Map<String, Object> params, Path root) {
+        if (params.get("baseDir") == null && root != null) {
             Map<String, Object> copy = new LinkedHashMap<>(params);
-            copy.put("baseDir", files.root().toString());
+            copy.put("baseDir", root.toString());
             return copy;
         }
         return params;
     }
 
-    private Map<String, Object> runTests(Map<String, Object> params) throws IOException {
+    private Map<String, Object> runTests(Map<String, Object> params, ProjectFiles files) throws IOException {
         String p = Json.str(params, "path", null);
-        Path target = p == null ? files.root().resolve("tests")
+        Path target = p == null ? files.resolve("tests")
                 : (files.root() != null && !Path.of(p).isAbsolute() ? files.resolve(p) : Path.of(p));
         return runTests(target);
     }

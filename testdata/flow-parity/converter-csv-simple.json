@@ -1,0 +1,133 @@
+{
+  "name": "converter-csv-simple",
+  "from": "tab",
+  "step": {
+    "type": "converter",
+    "config": {
+      "conversion": "csvToXml",
+      "useNamespaces": false,
+      "separator": ":",
+      "namespaceMapping": "",
+      "addRootElement": false,
+      "rootElementName": "root",
+      "rootNamespace": "",
+      "suppressRoot": false,
+      "streaming": false,
+      "streamingElements": "all",
+      "arrayPaths": "",
+      "outputEncoding": "",
+      "sourcePath": "",
+      "fieldSeparator": ",",
+      "csvHeader": "xml",
+      "includeParent": false,
+      "parentPath": "",
+      "includeAttributes": false,
+      "schema": "${header.schema}",
+      "targetPath": "/Orders/Order",
+      "recordMarker": "${property.marker}",
+      "firstLineHeader": true,
+      "headerMapping": "xsd"
+    }
+  },
+  "input": {
+    "body": "<a><b>1</b></a>",
+    "headers": {
+      "h0": "x"
+    },
+    "properties": {
+      "p0": "y"
+    }
+  },
+  "namespaces": {
+    "o": "urn:example:order"
+  },
+  "answers": {
+    "simple.eval": [
+      {
+        "ok": true,
+        "value": "xsd/order.xsd"
+      },
+      {
+        "ok": true,
+        "value": "Order"
+      }
+    ]
+  },
+  "calls": [
+    {
+      "engine": "camel",
+      "method": "simple.eval",
+      "params": {
+        "expression": "${header.schema}",
+        "mode": "expression",
+        "input": {
+          "body": "<a><b>1</b></a>",
+          "headers": {
+            "h0": "x"
+          },
+          "properties": {
+            "p0": "y"
+          }
+        }
+      }
+    },
+    {
+      "engine": "camel",
+      "method": "simple.eval",
+      "params": {
+        "expression": "${property.marker}",
+        "mode": "expression",
+        "input": {
+          "body": "<a><b>1</b></a>",
+          "headers": {
+            "h0": "x"
+          },
+          "properties": {
+            "p0": "y"
+          }
+        }
+      }
+    },
+    {
+      "engine": "xml",
+      "method": "convert.run",
+      "params": {
+        "conversion": "csvToXml",
+        "useNamespaces": false,
+        "separator": ":",
+        "namespaceMapping": "",
+        "addRootElement": false,
+        "rootElementName": "root",
+        "rootNamespace": "",
+        "suppressRoot": false,
+        "streaming": false,
+        "streamingElements": "all",
+        "arrayPaths": "",
+        "outputEncoding": "",
+        "sourcePath": "",
+        "fieldSeparator": ",",
+        "csvHeader": "xml",
+        "includeParent": false,
+        "parentPath": "",
+        "includeAttributes": false,
+        "schema": "xsd/order.xsd",
+        "targetPath": "/Orders/Order",
+        "recordMarker": "Order",
+        "firstLineHeader": true,
+        "headerMapping": "xsd",
+        "namespaces": {
+          "o": "urn:example:order"
+        },
+        "input": {
+          "body": "<a><b>1</b></a>",
+          "headers": {
+            "h0": "x"
+          },
+          "properties": {
+            "p0": "y"
+          }
+        }
+      }
+    }
+  ]
+}

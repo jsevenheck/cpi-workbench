@@ -1,0 +1,70 @@
+{
+  "name": "splitter-simple",
+  "from": "iflow",
+  "step": {
+    "type": "splitter",
+    "config": {
+      "splitter": "iterating",
+      "expressionType": "xpath",
+      "expression": "${property.path}",
+      "grouping": "",
+      "streaming": false
+    }
+  },
+  "input": {
+    "body": "<a><b>1</b></a>",
+    "headers": {
+      "h0": "x"
+    },
+    "properties": {
+      "p0": "y"
+    }
+  },
+  "namespaces": {
+    "o": "urn:example:order"
+  },
+  "answers": {
+    "simple.eval": [
+      {
+        "ok": true,
+        "value": "//b"
+      }
+    ]
+  },
+  "calls": [
+    {
+      "engine": "camel",
+      "method": "simple.eval",
+      "params": {
+        "expression": "${property.path}",
+        "mode": "expression",
+        "input": {
+          "body": "<a><b>1</b></a>",
+          "headers": {
+            "h0": "x"
+          },
+          "properties": {
+            "p0": "y"
+          }
+        }
+      }
+    },
+    {
+      "engine": "xml",
+      "method": "split.run",
+      "params": {
+        "splitter": "iterating",
+        "expressionType": "xpath",
+        "expression": "//b",
+        "grouping": "",
+        "streaming": false,
+        "namespaces": {
+          "o": "urn:example:order"
+        },
+        "input": {
+          "body": "<a><b>1</b></a>"
+        }
+      }
+    }
+  ]
+}

@@ -2,7 +2,8 @@
   // The imported iFlows drawn from the layout their export carries (plan F68), read-only. A step that a tab can run
   // opens there (double-click, or Open in the details); the others show their settings.
   import { untrack } from 'svelte';
-  import { app, iflowStepFor, openIflowStep, selectIflowNode } from '../lib/store.svelte';
+  import { app, iflowStepFor, openIflowStep, selectIflowNode, showWhereUsed } from '../lib/store.svelte';
+  import { SKIPPED_KEYS, whereUsedQuery } from '../lib/whereused';
   import { extent, flowPath, shapeOf, typeLabel, type Box, type IflowModel, type IflowNode } from '../lib/iflowmodel';
 
   const TAB: Record<string, string> = { groovy: 'Groovy Script', xslt: 'XSLT Mapping', xsd: 'XSD Validation', mmap: 'Groovy Script' };
@@ -138,7 +139,18 @@
 
   let processName = $derived((id: string | null) => model?.processes?.find((p) => p.id === id)?.name ?? '');
   let properties = $derived(selected ? Object.entries(selected.properties ?? {}) : []);
+  // A sender or receiver system shows the adapters that connect it, with their settings (address, credential, …).
+  let adapters = $derived(selected && (selected.kind === 'sender' || selected.kind === 'receiver')
+    ? (model?.flows ?? []).filter((f) => f.kind === 'message' && (f.source === selected!.id || f.target === selected!.id))
+    : []);
+  // Already in the adapter's heading, or metadata the index leaves out.
+  const ADAPTER_SHOWN = new Set(['ComponentType', 'direction', ...SKIPPED_KEYS]);
 </script>
+
+{#snippet find(k: string, v: unknown)}
+  {@const q = whereUsedQuery(k, v)}
+  {#if q}<button class="icon" onclick={() => showWhereUsed(q)} title="Where else is this value used?" aria-label="Where else is {k} used">⌕</button>{/if}
+{/snippet}
 
 <div class="diagram">
   <header class="bar">
@@ -240,10 +252,20 @@
         {#if properties.length}
           <table>
             <tbody>
-              {#each properties as [k, v]}<tr><td class="mono key">{k}</td><td class="mono">{v}</td></tr>{/each}
+              {#each properties as [k, v]}<tr><td class="mono key">{k}</td><td class="mono">{v}</td>
+                <td>{@render find(k, v)}</td></tr>{/each}
             </tbody>
           </table>
         {/if}
+        {#each adapters as f (f.id)}
+          <h4 class="adapter">{f.adapter} {f.direction === 'Receiver' ? 'receiver' : 'sender'} adapter</h4>
+          <table>
+            <tbody>
+              {#each Object.entries(f.properties ?? {}).filter(([k, v]) => v && !ADAPTER_SHOWN.has(k)) as [k, v]}<tr><td class="mono key">{k}</td><td class="mono">{v}</td>
+                <td>{@render find(k, v)}</td></tr>{/each}
+            </tbody>
+          </table>
+        {/each}
         <p class="muted small mono">{selected.id}</p>
       </aside>
     {/if}
@@ -285,6 +307,7 @@
   .details { width: 300px; flex-shrink: 0; border-left: 1px solid var(--border); padding: 10px; overflow: auto; box-sizing: border-box; }
   .details .head { display: flex; justify-content: space-between; align-items: start; gap: 6px; margin-bottom: 4px; }
   .details .open { margin: 8px 0; }
+  .details h4.adapter { font-size: 12px; margin: 12px 0 0; }
   table { border-collapse: collapse; width: 100%; margin-top: 8px; }
   td { padding: 2px 4px; border-bottom: 1px solid var(--border-soft); vertical-align: top; word-break: break-word; font-size: 11px; }
   td.key { color: var(--muted); width: 40%; }

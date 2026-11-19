@@ -7,10 +7,12 @@
 
 use serde_json::{json, Value};
 use std::collections::HashMap;
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError, SyncSender};
 use std::time::{Duration, Instant};
 
 pub enum Kind {
@@ -29,10 +31,34 @@ pub const PROFILES: &[(&str, &str, Kind)] = &[
 /// JVM engines that were not used for this long are stopped.
 pub const IDLE_LIMIT: Duration = Duration::from_secs(10 * 60);
 
+const MAX_FRAME: usize = 192 * 1024 * 1024;
+const POLL: Duration = Duration::from_millis(25);
+
+#[derive(Clone, Copy)]
+struct Deadlines {
+    queue: Duration,
+    startup: Duration,
+    exchange: Duration,
+    /// Largest request or response line, newline included.
+    frame: usize,
+}
+const STARTUP: u64 = 15;
+const EXCHANGE: u64 = 32; // Java normally diagnoses execution timeouts at 30 seconds
+const DEADLINES: Deadlines = Deadlines {
+    // A call waiting for its turn outlives the longest call ahead of it (a fresh worker's startup plus its
+    // exchange), so a file read or save during a long run waits for it instead of failing as busy.
+    queue: Duration::from_secs(STARTUP + EXCHANGE + 3),
+    startup: Duration::from_secs(STARTUP),
+    exchange: Duration::from_secs(EXCHANGE),
+    frame: MAX_FRAME,
+};
+
+type Reply = Result<Value, String>;
+
 struct Process {
     child: Child,
-    stdin: Option<ChildStdin>,
-    stdout: BufReader<ChildStdout>,
+    requests: Option<SyncSender<(u64, Vec<u8>)>>,
+    replies: Receiver<Reply>,
     next_id: u64,
     last_used: Instant,
     jvm: bool,
@@ -41,7 +67,7 @@ struct Process {
 impl Drop for Process {
     fn drop(&mut self) {
         // Closing stdin lets a JVM exit normally (and write its class-data archive); kill as fallback.
-        drop(self.stdin.take());
+        drop(self.requests.take());
         let deadline = Instant::now() + Duration::from_millis(if self.jvm { 3000 } else { 300 });
         while Instant::now() < deadline {
             if let Ok(Some(_)) = self.child.try_wait() {
@@ -59,11 +85,14 @@ impl Drop for Process {
 pub enum Launch {
     Native(PathBuf),
     Jar { java: PathBuf, jar: PathBuf },
+    #[cfg(test)]
+    Fixture(&'static str),
 }
 
 #[derive(Default)]
 pub struct Engines {
     slots: Mutex<HashMap<String, Arc<Mutex<Option<Process>>>>>,
+    stopping: AtomicBool,
     /// Bundled resources (installed app): jars and the JRE live here.
     pub resource_dir: Mutex<Option<PathBuf>>,
     /// Where JVM class-data archives (AppCDS) are kept for faster starts.
@@ -80,8 +109,9 @@ impl Engines {
     }
 
     pub fn shutdown(&self) {
-        let slots = self.slots.lock().unwrap();
-        for slot in slots.values() {
+        self.stopping.store(true, Ordering::Release);
+        let slots: Vec<_> = self.slots.lock().unwrap().values().cloned().collect();
+        for slot in slots {
             if let Ok(mut p) = slot.lock() {
                 *p = None;
             }
@@ -109,27 +139,62 @@ impl Engines {
         PROFILES.iter().filter(|(p, _, _)| self.locate(p).is_some()).map(|(p, _, _)| p.to_string()).collect()
     }
 
+    /// The desktop sends its project with every call, so a fresh worker needs no separate initialization.
+    /// The distinct envelope method makes an older worker fail rather than run with the wrong context.
+    pub fn call_desktop(&self, profile: &str, method: &str, params: Value, project_root: Option<String>) -> Result<Value, String> {
+        self.call(profile, "project.request", json!({ "method": method, "params": params, "projectRoot": project_root }))
+            .map_err(|e| if e == "Unknown method 'project.request'" {
+                "The engine does not support scoped desktop project requests. Use an engine built with this app.".into()
+            } else { e })
+    }
+
     /// Sends one request and waits for its response. Blocking; call from a worker thread.
     pub fn call(&self, profile: &str, method: &str, params: Value) -> Result<Value, String> {
         let launch = self.locate(profile).ok_or_else(|| missing_message(profile))?;
+        self.call_with(profile, &launch, method, params, DEADLINES)
+    }
+
+    fn call_with(&self, profile: &str, launch: &Launch, method: &str, params: Value, limits: Deadlines) -> Result<Value, String> {
         let slot = self.slot(profile);
-        let mut guard = slot.lock().map_err(|_| "engine lock poisoned".to_string())?;
+        let queue_deadline = Instant::now() + limits.queue;
+        let mut guard = loop {
+            if self.stopping.load(Ordering::Acquire) { return Err("Engine supervisor is shutting down".into()); }
+            match slot.try_lock() {
+                Ok(guard) => break guard,
+                Err(std::sync::TryLockError::Poisoned(_)) => return Err("engine lock poisoned".into()),
+                Err(std::sync::TryLockError::WouldBlock) => {
+                    let remaining = queue_deadline.saturating_duration_since(Instant::now());
+                    if remaining.is_zero() { return Err(format!("Engine busy ({profile}): timed out waiting for a turn. The request did not run.")); }
+                    std::thread::sleep(remaining.min(POLL));
+                }
+            }
+        };
+        if self.stopping.load(Ordering::Acquire) { return Err("Engine supervisor is shutting down".into()); }
+        // Retire an already-exited child before handing it a request. Once sent, calls are never replayed.
+        if guard.as_mut().is_some_and(|p| matches!(p.child.try_wait(), Ok(Some(_)))) {
+            *guard = None;
+        }
         if guard.is_none() {
             let cache = self.cache_dir.lock().unwrap().clone();
-            let mut proc = start(&launch, profile, cache.as_deref())?;
+            let deadline = Instant::now() + limits.startup;
+            let mut proc = start(launch, profile, cache.as_deref(), deadline, &self.stopping, limits.frame)?;
             let init = self.on_start.lock().unwrap().clone();
             if let Some((method, params)) = init {
-                match exchange(&mut proc, &method, params) {
+                match exchange(&mut proc, &method, params, deadline, &self.stopping, limits.frame) {
                     Ok(Exchange::Result(_)) => {}
                     Ok(Exchange::Error { message, .. }) => return Err(format!("{method} failed: {message}")),
-                    Err(e) => return Err(format!("Engine stopped unexpectedly: {e}")),
+                    Err(e) => {
+                        proc.terminate();
+                        return Err(format!("Engine startup ({method}): {e}"));
+                    }
                 }
             }
             *guard = Some(proc);
         }
         let proc = guard.as_mut().unwrap();
         proc.last_used = Instant::now();
-        let result = exchange(proc, method, params);
+        let result = exchange(proc, method, params, Instant::now() + limits.exchange, &self.stopping, limits.frame);
+        proc.last_used = Instant::now();
         match result {
             Ok(Exchange::Result(v)) => Ok(v),
             Ok(Exchange::Error { message, timeout }) => {
@@ -139,8 +204,14 @@ impl Engines {
                 Err(message)
             }
             Err(e) => {
+                // The pipe is out of step (or gone): the worker cannot take another request.
+                proc.terminate();
                 *guard = None;
-                Err(format!("Engine stopped unexpectedly: {e}"))
+                if e.starts_with("UnsupportedInSimulator") {
+                    Err(format!("{e} The engine ({profile}) was stopped; the next call starts a fresh one."))
+                } else {
+                    Err(format!("Engine transport ({profile}): {e}"))
+                }
             }
         }
     }
@@ -162,41 +233,108 @@ enum Exchange {
     Error { message: String, timeout: bool },
 }
 
-fn exchange(p: &mut Process, method: &str, params: Value) -> Result<Exchange, String> {
-    p.next_id += 1;
-    let id = p.next_id;
-    let line = json!({ "id": id, "method": method, "params": params }).to_string();
-    let stdin = p.stdin.as_mut().ok_or("engine stdin closed")?;
-    stdin.write_all(line.as_bytes()).map_err(|e| e.to_string())?;
-    stdin.write_all(b"\n").map_err(|e| e.to_string())?;
-    stdin.flush().map_err(|e| e.to_string())?;
-    loop {
-        let mut buf = String::new();
-        let n = p.stdout.read_line(&mut buf).map_err(|e| e.to_string())?;
-        if n == 0 {
-            let code = p.child.try_wait().ok().flatten().and_then(|s| s.code());
-            return Err(format!("no response (exit code {code:?})"));
+impl Process {
+    fn terminate(&mut self) {
+        drop(self.requests.take());
+        let _ = self.child.kill();
+    }
+
+    fn wait_reply(&mut self, deadline: Instant, stopping: &AtomicBool, stage: &str) -> Reply {
+        loop {
+            if stopping.load(Ordering::Acquire) { return Err("engine supervisor is shutting down".into()); }
+            let left = deadline.saturating_duration_since(Instant::now());
+            if left.is_zero() { return Err(format!("timeout {stage}; the worker was stopped. The request was not retried.")); }
+            match self.replies.recv_timeout(left.min(POLL)) {
+                Ok(Ok(v)) => return Ok(v),
+                // A simulator limit (an oversized frame) is its own message, not a transport failure.
+                Ok(Err(e)) if e.starts_with("UnsupportedInSimulator") => return Err(e),
+                Ok(Err(e)) => {
+                    let code = self.child.try_wait().ok().flatten().and_then(|s| s.code());
+                    return Err(format!("{e} {stage} (exit code {code:?})"));
+                }
+                Err(RecvTimeoutError::Disconnected) => return Err(format!("engine pipe closed {stage}")),
+                Err(RecvTimeoutError::Timeout) => {}
+            }
         }
-        let v: Value = match serde_json::from_str(buf.trim()) {
-            Ok(v) => v,
-            Err(_) => continue, // not protocol output
-        };
-        if v.get("id").and_then(Value::as_u64) != Some(id) {
-            continue; // events or stale responses
-        }
-        if let Some(err) = v.get("error") {
-            let message = err.get("message").and_then(Value::as_str).unwrap_or("engine error").to_string();
-            let timeout = err.get("timeout").and_then(Value::as_bool).unwrap_or(false);
-            return Ok(Exchange::Error { message, timeout });
-        }
-        return Ok(Exchange::Result(v.get("result").cloned().unwrap_or(Value::Null)));
     }
 }
 
-fn start(launch: &Launch, profile: &str, cache_dir: Option<&Path>) -> Result<Process, String> {
+/// `Err` is a transport failure (the caller stops the worker). A request that is too large to send is
+/// refused before anything is written, as an engine error: the worker stays as it is.
+fn exchange(p: &mut Process, method: &str, params: Value, deadline: Instant, stopping: &AtomicBool, max: usize) -> Result<Exchange, String> {
+    p.next_id += 1;
+    let id = p.next_id;
+    struct Frame(Vec<u8>, usize);
+    impl Write for Frame {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            if bytes.len() >= self.1 - self.0.len() { return Err(std::io::Error::other("engine frame limit")); }
+            self.0.extend_from_slice(bytes);
+            Ok(bytes.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> { Ok(()) }
+    }
+    let mut frame = Frame(Vec::new(), max);
+    if serde_json::to_writer(&mut frame, &json!({ "id": id, "method": method, "params": params })).is_err() {
+        return Ok(Exchange::Error {
+            message: format!("UnsupportedInSimulator: the engine request exceeds the {} frame limit; it was not sent. Use a smaller message.", frame_size(max)),
+            timeout: false,
+        });
+    }
+    frame.0.push(b'\n');
+    p.requests.as_ref().ok_or("engine stdin closed")?.try_send((id, frame.0))
+        .map_err(|_| "engine stdin unavailable".to_string())?;
+    let mut response = p.wait_reply(deadline, stopping, "writing the request or reading the response")?;
+    if let Some(err) = response.get("error") {
+        let message = err.get("message").and_then(Value::as_str).unwrap_or("engine error").to_string();
+        let timeout = err.get("timeout").and_then(Value::as_bool).unwrap_or(false);
+        return Ok(Exchange::Error { message, timeout });
+    }
+    Ok(Exchange::Result(response["result"].take()))
+}
+
+/// Only this I/O thread touches pipes. A blocked pipe cannot prevent the owner from terminating the child.
+fn pipe_loop(mut stdin: ChildStdin, stdout: ChildStdout, requests: Receiver<(u64, Vec<u8>)>, replies: SyncSender<Reply>, max: usize) {
+    let mut stdout = BufReader::new(stdout);
+    let ready = match read_frame(&mut stdout, max, |v| v["event"] == "ready") {
+        Ok(ready) => ready,
+        Err(e) => { let _ = replies.send(Err(e)); return; }
+    };
+    if replies.send(Ok(ready)).is_err() { return; }
+    while let Ok((id, frame)) = requests.recv() {
+        let response = stdin.write_all(&frame).and_then(|_| stdin.flush()).map_err(|e| format!("engine write failed: {e}"))
+            .and_then(|_| read_frame(&mut stdout, max, |v| v.get("id").and_then(Value::as_u64) == Some(id)));
+        let failed = response.is_err();
+        if replies.send(response).is_err() || failed { break; }
+    }
+}
+
+fn frame_size(max: usize) -> String {
+    if max % (1024 * 1024) == 0 { format!("{} MiB", max / (1024 * 1024)) } else { format!("{max}-byte") }
+}
+
+fn read_frame(input: &mut impl BufRead, max: usize, matches: impl Fn(&Value) -> bool) -> Reply {
+    let mut frame = Vec::new();
+    loop {
+        frame.clear();
+        let n = (&mut *input).take(max as u64 + 1).read_until(b'\n', &mut frame).map_err(|e| format!("engine read failed: {e}"))?;
+        if n > max { return Err(format!("UnsupportedInSimulator: the engine response exceeds the {} frame limit.", frame_size(max))); }
+        if n == 0 || frame.last() != Some(&b'\n') { return Err("engine pipe closed before a complete frame".into()); }
+        if let Ok(v) = serde_json::from_slice::<Value>(&frame) {
+            if matches(&v) { return Ok(v); }
+        }
+    }
+}
+
+fn start(launch: &Launch, profile: &str, cache_dir: Option<&Path>, deadline: Instant, stopping: &AtomicBool, max: usize) -> Result<Process, String> {
     let jvm = matches!(launch, Launch::Jar { .. });
     let mut cmd = match launch {
         Launch::Native(path) => Command::new(path),
+        #[cfg(test)]
+        Launch::Fixture(mode) => {
+            let mut c = Command::new(std::env::current_exe().unwrap());
+            c.args(["--exact", "engine::tests::sidecar_fixture", "--nocapture"]).env("CPIWB_TEST_SIDECAR", mode);
+            c
+        }
         Launch::Jar { java, jar } => {
             let mut c = Command::new(java);
             c.arg("-XX:+UseSerialGC").arg("-Xmx512m").arg("-Xss4m").arg("-Xshare:auto")
@@ -220,33 +358,36 @@ fn start(launch: &Launch, profile: &str, cache_dir: Option<&Path>) -> Result<Pro
             c
         }
     };
-    cmd.arg("serve").arg("--stdio")
-        .stdin(Stdio::piped())
+    #[cfg(not(test))]
+    cmd.args(["serve", "--stdio"]);
+    #[cfg(test)]
+    if !matches!(launch, Launch::Fixture(_)) { cmd.args(["serve", "--stdio"]); }
+    cmd.stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit());
+    #[cfg(test)]
+    if matches!(launch, Launch::Fixture(_)) { cmd.stderr(Stdio::null()); }
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
         const CREATE_NO_WINDOW: u32 = 0x0800_0000;
         cmd.creation_flags(CREATE_NO_WINDOW);
     }
-    let mut child = cmd.spawn().map_err(|e| format!("Cannot start engine {launch:?}: {e}"))?;
-    let stdin = child.stdin.take().ok_or("no stdin")?;
-    let mut stdout = BufReader::new(child.stdout.take().ok_or("no stdout")?);
-    // Wait for the ready event so the first call does not race the engine start.
-    loop {
-        let mut buf = String::new();
-        if stdout.read_line(&mut buf).map_err(|e| e.to_string())? == 0 {
-            let code = child.try_wait().ok().flatten().and_then(|s| s.code());
-            return Err(format!("Engine {launch:?} exited during start (exit code {code:?}){}", path_hint(launch)));
-        }
-        if let Ok(v) = serde_json::from_str::<Value>(buf.trim()) {
-            if v.get("event").and_then(Value::as_str) == Some("ready") {
-                break;
-            }
-        }
+    let child = cmd.spawn().map_err(|e| format!("Cannot start engine {launch:?}: {e}"))?;
+    let (requests, rx) = mpsc::sync_channel(1);
+    let (tx, replies) = mpsc::sync_channel(1);
+    let mut process = Process { child, requests: Some(requests), replies, next_id: 0, last_used: Instant::now(), jvm };
+    let stdin = process.child.stdin.take().expect("piped stdin");
+    let stdout = process.child.stdout.take().expect("piped stdout");
+    if let Err(e) = std::thread::Builder::new().name("cpiwb-pipe".into()).spawn(move || pipe_loop(stdin, stdout, rx, tx, max)) {
+        process.terminate();
+        return Err(format!("Cannot start engine pipe thread: {e}"));
     }
-    Ok(Process { child, stdin: Some(stdin), stdout, next_id: 0, last_used: Instant::now(), jvm })
+    if let Err(e) = process.wait_reply(deadline, stopping, "waiting for readiness") {
+        process.terminate();
+        return Err(format!("Engine startup ({profile}): {e}{}", path_hint(launch)));
+    }
+    Ok(process)
 }
 
 /// Java on Windows cannot start from a folder whose path has characters outside the ANSI code page
@@ -392,6 +533,124 @@ mod tests {
         assert_eq!(p("/opt/cpi-workbench"), PathBuf::from("/opt/cpi-workbench"));
     }
 
+    #[test]
+    fn sidecar_fixture() {
+        let Ok(mode) = std::env::var("CPIWB_TEST_SIDECAR") else { return; };
+        let stall = || std::thread::sleep(Duration::from_secs(15));
+        if mode == "early-exit" { std::process::exit(23); }
+        if mode == "no-ready" { stall(); return; }
+        let mut out = std::io::stdout().lock();
+        writeln!(out, "{{\"event\":\"ready\"}}").unwrap();
+        out.flush().unwrap();
+        if mode == "no-read" { stall(); return; }
+        for line in std::io::stdin().lock().lines() {
+            let msg: Value = serde_json::from_str(&line.unwrap()).unwrap();
+            if mode == "partial" {
+                write!(out, "{{\"id\":{}", msg["id"]).unwrap();
+                out.flush().unwrap();
+                stall();
+                return;
+            }
+            let reply = match msg["method"].as_str() {
+                Some("fail") => json!({"id": msg["id"], "error": {"message": "refused"}}),
+                Some("big") => json!({"id": msg["id"], "result": "x".repeat(4096)}),
+                _ => json!({"id": msg["id"], "result": msg["method"]}),
+            };
+            writeln!(out, "{reply}").unwrap();
+            out.flush().unwrap();
+        }
+    }
+
+    #[test]
+    fn stalled_or_exited_sidecars_are_bounded_and_another_profile_still_works() {
+        let engines = Engines::default();
+        // Leave room for a test executable to start under parallel CI load. Use the short startup
+        // budget only for the fixture that deliberately never sends ready.
+        let limits = Deadlines { startup: Duration::from_secs(8), exchange: Duration::from_secs(1), ..DEADLINES };
+        for (mode, expected, args) in [
+            ("no-ready", "timeout waiting for readiness", json!({})),
+            ("early-exit", "engine pipe closed", json!({})),
+            ("partial", "timeout writing the request or reading the response", json!({})),
+            ("no-read", "timeout writing the request or reading the response", json!({"data": "a".repeat(1024 * 1024)})),
+        ] {
+            let fault_limits = if mode == "no-ready" { Deadlines { startup: Duration::from_millis(800), ..limits } } else { limits };
+            let now = Instant::now();
+            let e = engines.call_with("faulty", &Launch::Fixture(mode), "ping", args, fault_limits).unwrap_err();
+            assert!(e.contains(expected), "{mode}: {e}");
+            assert!(now.elapsed() < fault_limits.startup + fault_limits.exchange + Duration::from_secs(2),
+                "{mode}: {:?}", now.elapsed());
+            assert!(engines.slot("faulty").lock().unwrap().is_none());
+            assert_eq!(engines.call_with("other", &Launch::Fixture("echo"), "ping", json!({}), limits).unwrap(), "ping");
+        }
+        assert_eq!(engines.call_with("faulty", &Launch::Fixture("echo"), "next", json!({}), limits).unwrap(), "next");
+        assert!(read_frame(&mut std::io::Cursor::new(b"over the cap\n"), 8, |_| true).unwrap_err().contains("frame limit"));
+        engines.shutdown();
+    }
+
+    #[test]
+    fn the_frame_limit_refuses_a_request_without_stopping_the_worker() {
+        let engines = Engines::default();
+        let limits = Deadlines { frame: 1024, ..DEADLINES };
+        let pid = |e: &Engines| e.slot("framed").lock().unwrap().as_ref().map(|p| p.child.id());
+        assert_eq!(engines.call_with("framed", &Launch::Fixture("echo"), "ping", json!({}), limits).unwrap(), "ping");
+        let before = pid(&engines).expect("a running worker");
+        let e = engines.call_with("framed", &Launch::Fixture("echo"), "ping", json!({ "data": "a".repeat(2048) }), limits).unwrap_err();
+        assert!(e.starts_with("UnsupportedInSimulator: the engine request exceeds the 1024-byte frame limit"), "{e}");
+        assert_eq!(pid(&engines), Some(before), "the request was not sent; the worker is untouched");
+        assert_eq!(engines.call_with("framed", &Launch::Fixture("echo"), "after", json!({}), limits).unwrap(), "after");
+        // An oversized response leaves the pipe out of step: that worker is stopped, with the limit's message.
+        let e = engines.call_with("framed", &Launch::Fixture("echo"), "big", json!({}), limits).unwrap_err();
+        assert!(e.starts_with("UnsupportedInSimulator: the engine response exceeds the 1024-byte frame limit"), "{e}");
+        assert!(pid(&engines).is_none());
+        assert_eq!(engines.call_with("framed", &Launch::Fixture("echo"), "again", json!({}), limits).unwrap(), "again");
+        engines.shutdown();
+    }
+
+    #[test]
+    fn a_failed_start_call_leaves_no_worker() {
+        let engines = Engines::default();
+        let limits = Deadlines { startup: Duration::from_secs(6), ..DEADLINES };
+        *engines.on_start.lock().unwrap() = Some(("fail".into(), json!({})));
+        let e = engines.call_with("init", &Launch::Fixture("echo"), "ping", json!({}), limits).unwrap_err();
+        assert_eq!(e, "fail failed: refused");
+        assert!(engines.slot("init").lock().unwrap().is_none());
+        *engines.on_start.lock().unwrap() = Some(("open".into(), json!({})));
+        let now = Instant::now();
+        let e = engines.call_with("init", &Launch::Fixture("partial"), "ping", json!({}), limits).unwrap_err();
+        assert!(e.starts_with("Engine startup (open): timeout"), "{e}");
+        assert!(now.elapsed() < limits.startup + Duration::from_secs(2), "{:?}", now.elapsed());
+        assert!(engines.slot("init").lock().unwrap().is_none());
+        assert_eq!(engines.call_with("init", &Launch::Fixture("echo"), "ping", json!({}), limits).unwrap(), "ping");
+        engines.shutdown();
+    }
+
+    #[test]
+    fn a_waiting_call_outlives_the_longest_call_ahead() {
+        assert!(DEADLINES.queue > DEADLINES.startup + DEADLINES.exchange);
+    }
+
+    #[test]
+    fn queue_expiry_and_shutdown_do_not_wait_for_a_stuck_pipe() {
+        let engines = Arc::new(Engines::default());
+        let owner = engines.clone();
+        let active = std::thread::spawn(move || owner.call_with("busy", &Launch::Fixture("partial"), "ping", json!({}), DEADLINES));
+        let slot = engines.slot("busy");
+        let until = Instant::now() + Duration::from_secs(3);
+        while slot.try_lock().is_ok() {
+            assert!(Instant::now() < until, "fixture did not acquire its slot");
+            std::thread::sleep(POLL);
+        }
+        let limits = Deadlines { queue: Duration::from_millis(80), ..DEADLINES };
+        let e = engines.call_with("busy", &Launch::Fixture("echo"), "waiting", json!({}), limits).unwrap_err();
+        assert!(e.contains("waiting for a turn"), "{e}");
+        assert!(!active.is_finished());
+        let now = Instant::now();
+        engines.shutdown();
+        assert!(now.elapsed() < Duration::from_secs(3));
+        assert!(active.join().unwrap().unwrap_err().contains("shutting down"));
+        assert!(slot.lock().unwrap().is_none());
+    }
+
     /// Runs against real engines when found (repository checkout with a build).
     #[test]
     fn round_trip_when_engines_present() {
@@ -418,6 +677,62 @@ mod tests {
         engines.shutdown();
     }
 
+    #[test]
+    fn desktop_groovy_uses_the_selected_project_after_idle_and_exit() {
+        if std::env::var_os("CPIWB_REQUIRE_ENGINES").is_none() {
+            return;
+        }
+        let parent = std::env::temp_dir().join(format!("cpiwb-desktop-restart-{}", std::process::id()));
+        let engines = Engines::default();
+        let make_project = |marker: &str| {
+            let path = parent.join(marker);
+            std::fs::create_dir_all(path.join("platform")).unwrap();
+            std::fs::write(path.join("platform/value-mappings.json"), json!([{
+                "sourceAgency": "Shop", "sourceIdentifier": "Customer", "sourceValue": "C-77",
+                "targetAgency": "S4", "targetIdentifier": "SoldTo", "targetValue": marker,
+            }]).to_string()).unwrap();
+            path
+        };
+        let first = make_project("first-project");
+        let second = make_project("second-project");
+        let select = |profile: &str, path: &Path| {
+            let opened = engines.call_desktop(profile, "project.open", json!({ "dir": path.to_string_lossy() }), None).unwrap();
+            opened["root"].as_str().unwrap().to_string()
+        };
+        for profile in ["groovy-1.x", "groovy-2.x"] {
+            assert!(engines.locate(profile).is_some(), "{}", missing_message(profile));
+            let root = select("saxon-he-9.9", &first); // projected by the UI's file engine, not by Groovy
+            let run = |root: Option<String>, expected: &str| {
+                let result = engines.call_desktop(profile, "groovy.run", json!({
+                    "script": { "content": "import com.sap.it.api.ITApiFactory\n\
+                        import com.sap.it.api.mapping.ValueMappingApi\n\
+                        def processData(m) { def vm = ITApiFactory.getService(ValueMappingApi, null); \
+                        m.setBody(vm.getMappedValue('Shop','Customer','C-77','S4','SoldTo') ?: 'no-project'); m }" },
+                    "input": { "body": "unchanged" },
+                }), root).unwrap();
+                assert_eq!(result["output"]["body"], expected, "{profile}: {result}");
+            };
+            run(Some(root.clone()), "first-project");
+            engines.stop_idle(Duration::ZERO);
+            assert!(engines.slot(profile).lock().unwrap().is_none(), "{profile} was not stopped");
+            run(Some(root.clone()), "first-project"); // first request to the replacement worker
+
+            let slot = engines.slot(profile);
+            {
+                let mut current = slot.lock().unwrap();
+                let child = &mut current.as_mut().unwrap().child;
+                child.kill().unwrap();
+                child.wait().unwrap();
+            } // the supervisor still has a handle to the exited worker
+            let next = select("saxon-he-9.9", &second);
+            run(Some(next.clone()), "second-project");
+            run(Some(root), "first-project"); // an already-issued request retains its own project
+            run(None, "no-project"); // a scratch call after closing a project cannot see its mock data
+        }
+        engines.shutdown();
+        std::fs::remove_dir_all(&parent).unwrap();
+    }
+
     /// The installed app's path through the shell: every engine over stdio, on a copy of the demo
     /// project in the OS temp folder (Windows paths on Windows). Skipped unless CPIWB_REQUIRE_ENGINES
     /// is set; CI sets it with CPIWB_ENGINE_DIR (native executables, jars) and JAVA_HOME (bundled JRE).
@@ -437,13 +752,14 @@ mod tests {
         let mut passed = std::collections::BTreeSet::new();
         for (name, _, _) in PROFILES {
             assert!(engines.locate(name).is_some(), "{}", missing_message(name));
-            let info = engines.call(name, "engine.info", json!({})).unwrap();
+            let info = engines.call_desktop(name, "engine.info", json!({}), None).unwrap();
             assert_eq!(info["profile"], *name, "{info}");
-            let opened = engines.call(name, "project.open", json!({ "dir": project.to_string_lossy() })).unwrap();
+            let opened = engines.call_desktop(name, "project.open", json!({ "dir": project.to_string_lossy() }), None).unwrap();
             let files = opened["files"].as_array().unwrap();
             assert!(files.iter().any(|f| f["path"] == "tests/groovy-attachment/case.json"),
                 "project paths use '/': {opened}");
-            let r = engines.call(name, "tests.run", json!({})).unwrap();
+            let r = engines.call_desktop(name, "tests.run", json!({}),
+                Some(opened["root"].as_str().unwrap().to_string())).unwrap();
             assert_eq!(r["failed"], 0, "{name}: {r}");
             for c in r["results"].as_array().unwrap() {
                 if c["status"] == "passed" {
@@ -455,8 +771,8 @@ mod tests {
         assert_eq!(passed.len() as u64, cases, "cases passed on some engine: {passed:?}");
 
         // Files written through the engine land in the project, nested folders included.
-        let w = engines.call("saxon-he-9.9", "file.write",
-            json!({ "path": "tests/new-case/input.xml", "content": "<a/>" })).unwrap();
+        let w = engines.call_desktop("saxon-he-9.9", "file.write",
+            json!({ "path": "tests/new-case/input.xml", "content": "<a/>" }), Some(project.to_string_lossy().into_owned())).unwrap();
         assert_eq!(w["saved"], true);
         assert!(project.join("tests").join("new-case").join("input.xml").is_file());
         engines.shutdown();

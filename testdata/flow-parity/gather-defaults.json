@@ -1,0 +1,44 @@
+{
+  "name": "gather-defaults",
+  "from": "iflow",
+  "step": {
+    "type": "gather",
+    "config": {}
+  },
+  "input": {
+    "body": "<a><b>1</b></a>",
+    "headers": {
+      "h0": "x"
+    },
+    "properties": {
+      "p0": "y"
+    }
+  },
+  "namespaces": {
+    "o": "urn:example:order"
+  },
+  "messages": [
+    "<b>1</b>",
+    "<b>2</b>"
+  ],
+  "answers": {},
+  "calls": [
+    {
+      "engine": "xml",
+      "method": "gather.run",
+      "params": {
+        "messageType": "sameXml",
+        "algorithm": "combine",
+        "sourceXPath": "",
+        "targetXPath": "",
+        "namespaces": {
+          "o": "urn:example:order"
+        },
+        "messages": [
+          "<b>1</b>",
+          "<b>2</b>"
+        ]
+      }
+    }
+  ]
+}

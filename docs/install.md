@@ -106,16 +106,16 @@ disable Gatekeeper globally or override a warning that the app contains malware.
 
 ## Command line
 
-The engine jars run test cases in a terminal or a CI pipeline. Each needs Java 17 or later (21 is
+The engine jars run a mapping, script, schema or XPath in a terminal. Each needs Java 17 or later (21 is
 what a tenant and the app run; on 17 the default charset can differ):
 
 ```sh
-java -jar cpiwb-xml-he99-<version>.jar test path/to/project/tests     # XSLT and XSD cases
-java -jar cpiwb-groovy-v1-<version>.jar test path/to/project/tests    # Groovy Script 1.x cases
-java -jar cpiwb-groovy-v2-<version>.jar test path/to/project/tests    # Groovy Script 2.x cases
+java -jar cpiwb-xml-he99-<version>.jar xslt --xsl mappings/order.xsl --in input.xml   # XSLT on Saxon-HE 9.9
+java -jar cpiwb-groovy-v1-<version>.jar run --script scripts/enrich.groovy --in input.xml   # Groovy Script 1.x
+java -jar cpiwb-groovy-v2-<version>.jar run --script scripts/enrich.groovy --in input.xml   # Groovy Script 2.x
 ```
 
-See the [user guide](user-guide.md#command-line-ci-friendly) and [test cases](test-cases.md).
+See the [user guide](user-guide.md#command-line).
 
 ## First steps
 

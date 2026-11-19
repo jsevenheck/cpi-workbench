@@ -5,7 +5,7 @@
 
   /**
    * The mocked platform data a script reads through ITApiFactory, as tables over the project's platform/*.json
-   * files (docs/test-cases.md). A table's unsaved rows already go with each run; Save writes the file.
+   * files (docs/project-files.md). A table's unsaved rows already go with each run; Save writes the file.
    */
   interface Props {
     onchange?: () => void;
@@ -54,7 +54,7 @@
           title={app.project ? 'Write ' + PLATFORM_FILES[s.key] : 'Open a project to save'} aria-label="Save {s.title}">Save</button>
       </header>
       {#if overridden.includes(s.key)}
-        <p class="note">The open test case brings its own {s.title.toLowerCase()} (<code>platform.{s.key}</code> in <code>case.json</code>); its runs use those, not this table.</p>
+        <p class="note">The open file brings its own {s.title.toLowerCase()} (<code>platform.{s.key}</code>); its runs use those, not this table.</p>
       {/if}
       {#if sec.loadError}
         <p class="err">{PLATFORM_FILES[s.key]} cannot be shown as a table: {sec.loadError}. Fix it in the file.</p>

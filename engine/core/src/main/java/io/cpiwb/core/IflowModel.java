@@ -6,7 +6,6 @@ import org.w3c.dom.Node;
 
 import javax.xml.parsers.DocumentBuilderFactory;
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -14,7 +13,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Stream;
 
 /**
  * The whole of an imported iFlow, for the app's iFlow list and its Diagram tab: processes, every element (also
@@ -25,7 +23,7 @@ import java.util.stream.Stream;
 public final class IflowModel {
 
     /** Property values are cut at this length: a routing table or schedule can hold a whole XML document. */
-    private static final int MAX_VALUE = 2000;
+    static final int MAX_VALUE = 2000;
     /** BPMN elements that are no flow nodes. */
     private static final Set<String> NOT_NODES = Set.of("sequenceFlow", "extensionElements", "incoming", "outgoing",
             "documentation", "laneSet", "standardLoopCharacteristics", "multiInstanceLoopCharacteristics", "dataObject",
@@ -38,18 +36,12 @@ public final class IflowModel {
     public static Map<String, Object> models(Path projectRoot) throws IOException {
         List<Object> out = new ArrayList<>();
         Path iflows = projectRoot.resolve("iflows");
-        List<Path> files = new ArrayList<>();
-        if (Files.isDirectory(iflows)) {
-            try (Stream<Path> s = Files.walk(iflows, 12)) {
-                s.filter(p -> p.toString().endsWith(".iflw")).sorted().forEach(files::add);
-            }
-        }
-        for (Path file : files) {
-            Path rel = iflows.relativize(file);
-            String iflow = rel.getNameCount() > 0 ? rel.getName(0).toString() : "";
-            String path = projectRoot.relativize(file).toString().replace('\\', '/');
+        for (ProjectPaths.Entry file : IflowImport.models(projectRoot)) {
+            String iflow = IflowImport.iflowName(iflows, file.path());
+            String path = ProjectPaths.label(projectRoot, file.path());
             try {
-                out.add(read(file).with("iflow", iflow).with("file", path));
+                file.requireReadable();
+                out.add(read(projectRoot, file.path(), MAX_VALUE).with("iflow", iflow).with("file", path));
             } catch (Exception ex) {
                 out.add(Json.o().with("iflow", iflow).with("file", path).with("error", "Cannot read the iFlow model: " + ex.getMessage()));
             }
@@ -57,11 +49,12 @@ public final class IflowModel {
         return Json.o().with("models", out);
     }
 
-    static Json.Obj read(Path file) throws Exception {
+    /** The model with property values cut at {@code maxValue} characters ({@link IflowIndex} reads them whole). */
+    static Json.Obj read(Path projectRoot, Path file, int maxValue) throws Exception {
         DocumentBuilderFactory f = DocumentBuilderFactory.newDefaultInstance();
         f.setNamespaceAware(true);
         f.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
-        Document doc = f.newDocumentBuilder().parse(file.toFile());
+        Document doc = f.newDocumentBuilder().parse(ProjectPaths.checked(projectRoot, file).toFile());
         Element root = doc.getDocumentElement();
         Map<String, double[]> bounds = new LinkedHashMap<>();
         Map<String, List<Object>> waypoints = new LinkedHashMap<>();
@@ -85,12 +78,12 @@ public final class IflowModel {
                 // EndpointRecevier is how the editor spells it (F68).
                 String kind = type.toLowerCase(Locale.ROOT).startsWith("endpointrec") ? "receiver"
                         : type.equalsIgnoreCase("EndpointSender") ? "sender" : "participant";
-                nodes.add(node(p, kind, null, bounds));
+                nodes.add(node(p, kind, null, bounds, maxValue));
             }
             for (Element m : children(collab, "messageFlow")) {
                 Map<String, String> pr = props(m);
                 flows.add(flow(m, "message", waypoints).with("adapter", pr.getOrDefault("ComponentType", m.getAttribute("name")))
-                        .with("direction", pr.get("direction")).with("properties", limited(pr)));
+                        .with("direction", pr.get("direction")).with("properties", limited(pr, maxValue)));
             }
         }
         for (Element process : children(root, "process")) {
@@ -100,14 +93,14 @@ public final class IflowModel {
             String pool = pools.get(id);
             processes.add(Json.o().with("id", id).with("name", process.getAttribute("name")).with("kind", kind)
                     .with("pool", pool).with("bounds", pool == null ? null : box(bounds.get(pool))));
-            elements(process, id, processes, nodes, flows, bounds, waypoints);
+            elements(process, id, processes, nodes, flows, bounds, waypoints, maxValue);
         }
         return Json.o().with("name", name).with("processes", processes).with("nodes", nodes).with("flows", flows)
                 .with("hasLayout", !bounds.isEmpty());
     }
 
     private static void elements(Element container, String process, List<Object> processes, List<Object> nodes,
-                                 List<Object> flows, Map<String, double[]> bounds, Map<String, List<Object>> waypoints) {
+                                 List<Object> flows, Map<String, double[]> bounds, Map<String, List<Object>> waypoints, int maxValue) {
         Map<String, String> defaults = new LinkedHashMap<>(); // flow id -> gateway id
         for (Element el : children(container, null)) {
             String ln = local(el);
@@ -115,7 +108,7 @@ public final class IflowModel {
                 Element cond = first(el, "conditionExpression");
                 Map<String, String> pr = props(el);
                 flows.add(flow(el, "sequence", waypoints).with("condition", cond == null ? null : cond.getTextContent().trim())
-                        .with("expressionType", pr.get("expressionType")));
+                        .with("expressionType", pr.get("expressionType")).with("properties", limited(pr, maxValue)));
                 continue;
             }
             if (NOT_NODES.contains(ln) || el.getAttribute("id").isEmpty()) {
@@ -130,13 +123,13 @@ public final class IflowModel {
                 processes.add(Json.o().with("id", id).with("name", el.getAttribute("name"))
                         .with("kind", exception ? "exception" : "subprocess").with("parent", process)
                         .with("bounds", box(bounds.get(id))));
-                nodes.add(node(el, "subprocess", process, bounds));
-                elements(el, id, processes, nodes, flows, bounds, waypoints);
+                nodes.add(node(el, "subprocess", process, bounds, maxValue));
+                elements(el, id, processes, nodes, flows, bounds, waypoints, maxValue);
                 continue;
             }
             String kind = ln.equals("startEvent") ? "start" : ln.equals("endEvent") ? "end"
                     : ln.endsWith("Event") ? "event" : ln.endsWith("Gateway") ? "gateway" : "step";
-            Json.Obj n = node(el, kind, process, bounds);
+            Json.Obj n = node(el, kind, process, bounds, maxValue);
             if (!el.getAttribute("default").isEmpty()) {
                 defaults.put(el.getAttribute("default"), el.getAttribute("id"));
             }
@@ -164,13 +157,13 @@ public final class IflowModel {
         }
     }
 
-    private static Json.Obj node(Element el, String kind, String process, Map<String, double[]> bounds) {
+    private static Json.Obj node(Element el, String kind, String process, Map<String, double[]> bounds, int maxValue) {
         Map<String, String> pr = props(el);
         String id = el.getAttribute("id");
         return Json.o().with("id", id).with("name", el.getAttribute("name")).with("kind", kind).with("element", local(el))
                 .with("process", process).with("activityType", pr.get("activityType"))
                 .with("subActivityType", pr.get("subActivityType")).with("variant", variant(pr.get("cmdVariantUri")))
-                .with("bounds", box(bounds.get(id))).with("properties", limited(pr));
+                .with("bounds", box(bounds.get(id))).with("properties", limited(pr, maxValue));
     }
 
     private static Json.Obj flow(Element el, String kind, Map<String, List<Object>> waypoints) {
@@ -244,9 +237,9 @@ public final class IflowModel {
         return out;
     }
 
-    private static Map<String, Object> limited(Map<String, String> props) {
+    private static Map<String, Object> limited(Map<String, String> props, int maxValue) {
         Map<String, Object> out = new LinkedHashMap<>();
-        props.forEach((k, v) -> out.put(k, v.length() > MAX_VALUE ? v.substring(0, MAX_VALUE) + "…" : v));
+        props.forEach((k, v) -> out.put(k, v.length() > maxValue ? v.substring(0, maxValue) + "…" : v));
         return out;
     }
 

@@ -1,0 +1,95 @@
+{
+  "name": "router-simple",
+  "from": "iflow",
+  "step": {
+    "type": "router",
+    "config": {
+      "routes": [
+        {
+          "name": "Z",
+          "expressionType": "nonxml",
+          "condition": "${header.h0} = 'z'",
+          "default": false
+        },
+        {
+          "name": "",
+          "expressionType": "nonxml",
+          "condition": "${header.h0} = 'x'",
+          "default": false
+        },
+        {
+          "name": "Never",
+          "expressionType": "nonxml",
+          "condition": "${header.h0} = 'n'",
+          "default": false
+        },
+        {
+          "name": "Other",
+          "expressionType": "nonxml",
+          "condition": "",
+          "default": true
+        }
+      ]
+    }
+  },
+  "input": {
+    "body": "<a><b>1</b></a>",
+    "headers": {
+      "h0": "x"
+    },
+    "properties": {
+      "p0": "y"
+    }
+  },
+  "namespaces": {
+    "o": "urn:example:order"
+  },
+  "answers": {
+    "simple.eval": [
+      {
+        "ok": true,
+        "value": "false"
+      },
+      {
+        "ok": true,
+        "value": "true"
+      }
+    ]
+  },
+  "calls": [
+    {
+      "engine": "camel",
+      "method": "simple.eval",
+      "params": {
+        "expression": "${header.h0} = 'z'",
+        "mode": "condition",
+        "input": {
+          "body": "<a><b>1</b></a>",
+          "headers": {
+            "h0": "x"
+          },
+          "properties": {
+            "p0": "y"
+          }
+        }
+      }
+    },
+    {
+      "engine": "camel",
+      "method": "simple.eval",
+      "params": {
+        "expression": "${header.h0} = 'x'",
+        "mode": "condition",
+        "input": {
+          "body": "<a><b>1</b></a>",
+          "headers": {
+            "h0": "x"
+          },
+          "properties": {
+            "p0": "y"
+          }
+        }
+      }
+    }
+  ]
+}

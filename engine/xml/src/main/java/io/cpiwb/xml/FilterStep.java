@@ -67,7 +67,7 @@ public final class FilterStep {
             if (expr.isEmpty()) {
                 throw new IllegalArgumentException("Enter an XPath expression.");
             }
-            if (expr.contains("function:simple")) {
+            if (needsCamel(expr)) {
                 throw new IllegalArgumentException("UnsupportedInSimulator: function:simple(...) needs Camel; "
                         + "the Flow Steps tab resolves it before the XPath runs.");
             }
@@ -96,6 +96,31 @@ public final class FilterStep {
         return result.with("ok", ok).with("diagnostics", diags)
                 .with("engine", XsltStep.engineVersion() + " (XPath 3.1)")
                 .with("timing", Json.o().with("totalMs", (System.nanoTime() - t0) / 1_000_000.0));
+    }
+
+    /** A substituted XPath literal can contain these characters without calling Camel again. */
+    static boolean needsCamel(String expression) {
+        char quote = 0;
+        int comment = 0;
+        for (int i = 0; i < expression.length(); i++) {
+            char c = expression.charAt(i);
+            if (quote != 0) {
+                if (c == quote) {
+                    if (i + 1 < expression.length() && expression.charAt(i + 1) == quote) i++;
+                    else quote = 0;
+                }
+            } else if (expression.startsWith("(:", i)) {
+                comment++;
+                i++;
+            } else if (comment > 0) {
+                if (expression.startsWith(":)", i)) { comment--; i++; }
+            } else if (c == '\'' || c == '"') {
+                quote = c;
+            } else if (expression.startsWith("function:simple", i)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private String body(XdmValue value, String type, List<Object> diags) throws SaxonApiException {

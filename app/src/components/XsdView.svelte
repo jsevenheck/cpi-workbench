@@ -2,7 +2,7 @@
   import Gutter from './Gutter.svelte';
   import { paneSizes, paneColumns } from '../lib/split.svelte';
   import Editor from './Editor.svelte';
-  import { app, xsd, xslt, runXsd, saveSchema, saveSchemaAs, saveInput, closeInput, closeEditorFile } from '../lib/store.svelte';
+  import { app, xsd, xslt, runXsd, saveSchema, saveSchemaAs, savingEditor, saveInput, closeInput, closeEditorFile } from '../lib/store.svelte';
 
   const panes = paneSizes('xsd', [1, 1]);
 
@@ -41,8 +41,8 @@
       {#if xsd.schemaPath || xsd.casePath || xsd.schema}<button class="close-file" onclick={() => closeEditorFile('xsd')}
         title="Close this file (it stays on disk)" aria-label="Close file">×</button>{/if}
       <div class="spacer"></div>
-      <button class="small" onclick={saveSchema} disabled={!app.project}>Save</button>
-      <button class="small" onclick={saveSchemaAs} disabled={!app.project} title="Save under a new name; the open file stays as it is">Save as…</button>
+      <button class="small" onclick={saveSchema} disabled={!app.project || savingEditor.xsd}>Save</button>
+      <button class="small" onclick={saveSchemaAs} disabled={!app.project || savingEditor.xsd} title="Save under a new name; the open file stays as it is">Save as…</button>
     </header>
     <div class="body schema">
       {#if !xsd.schema.trim()}

@@ -74,10 +74,14 @@ public final class SimpleStep {
         return PROPERTY.matcher(camel).replaceAll("\\${exchangeProperty.");
     }
 
-    /** A Camel exchange with the input message (body as text). */
+    /** A Camel exchange with the input message (body as text for standalone Simple evaluation). */
     static Exchange exchange(SimExchange in) {
+        return exchange(in, false);
+    }
+
+    static Exchange exchange(SimExchange in, boolean binaryBody) {
         Exchange exchange = Exchanges.create();
-        exchange.getIn().setBody(in.getBodyAsString());
+        exchange.getIn().setBody(binaryBody ? in.getBody() : in.getBodyAsString());
         exchange.getIn().getHeaders().putAll(in.getHeaders());
         exchange.getProperties().putAll(in.getProperties());
         return exchange;

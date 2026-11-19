@@ -1,0 +1,82 @@
+{
+  "name": "content-modifier",
+  "from": "iflow",
+  "step": {
+    "type": "contentModifier",
+    "config": {
+      "headers": [
+        { "name": "h1", "type": "expression", "value": "${exchangeId}" },
+        { "name": "h2", "type": "xpath", "value": "$h1", "datatype": "java.lang.String" },
+        { "action": "Delete", "name": "h0" }
+      ],
+      "properties": [
+        { "name": "p1", "type": "xpath", "value": "/a", "datatype": "org.w3c.dom.NodeList" }
+      ],
+      "body": "${header.h2}",
+      "bodyType": "expression"
+    }
+  },
+  "input": { "body": "<a><b>1</b></a>", "headers": { "h0": "x" }, "properties": { "p0": "y" } },
+  "namespaces": { "o": "urn:example:order" },
+  "answers": {
+    "contentModifier.advance": [
+      { "ok": true, "continuation": "first", "variables": { "headers": { "h0": "x", "h1": "id-1" }, "properties": { "p0": "y" } } },
+      { "ok": true, "continuation": "second" }
+    ],
+    "xpath.eval": [ { "ok": true, "value": "id-1" }, { "ok": true, "value": "<a><b>1</b></a>" } ],
+    "contentModifier.run": [
+      { "ok": true, "output": { "body": "id-1", "headers": { "h1": "id-1", "h2": "id-1" }, "properties": { "p0": "y", "p1": "<a><b>1</b></a>" } } }
+    ]
+  },
+  "calls": [
+    {
+      "engine": "camel",
+      "method": "contentModifier.advance",
+      "params": {
+        "headers": [ { "action": "Create", "name": "h1", "type": "expression", "value": "${exchangeId}", "datatype": "", "default": "" } ],
+        "properties": [],
+        "input": { "body": "<a><b>1</b></a>", "headers": { "h0": "x" }, "properties": { "p0": "y" } },
+        "variables": true
+      }
+    },
+    {
+      "engine": "xml",
+      "method": "xpath.eval",
+      "params": {
+        "expression": "$h1", "version": "3.1", "as": "string", "namespaces": { "o": "urn:example:order" },
+        "input": { "body": "<a><b>1</b></a>", "headers": { "h0": "x", "h1": "id-1" }, "properties": { "p0": "y" } }
+      }
+    },
+    {
+      "engine": "camel",
+      "method": "contentModifier.advance",
+      "params": {
+        "headers": [
+          { "action": "Create", "name": "h2", "type": "xpath", "value": "$h1", "datatype": "java.lang.String", "default": "", "resolved": "id-1" },
+          { "action": "Delete", "name": "h0", "type": "constant", "value": "", "datatype": "", "default": "" }
+        ],
+        "properties": [], "continuation": "first", "variables": false
+      }
+    },
+    {
+      "engine": "xml",
+      "method": "xpath.eval",
+      "params": {
+        "expression": "/a", "version": "3.1", "as": "nodes", "namespaces": { "o": "urn:example:order" },
+        "input": { "body": "<a><b>1</b></a>", "headers": { "h0": "x" }, "properties": { "p0": "y" } }
+      }
+    },
+    {
+      "engine": "camel",
+      "method": "contentModifier.run",
+      "params": {
+        "headers": [],
+        "properties": [ { "action": "Create", "name": "p1", "type": "xpath", "value": "/a", "datatype": "org.w3c.dom.NodeList", "default": "", "resolved": "<a><b>1</b></a>" } ],
+        "continuation": "second", "body": "${header.h2}", "bodyType": "expression"
+      }
+    }
+  ],
+  "result": {
+    "ok": true, "output": { "body": "id-1", "headers": { "h1": "id-1", "h2": "id-1" }, "properties": { "p0": "y", "p1": "<a><b>1</b></a>" } }
+  }
+}

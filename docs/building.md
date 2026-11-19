@@ -89,7 +89,8 @@ one. These browser-warning checks are not yet part of the committed e2e scripts.
 
 `.github/workflows/build.yml`:
 
-* runs the engine tests and the regression cases in `testdata/regression-project`,
+* runs the engine tests and the regression cases in `testdata/regression-project` (format and `test` command:
+  [Regression test cases](test-cases.md); *Init* creates no `tests/` folder, so a new case's folder is made by hand),
 * runs the browser e2e tests,
 * runs the shell tests against the native engines and the trimmed JRE, then builds the bundles,
 * starts the release executable as an MCP server (`app/scripts/mcp-smoke.mjs`), as a client would.

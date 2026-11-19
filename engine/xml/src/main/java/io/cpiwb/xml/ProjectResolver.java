@@ -45,7 +45,12 @@ public final class ProjectResolver implements URIResolver, LSResourceResolver, E
     private final Map<String, String> resources = new LinkedHashMap<>();
     /** Files read from disk with their modification time, for cache validation. */
     private final Map<Path, Long> filesRead = new LinkedHashMap<>();
-    private java.util.function.Consumer<String> moduleListener;
+    private ModuleListener moduleListener;
+
+    @FunctionalInterface
+    interface ModuleListener {
+        void loaded(String systemId, String text) throws TransformerException;
+    }
 
     /**
      * @param baseDir   project folder, may be null
@@ -74,8 +79,8 @@ public final class ProjectResolver implements URIResolver, LSResourceResolver, E
         return rel.replace(" ", "%20");
     }
 
-    /** Called with the text of every stylesheet module loaded via {@link #resolve}. */
-    public void setModuleListener(java.util.function.Consumer<String> listener) {
+    /** Called for every stylesheet module during compilation, before Saxon sees its content. */
+    void setModuleListener(ModuleListener listener) {
         this.moduleListener = listener;
     }
 
@@ -160,7 +165,7 @@ public final class ProjectResolver implements URIResolver, LSResourceResolver, E
         String abs = resolveAgainst(href, base);
         String content = load(abs);
         if (moduleListener != null) {
-            moduleListener.accept(content);
+            moduleListener.loaded(abs, content);
         }
         return source(new InputSource(new StringReader(content)), abs);
     }

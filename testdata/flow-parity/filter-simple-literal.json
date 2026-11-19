@@ -1,0 +1,23 @@
+{
+  "from": "iflow",
+  "input": { "body": "<a><b>2</b></a>", "headers": {}, "properties": {} },
+  "namespaces": {},
+  "step": { "type": "filter", "config": {
+    "expression": "//b[contains(function:simple(\"${header.first}\"), 'marker')][. = function:simple('${header.qty}')][. = function:simple('${header.qty}')]",
+    "valueType": "string"
+  } },
+  "answers": {
+    "simple.eval": [{ "ok": true, "value": "marker function:simple('${header.qty}') and \"quotes\"" }, { "ok": true, "value": "2" }, { "ok": true, "value": "2" }],
+    "filter.run": [{ "ok": true, "body": "2" }]
+  },
+  "calls": [
+    { "engine": "camel", "method": "simple.eval", "params": { "expression": "${header.first}", "mode": "expression", "input": { "body": "<a><b>2</b></a>", "headers": {}, "properties": {} } } },
+    { "engine": "camel", "method": "simple.eval", "params": { "expression": "${header.qty}", "mode": "expression", "input": { "body": "<a><b>2</b></a>", "headers": {}, "properties": {} } } },
+    { "engine": "camel", "method": "simple.eval", "params": { "expression": "${header.qty}", "mode": "expression", "input": { "body": "<a><b>2</b></a>", "headers": {}, "properties": {} } } },
+    { "engine": "xml", "method": "filter.run", "params": {
+      "expression": "//b[contains('marker function:simple(''${header.qty}'') and \"quotes\"', 'marker')][. = '2'][. = '2']",
+      "valueType": "string", "namespaces": {}, "input": { "body": "<a><b>2</b></a>", "headers": {}, "properties": {} }
+    } }
+  ],
+  "result": { "ok": true, "body": "2" }
+}

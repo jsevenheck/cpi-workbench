@@ -1,5 +1,5 @@
 /**
- * The mocked platform data of a project (`platform/*.json`, docs/test-cases.md) as table rows for the Groovy
+ * The mocked platform data of a project (`platform/*.json`, docs/project-files.md) as table rows for the Groovy
  * tab, and back. The JSON files stay the source of truth: rows are read from a file's document and written
  * into it again, and whatever the tables do not show (OAuth fields of a credential, binary Partner Directory
  * parameters, alternative partners, unknown members) is kept as it is in the file.

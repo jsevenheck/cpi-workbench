@@ -353,8 +353,9 @@ engine, not even one whose name is re-pointed to 127.0.0.1 (DNS rebinding). The 
 page also handles the project's files. Each tab sends its own project with each call, so opening or closing
 a project in one tab does not change another tab's project. Tabs opened later can still restore the last
 project from browser settings. A browser request can carry up to 32 MiB, including JSON and Base64
-encoding. Use the desktop app or a smaller message if a request exceeds this limit. If the engine is
-busy or the wait exceeds five seconds, the waiting request is refused without running it. Try again
+encoding. Use the desktop app or a smaller message if a request exceeds this limit. A request waits while the
+engine runs another one (for example a save during a long run); if more requests are waiting than the engine
+admits, or the wait exceeds the run timeout plus five seconds, it is refused without running it. Try again
 when the active call finishes. Only a timeout during execution restarts the engine; the next call
 carries the project as usual. Failed calls are not retried automatically.
 To add more engines, use jars from the same build as the UI and pass them in a URL parameter (local engines only):

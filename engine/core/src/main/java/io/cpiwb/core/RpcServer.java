@@ -46,12 +46,13 @@ public final class RpcServer {
     private static final int HTTP_THREADS = 12;
     private static final int HTTP_IN_FLIGHT = 4;
     private static final int HTTP_BODY_LIMIT = 32 * 1024 * 1024;
-    private static final long HTTP_QUEUE_MS = 5_000;
+    /** Beyond the execution timeout: a file save during a long run waits for it instead of failing as busy. */
+    private static final long HTTP_QUEUE_MARGIN_MS = 5_000;
 
     private final RpcHandler handler;
     private final long defaultTimeoutMs;
     private final int bodyLimit;
-    private final long queueMs;
+    final long queueMs;
     // Admission covers uploads, queueing, executions and RPC replies. Leave HTTP threads for preflights,
     // static assets and overload replies. Only the holder of httpExecution can submit to the worker over HTTP.
     private final Semaphore httpAdmission = new Semaphore(HTTP_IN_FLIGHT);
@@ -73,7 +74,7 @@ public final class RpcServer {
     });
 
     public RpcServer(RpcHandler handler, long defaultTimeoutMs) {
-        this(handler, defaultTimeoutMs, HTTP_BODY_LIMIT, HTTP_QUEUE_MS);
+        this(handler, defaultTimeoutMs, HTTP_BODY_LIMIT, defaultTimeoutMs + HTTP_QUEUE_MARGIN_MS);
     }
 
     RpcServer(RpcHandler handler, long defaultTimeoutMs, int bodyLimit, long queueMs) {

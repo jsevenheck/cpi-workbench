@@ -313,7 +313,7 @@ class IflowImportTest {
             }
             staging.close(); // does not throw, whether or not the file could be removed
         } finally {
-            if (!windows) {
+            if (!windows && Files.exists(sub)) { // root ignores r-x, so close() may have removed it after all
                 Files.setPosixFilePermissions(sub, java.nio.file.attribute.PosixFilePermissions.fromString("rwx------"));
             }
         }

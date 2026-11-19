@@ -46,8 +46,8 @@ when sending it over stdio; plain stdio (used by MCP's worker calls) and the leg
 endpoint keep their stateful contract. Both HTTP endpoints admit up to four RPCs per engine, with a
 32 MiB request-body cap (HTTP 413) and a roughly ten-second request read deadline. The JDK HTTP
 server uses a 24-connection cap, a 16 KiB header cap and a bounded executor. Excess transport
-connections and stalled uploads can be closed before an HTTP reply. A parsed request waits at most
-five seconds for the engine; a full admission pool or expired queue wait returns HTTP 503 without
+connections and stalled uploads can be closed before an HTTP reply. A parsed request waits for the engine
+up to the execution timeout plus five seconds (35 s by default), so it outlives the call ahead; a full admission pool or expired queue wait returns HTTP 503 without
 running that request. Execution has a separate timeout. `serve --http` runs in a child process
 (`--worker`) and restarts it only when an executing call times out. After worker replacement both UIs
 still send the selected project on the first request. Failed calls are not replayed.

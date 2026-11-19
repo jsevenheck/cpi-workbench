@@ -26,8 +26,9 @@ of its version.
   that is not valid text in the message charset, instead of silently replacing those bytes with U+FFFD.
 - **XSLT Live previews** also ask for a manual Run when a `java:` namespace is written with character
   or entity references or as an EQName (`Q{java:…}`); other compile errors are reported as compile errors.
-- **Browser requests** have bounded uploads and queue waits. A busy engine refuses a waiting request
-  without interrupting the request already running.
+- **Browser requests** have bounded uploads and queue waits. A waiting request outlives the call ahead
+  (a save during a long run waits for it); one the engine cannot admit is refused without interrupting the
+  request already running.
 - **Imports** no longer report a finished import as failed when a temporary file cannot be removed
   (a virus scanner holding it on Windows). A failed create-new import cleans up only its own writes;
   files added by another writer are left alone. Archives with duplicate entries are refused with the

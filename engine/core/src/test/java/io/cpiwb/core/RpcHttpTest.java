@@ -54,6 +54,21 @@ class RpcHttpTest {
         return new RpcServer(handler, 10_000, bodyLimit, queueMs).serveHttp(0, null);
     }
 
+    /** A file save during a long run must wait for it, as on the desktop (engine.rs DEADLINES). */
+    @Test
+    void aWaitingRequestOutlivesTheCallAhead() {
+        RpcHandler none = new RpcHandler() {
+            public Object call(String method, Map<String, Object> args) {
+                return null;
+            }
+
+            public Map<String, Object> describe() {
+                return Json.o();
+            }
+        };
+        assertTrue(new RpcServer(none, 30_000).queueMs > 30_000);
+    }
+
     @Test
     void queuedExpiryDoesNotRunOrInterruptTheActiveCall() throws Exception {
         HttpServer server = serve(1024, 250);

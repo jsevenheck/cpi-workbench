@@ -6,6 +6,16 @@ of its version.
 
 ## [Unreleased]
 
+### Changed
+
+- **Editor features.** The code editors (Monaco 0.57) now offer Monaco's full set of editor features in every
+  editor: its own right-click menu, the command palette (F1), sticky scroll of enclosing elements and
+  go-to-line, among others. Monaco 0.57 loads these with its JSON support anyway, so before, editors opened
+  after the first JSON file had more features than earlier ones.
+- **Dependencies.** The app's UI and shell dependencies are updated: Vite 8, the Svelte plugin 7, TypeScript 6,
+  Monaco 0.57, Svelte 5.57.3, the Tauri dialog plugin 2.8.4, and the Rust crates within their versions
+  (Windows: `junction` 2). The engines' runtimes (Saxon, Groovy, Camel, Java) are unchanged.
+
 ## [0.6.0] - 2026-11-19
 
 ### Added

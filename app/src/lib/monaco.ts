@@ -1,19 +1,20 @@
 // Monaco is bundled locally (no CDN) so the app works offline. Only the languages we need are loaded.
-import * as monaco from 'monaco-editor/esm/vs/editor/editor.api';
-import 'monaco-editor/esm/vs/basic-languages/xml/xml.contribution';
-import 'monaco-editor/esm/vs/basic-languages/java/java.contribution';
-import 'monaco-editor/esm/vs/language/json/monaco.contribution';
-import 'monaco-editor/esm/vs/editor/contrib/find/browser/findController';
-import 'monaco-editor/esm/vs/editor/contrib/folding/browser/folding';
-import 'monaco-editor/esm/vs/editor/contrib/bracketMatching/browser/bracketMatching';
-import 'monaco-editor/esm/vs/editor/contrib/wordHighlighter/browser/wordHighlighter';
-import 'monaco-editor/esm/vs/editor/contrib/comment/browser/comment';
-import 'monaco-editor/esm/vs/editor/contrib/multicursor/browser/multicursor';
-import 'monaco-editor/esm/vs/editor/contrib/hover/browser/hoverContribution';
-import 'monaco-editor/esm/vs/editor/contrib/suggest/browser/suggestController';
-import 'monaco-editor/esm/vs/editor/contrib/snippet/browser/snippetController2';
-import EditorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
-import JsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker';
+import * as monaco from 'monaco-editor/editor';
+import 'monaco-editor/languages/definitions/xml/register';
+import 'monaco-editor/languages/definitions/java/register';
+import 'monaco-editor/languages/features/json/register';
+// The JSON language feature loads every editor contribution through Monaco's internal/common/workers.js
+// when the first JSON model opens. Loading the same set up front keeps all editors alike: register.all
+// plus the contributions only that module adds.
+import 'monaco-editor/features/register.all';
+import 'monaco-editor/editor/contrib/suggest/browser/suggestController';
+import 'monaco-editor/editor/contrib/caretOperations/browser/caretOperations';
+import 'monaco-editor/editor/contrib/dropOrPasteInto/browser/copyPasteContribution';
+import 'monaco-editor/editor/contrib/gotoError/browser/markerSelectionStatus';
+import 'monaco-editor/editor/contrib/gotoSymbol/browser/goToCommands';
+import 'monaco-editor/editor/contrib/semanticTokens/browser/documentSemanticTokens';
+import EditorWorker from 'monaco-editor/editor/editor.worker?worker';
+import JsonWorker from 'monaco-editor/languages/features/json/json.worker?worker';
 import { memberAccess, membersFor } from './completions';
 
 (self as any).MonacoEnvironment = {

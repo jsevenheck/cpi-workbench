@@ -5,7 +5,7 @@
 Download the installer for your platform from the
 [latest release](https://github.com/jsevenheck/cpi-workbench/releases/latest) (see
 [Installing](install.md)), install it and open a project folder. Any folder works; **Init** adds `mappings/`, `schemas/`,
-`scripts/`, `tests/` and example files in `platform/`.
+`scripts/` and example files in `platform/` ([Project files](project-files.md)).
 
 Without a project, **Examples…** in the sidebar loads a mapping or script of the demo project with its input
 into the editors (an XSLT 3.0 mapping, a Groovy 2.x script for an XML and one for a JSON body). The examples
@@ -14,6 +14,10 @@ come with the app; **Save** asks where to keep them, once a project is open. As 
 
 ### Files and editors
 
+* **Fidelity** (next to **Runtime**, and next to **Run step** in Flow Steps) says how well the open step's
+  behaviour is backed: *Tenant-verified*, *Documented* (SAP's documentation or Camel's / Saxon's behaviour, not seen
+  on a tenant) or *Assumptions*, the weakest of its rows on the [Fidelity](fidelity.md) page. A click lists the
+  rows, also what the simulator refuses. The page is part of the app; nothing is fetched.
 * Open a `.xsl` or `.groovy` file in the tree and enter the input body, headers and properties on the left.
   Opening a Groovy script picks the runtime from its Script API import; for a pasted script, choose
   it under **Runtime**.
@@ -21,13 +25,16 @@ come with the app; **Save** asks where to keep them, once a project is open. As 
   result: text in XSLT, `xsl:text`, `xml:space="preserve"`, CDATA, literal attribute values and
   multi-line Groovy strings keep theirs.
 * **Save** writes the open mapping, script or schema; **Save as…** writes it under a new name
-  (`<name>-copy` is suggested) and leaves the open file as it is. Saving or creating a file under a
-  name that exists asks before it overwrites the file, and opening another file asks before it
-  drops unsaved changes (the dot after the file name).
+  (`<name>-copy` is suggested) and leaves the original on disk. When you choose a destination to save,
+  create, copy or rename a file, the filesystem checks whether it exists, even if the file is not in
+  the tree. An existing destination is replaced only after you choose **Overwrite**; **Save as…** onto
+  the open file's own path saves it without asking. Opening another
+  file asks before dropping unsaved changes (the dot after the file name). You can keep typing during
+  a save; edits made after the write started keep the dot until you save them too.
 * Right-click a file in the tree to open, rename, copy or delete it, or to copy its path.
 * The **×** next to a file name closes that file; the file on disk stays as it is. It asks first when there
   are unsaved changes. In the mapping, script and schema panes it leaves an empty editor without a path, so
-  **Save** asks for a new name; for a test case it also drops the case's input and its attachments. Next to
+  **Save** asks for a new name. Next to
   the input file it empties the input body; headers and properties stay. The **File** tab closes the same way, also from the × on its
   tab in the tool bar.
 * Drag the bars between input, mapping or script and output to resize them; double-click a bar to reset.
@@ -37,10 +44,11 @@ come with the app; **Save** asks where to keep them, once a project is open. As 
 * Other files, such as `platform/*.json` or `cpi-workbench.json`, open in a **File** tab with their own
   editor rather than replacing the input body.
 * The output updates live, or press **Ctrl+Enter**. Compile and runtime errors are marked in the editor.
-* Opening a Groovy script, a Groovy test case or a stylesheet with reflexive `java:` calls does not
-  execute it until **Run** or **Ctrl+Enter**; afterwards Live follows your edits. Such code runs with
-  your rights, so trust the source of imported iFlows and shared projects. Other stylesheets run
-  automatically when opened. Code imported from a message link always waits for a manual run.
+* A newly opened Groovy script waits for **Run** or **Ctrl+Enter**; afterwards Live follows your edits.
+  XSLT Live previews never enable reflexive `java:` calls, including in included or imported modules.
+  Use **Run** or **Ctrl+Enter** each time a mapping needs Java. Such code runs with your rights, so trust
+  the source of imported iFlows and shared projects. Other stylesheets can preview when opened.
+  Code imported from a message link always waits for a manual first run.
 * A message or file whose XML declaration names an encoding (`<?xml version="1.0" encoding="ISO-8859-1"?>`)
   is handled in that encoding: the body reaches the parser, or a script's `InputStream` / `byte[]`,
   in it, and the file is read and saved in it. A character the
@@ -55,16 +63,14 @@ come with the app; **Save** asks where to keep them, once a project is open. As 
 * **Attachments** and **SOAP** (Groovy, next to Headers and Properties) hold what the script reads with
   `message.getAttachments()` and `getSoapHeaders()` (both simulator profiles; SOAP is documented in v1
   and observed on the v2 runtime): an attachment's content is text typed
-  there, a file of the project (its path) or Base64; a test case's attachments and SOAP headers open
-  there. A Message Mapping function gets no message, so the two tabs are hidden for it.
+  there, a file of the project (its path) or Base64. A Message Mapping function gets no message, so the two tabs are hidden for it.
 * **Platform** (Groovy) shows the mocked platform data the script reads through `ITApiFactory` as tables:
   value mappings, the Secure Store's credentials, Partner Directory parameters and number ranges, from
-  the project's `platform/*.json` files ([format](test-cases.md#mocked-platform-data-platform)). A changed
+  the project's `platform/*.json` files ([format](project-files.md#mocked-platform-data-platform)). A changed
   table applies to the next run at once and is marked with a dot until **Save** writes its file, as
   indented JSON (numbers keep their spelling). What a table does not show stays in the file as it is: a credential's properties and
   OAuth2 tokens, binary parameters, alternative partners and authorized users; **Open file** edits
-  those. The keystore is edited as a file. Without a project the tables work in memory. A test case's own
-  `platform` object wins over a table for its runs, and the tab says so. Use test-only values, never a
+  those. The keystore is edited as a file. Without a project the tables work in memory. Use test-only values, never a
   tenant's real secrets.
 * The Groovy profiles follow one tenant's fingerprint: Java 21, Camel 3.14.7, timezone UTC and
   locale `en_US` whatever your computer uses, with commons-lang3; on 1.x also Jackson and
@@ -81,10 +87,6 @@ come with the app; **Save** asks where to keep them, once a project is open. As 
   what differs from the result shown now, as **Compare** does. A run with the same outcome as the one
   before only updates its time, so live runs while you type do not crowd the list. The history is kept in
   memory and is gone when the app closes.
-* Test cases (see [Test cases](test-cases.md)) are written by hand and run from the command line;
-  the app has no test runner. Opening a `case.json` loads the case into its editor view. A Groovy
-  case's attachments and SOAP headers open in the input's **Attachments** and **SOAP** tabs; its
-  `platform` overrides apply to its runs while it is open, and the **Platform** tab says so.
 ### XSD and XPath
 
 * **XSD** validates a document against a schema; **XPath** evaluates an expression (3.1 by default, or 1.0).
@@ -103,13 +105,17 @@ come with the app; **Save** asks where to keep them, once a project is open. As 
 
 * **Flow Steps** runs a **Content Modifier**, **Filter**, **Router**, **General / Iterating Splitter**,
   **Gather**, **Converter**, **Encoder**, **Decoder** or **Message Digest** on an input message (body, headers,
-  properties, namespace mapping):
+  properties, namespace mapping). With only a Saxon engine, XML-only steps such as the Encoder still
+  run; the tab names the missing runtime if the current settings also require Camel:
   * Content Modifier: header and property rows with their source types and data types, and the
-    message body; the result shows each row's value and the output message.
+    message body; the result shows each row's value and the output message. Leave *Message Body* empty
+    to keep the incoming body, including binary bytes. *Use as input* passes them on with the updated
+    headers and properties; *Save…* writes the bytes to a file.
   * Router: routes in order, XML (XPath) or Non-XML (Camel Simple, with CPI's `=`, `and`, `or` and
     `${property.x}`) conditions, default route; the result shows which route the message takes.
   * Filter: an XPath and its Value Type (String, Integer, Boolean, Node, Nodelist); the result is the
-    new body. `function:simple('${property.x}')` takes the value from Camel Simple.
+    new body. `function:simple('${property.x}')` takes the value from Camel Simple; inside the XPath's own
+    string literals and `(: :)` comments it is plain text.
   * Splitter: XPath, Line Break or Token, grouping; the result lists the messages. *Gather* passes them on.
   * Converter: JSON to XML, XML to JSON (namespace mapping, root element options, streaming), XML to CSV
     and CSV to XML (with an XSD from the project), with the settings of CPI's converter steps. *Use as
@@ -153,7 +159,8 @@ come with the app; **Save** asks where to keep them, once a project is open. As 
   refused, since Windows takes both for one folder. A Groovy Script or XSLT Mapping step opens its file with the step's function name and
   script version; a flow step opens in Flow Steps with its settings, with `{{parameters}}` from the
   iFlow's `parameters.prop`; the line *From <iFlow> · <step>* above its settings says where they came from, and
-  its **×** gives the step its empty starting settings back (the iFlow stays as it is; closing the project does the
+  a choice the iFlow leaves out (an Encoder's scheme, a Message Digest's algorithm, …) takes the tab's default,
+  which a line in warning colour names as an assumption; its **×** gives the step its empty starting settings back (the iFlow stays as it is; closing the project does the
   same for all its steps). Steps that choose their mapping from a header at runtime are marked. A
   **Message Mapping** step (**M**) is not simulated; clicking it opens the first Groovy script its
   `.mmap` uses, with its first mapping function. The `.iflw` format is not publicly documented, so
@@ -176,8 +183,20 @@ come with the app; **Save** asks where to keep them, once a project is open. As 
   there, as before; any other element opens in the **Diagram** tab with its settings (read-only).
 * **Diagram** (shown once iFlows are imported) draws an iFlow in the layout its export stores, without
   SAP's icons: pools, steps, Routers, events, adapters and exception subprocesses. Scroll to zoom, drag to
-  move, **Fit** shows all of it. A click shows an element's type and settings; a step that runs in the
+  move, **Fit** shows all of it. A click shows an element's type and settings (for a sender or receiver,
+  also its adapters' settings); a step that runs in the
   app (blue outline) opens with a double-click or **Open in …**. Nothing in the diagram can be changed.
+  The ⌕ next to a setting searches for its value in **Where used**.
+* **Where used** (next to Diagram) searches all imported iFlows offline. Type a host, a credential or key
+  alias, a queue, a script file, a `{{parameter}}` or any value: it lists every step, adapter and Router
+  route whose settings contain it, grouped by iFlow; a key name (`address`) finds that setting everywhere.
+  **Kind** narrows to addresses, credentials, queues, key aliases, files or parameters, where the adapter's
+  setting says what it holds (from public exports; other settings are searched as plain values). Settings
+  are searched as the export writes them: a setting that holds `{{SftpHost}}` is found by `SftpHost`, not by
+  the host in `parameters.prop`. A click
+  shows the element in the diagram; a script or mapping opens in its tab. **Parameters** lists each iFlow's
+  externalized parameters with value, type and description (`parameters.prop`, `parameters.propdef`), where
+  they are used, and marks those that are *unused* or have *no value*.
 ### Groovy completions and Message Mapping functions
 
 * **Completions** in Groovy scripts: after `message.` (or a variable declared as `Message`),
@@ -197,8 +216,7 @@ come with the app; **Save** asks where to keep them, once a project is open. As 
   field as the mapping passes them in: one box per context (a context change starts the next one, e.g. per
   parent element), with **+ Value**, **+ Context** and per value *text* (the field's value), *SUPPRESS*
   (a suppressed value: no content, but still a place in the context), *xsi:nil* or *null*. **Text** shows the
-  same as one context per line in JSON (`["A", "B"]`; `{"suppress": true}` and `{"xsiNil": true}`), as
-  in `case.json`. `Output` and `MappingContext` come from the simulator. A `String[]` function runs once
+  same as one context per line in JSON (`["A", "B"]`; `{"suppress": true}` and `{"xsiNil": true}`). `Output` and `MappingContext` come from the simulator. A `String[]` function runs once
   per context, a `String` function once (a tenant calls it once per value). A script with only mapping
   functions opens with its first one;
   each script keeps its function and arguments while the app is open, also when you switch to
@@ -274,7 +292,8 @@ with the message, can stay in the browser's history.
   outside the project, on both Saxon versions (Saxon 9.9 alone would go on with an empty `document()`). XPath runs (the XPath tab and flow
   steps) also refuse `fn:transform()`, and on Saxon 12 `fn:function-lookup()`: with a configuration of
   its own, a nested transformation would not be bound to the project. In XSLT, reflexive `java:` calls
-  and `fn:transform()` are the exception: they are not restricted.
+  and `fn:transform()` are exceptions to the project file access rules. Reflexive Java calls are
+  available only on a manual run, not in Live previews.
 * XPath runs see no environment variables: `environment-variable()` returns nothing.
 * Groovy scripts run as ordinary Java code with your user's rights; there is no sandbox. Run only
   scripts you trust.
@@ -285,7 +304,9 @@ The installers are not code-signed yet; [Installing](install.md) shows how to st
 first time. The Windows `setup.exe` installs per user and needs no admin rights; the `.msi` installs
 per machine and needs admin rights.
 
-The Groovy runtime starts only when the Groovy or Flow Steps tab is used and stops after 10 idle minutes. Closing the app stops all engines; if the app ends without closing (a crash, Task Manager), the engines stop on their own as soon as it is gone.
+The Groovy runtime starts on demand and stops after 10 idle minutes. The next run still uses the selected
+project and its mock data. If a worker stops during a run, start the run again yourself; the app does not
+replay it. Closing the app stops all engines; if the app ends without closing, the engines stop on their own.
 
 **⚙** (bottom left, next to the status) shows the installed version. **Check for updates** asks github.com for the latest
 release and links to its page if it is newer; download and install it from there.
@@ -301,15 +322,13 @@ XPath, Flow Steps) over the Model Context Protocol, plus reading and saving proj
 a reference of the Script API, so it can write a step and try it on the simulator. Setup, tools and what the
 server can access: [MCP server](mcp.md).
 
-## Command line (CI-friendly)
+## Command line
 
 ```sh
 java -jar cpiwb-groovy-v1.jar run --script scripts/enrich.groovy --in input.xml -H SenderSystem=ERP
-java -jar cpiwb-groovy-v2.jar test testdata/regression-project/tests
 java -jar cpiwb-xml-he99.jar xslt --xsl mappings/order.xsl --in input.xml -H SenderSystem=ERP -P Count=3:Integer
 java -jar cpiwb-xml-he99.jar validate --xsd schemas/order.xsd --in output.xml
 java -jar cpiwb-xml-he99.jar xpath --expr "//Item/@sku" --in input.xml --version 3.1
-java -jar cpiwb-xml-he99.jar test testdata/regression-project/tests   # exit code 1 if a case fails
 ```
 
 These examples use the build-output jar names; release jars include `-<version>` before `.jar`.
@@ -320,7 +339,7 @@ commands do not have the shell's supervised timeout; use the app/MCP or a superv
 when running potentially non-terminating code.
 
 `-H` sets a header and `-P` an exchange property, as `name=value[:Type]`. The types are listed in
-[Test cases](test-cases.md). Each engine runs only the cases of its own kind and skips the others.
+[Project files](project-files.md#header-and-property-types).
 
 ## Browser mode (no desktop shell needed)
 
@@ -331,9 +350,15 @@ cpiwb-xml-he99 serve --http 7777 --ui app/dist    # then open http://127.0.0.1:7
 Web mode listens on localhost only and answers only requests that name this machine (`localhost`,
 `127.0.0.1` or `[::1]` in the Host header, and a local origin), so a foreign web page cannot drive an
 engine, not even one whose name is re-pointed to 127.0.0.1 (DNS rebinding). The engine that serves the
-page also handles the project's files. After a timed-out call an engine starts again by itself, as in the desktop app (the command you start
-only watches over a second process that serves); it then has no project open until the page's next call.
-To add more engines, pass them in a URL parameter (engines on this machine only):
+page also handles the project's files. Each tab sends its own project with each call, so opening or closing
+a project in one tab does not change another tab's project. Tabs opened later can still restore the last
+project from browser settings. A browser request can carry up to 32 MiB, including JSON and Base64
+encoding. Use the desktop app or a smaller message if a request exceeds this limit. A request waits while the
+engine runs another one (for example a save during a long run); if more requests are waiting than the engine
+admits, or the wait exceeds the run timeout plus five seconds, it is refused without running it. Try again
+when the active call finishes. Only a timeout during execution restarts the engine; the next call
+carries the project as usual. Failed calls are not retried automatically.
+To add more engines, use jars from the same build as the UI and pass them in a URL parameter (local engines only):
 
 ```sh
 java -jar cpiwb-groovy-v1.jar serve --http 7778 &

@@ -313,12 +313,68 @@ class ArtifactImportTest {
         assertFalse(Files.exists(tmp.resolve("evil.txt")));
     }
 
+    @Test
+    void aDamagedLateArtifactLeavesTheProjectUnchangedAndCanBeRetried(@TempDir Path tmp) throws Exception {
+        Path project = Files.createDirectories(tmp.resolve("project/platform")).getParent();
+        Files.writeString(project.resolve(ValueMappingImport.FILE), "[]\n");
+        var before = snapshot(project);
+        Path archive = tmp.resolve("package.zip");
+        String manifest = "{\"resources\":[" + resource("v", "ValueMapping", "Map", "Map") + ","
+                + resource("a", "IFlow", "One", "One") + "," + resource("b", "IFlow", "Two", "Two") + "]}";
+        Map<String, byte[]> entries = new LinkedHashMap<>();
+        entries.put("resources.cnt", Base64.getEncoder().encode(b(manifest)));
+        entries.put("v_content", valueMappingZip(VM));
+        entries.put("a_content", zip(Map.of("test.txt", b("first"))));
+        entries.put("b_content", b("not an inner ZIP"));
+        Files.write(archive, zip(entries));
+        var failure = assertThrows(java.io.IOException.class, () -> ArtifactImport.importZip(archive, project, null, true));
+        assertTrue(failure.getMessage().contains("Cannot stage artifact Two"), failure::getMessage);
+        assertEquals(before, snapshot(project));
+        entries.put("b_content", zip(Map.of("test.txt", b("second"))));
+        Files.write(archive, zip(entries));
+        var result = ArtifactImport.importZip(archive, project, null, true);
+        assertEquals(List.of("iflows/One", "iflows/Two"), result.get("iflows"));
+        assertEquals("second", Files.readString(project.resolve("iflows/Two/test.txt")));
+        assertTrue(Files.readString(project.resolve(ValueMappingImport.FILE)).contains("LEAD"));
+    }
+
+    @Test
+    void expandedBytesAndEntriesAreSharedAcrossArtifacts(@TempDir Path tmp) throws Exception {
+        Path project = Files.createDirectory(tmp.resolve("project"));
+        var before = snapshot(project);
+        String manifest = "{\"resources\":[" + resource("a", "IFlow", "One", "One") + ","
+                + resource("b", "IFlow", "Two", "Two") + "]}";
+        Path archive = Files.write(tmp.resolve("package.zip"), zip(Map.of(
+                "resources.cnt", Base64.getEncoder().encode(b(manifest)),
+                "a_content", zip(Map.of("test.txt", b("AAAAAA"))), "b_content", zip(Map.of("test.txt", b("BBBBBB"))))));
+        for (var budget : List.of(new ImportBudget(10, 20), new ImportBudget(40, 4))) {
+            var failure = assertThrows(java.io.IOException.class, () -> ArtifactImport.importZip(archive, project, null, true, budget));
+            assertTrue(failure.getMessage().contains("Cannot stage artifact Two"), failure::getMessage);
+            assertTrue(failure.getMessage().contains("UnsupportedInSimulator"), failure::getMessage);
+            assertEquals(before, snapshot(project));
+        }
+    }
+
     private static String prop(String k, String v) {
         return "<ifl:property><key>" + k + "</key><value>" + v + "</value></ifl:property>";
     }
 
     private static String resource(String id, String type, String name, String unique) {
         return "{\"id\":\"" + id + "\",\"resourceType\":\"" + type + "\",\"name\":\"" + name + "\",\"uniqueId\":\"" + unique + "\"}";
+    }
+
+    /** POSIX: replacing the table keeps its permissions instead of those of a temporary file. */
+    @Test
+    void valueMappingImportKeepsTheTablesPermissions(@TempDir Path tmp) throws Exception {
+        Path project = Files.createDirectories(tmp.resolve("project/platform")).getParent();
+        Path table = Files.writeString(project.resolve(ValueMappingImport.FILE), "[]\n");
+        org.junit.jupiter.api.Assumptions.assumeTrue(
+                Files.getFileAttributeView(table, java.nio.file.attribute.PosixFileAttributeView.class) != null, "POSIX only");
+        var mode = java.nio.file.attribute.PosixFilePermissions.fromString("rw-rw-r--");
+        Files.setPosixFilePermissions(table, mode);
+        ArtifactImport.importZip(Files.write(tmp.resolve("vm.zip"), valueMappingZip(VM)), project, null, false);
+        assertTrue(Files.readString(table).contains("LEAD"));
+        assertEquals(mode, Files.getPosixFilePermissions(table));
     }
 
     @Test

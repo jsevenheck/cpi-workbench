@@ -1,0 +1,41 @@
+{
+  "name": "decoder-defaults",
+  "from": "iflow",
+  "step": {
+    "type": "decoder",
+    "config": {
+      "scheme": null
+    }
+  },
+  "input": {
+    "body": "<a><b>1</b></a>",
+    "headers": {
+      "h0": "x"
+    },
+    "properties": {
+      "p0": "y"
+    }
+  },
+  "namespaces": {
+    "o": "urn:example:order"
+  },
+  "answers": {},
+  "calls": [
+    {
+      "engine": "xml",
+      "method": "decode.run",
+      "params": {
+        "scheme": "base64Decode",
+        "input": {
+          "body": "<a><b>1</b></a>",
+          "headers": {
+            "h0": "x"
+          },
+          "properties": {
+            "p0": "y"
+          }
+        }
+      }
+    }
+  ]
+}

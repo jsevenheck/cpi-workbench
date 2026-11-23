@@ -1,0 +1,21 @@
+{
+  "from": "iflow",
+  "input": { "body": "<a><b>2</b></a>", "headers": {}, "properties": {} },
+  "namespaces": {},
+  "step": { "type": "filter", "config": {
+    "expression": "//b[. != 'function:simple(''${header.no}'')' and . != \"function:simple('${header.no}')\"](: function:simple('${header.no}') (: nested :) function:simple(\"${header.no}\") ' :)[. = function:simple('${header.qty}')]",
+    "valueType": "string"
+  } },
+  "answers": {
+    "simple.eval": [{ "ok": true, "value": "2" }],
+    "filter.run": [{ "ok": true, "body": "2" }]
+  },
+  "calls": [
+    { "engine": "camel", "method": "simple.eval", "params": { "expression": "${header.qty}", "mode": "expression", "input": { "body": "<a><b>2</b></a>", "headers": {}, "properties": {} } } },
+    { "engine": "xml", "method": "filter.run", "params": {
+      "expression": "//b[. != 'function:simple(''${header.no}'')' and . != \"function:simple('${header.no}')\"](: function:simple('${header.no}') (: nested :) function:simple(\"${header.no}\") ' :)[. = '2']",
+      "valueType": "string", "namespaces": {}, "input": { "body": "<a><b>2</b></a>", "headers": {}, "properties": {} }
+    } }
+  ],
+  "result": { "ok": true, "body": "2" }
+}

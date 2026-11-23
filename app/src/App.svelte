@@ -6,13 +6,15 @@
   import XsdView from './components/XsdView.svelte';
   import XPathView from './components/XPathView.svelte';
   import DiagramView from './components/DiagramView.svelte';
+  import WhereUsedView from './components/WhereUsedView.svelte';
   import FlowStepsView from './components/FlowStepsView.svelte';
   import Dialog from './components/Dialog.svelte';
   import FileView from './components/FileView.svelte';
   import SettingsMenu from './components/SettingsMenu.svelte';
+  import Fidelity from './components/Fidelity.svelte';
   import { isDesktop } from './lib/engine';
   import { initReceiver } from './lib/receiver.svelte';
-  import { app, xslt, xpath, groovy, fileView, init, runXslt, runXsd, runXpath, runFlowStep, runGroovy, closeFileTab, importFromAddress, autoRunXslt, autoRunGroovy, onGroovyProfileChange } from './lib/store.svelte';
+  import { app, xslt, xpath, groovy, fileView, init, runXslt, runXsd, runXpath, runFlowStep, runGroovy, closeFileTab, importFromAddress, autoRunXslt, autoRunGroovy, onGroovyProfileChange, selectedMapping } from './lib/store.svelte';
 
   onMount(async () => {
     await init();
@@ -30,7 +32,7 @@
   }
 
   $effect(() => {
-    if (app.tool !== 'file' && app.tool !== 'diagram') app.stepTool = app.tool;
+    if (app.tool !== 'file' && app.tool !== 'diagram' && app.tool !== 'whereused') app.stepTool = app.tool;
   });
 
   let kind = $derived<'xslt' | 'groovy'>(app.tool === 'groovy' || app.tool === 'flow' ? 'groovy' : 'xslt');
@@ -71,7 +73,7 @@
     { id: 'groovy', label: 'Groovy Script', needs: 'groovy' },
     { id: 'xsd', label: 'XSD Validation', needs: 'xslt' },
     { id: 'xpath', label: 'XPath', needs: 'xslt' },
-    { id: 'flow', label: 'Flow Steps', needs: 'groovy' },
+    { id: 'flow', label: 'Flow Steps', needs: null },
   ] as const;
 </script>
 
@@ -80,8 +82,8 @@
     <div class="tools" role="tablist" aria-label="Tools">
       {#each tools as t}
         <button role="tab" class:active={app.tool === t.id} onclick={() => selectTool(t.id)}
-          disabled={app.profiles.length > 0 && t.needs !== null && !hasKind(t.needs)}
-          title={app.profiles.length > 0 && t.needs !== null && !hasKind(t.needs) ? 'The engine for this tool is not installed or not running' : ''}>{t.label}</button>
+          disabled={app.profiles.length > 0 && (t.needs ? !hasKind(t.needs) : !hasKind('xslt') && !hasKind('groovy'))}
+          title={app.profiles.length > 0 && (t.needs ? !hasKind(t.needs) : !hasKind('xslt') && !hasKind('groovy')) ? 'The engine for this tool is not installed or not running' : ''}>{t.label}</button>
       {/each}
       {#if fileView.path}
         <button role="tab" class="file-tab" class:active={app.tool === 'file'} onclick={() => (app.tool = 'file')}
@@ -92,10 +94,12 @@
       {#if app.iflowModels.length}
         <button role="tab" class:active={app.tool === 'diagram'} onclick={() => (app.tool = 'diagram')}
           title="The imported iFlows as their editor draws them (read-only)">Diagram</button>
+        <button role="tab" class:active={app.tool === 'whereused'} onclick={() => (app.tool = 'whereused')}
+          title="Where an address, credential, queue, file or parameter is used in the imported iFlows (read-only)">Where used</button>
       {/if}
     </div>
     <div class="spacer"></div>
-    {#if app.tool !== 'file' && app.tool !== 'diagram' && app.tool !== 'flow' && app.tool !== 'xsd'}
+    {#if app.tool !== 'file' && app.tool !== 'diagram' && app.tool !== 'whereused' && app.tool !== 'flow' && app.tool !== 'xsd'}
       <!-- XSD validation uses the JDK's validator in both XML engines, so the runtime changes nothing there;
            XPath 1.0 runs on the JDK too. -->
       <label class="profile" title={xpathOnJdk ? 'XPath 1.0 runs on the JDK: the runtime applies to XPath 3.1 only' : profile?.note ?? ''}>Runtime
@@ -114,12 +118,17 @@
         {/if}
       </label>
     {/if}
+    {#if app.tool === 'xslt' || app.tool === 'xsd' || app.tool === 'xpath'}
+      <Fidelity step={app.tool} label={app.tool === 'xslt' ? 'XSLT Mapping' : app.tool === 'xsd' ? 'XSD validation' : 'XPath'} />
+    {:else if app.tool === 'groovy'}
+      <Fidelity step={selectedMapping() ? 'mapping' : 'groovy'} label={selectedMapping() ? 'Message Mapping function' : 'Groovy Script'} />
+    {/if}
     {#if app.tool === 'xslt'}
       <label class="live" title="Re-run on every change"><input type="checkbox" bind:checked={xslt.live} /> Live</label>
     {:else if app.tool === 'groovy'}
       <label class="live" title="Re-run on every change"><input type="checkbox" bind:checked={groovy.live} /> Live</label>
     {/if}
-    {#if app.tool !== 'file' && app.tool !== 'diagram'}
+    {#if app.tool !== 'file' && app.tool !== 'diagram' && app.tool !== 'whereused'}
       <button class="primary" onclick={run} title="Run (Ctrl+Enter)">▶ Run</button>
     {/if}
   </header>
@@ -133,13 +142,14 @@
 
   <div class="main">
     <Sidebar />
-    <main class="content">
+    <main class="content" tabindex="-1">
       {#if app.tool === 'xslt'}<XsltView />
       {:else if app.tool === 'groovy'}<GroovyView />
       {:else if app.tool === 'xsd'}<XsdView />
       {:else if app.tool === 'xpath'}<XPathView />
       {:else if app.tool === 'flow'}<FlowStepsView />
       {:else if app.tool === 'diagram'}<DiagramView />
+      {:else if app.tool === 'whereused'}<WhereUsedView />
       {:else}<FileView />{/if}
     </main>
   </div>
@@ -177,6 +187,8 @@
   .banner.error { background: var(--err-bg); color: var(--err); border-bottom: 1px solid var(--border); }
   .main { flex: 1; display: flex; min-height: 0; }
   .content { flex: 1; min-width: 0; min-height: 0; }
+  /* Focusable only as the fallback target when a dialog's opener is gone; the region itself is not a control. */
+  .content:focus { outline: none; }
   .status { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); padding: 3px 10px; border-top: 1px solid var(--border); background: var(--surface); }
   .err { color: var(--err); }
   @media (max-width: 800px) { .main { flex-direction: column; } .app { height: auto; min-height: 100vh; } .content { height: 140vh; } }

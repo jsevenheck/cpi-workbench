@@ -49,7 +49,7 @@ check(init.result?.protocolVersion === '2025-11-25', 'initialize (2025-11-25)', 
 child.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
 
 const list = await request('tools/list', {});
-check(list.result?.tools?.length === 10, 'tools/list', list);
+check(list.result?.tools?.length === 11, 'tools/list', list);
 const prompts = await request('prompts/list', {});
 check(prompts.result?.prompts?.[0]?.name === 'develop_step', 'prompts/list', prompts);
 
@@ -87,6 +87,28 @@ const first = await tool('run_groovy', { runtime: 'groovy-1.x', body: 'abc', hea
 const next = await tool('run_groovy', { runtime: 'groovy-2.x', messageFrom: first.runId,
   script: "def processData(m) { m.setBody(m.getBody(String) + m.getHeaders()['h']); m }" });
 check(next.output?.body === 'ABCx', 'messageFrom passes a run on by its runId', next);
+
+const filtered = await tool('run_flow_step', { body: '<a><b>2</b><b>3</b></a>',
+  headers: { first: `marker function:simple('\${header.qty}') and "quotes"`, qty: '2' },
+  step: { type: 'filter', config: { valueType: 'string',
+    expression: `//b[contains(function:simple("\${header.first}"), 'marker')][. = function:simple('\${header.qty}')][. = function:simple('\${header.qty}')]` } } });
+check(filtered.ok && filtered.body === '2', 'Filter leaves call-like text in substituted values literal', filtered);
+
+// Bytes and metadata travel through a header/property-only Content Modifier, not via a text preview.
+const payload = '<order>Grüße</order>\n';
+const gz = await tool('run_flow_step', { body: payload, headers: { Keep: 'yes' },
+  step: { type: 'encoder', config: { scheme: 'gzipCompress' } } });
+check(gz.output?.binary === true && typeof gz.output.bodyBase64 === 'string', 'GZIP Encoder returns bytes', gz);
+const cm = await tool('run_flow_step', { messageFrom: gz.runId, step: { type: 'contentModifier', config: {
+  headers: [{ name: 'Encoding', value: 'gzip' }], properties: [{ name: 'Processed', value: 'yes' }],
+} } });
+check(cm.output?.binary === true && cm.output.bodyBase64 === gz.output.bodyBase64 && !('body' in cm.output),
+  'Content Modifier preserves the exact GZIP bytes', cm);
+const gunzip = await tool('run_flow_step', { messageFrom: cm.runId,
+  step: { type: 'decoder', config: { scheme: 'gzipDecompress' } } });
+const row = (table, name) => gunzip.output?.[table]?.find((r) => r.name === name)?.value;
+check(gunzip.output?.body === payload && row('headers', 'Keep') === 'yes' && row('headers', 'Encoding') === 'gzip'
+  && row('properties', 'Processed') === 'yes', 'Decoder receives the bytes, headers and properties via messageFrom', gunzip);
 
 clearTimeout(timer);
 child.stdin.end();

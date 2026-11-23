@@ -1,0 +1,20 @@
+{
+  "from": "iflow",
+  "step": { "type": "contentModifier", "config": {
+    "headers": [
+      { "name": "broken", "type": "numberRange", "value": "Orders" },
+      { "name": "later", "type": "xpath", "value": "/a" }
+    ]
+  } },
+  "input": { "body": "<a/>", "headers": [], "properties": [] },
+  "namespaces": {},
+  "answers": { "contentModifier.advance": [ { "ok": false, "diagnostics": [ { "message": "UnsupportedInSimulator: Number Range" } ] } ] },
+  "calls": [
+    { "engine": "camel", "method": "contentModifier.advance", "params": {
+      "headers": [ { "action": "Create", "name": "broken", "type": "numberRange", "value": "Orders", "datatype": "", "default": "" } ],
+      "properties": [], "variables": false,
+      "input": { "body": "<a/>", "headers": [], "properties": [] }
+    } }
+  ],
+  "result": { "ok": false, "diagnostics": [ { "message": "UnsupportedInSimulator: Number Range" } ] }
+}

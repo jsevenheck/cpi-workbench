@@ -20,8 +20,7 @@ java -agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=127.0.0.1:500
 ```
 
 `suspend=y` makes the JVM wait for the debugger before the script runs. The other options are those of `run`
-(see the [user guide](user-guide.md#command-line-ci-friendly)); `test <path>` works the same way and stops in
-every case that runs the script.
+(see the [user guide](user-guide.md#command-line)).
 
 ## Attach a debugger
 

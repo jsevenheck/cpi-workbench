@@ -188,7 +188,11 @@ def main():
                         "version": "3.1", "input": {"body": "<a/>"}}, no_leak),
         ("xslt.run", {"xslt": {"content": "<xsl:stylesheet version='2.0' xmlns:xsl='http://www.w3.org/1999/XSL/Transform'><xsl:template match='/'><xsl:copy-of select='.'/></xsl:template></xsl:stylesheet>"},
                       "input": {"body": entity_doc}}, no_leak),
-        ("tests.run", {"path": "tests"}, lambda r: r["failed"] == 0),
+        # A fresh project has no tests/ folder: the smoke case is written here, and must run and pass.
+        ("file.write", {"path": "tests/smoke/case.json", "content": json.dumps({
+            "name": "smoke", "step": "xsd", "schema": "../../schemas/x.xsd",
+            "input": {"body": BODY}, "expect": {"valid": True}})}, lambda r: r["saved"]),
+        ("tests.run", {"path": "tests"}, lambda r: r["passed"] == 1 and r["failed"] == 0),
         ("file.delete", {"path": "mappings/main.xsl"}, lambda r: r["deleted"]),
         ("project.close", {}, lambda r: r["closed"]),
         ("project.list", {}, "error"),

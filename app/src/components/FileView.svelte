@@ -1,17 +1,9 @@
 <script lang="ts">
   import Editor from './Editor.svelte';
   import { languageFor } from '../lib/monaco';
-  import { fileView, saveFileView, closeFileTab, useAsInput, app } from '../lib/store.svelte';
+  import { fileView, saveFileView, savingEditor, closeFileTab, useAsInput, app } from '../lib/store.svelte';
 
   let dirty = $derived(fileView.content !== fileView.saved);
-
-  async function save() {
-    try {
-      await saveFileView();
-    } catch (e) {
-      app.error = (e as Error).message;
-    }
-  }
 
 </script>
 
@@ -22,11 +14,11 @@
     <div class="spacer"></div>
     <button class="small" onclick={() => fileView.path && useAsInput(fileView.path)}
       title={`Load this file as the input body of the ${app.stepTool.toUpperCase()} step`}>Use as input</button>
-    <button class="small" onclick={save} title="Save (Ctrl+S)">Save</button>
+    <button class="small" onclick={saveFileView} disabled={savingEditor.file} title="Save (Ctrl+S)">Save</button>
   </header>
   <div class="body">
     {#key fileView.path}
-      <Editor bind:value={fileView.content} language={languageFor(fileView.path ?? '')} onsave={save} label="File" />
+      <Editor bind:value={fileView.content} language={languageFor(fileView.path ?? '')} onsave={saveFileView} label="File" />
     {/key}
   </div>
 </section>

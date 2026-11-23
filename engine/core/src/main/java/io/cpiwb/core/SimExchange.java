@@ -82,12 +82,7 @@ public final class SimExchange {
 
     /** Message as JSON for the UI: body as text, headers/properties typed. */
     public Json.Obj toJson() {
-        return Json.o()
-                .with("body", getBodyAsString())
-                .with("encoding", charset.name())
-                .with("bodySize", body.length)
-                .with("headers", TypedValue.writeList(headers))
-                .with("properties", TypedValue.writeList(properties));
+        return withMetadata(Json.o().with("body", getBodyAsString()));
     }
 
     /**
@@ -109,9 +104,16 @@ public final class SimExchange {
      */
     public Json.Obj toJsonOrBinary() {
         String text = bodyText();
-        Json.Obj o = text != null ? Json.o().with("body", text)
-                : Json.o().with("binary", true).with("bodyBase64", Base64.getEncoder().encodeToString(body));
-        return o.with("encoding", charset.name()).with("bodySize", body.length)
+        return text == null ? toJsonBinary() : withMetadata(Json.o().with("body", text));
+    }
+
+    /** Bytes already known to be binary are not reclassified, even if they could be decoded as text. */
+    public Json.Obj toJsonBinary() {
+        return withMetadata(Json.o().with("binary", true).with("bodyBase64", Base64.getEncoder().encodeToString(body)));
+    }
+
+    private Json.Obj withMetadata(Json.Obj bodyFields) {
+        return bodyFields.with("encoding", charset.name()).with("bodySize", body.length)
                 .with("headers", TypedValue.writeList(headers))
                 .with("properties", TypedValue.writeList(properties));
     }

@@ -2,6 +2,7 @@
 //   cpiwb-xml serve --http 7777 --ui app/dist   then   node app/e2e/smoke.mjs <projectDir> [screenshotDir]
 import { createRequire } from 'node:module';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 const project = path.resolve(process.argv[2] ?? 'testdata/regression-project');
@@ -13,7 +14,8 @@ const { chromium } = createRequire(import.meta.url)('playwright');
 const fail = (m) => { console.error('FAIL: ' + m); process.exitCode = 1; };
 
 const browser = await chromium.launch();
-const page = await browser.newPage({ viewport: { width: 1440, height: 860 } });
+const context = await browser.newContext({ viewport: { width: 1440, height: 860 } });
+const page = await context.newPage();
 const errors = [];
 page.on('pageerror', (e) => errors.push(e.message));
 page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
@@ -30,6 +32,53 @@ if ((await page.locator('section.pane .view-lines').first().innerText()).trim())
 await page.waitForTimeout(1000);
 if (await page.locator('section.output .badge').count()) fail('something ran on an empty start');
 if (shots) await page.screenshot({ path: path.join(shots, '1-xslt-empty.png') });
+
+// 1-) The Fidelity dialog is modal for the keyboard: focus moves in, Tab stays in, Escape closes and gives focus back.
+const fid = page.getByRole('button', { name: /^Fidelity of XSLT Mapping/ });
+await fid.focus();
+await page.keyboard.press('Enter');
+const fidDialog = page.getByRole('dialog', { name: 'Fidelity of XSLT Mapping' });
+await fidDialog.waitFor({ timeout: 5000 });
+const focusedText = () => page.evaluate(() => document.activeElement?.textContent?.trim() ?? '');
+await page.waitForFunction(() => document.activeElement?.closest('[role="dialog"]'), null, { timeout: 5000 })
+  .catch(() => fail('opening the Fidelity dialog did not move focus into it'));
+await page.keyboard.press('Tab');
+await page.keyboard.press('Shift+Tab');
+if ((await focusedText()) !== 'Close') fail('Tab left the Fidelity dialog: ' + (await focusedText()));
+await page.keyboard.press('Escape');
+await fidDialog.waitFor({ state: 'detached', timeout: 5000 }).catch(() => fail('Escape did not close the Fidelity dialog'));
+if (!(await fid.evaluate((b) => b === document.activeElement))) fail('closing the Fidelity dialog did not return focus to its button');
+
+// Shared input dialog: both tab boundaries wrap; Escape and Cancel restore focus.
+const importer = page.getByRole('button', { name: 'Import…', exact: true }).first();
+await importer.focus();
+for (const close of ['Escape', 'Cancel']) {
+  await page.keyboard.press('Enter');
+  const modal = page.locator('dialog.dlg');
+  await modal.waitFor();
+  const focusIs = (locator) => locator.evaluate((el) => el === document.activeElement);
+  if (!(await focusIs(modal.locator('input.mono')))) fail('Import dialog did not focus its input');
+  await page.keyboard.press('Shift+Tab');
+  if (!(await focusIs(modal.getByRole('button', { name: 'OK' })))) fail('Shift+Tab escaped the dialog');
+  await page.keyboard.press('Tab');
+  if (!(await focusIs(modal.locator('input.mono')))) fail('Tab escaped the dialog');
+  if (close === 'Escape') await page.keyboard.press('Escape');
+  else await modal.getByRole('button', { name: 'Cancel' }).click();
+  await modal.waitFor({ state: 'detached' });
+  if (!(await focusIs(importer))) fail(`${close} did not return focus to Import…`);
+}
+
+// With only XML engines, Flow Steps can still run the Encoder and explain a missing Camel engine.
+await page.getByRole('tab', { name: 'Flow Steps', exact: true }).click();
+await page.getByRole('button', { name: 'Run step' }).click();
+await page.getByRole('alert').filter({ hasText: 'requires a Groovy engine (Camel)' }).waitFor({ timeout: 5000 });
+await page.getByRole('tab', { name: 'Encoder', exact: true }).click();
+const flowBody = page.locator('section[aria-label="Input message"] .view-lines');
+await flowBody.click({ position: { x: 20, y: 10 } });
+await page.keyboard.insertText('<a/>');
+await page.getByRole('button', { name: 'Run step' }).click();
+await page.locator('section[aria-label="Step result"] pre', { hasText: 'PGEvPg==' }).waitFor({ timeout: 5000 });
+await page.getByRole('tab', { name: 'XSLT Mapping', exact: true }).click();
 
 // 1a) A bundled example loads without a project and runs.
 await page.getByLabel('Examples').selectOption('xslt-batch');
@@ -74,6 +123,9 @@ const mappingFile = page.locator('.tree .file', { hasText: 'order-to-salesorder.
 const discard = page.getByRole('dialog').filter({ hasText: 'Discard the unsaved changes' });
 await mappingFile.click();
 await discard.waitFor({ timeout: 5000 }).catch(() => fail('no question before an unsaved mapping is replaced'));
+// A destructive question opens on Cancel, so Enter does not discard.
+const cancelFocused = (dlg) => dlg.getByRole('button', { name: 'Cancel', exact: true }).evaluate((b) => b === document.activeElement);
+if (!(await cancelFocused(discard))) fail('the discard question did not open with Cancel focused');
 await discard.getByRole('button', { name: 'Cancel' }).click();
 if (!(await page.locator('section.mapping .view-lines').innerText()).includes('<broken')) fail('Cancel did not keep the unsaved mapping');
 await mappingFile.click();
@@ -94,6 +146,156 @@ if (fs.readFileSync(path.join(project, 'mappings/order-to-salesorder.xsl'), 'utf
 await page.locator('.tree .file', { hasText: 'order-to-salesorder-copy.xsl' }).waitFor();
 await mappingFile.click();
 await page.locator('section.mapping h2[title="mappings/order-to-salesorder.xsl"]').waitFor();
+
+// Hold only the acknowledgement, after a real write to the disposable project.
+async function holdSave(destination) {
+  const written = Promise.withResolvers();
+  const release = Promise.withResolvers();
+  const handler = async (route) => {
+    const req = route.request().postDataJSON();
+    if (req?.method !== 'file.write' || req.params.path !== destination) return route.fallback();
+    const response = await route.fetch();
+    const envelope = await response.json();
+    if (!envelope.result?.saved) {
+      written.reject(new Error(`file.write failed: ${JSON.stringify(envelope)}`));
+      return route.fulfill({ response });
+    }
+    written.resolve(req.params.content);
+    await release.promise;
+    await route.fulfill({ response });
+  };
+  await page.route('**/rpc', handler);
+  return {
+    written: written.promise,
+    async release() {
+      release.resolve();
+      await page.unrouteAll({ behavior: 'wait' });
+    },
+  };
+}
+
+// 3a) Edits made while Save waits must remain dirty, and closing must ask before losing them.
+const mappingPath = 'mappings/order-to-salesorder.xsl';
+const mappingPane = page.locator('section.mapping');
+const mappingSave = mappingPane.getByRole('button', { name: 'Save', exact: true });
+const mappingClose = mappingPane.getByRole('button', { name: 'Close file', exact: true });
+const mappingDirty = mappingPane.getByTitle('Unsaved changes');
+async function appendMapping(text) {
+  await mappingPane.getByRole('textbox', { name: 'XSLT mapping', exact: true }).focus();
+  await page.keyboard.press('Control+End');
+  await page.keyboard.insertText(text);
+}
+await appendMapping('\n<!-- before save -->');
+await mappingDirty.waitFor({ timeout: 5000 });
+const savePending = await holdSave(mappingPath);
+await mappingSave.click();
+const savedText = await savePending.written;
+await appendMapping('\n<!-- after save snapshot -->');
+await savePending.release();
+await mappingPane.locator('button:not([disabled])', { hasText: /^Save$/ }).waitFor({ timeout: 5000 });
+const onDisk = fs.readFileSync(path.join(project, mappingPath), 'utf8');
+if (onDisk !== savedText || !onDisk.includes('before save') || onDisk.includes('after save snapshot')) fail('Save did not write the snapshot');
+if (!(await mappingDirty.isVisible())) fail('the edit made while Save waited was marked saved');
+await mappingClose.click();
+await discard.getByRole('button', { name: 'Cancel' }).click({ timeout: 5000 });
+await mappingSave.click();
+await mappingDirty.waitFor({ state: 'hidden', timeout: 5000 });
+if (!fs.readFileSync(path.join(project, mappingPath), 'utf8').includes('after save snapshot')) fail('the next Save did not write the later edit');
+
+// 3b) Save As may finish after the original path is closed and reopened. It must not retarget that editor.
+const staleCopy = 'mappings/save-ack-copy.xsl';
+const copyPending = await holdSave(staleCopy);
+await mappingPane.getByRole('button', { name: 'Save as…', exact: true }).click();
+await page.getByRole('dialog').getByRole('textbox').fill(staleCopy);
+await page.getByRole('dialog').getByRole('button', { name: 'OK' }).click();
+const copiedText = await copyPending.written;
+await mappingClose.click();
+await mappingPane.getByRole('heading', { name: 'No mapping open' }).waitFor({ timeout: 5000 });
+await mappingFile.click();
+await mappingPane.locator(`h2[title="${mappingPath}"]`).waitFor({ timeout: 5000 });
+await appendMapping('\n<!-- reopened editor -->');
+await copyPending.release();
+await mappingPane.locator('button:not([disabled])', { hasText: /^Save$/ }).waitFor({ timeout: 5000 });
+if (fs.readFileSync(path.join(project, staleCopy), 'utf8') !== copiedText) fail('Save As did not write the snapshot');
+if (!(await mappingPane.locator(`h2[title="${mappingPath}"]`).isVisible()) || !(await mappingDirty.isVisible())) {
+  fail('the late Save As changed the path or cleared the dirty marker of the reopened document');
+}
+await mappingClose.click();
+await discard.getByRole('button', { name: 'OK' }).click({ timeout: 5000 });
+
+// 3c) Two tabs use the same engine (and compare engine if present) with the same relative names.
+const scopedXsl = 'mappings/tab-scope.xsl';
+const scopedData = 'mappings/tab-scope.xml';
+const tabMapping = '<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="2.0">'
+  + '<xsl:output method="text"/><xsl:template match="/">'
+  + '<xsl:value-of select="doc(\'tab-scope.xml\')/value"/></xsl:template></xsl:stylesheet>';
+const writeScopeData = (dir, value) => fs.writeFileSync(path.join(dir, scopedData), `<value>${value}</value>`);
+const openScopeMapping = (tab) => tab.locator('.tree .file', { hasText: 'tab-scope.xsl' }).click();
+const scopeBody = (tab, text) => tab.locator('section.output .view-lines', { hasText: text }).waitFor({ timeout: 10000 });
+const fillScopeInput = async (tab) => {
+  await tab.locator('.tree .file', { hasText: 'tab-scope-input.xml' }).click();
+  await tab.locator('section.input h2', { hasText: 'tab-scope-input.xml' }).waitFor({ timeout: 5000 });
+};
+const scopeRun = (tab) => tab.getByTitle('Run (Ctrl+Enter)').click();
+const scopeCompare = (tab) => tab.locator('section.output .compare .same').waitFor({ timeout: 10000 })
+  .catch(async (e) => { throw new Error('Project scope comparison: ' + await tab.locator('section.output').innerText(), { cause: e }); });
+const otherRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'cpiwb-tab-'));
+const otherTab = await context.newPage();
+try {
+  for (const [dir, value] of [[project, 'first-tab'], [otherRoot, 'second-tab']]) {
+    fs.mkdirSync(path.join(dir, 'mappings'), { recursive: true });
+    fs.mkdirSync(path.join(dir, 'inputs'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'inputs/tab-scope-input.xml'), '<input/>');
+    fs.writeFileSync(path.join(dir, scopedXsl), tabMapping);
+    writeScopeData(dir, value);
+  }
+  await page.getByTitle('Reload file list').click();
+  await openScopeMapping(page);
+  await fillScopeInput(page);
+  await scopeRun(page);
+  await scopeBody(page, 'first-tab');
+  const compareScope = await compare.isEnabled();
+  if (compareScope) {
+    await compare.click();
+    await scopeCompare(page);
+  }
+
+  await otherTab.goto(url);
+  // The new tab restores the last project from browser storage; changing it must not affect the first tab.
+  await otherTab.getByTitle('Close project').click();
+  await otherTab.getByLabel('Project folder').fill(otherRoot);
+  await otherTab.getByRole('button', { name: 'Open', exact: true }).click();
+  await openScopeMapping(otherTab);
+  await fillScopeInput(otherTab);
+  await scopeRun(otherTab);
+  await scopeBody(otherTab, 'second-tab');
+  if (compareScope) {
+    await otherTab.getByRole('button', { name: 'Compare', exact: true }).click();
+    await scopeCompare(otherTab);
+  }
+
+  writeScopeData(project, 'first-tab-updated');
+  await scopeRun(page);
+  if (compareScope) {
+    await scopeCompare(page);
+    await page.getByRole('button', { name: 'Comparing', exact: true }).click();
+  }
+  await scopeBody(page, 'first-tab-updated');
+  await appendMapping('\n<!-- only the first tab saves -->');
+  await mappingSave.click();
+  await mappingDirty.waitFor({ state: 'hidden', timeout: 5000 });
+  if (!fs.readFileSync(path.join(project, scopedXsl), 'utf8').includes('only the first tab saves')
+      || fs.readFileSync(path.join(otherRoot, scopedXsl), 'utf8') !== tabMapping) fail('Save changed the wrong tab’s project');
+
+  await otherTab.getByTitle('Close project').click();
+  await otherTab.getByLabel('Project folder').waitFor({ timeout: 5000 });
+  writeScopeData(project, 'first-tab-still-open');
+  await scopeRun(page);
+  await scopeBody(page, 'first-tab-still-open');
+} finally {
+  await otherTab.close();
+  fs.rmSync(otherRoot, { recursive: true, force: true });
+}
 
 // 4) Open a test case: loads input, headers and runs.
 await page.locator('.tree .file', { hasText: 'standard-order/case.json' }).click();
@@ -140,6 +342,10 @@ await page.locator('.tree .file', { hasText: 'copy.xsd' }).waitFor({ timeout: 10
 await (await menuOn('copy.xsd')).getByRole('menuitem', { name: 'Rename…' }).click();
 await answer('schemas/renamed.xsd');
 await page.locator('.tree .file', { hasText: 'renamed.xsd' }).waitFor({ timeout: 10000 });
+// The menu item that opened the dialog is gone: focus goes to the active tool tab, not to <body>.
+if (!(await page.evaluate(() => document.activeElement?.matches('.tools [role="tab"].active, main')))) {
+  fail('closing the Rename dialog left focus on ' + (await page.evaluate(() => document.activeElement?.outerHTML.slice(0, 80))));
+}
 if (fs.existsSync(path.join(project, 'schemas/copy.xsd'))) fail('rename left schemas/copy.xsd behind');
 if (fs.readFileSync(path.join(project, 'schemas/renamed.xsd'), 'utf8') !== fs.readFileSync(path.join(project, 'schemas/salesorder.xsd'), 'utf8')) {
   fail('renamed copy differs from schemas/salesorder.xsd');
@@ -312,6 +518,61 @@ await page.getByRole('dialog').filter({ hasText: 'exists. Overwrite it?' }).getB
   .catch(() => fail('no overwrite question for an existing script'));
 if (fs.readFileSync(path.join(project, 'scripts/new-script.groovy'), 'utf8') !== '// keep me\n') fail('+ Script overwrote an existing file');
 
+// 10a) Save As must ask even when the existing file is deeper than the engine's eight-level listing.
+const unlistedCopy = 'mappings/one/two/three/four/five/six/seven/eight/hidden-copy.xsl';
+const unlistedFile = path.join(project, unlistedCopy);
+const expectedCopy = fs.readFileSync(path.join(project, 'mappings/order-to-salesorder.xsl'), 'utf8');
+const overwrite = page.getByRole('dialog').filter({ hasText: 'exists. Overwrite it?' });
+fs.mkdirSync(path.dirname(unlistedFile), { recursive: true });
+fs.writeFileSync(unlistedFile, '<!-- original at an unlisted path -->');
+for (const button of ['Cancel', 'Overwrite']) {
+  await mappingPane.getByRole('button', { name: 'Save as…', exact: true }).click();
+  await answer(unlistedCopy);
+  await overwrite.waitFor({ timeout: 5000 });
+  if (!(await cancelFocused(overwrite))) fail('the overwrite question did not open with Cancel focused');
+  if (fs.readFileSync(unlistedFile, 'utf8') !== '<!-- original at an unlisted path -->') fail('Save As wrote before confirmation');
+  await overwrite.getByRole('button', { name: button, exact: true }).click();
+  await mappingPane.locator('button:not([disabled])', { hasText: /^Save$/ }).waitFor({ timeout: 5000 });
+  if (button === 'Cancel' && fs.readFileSync(unlistedFile, 'utf8') !== '<!-- original at an unlisted path -->') fail('Cancel changed the unlisted file');
+}
+if (fs.readFileSync(unlistedFile, 'utf8') !== expectedCopy) fail('Save As did not write the confirmed replacement');
+if (fs.readFileSync(path.join(project, 'mappings/order-to-salesorder.xsl'), 'utf8') !== expectedCopy) fail('Save As changed the source');
+// Save As onto the editor's own file is a plain save of the same document: no overwrite question.
+fs.writeFileSync(unlistedFile, '<!-- changed on disk -->');
+await mappingPane.getByRole('button', { name: 'Save as…', exact: true }).click();
+await answer(unlistedCopy);
+for (let i = 0; i < 50 && fs.readFileSync(unlistedFile, 'utf8') !== expectedCopy; i++) await page.waitForTimeout(100);
+if (await overwrite.count()) {
+  fail('Save As onto the open file asked to overwrite it');
+  await overwrite.getByRole('button', { name: 'Cancel', exact: true }).click();
+}
+if (fs.readFileSync(unlistedFile, 'utf8') !== expectedCopy) fail('Save As onto the open file did not save it');
+
+// 10b) If a rename encounters a file created just as it writes, Cancel must preserve both files.
+const raceDestination = 'schemas/appeared-during-rename.xsd';
+let racingCreatorRan = false;
+const createBeforeWrite = async (route) => {
+  const rpc = route.request().postDataJSON();
+  if (!racingCreatorRan && rpc?.method === 'file.write' && rpc.params.path === raceDestination) {
+    racingCreatorRan = true;
+    fs.writeFileSync(path.join(project, raceDestination), 'concurrent writer', { flag: 'wx' });
+  }
+  await route.continue();
+};
+const originalSchema = path.join(project, 'schemas/salesorder.xsd');
+const schemaBeforeRace = fs.readFileSync(originalSchema, 'utf8');
+await page.route('**/rpc', createBeforeWrite);
+try {
+  await (await menuOn('salesorder.xsd')).getByRole('menuitem', { name: 'Rename…' }).click();
+  await answer(raceDestination);
+  await overwrite.getByRole('button', { name: 'Cancel', exact: true }).click({ timeout: 5000 });
+  await overwrite.waitFor({ state: 'hidden', timeout: 5000 });
+  if (!racingCreatorRan || fs.readFileSync(path.join(project, raceDestination), 'utf8') !== 'concurrent writer') fail('rename replaced a file created by a concurrent writer');
+  if (!fs.existsSync(originalSchema) || fs.readFileSync(originalSchema, 'utf8') !== schemaBeforeRace) fail('cancelled rename changed its source');
+} finally {
+  await page.unroute('**/rpc', createBeforeWrite);
+}
+
 // 11) Closing the project asks before it drops unsaved changes in the File tab; Cancel keeps it open.
 await page.locator('.tree .file', { hasText: 'value-mappings.json' }).click();
 await page.locator('section[aria-label="File"] .view-lines').click({ position: { x: 40, y: 10 } });
@@ -328,7 +589,44 @@ await page.getByRole('dialog').filter({ hasText: 'Discard the unsaved changes' }
 await page.getByRole('tab', { name: 'value-mappings.json' }).waitFor({ state: 'detached', timeout: 5000 })
   .catch(() => fail('the × on the File tab did not close it'));
 
-// 12) A link from CPI Helper's xsltDebugX plugin that points at the app: the traced message and the mapping
+// 12) Live checks modules as well as the editor. Use an inert Java declaration and verify that only Run
+// uses the manual RPC, including after that stylesheet has already been run once.
+const xsltRpc = [];
+const observeXsltRpc = (req) => {
+  if (req.method() !== 'POST' || !req.url().endsWith('/rpc')) return;
+  const method = req.postDataJSON()?.method;
+  if (method === 'xslt.preview' || method === 'xslt.run') xsltRpc.push(method);
+};
+const shell = (attributes, inner) => '<xsl:stylesheet version="2.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform"'
+  + attributes + '>' + inner + '</xsl:stylesheet>';
+fs.writeFileSync(path.join(project, 'mappings/preview-main.xsl'), shell('', '<xsl:include href="preview-module.xsl"/>'));
+fs.writeFileSync(path.join(project, 'mappings/preview-module.xsl'), shell(' xmlns:math="java:java.lang.Math"',
+  '<xsl:output method="text"/><xsl:template match="/">manual-preview-test</xsl:template>'));
+await page.getByTitle('Reload file list').click();
+page.on('request', observeXsltRpc);
+await page.locator('.tree .file', { hasText: 'preview-main.xsl' }).click();
+const blockedPreview = page.locator('section.output .badge', { hasText: 'Run required' });
+await blockedPreview.waitFor({ timeout: 10000 });
+if (!xsltRpc.includes('xslt.preview') || xsltRpc.includes('xslt.run')) fail('opening a mapping did not use restricted preview');
+await page.locator('section.output').getByRole('tab', { name: 'Body', exact: true }).click();
+await page.locator('section.input').getByRole('tab', { name: 'Body', exact: true }).click();
+const previewInput = page.getByRole('textbox', { name: 'Input body', exact: true });
+await previewInput.focus();
+await page.keyboard.press('Control+A');
+await page.keyboard.insertText('<input/>');
+await page.getByTitle('Run (Ctrl+Enter)').click();
+await page.locator('section.output .view-lines', { hasText: 'manual-preview-test' }).waitFor({ timeout: 10000 })
+  .catch(async (e) => { throw new Error('manual run: ' + await page.locator('section.output').innerText(), { cause: e }); });
+if (!xsltRpc.includes('xslt.run')) fail('Run did not use the manual XSLT RPC');
+xsltRpc.length = 0;
+await previewInput.focus();
+await page.keyboard.press('End');
+await page.keyboard.type(' ');
+await blockedPreview.waitFor({ timeout: 10000 });
+if (!xsltRpc.includes('xslt.preview') || xsltRpc.includes('xslt.run')) fail('Live reused manual XSLT approval');
+page.off('request', observeXsltRpc);
+
+// 13) A link from CPI Helper's xsltDebugX plugin that points at the app: the traced message and the mapping
 // arrive in the XSLT tab and the data leaves the address. The mapping is someone's code: it runs on Run only.
 /** A link's data as CPI Helper's plugins write it: JSON, raw DEFLATE, URL-safe Base64 without padding. */
 async function shareData(data) {

@@ -112,8 +112,17 @@ public final class XsltStep {
     }
 
     public XsltStep() {
+        this(false);
+    }
+
+    XsltStep(boolean preview) {
+        // Preview has its own configuration and cache: even after a manual run, it cannot reuse
+        // registered Java functions or a compiled stylesheet that calls them.
         factory = new net.sf.saxon.TransformerFactoryImpl();
         ProjectResolver.install(factory.getConfiguration());
+        if (preview) {
+            factory.getConfiguration().setBooleanProperty(net.sf.saxon.lib.Feature.ALLOW_EXTERNAL_FUNCTIONS, false);
+        }
         SaxonCompat.registerCpiFunctions(factory.getConfiguration(), (function, target, name, value) -> {
             if (!(target instanceof ExchangeHandle)) {
                 throw new IllegalArgumentException(function + ": the first argument must be $exchange "
@@ -127,7 +136,7 @@ public final class XsltStep {
             }
             h.calls.add(Json.o().with("function", function).with("name", name).with("value", value));
         });
-        javaExtensions = new JavaExtensions((ns, local, invoker) ->
+        javaExtensions = preview ? null : new JavaExtensions((ns, local, invoker) ->
                 SaxonCompat.registerJavaFunction(factory.getConfiguration(), ns, local, invoker));
     }
 
@@ -191,23 +200,37 @@ public final class XsltStep {
                 List<Diagnostic> compileDiags = new ArrayList<>();
                 factory.setErrorListener(new CollectingListener(compileDiags));
                 factory.setURIResolver(resolver);
-                // Reflexive Java calls (java: namespaces) in the main module and in included modules.
-                List<String> javaProblems = new ArrayList<>(javaExtensions.scan(content));
-                resolver.setModuleListener(text -> javaProblems.addAll(javaExtensions.scan(text)));
-                Source src = resolver.source(new InputSource(new StringReader(content)), systemId);
+                List<String> javaProblems = new ArrayList<>();
+                // Set only when a module declares Java: other compile failures are not approval failures.
+                boolean[] blocked = {false};
                 try {
+                    if (javaExtensions == null) {
+                        checkPreviewModule(systemId, content, diags, blocked);
+                        resolver.setModuleListener((id, text) -> checkPreviewModule(id, text, diags, blocked));
+                    } else {
+                        javaProblems.addAll(javaExtensions.scan(content));
+                        resolver.setModuleListener((id, text) -> javaProblems.addAll(javaExtensions.scan(text)));
+                    }
+                    Source src = resolver.source(new InputSource(new StringReader(content)), systemId);
                     Templates t = factory.newTemplates(src);
                     List<Diagnostic> warnings = new ArrayList<>(compileDiags);
                     entry = new CacheEntry(t, new LinkedHashMap<>(resolver.getFilesRead()), warnings);
                     cache.put(key, entry);
                     diags.addAll(compileDiags);
                 } catch (TransformerException e) {
+                    // Saxon can wrap a resolver exception, but the preview diagnostic is already recorded.
+                    if (blocked[0]) {
+                        return finish(result, false, "approval", diags, messages, input, null, t0, 0, false, null, null);
+                    }
                     javaProblems.forEach(p -> diags.add(Diagnostic.error(p)));
                     diags.addAll(compileDiags);
                     if (compileDiags.stream().noneMatch(d -> d.getSeverity() == Diagnostic.Severity.ERROR)) {
                         diags.add(toDiagnostic(e, Diagnostic.Severity.ERROR));
                     }
                     return finish(result, false, "compile", diags, messages, input, null, t0, 0, cached, null, null);
+                } finally {
+                    // Runtime document() reads are data, not stylesheet modules.
+                    resolver.setModuleListener(null);
                 }
             }
             templates = entry.templates;
@@ -298,6 +321,21 @@ public final class XsltStep {
             }
             result.with("transformMs", (System.nanoTime() - t1) / 1_000_000.0);
             return finish(result, false, "runtime", diags, messages, input, null, t0, compileNanos, cached, bindings, handle);
+        }
+    }
+
+    /**
+     * Gives an actionable error for declared Java namespaces. This is a message, not the protection: preview has
+     * its own configuration and never registers Java functions, so a call this check misses fails to compile.
+     */
+    private static void checkPreviewModule(String systemId, String content, List<Diagnostic> diags, boolean[] blocked)
+            throws TransformerException {
+        if (JavaExtensions.declaresJava(content)) {
+            blocked[0] = true;
+            String message = "This stylesheet or one of its modules declares a Java extension. "
+                    + "Press Run or Ctrl+Enter to run it if you trust the code.";
+            diags.add(new Diagnostic(Diagnostic.Severity.ERROR, message, null, systemId, -1, -1));
+            throw new TransformerException(message);
         }
     }
 

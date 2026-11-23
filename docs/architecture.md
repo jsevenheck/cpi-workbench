@@ -19,19 +19,47 @@ The desktop shell starts each engine as a sidecar process on demand and talks JS
 over stdio. Every engine can also serve HTTP on localhost (`serve --http <port>`) for the
 browser mode. The main methods are:
 
-* `xslt.run`, `xsd.validate`, `xpath.eval`, `split.run`, `filter.run`, `gather.run`, `convert.run`,
+* `xslt.run` (explicit run), `xslt.preview` (automatic runs, separate configuration and cache without
+  reflexive Java functions), `xsd.validate`, `xpath.eval`, `split.run`, `filter.run`, `gather.run`, `convert.run`,
   `encode.run`, `decode.run`, `digest.run` (XML engines),
-* `groovy.run`, `simple.eval`, `contentModifier.run` (Groovy engines); the UI evaluates a Router
-  route by route with `xpath.eval` and `simple.eval`,
-* `tests.run`, and `project.*`, `file.*`, `iflow.*` for files and imported models (all engines).
+* `groovy.run`, `simple.eval`, `contentModifier.run` (Groovy engines); the Content Modifier keeps one
+  exchange across XPath using single-use, project-bound continuations (`contentModifier.advance` and
+  `contentModifier.discard`, up to eight paused exchanges per engine, expiring after one minute).
+  The UI evaluates a Router route by route with `xpath.eval` and `simple.eval`,
+* `tests.run`, and `project.*`, `file.*`, `iflow.*` for files and imported models (all engines);
+  `iflow.index` / `iflow.search` (`IflowIndex`) back the Where used tab and the MCP tool `iflow_where_used`.
 
-File methods and XML runs stay inside the open project (`ProjectFiles`, `ProjectResolver`; `ProjectPaths` follows symbolic links). Over
-HTTP, the engines answer pages from `localhost`, `127.0.0.1` and the desktop shell only: requests
+Project file access, Init, iFlow discovery and project-relative XML resolution check real paths
+(`ProjectPaths`, `ProjectFiles`, `ProjectResolver`). A link selected as the project root defines the
+boundary at its target; links below it must stay inside. Discovery checks directories before listing
+and files before parsing. These checks are not a sandbox or a guarantee against another process
+replacing directories concurrently. Over HTTP, the engines answer pages from `localhost`, `127.0.0.1`
+and the desktop shell only: requests
 need an `X-Cpiwb` header, which forces a CORS preflight, and the origin's host is compared exactly.
 A request whose `Host` header does not name this machine, or whose `Origin` is not local, gets 403:
 after DNS rebinding a foreign page is same-origin for the browser and no preflight happens, but its
-requests still carry the foreign host name. `serve --http` runs the server in a child process
-(`--worker`) and starts it again after a timed-out call, as the desktop shell does over stdio.
+requests still carry the foreign host name. The browser UI uses `/project/rpc`: every request carries
+`projectRoot` (the absolute directory returned by `project.open`, or `null` without a project). Each call
+gets its own project context, so one tab's Open or Close does not alter another's. An unavailable root
+fails rather than falling back. The desktop shell wraps the same scoped request in `project.request`
+when sending it over stdio; plain stdio (used by MCP's worker calls) and the legacy local `/rpc`
+endpoint keep their stateful contract. Both HTTP endpoints admit up to four RPCs per engine, with a
+32 MiB request-body cap (HTTP 413) and a roughly ten-second request read deadline. The JDK HTTP
+server uses a 24-connection cap, a 16 KiB header cap and a bounded executor. Excess transport
+connections and stalled uploads can be closed before an HTTP reply. A parsed request waits for the engine
+up to the execution timeout plus five seconds (35 s by default), so it outlives the call ahead; a full admission pool or expired queue wait returns HTTP 503 without
+running that request. Execution has a separate timeout. `serve --http` runs in a child process
+(`--worker`) and restarts it only when an executing call times out. After worker replacement both UIs
+still send the selected project on the first request. Failed calls are not replayed.
+
+Over stdio, the Rust supervisor allows 15 seconds for startup (ready plus any MCP project setup) and
+32 seconds to send and receive a request; a call waits up to 50 seconds for its profile slot, longer
+than the call ahead of it can take, so a file read or save during a long run waits for it. Java's own
+default execution timeout is 30 seconds. Stdio frames are limited to 192 MiB: a larger request is
+refused before it is sent (`UnsupportedInSimulator`) and leaves the worker running; a larger response
+stops that worker, whose pipe is then out of step. A queue timeout does not touch
+the busy worker; an expired startup or exchange stops and reaps that worker. Shutdown stops new
+submissions and interrupts waits for the direct child, not arbitrary processes started by user code.
 
 * **XML engines** are GraalVM native executables, so XSLT needs no JVM at runtime. The same code
   also runs as a jar (`java -jar engine/xml-he99/target/cpiwb-xml-he99.jar`).

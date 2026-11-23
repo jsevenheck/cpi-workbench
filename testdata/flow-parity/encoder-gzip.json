@@ -1,0 +1,41 @@
+{
+  "name": "encoder-gzip",
+  "from": "iflow",
+  "step": {
+    "type": "encoder",
+    "config": {
+      "scheme": "gzipCompress"
+    }
+  },
+  "input": {
+    "body": "<a><b>1</b></a>",
+    "headers": {
+      "h0": "x"
+    },
+    "properties": {
+      "p0": "y"
+    }
+  },
+  "namespaces": {
+    "o": "urn:example:order"
+  },
+  "answers": {},
+  "calls": [
+    {
+      "engine": "xml",
+      "method": "encode.run",
+      "params": {
+        "scheme": "gzipCompress",
+        "input": {
+          "body": "<a><b>1</b></a>",
+          "headers": {
+            "h0": "x"
+          },
+          "properties": {
+            "p0": "y"
+          }
+        }
+      }
+    }
+  ]
+}

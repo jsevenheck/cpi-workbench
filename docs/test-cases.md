@@ -1,16 +1,11 @@
-# Test cases and platform data
+# Regression test cases
 
-## Project layout
+`case.json` test cases are this repository's regression tests: CI runs the cases in
+`testdata/regression-project/tests` on all four engines ([Building](building.md)). They are not a feature
+for users, who test a step by running it in the app. Project layout and the `platform/` formats:
+[Project files](project-files.md).
 
-```
-my-project/
-  cpi-workbench.json      # marks the folder as a project (name)
-  mappings/  scripts/  schemas/
-  lib/                    # extra .jar files on the script class path
-  platform/               # mocked platform data (see below)
-  iflows/                 # imported iFlow exports
-  tests/<name>/case.json  # one folder per test case, with its input and expected files
-```
+A case lies in its own folder, `tests/<name>/case.json`, with its input and expected files.
 
 ## `case.json`
 
@@ -56,8 +51,7 @@ my-project/
     reports validate against Surefire's published schema. They have not been tried with a CI reporter
     (GitHub Actions, Jenkins, GitLab).
 * Files (bodies, mappings, expected output) are read as UTF-8, or in the encoding their XML declaration names.
-* Header and property types: `String`, `Integer`, `Long`, `Boolean`, `Double`, `Float`,
-  `BigDecimal`, `Date` (ISO-8601), `byte[]` (Base64), `null`.
+* Header and property types: as in [Project files](project-files.md#header-and-property-types).
 * `body` is a string, `{ "file": "…" }` or `{ "text": "…" }`. Paths are relative to the case folder.
 * `compare` is `xml` (ignores formatting and namespace declarations), `json` (ignores formatting and the order of
   an object's members; `1` equals `1.0`; arrays keep their order), `text` or `trimmed`.
@@ -108,7 +102,7 @@ or `def void f(String[] a, Output output, MappingContext c)`, runs with `args` i
 * `expect.returned` is the returned value (a string or `null`); `expect.queue` the output queue in
   the same form as the arguments.
 
-### Further script inputs
+### Attachments and SOAP headers
 
 * **Attachments**: `"attachments": [ { "file": "note.txt", "contentType": "text/plain" } ]` in
   `input`. An entry can hold `text` or `base64` instead of `file`, and an optional `name`
@@ -116,37 +110,9 @@ or `def void f(String[] a, Output output, MappingContext c)`, runs with `args` i
 * **SOAP headers** (documented in Script API v1; also offered by the probed v2 runtime):
   `"soapHeaders": [ { "name": "{urn:ns}Local", "value": "<Local xmlns=\"urn:ns\">…</Local>", "mustUnderstand": false } ]`.
   The result shows the headers the script sets.
-* **Libraries**: jars in the project's `lib/` folder and in an imported iFlow's
-  `src/main/resources/lib/` are on the script's class path. The engines also bundle the libraries
-  identified by tenant fingerprints (commons-lang3 on both; Jackson and commons-codec on 1.x;
-  yaml/toml support on 2.x). Exact versions and exclusions: [Fidelity](fidelity.md).
-* **Java calls from XSLT**: `xmlns:x="java:java.lang.Math"` style calls (`x:max(1, 2)`,
-  `x:new(…)`, instance methods with the object as first argument) work for JDK classes (the native
-  engines: a fixed list of common ones). Classes from `lib/` jars are not available to XSLT.
-  Hyphenated names (`random-UUID`) work too.
 
-## Mocked platform data (`platform/`)
+## Platform data in a case
 
-| File | Used by | Format |
-|---|---|---|
-| `credentials.json` | `SecureStoreService` | `{ "ALIAS": { "username": "…", "password": "…", "properties": {…} } }`. For OAuth2 credentials (`getAccesTokenForOauth2ClientCredential`, `…AuthorizationCodeCredential`) add `"accessToken": "…"`, optionally `"user"` and `"tokenResponse": {…}`. No token server is called. |
-| `value-mappings.json` | `ValueMappingApi.getMappedValue` | `[ { "sourceAgency", "sourceIdentifier", "sourceValue", "targetAgency", "targetIdentifier", "targetValue" } ]` |
-| `partner-directory.json` | `PartnerDirectoryService` | `{ "partners": { "PID": { "parameters": { "NAME": "string" or { "contentType": "…", "file": "x.bin" } or { "base64": "…" } }, "alternativePartners": [ { "agency", "scheme", "id" } ], "authorizedUsers": [ "user" ] } } }`. A binary parameter with content type `crt` is returned by `getCertificateParameter` as an X.509 certificate. |
-| `keystore.json` | `KeystoreService` | `{ "file": "keystore.p12", "password": "…", "type": "PKCS12", "keyPasswords": { "alias": "…" } }`. The keystore file lies next to it; `type` is optional. Key and trust managers use the same file. |
-| `number-ranges.json` | `NumberRangeConfigurationService` | `{ "NAME": { "next": 1, "min": 1, "max": 999999, "fieldLength": 6, "rotate": false } }`. Values count up within one run only and are not written back. The same correlation ID returns the same value. Zero padding to `fieldLength` is an assumption. |
-
-In the app, the Groovy tab's **Platform** tab edits these files as tables (the keystore as a file); see the
-[user guide](user-guide.md).
-
-A test case can override any of these with a `platform` object (`credentials`, `valueMappings`,
-`partnerDirectory`, `keystore`, `numberRanges`). Keys it leaves out still come from the folder.
-
-**Use test-only keys and passwords here, never real tenant secrets.**
-
-Behaviour for missing entries follows SAP's published Javadoc and a tenant's probe results (the
-messages too, [plan](plan.md) F52):
-
-* The Partner Directory and the Keystore return `null` for a missing entry or an unknown alias
-  (also `getAuthorizedUsers` of an unknown partner). Without `keystore.json` the keystore is empty.
-* The Secure Store throws `SecureStoreException` for an unknown alias.
-* `ITApiFactory` throws `InvalidContextException` for a service the simulator does not offer.
+A case can override any `platform/` file with a `platform` object (`credentials`, `valueMappings`,
+`partnerDirectory`, `keystore`, `numberRanges`), in the files' formats. Keys it leaves out still come from
+the folder.

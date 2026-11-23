@@ -106,6 +106,44 @@ public final class ValueMappingImport {
      */
     @SuppressWarnings("unchecked")
     static Json.Obj importGroups(List<List<Entry>> groups, Path projectRoot, boolean createNew, String artifact) throws Exception {
+        return prepare(groups, projectRoot, createNew, artifact).publish();
+    }
+
+    record Prepared(Path root, String content, Json.Obj result) {
+        Json.Obj publish() throws IOException {
+            Path file = ProjectPaths.checked(root, root.resolve(FILE));
+            Files.createDirectories(file.getParent());
+            // Same directory for the replacement, so a failed write cannot truncate the old table. Created as any
+            // new file (createTempFile would make it owner-only on POSIX), then given the old table's permissions.
+            Path stage = file.resolveSibling(".value-mappings-" + java.util.UUID.randomUUID() + ".tmp");
+            Files.createFile(stage);
+            try {
+                keepPermissions(file, stage);
+                Files.writeString(stage, content, StandardCharsets.UTF_8);
+                Files.move(stage, file, java.nio.file.StandardCopyOption.ATOMIC_MOVE,
+                        java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            } finally {
+                Files.deleteIfExists(stage);
+            }
+            return result;
+        }
+
+        /** POSIX only: the replacement gets the permissions of the file it replaces. Elsewhere nothing to do. */
+        private static void keepPermissions(Path file, Path stage) {
+            if (!Files.isRegularFile(file)
+                    || Files.getFileAttributeView(file, java.nio.file.attribute.PosixFileAttributeView.class) == null) {
+                return;
+            }
+            try {
+                Files.setPosixFilePermissions(stage, Files.getPosixFilePermissions(file));
+            } catch (IOException | UnsupportedOperationException e) {
+                System.err.println("cpiwb: " + FILE + " is replaced with default permissions; its own could not be kept: " + e);
+            }
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    static Prepared prepare(List<List<Entry>> groups, Path projectRoot, boolean createNew, String artifact) throws Exception {
         List<Map<String, Object>> rows = rows(groups);
         Set<String> pairs = new LinkedHashSet<>();
         for (Map<String, Object> r : rows) {
@@ -137,16 +175,18 @@ public final class ValueMappingImport {
             throw new IllegalArgumentException("exists already: " + FILE + " has value mappings for " + String.join(", ", labels(pairs)));
         }
         kept.addAll(rows);
-        Files.createDirectories(file.getParent());
-        Files.writeString(file, table(kept), StandardCharsets.UTF_8);
+        if (Files.exists(file) && !Files.isRegularFile(file)) {
+            throw new IOException("Not a regular file: " + FILE);
+        }
         List<Object> notes = new ArrayList<>();
         int ambiguous = ambiguous(rows);
         if (ambiguous > 0) {
             notes.add(ambiguous + " value(s) map to several values without a default; the first group in the file is "
                     + "taken for them (an assumption, docs/fidelity.md).");
         }
-        return Json.o().with("artifact", artifact).with("file", FILE).with("groups", groups.size()).with("rows", rows.size())
-                .with("replaced", replaced).with("pairs", new ArrayList<Object>(labels(pairs))).with("notes", notes);
+        return new Prepared(projectRoot, table(kept), Json.o().with("artifact", artifact).with("file", FILE)
+                .with("groups", groups.size()).with("rows", rows.size()).with("replaced", replaced)
+                .with("pairs", new ArrayList<Object>(labels(pairs))).with("notes", notes));
     }
 
     /**

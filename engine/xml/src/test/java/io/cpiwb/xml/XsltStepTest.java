@@ -7,6 +7,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
 import java.util.List;
 import java.util.Map;
 
@@ -254,6 +255,96 @@ class XsltStepTest {
                 input("<a/>", List.of(), List.of()), null);
         assertFalse(Json.bool(bad, "ok", true));
         assertTrue(Json.write(bad).contains("com.example.DoesNotExist is not available"), () -> Json.write(bad));
+    }
+
+    @Test
+    void previewRequiresManualRunForAJavaNamespaceInTheEditor() throws Exception {
+        XmlEngine engine = new XmlEngine();
+        Map<String, Object> req = Json.o().with("xslt", Json.o().with("content", previewModule(true)))
+                .with("input", input("<a/>", List.of(), List.of()));
+        Map<String, Object> result = (Map<String, Object>) engine.call("xslt.preview", req);
+        assertEquals("approval", result.get("failedPhase"), () -> Json.write(result));
+        assertFalse(result.containsKey("output"));
+    }
+
+    @Test
+    void previewChecksChangedModulesAndDoesNotReuseManualTemplates(@TempDir Path dir) throws Exception {
+        XmlEngine engine = new XmlEngine();
+        String main = "<xsl:stylesheet version='2.0' xmlns:xsl='http://www.w3.org/1999/XSL/Transform'>"
+                + "<xsl:include href='wrapper.xsl'/></xsl:stylesheet>";
+        Files.writeString(dir.resolve("wrapper.xsl"), main.replace("wrapper.xsl", "module.xsl")
+                .replace("xsl:include", "xsl:import"));
+        Path module = dir.resolve("module.xsl");
+        Files.writeString(module, previewModule(false));
+        FileTime before = Files.getLastModifiedTime(module);
+        Map<String, Object> req = Json.o().with("baseDir", dir.toString())
+                .with("xslt", Json.o().with("content", main)).with("input", input("<a/>", List.of(), List.of()));
+        assertEquals("ready", body((Map<String, Object>) engine.call("xslt.preview", req)));
+        Map<String, Object> cached = (Map<String, Object>) engine.call("xslt.preview", req);
+        assertTrue(Json.bool(Json.obj(cached, "timing"), "cached", false));
+
+        Files.writeString(module, previewModule(true));
+        Files.setLastModifiedTime(module, FileTime.fromMillis(before.toMillis() + 5_000));
+        Map<String, Object> blocked = (Map<String, Object>) engine.call("xslt.preview", req);
+        assertEquals("approval", blocked.get("failedPhase"), () -> Json.write(blocked));
+        assertFalse(blocked.containsKey("output"));
+        assertTrue(Json.write(blocked).contains("module.xsl"), () -> Json.write(blocked));
+
+        // A manual run is allowed, but cannot authorize a future automatic run, even of the same text.
+        assertEquals("ready", body((Map<String, Object>) engine.call("xslt.run", req)));
+        assertEquals("approval", ((Map<String, Object>) engine.call("xslt.preview", req)).get("failedPhase"));
+    }
+
+    @Test
+    void previewDoesNotRunJavaThatThePlainDeclarationCheckMisses() throws Exception {
+        XmlEngine engine = new XmlEngine();
+        // A manual run registers java.lang.Math with the manual configuration; preview has its own.
+        String plain = "<xsl:stylesheet version='2.0' xmlns:xsl='http://www.w3.org/1999/XSL/Transform'"
+                + " xmlns:j='java:java.lang.Math'><xsl:output method='text'/>"
+                + "<xsl:template match='/'><xsl:value-of select='j:max(1, 2)'/></xsl:template></xsl:stylesheet>";
+        Map<String, Object> manual = Json.o().with("xslt", Json.o().with("content", plain))
+                .with("input", input("<a/>", List.of(), List.of()));
+        assertEquals("2", body((Map<String, Object>) engine.call("xslt.run", manual)));
+
+        // A character reference, an entity and an EQName hide the namespace from a text search.
+        for (String hidden : List.of(plain.replace("'java:java", "'jav&#97;:java"),
+                "<!DOCTYPE xsl:stylesheet [<!ENTITY jv 'java'>]>" + plain.replace("'java:java", "'&jv;:java"),
+                plain.replace(" xmlns:j='java:java.lang.Math'", "").replace("j:max", "Q{jav&#97;:java.lang.Math}max"))) {
+            assertFalse(JavaExtensions.JAVA_NS.matcher(hidden).find(), hidden);
+            Map<String, Object> req = Json.o().with("xslt", Json.o().with("content", hidden))
+                    .with("input", input("<a/>", List.of(), List.of()));
+            Map<String, Object> blocked = (Map<String, Object>) engine.call("xslt.preview", req);
+            assertEquals("approval", blocked.get("failedPhase"), () -> Json.write(blocked));
+            assertFalse(blocked.containsKey("output"));
+            assertTrue(Json.write(blocked).contains("Press Run"), () -> Json.write(blocked));
+        }
+
+        // Without any declaration, a dynamic lookup finds nothing in preview: no Java function is registered there.
+        String lookup = "<xsl:stylesheet version='3.0' xmlns:xsl='http://www.w3.org/1999/XSL/Transform'>"
+                + "<xsl:output method='text'/><xsl:template match='/'>"
+                + "<xsl:value-of select=\"exists(function-lookup(QName('jav' || 'a:java.lang.Math', 'max'), 2))\"/>"
+                + "</xsl:template></xsl:stylesheet>";
+        Map<String, Object> dynamic = (Map<String, Object>) engine.call("xslt.preview", Json.o()
+                .with("xslt", Json.o().with("content", lookup)).with("input", input("<a/>", List.of(), List.of())));
+        assertFalse(Json.write(dynamic).contains("\"body\":\"true\""), () -> Json.write(dynamic));
+        assertTrue(!Json.bool(dynamic, "ok", false) || "false".equals(body(dynamic)), () -> Json.write(dynamic));
+    }
+
+    @Test
+    void previewCompileErrorsAreNotApprovalFailures() throws Exception {
+        XmlEngine engine = new XmlEngine();
+        String broken = "<xsl:stylesheet version='2.0' xmlns:xsl='http://www.w3.org/1999/XSL/Transform'>"
+                + "<xsl:template match='/'><xsl:value-of select='nope('/></xsl:template></xsl:stylesheet>";
+        Map<String, Object> r = (Map<String, Object>) engine.call("xslt.preview", Json.o()
+                .with("xslt", Json.o().with("content", broken)).with("input", input("<a/>", List.of(), List.of())));
+        assertEquals("compile", r.get("failedPhase"), () -> Json.write(r));
+    }
+
+    /** A Java namespace without any calls: approval tests do not need to execute Java code. */
+    private static String previewModule(boolean declaresJava) {
+        return "<xsl:stylesheet version='2.0' xmlns:xsl='http://www.w3.org/1999/XSL/Transform'"
+                + (declaresJava ? " xmlns:math='java:java.lang.Math'" : "") + ">"
+                + "<xsl:output method='text'/><xsl:template match='/'>ready</xsl:template></xsl:stylesheet>";
     }
 
     @Test

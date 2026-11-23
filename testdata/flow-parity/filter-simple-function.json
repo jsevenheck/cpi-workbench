@@ -1,0 +1,69 @@
+{
+  "name": "filter-simple-function",
+  "from": "iflow",
+  "step": {
+    "type": "filter",
+    "config": {
+      "expression": "//b[. = function:simple('${property.p0}')]"
+    }
+  },
+  "input": {
+    "body": "<a><b>1</b></a>",
+    "headers": {
+      "h0": "x"
+    },
+    "properties": {
+      "p0": "y"
+    }
+  },
+  "namespaces": {
+    "o": "urn:example:order"
+  },
+  "answers": {
+    "simple.eval": [
+      {
+        "ok": true,
+        "value": "it's"
+      }
+    ]
+  },
+  "calls": [
+    {
+      "engine": "camel",
+      "method": "simple.eval",
+      "params": {
+        "expression": "${property.p0}",
+        "mode": "expression",
+        "input": {
+          "body": "<a><b>1</b></a>",
+          "headers": {
+            "h0": "x"
+          },
+          "properties": {
+            "p0": "y"
+          }
+        }
+      }
+    },
+    {
+      "engine": "xml",
+      "method": "filter.run",
+      "params": {
+        "expression": "//b[. = 'it''s']",
+        "valueType": "nodelist",
+        "namespaces": {
+          "o": "urn:example:order"
+        },
+        "input": {
+          "body": "<a><b>1</b></a>",
+          "headers": {
+            "h0": "x"
+          },
+          "properties": {
+            "p0": "y"
+          }
+        }
+      }
+    }
+  ]
+}

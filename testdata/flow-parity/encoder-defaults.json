@@ -1,0 +1,39 @@
+{
+  "name": "encoder-defaults",
+  "from": "iflow",
+  "step": {
+    "type": "encoder",
+    "config": {}
+  },
+  "input": {
+    "body": "<a><b>1</b></a>",
+    "headers": {
+      "h0": "x"
+    },
+    "properties": {
+      "p0": "y"
+    }
+  },
+  "namespaces": {
+    "o": "urn:example:order"
+  },
+  "answers": {},
+  "calls": [
+    {
+      "engine": "xml",
+      "method": "encode.run",
+      "params": {
+        "scheme": "base64Encode",
+        "input": {
+          "body": "<a><b>1</b></a>",
+          "headers": {
+            "h0": "x"
+          },
+          "properties": {
+            "p0": "y"
+          }
+        }
+      }
+    }
+  ]
+}

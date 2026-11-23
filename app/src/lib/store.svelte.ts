@@ -1,7 +1,8 @@
 import { EXAMPLES } from './examples';
 import type { IflowModel } from './iflowmodel';
+import type { IndexEntry, IndexedIflow } from './whereused';
 import { addRun, type HistoryEntry } from './history';
-import { call, openProject, closeProject as closeEngineProject, availableProfiles, DEFAULT_PROFILE, type Profile, type ProfileInfo } from './engine';
+import { call, flowEngineCall, openProject, closeProject as closeEngineProject, availableProfiles, DEFAULT_PROFILE, EngineError, type Profile, type ProfileInfo } from './engine';
 import type { Diagnostic, FileEntry, GroovyResult, Row, XsltResult } from './types';
 import { argText, mappingArgs } from './queue';
 import { scriptFunctions } from './functions';
@@ -10,8 +11,8 @@ import { attachmentInput, attachmentRows, parsePlatformFile, platformDoc, platfo
   soapHeaderInput, soapHeaderRows, type AttachmentRow, type PlatformKey, type PlatformRows, type SoapHeaderRow } from './platform';
 import { toRows } from './rows';
 import { isArchive, pathKey, projectPath } from './paths';
-import { resolveSimpleFunctions } from './simple';
-import { callsJava } from './trust';
+import { isExistsConflict } from './errors';
+import { defaultedSettings, flowConfigKey, missingFlowRuntime as missingRuntime, flowStepDefaults, runStep, settingsFromIflowStep, type FlowRun, type FlowStep, type RouteResult } from './flowcalls';
 
 export type StepTool = 'xslt' | 'groovy' | 'xsd' | 'xpath' | 'flow';
 
@@ -21,7 +22,7 @@ export const app = $state({
   engineInfo: null as any,
   profile: DEFAULT_PROFILE as Profile,
   groovyProfile: 'groovy-1.x' as Profile,
-  tool: 'xslt' as StepTool | 'file' | 'diagram',
+  tool: 'xslt' as StepTool | 'file' | 'diagram' | 'whereused',
   /** The step tool last shown; inputs opened from the tree go to its body. */
   stepTool: 'xslt' as StepTool,
   /** The inputs/ file last loaded or saved as each tool's input body. */
@@ -35,6 +36,70 @@ export const app = $state({
   /** The iFlow the Diagram tab shows and the element chosen in the list or the diagram (id null: none). */
   iflowSelected: null as { iflow: string; id: string | null } | null,
 });
+
+/** The Where used tab: a search over the imported iFlows and their parameters (engine `iflow.search`, `iflow.index`). */
+export const whereUsed = $state({
+  view: 'search' as 'search' | 'parameters',
+  query: '',
+  kind: '',
+  /** Only this iFlow; empty: all. */
+  iflow: '',
+  hits: [] as IndexEntry[],
+  /** The query the hits are for. */
+  searched: '',
+  index: [] as IndexedIflow[],
+  error: '',
+});
+
+// Each search and each index load counts up; a late answer whose count is not the latest is dropped (also after a
+// project was closed, which counts both up).
+let whereUsedSeq = 0;
+let indexSeq = 0;
+
+/** Runs the Where used search for the tab's query, kind and iFlow. */
+export async function searchIflows() {
+  const seq = ++whereUsedSeq;
+  const query = whereUsed.query.trim();
+  if (!app.project || (!query && !whereUsed.kind)) {
+    whereUsed.hits = [];
+    whereUsed.searched = '';
+    whereUsed.error = '';
+    return;
+  }
+  try {
+    const r = await call('iflow.search', { query, kind: whereUsed.kind || undefined, iflow: whereUsed.iflow || undefined });
+    if (seq !== whereUsedSeq) return;
+    whereUsed.hits = r.hits;
+    whereUsed.searched = query;
+    whereUsed.error = r.warnings?.join(' ') ?? '';
+  } catch (e) {
+    if (seq === whereUsedSeq) whereUsed.error = (e as Error).message;
+  }
+}
+
+/** The parameters of the imported iFlows, for the Where used tab's Parameters view. */
+export async function loadIflowIndex() {
+  if (!app.project) return;
+  const seq = ++indexSeq;
+  try {
+    const iflows = (await call('iflow.index')).iflows;
+    if (seq !== indexSeq) return;
+    whereUsed.index = iflows;
+    whereUsed.error = '';
+  } catch (e) {
+    if (seq === indexSeq) whereUsed.error = (e as Error).message;
+  }
+}
+
+/** Opens the Where used tab searching for a value (from the diagram's details). */
+export function showWhereUsed(query: string, iflow = '') {
+  whereUsed.view = 'search';
+  whereUsed.query = query;
+  whereUsed.kind = '';
+  whereUsed.iflow = iflow;
+  app.tool = 'whereused';
+  void searchIflows();
+}
 
 export interface IflowStep {
   iflow: string;
@@ -65,7 +130,7 @@ export const xslt = $state({
   result: null as XsltResult | null,
   running: false,
   live: true,
-  /** False for a mapping with java: calls that was opened and not yet run by hand (see autoRunXslt). */
+  /** Message imports can require a manual run before even restricted previews resume. */
   armed: true,
   casePath: null as string | null,
   compareOn: false,
@@ -75,20 +140,20 @@ export const xslt = $state({
   resultAt: null as number | null,
 });
 
-/**
- * Opening a file must not run its code: a Groovy script, and a stylesheet's reflexive java: calls, run with the
- * user's rights, and a file may come from someone else (an imported iFlow, a shared project). Such a file runs
- * for the first time when the user starts it (Run or Ctrl+Enter); from then on live runs follow the edits.
- */
-function disarmXslt(path: string) {
-  xslt.armed = !callsJava(xslt.mapping);
-  if (!xslt.armed) {
-    xslt.result = null;
-    xslt.compare = null;
-    app.status = `Opened ${path}. It calls Java (java: namespace), so it has not run: press Ctrl+Enter to run it.`;
-  }
+function resetXsltRun() {
+  clearTimeout(xsltPreviewTimer);
+  runSeq++;
+  xslt.running = false;
+  xslt.result = xslt.compare = null;
 }
 
+/** A newly opened mapping can preview, but only an explicit Run can call Java. */
+function openXsltPreview() {
+  resetXsltRun();
+  xslt.armed = true;
+}
+
+/** A Groovy script runs with the user's rights. A newly opened script waits for a manual first run. */
 function disarmGroovy(what: string) {
   groovy.armed = false;
   groovy.result = null;
@@ -96,10 +161,16 @@ function disarmGroovy(what: string) {
   app.status = `Opened ${what}. A script runs with your rights, so it has not run: press Ctrl+Enter to run it.`;
 }
 
-/** A live run or a run on showing a tab: only for code the user has started once. */
+/** A live run or a run on showing a tab never enables reflexive Java calls. */
 export function autoRunXslt() {
-  // An empty editor (a closed mapping) has nothing to run.
-  if (xslt.armed && xslt.mapping.trim()) void runXslt();
+  if (xslt.armed && xslt.mapping.trim()) return executeXslt('xslt.preview');
+}
+
+let xsltPreviewTimer: ReturnType<typeof setTimeout> | undefined;
+
+export function scheduleXsltPreview() {
+  clearTimeout(xsltPreviewTimer);
+  if (xslt.live) xsltPreviewTimer = setTimeout(() => { if (xslt.live) void autoRunXslt(); }, 450);
 }
 
 export function autoRunGroovy() {
@@ -209,70 +280,8 @@ export const xpath = $state({
   running: false,
 });
 
-export type FlowStep = 'contentModifier' | 'filter' | 'router' | 'splitter' | 'gather' | 'converter' | 'encoder' | 'decoder' | 'messageDigest';
+export type { CmRow, FlowStep, Route, RouteResult } from './flowcalls';
 
-/** A Content Modifier row in the iFlow's encoding (type: constant, header, property, xpath, expression, ...). */
-export interface CmRow {
-  action: 'Create' | 'Delete';
-  name: string;
-  type: string;
-  value: string;
-  datatype: string;
-  default: string;
-}
-
-export interface Route {
-  name: string;
-  expressionType: 'xml' | 'nonxml';
-  condition: string;
-  default: boolean;
-}
-
-export interface RouteResult {
-  status: 'true' | 'false' | 'error' | 'not evaluated' | 'default';
-  message?: string;
-  /** The Camel spelling of a Non-XML condition, when CPI's had to be rewritten. */
-  camel?: string;
-}
-
-/**
- * JSON ↔ XML and XML ↔ CSV converters; mapping and array paths are text, one entry per line. The MCP server uses
- * the same defaults (`converter_defaults` in `mcp/flow.rs`); change both together.
- */
-function converterDefaults() {
-  return {
-    conversion: 'xmlToJson' as 'jsonToXml' | 'xmlToJson' | 'xmlToCsv' | 'csvToXml',
-    useNamespaces: false, separator: ':', namespaceMapping: '',
-    addRootElement: false, rootElementName: 'root', rootNamespace: '',
-    suppressRoot: false, streaming: false, streamingElements: 'all' as 'all' | 'specific', arrayPaths: '', outputEncoding: '',
-    sourcePath: '', fieldSeparator: ',', csvHeader: 'xml' as 'none' | 'xml' | 'xsd', includeParent: false, parentPath: '',
-    includeAttributes: false,
-    schema: '', targetPath: '', recordMarker: '', firstLineHeader: true, headerMapping: 'xsd' as 'xsd' | 'csv',
-  };
-}
-
-/**
- * The settings each flow step starts with, keyed as in `flow`: empty where the user fills them in (rows, routes,
- * expressions), SAP's defaults where the step has a choice (scheme, method, header name). Closing a step taken from
- * an iFlow brings them back.
- */
-function flowStepDefaults() {
-  return {
-    cm: { headers: [] as CmRow[], properties: [] as CmRow[], bodyType: 'constant' as 'constant' | 'expression', body: '' },
-    router: { routes: [] as Route[], throwException: false },
-    splitter: { splitter: 'general' as 'general' | 'iterating', expressionType: 'xpath' as 'xpath' | 'token' | 'lineBreak',
-      expression: '', grouping: '', streaming: true },
-    filter: { expression: '', valueType: 'nodelist' },
-    /** Gather's settings; its messages are not settings and are not part of this. */
-    gather: { messageType: 'sameXml', algorithm: 'combine', sourceXPath: '', targetXPath: '' },
-    converter: converterDefaults(),
-    /** Encoder and Decoder. The MCP server uses the same defaults (`mcp/flow.rs`); an imported step keeps its scheme. */
-    encoder: { scheme: 'base64Encode' },
-    decoder: { scheme: 'base64Decode' },
-    /** Message Digest. The MCP server uses the same defaults (`message_digest` in `mcp/flow.rs`); change both together. */
-    digest: { filter: '', canonicalization: 'c14n10', algorithm: 'SHA512', targetHeader: 'SAPMessageDigest' },
-  };
-}
 
 export const flow = $state({
   step: 'contentModifier' as FlowStep,
@@ -283,6 +292,8 @@ export const flow = $state({
   camel: 'groovy-2.x' as Profile,
   /** The iFlow step each step's settings came from, if any. */
   sources: {} as Partial<Record<FlowStep, string>>,
+  /** Settings the iFlow step left out, with the default the tab took for each (an assumption). */
+  defaulted: {} as Partial<Record<FlowStep, string>>,
   body: '',
   /**
    * A body that is no text (a .zip or .gz from the project, an Encoder's GZIP or ZIP result): its bytes as Base64.
@@ -426,10 +437,9 @@ export interface ImportOptions {
 function importGroovy(m: SharedMessage, rerun: boolean) {
   if (m.source !== '') {
     rememberScript();
-    groovy.scriptPath = groovy.casePath = null;
+    setEditorDocument('groovy', null, m.source, ''); // unsaved: Save asks for a path
+    groovy.casePath = null;
     groovy.casePlatform = null;
-    groovy.script = m.source;
-    groovy.savedScript = ''; // not a file of the project yet: Save asks for a path
     groovy.functionName = m.function || 'processData';
     groovy.mapping = null;
     groovy.functions = [];
@@ -469,22 +479,20 @@ export async function loadExample(id: string) {
   if (!ex || !(await mayDiscard(ex.tool))) return;
   app.error = '';
   if (ex.tool === 'xslt') {
-    xslt.mappingPath = xslt.casePath = null;
-    xslt.mapping = ex.source;
-    xslt.savedMapping = '';
+    setEditorDocument('xslt', null, ex.source, '');
+    xslt.casePath = null;
     xslt.body = ex.body;
     delete app.inputPaths.xslt;
     app.tool = 'xslt';
-    disarmXslt('the example');
+    openXsltPreview();
     app.status = `Loaded the example ${ex.path} with its input. Save asks where to keep it.`;
     rerunIfLive('xslt');
     return;
   }
   rememberScript();
-  groovy.scriptPath = groovy.casePath = null;
+  setEditorDocument('groovy', null, ex.source, '');
+  groovy.casePath = null;
   groovy.casePlatform = null;
-  groovy.script = ex.source;
-  groovy.savedScript = '';
   groovy.functionName = 'processData';
   groovy.mapping = null;
   groovy.functions = [];
@@ -500,9 +508,8 @@ export async function loadExample(id: string) {
 
 function importXslt(m: SharedMessage, rerun: boolean) {
   if (m.source !== '') {
-    xslt.mappingPath = xslt.casePath = null;
-    xslt.mapping = m.source;
-    xslt.savedMapping = '';
+    setEditorDocument('xslt', null, m.source, '');
+    xslt.casePath = null;
   }
   if (m.body !== '') {
     xslt.body = m.body;
@@ -514,10 +521,8 @@ function importXslt(m: SharedMessage, rerun: boolean) {
   if (m.source !== '') {
     // Stricter than for a file opened from the project: a link can come from any web page, so its mapping
     // waits for a run by hand whether or not it calls Java.
-    runSeq++;
-    xslt.running = false;
+    resetXsltRun();
     xslt.armed = false;
-    xslt.result = xslt.compare = null;
     app.status = `Imported from CPI Helper: ${sharedSummary(m)}. A mapping from a link has not run: press Ctrl+Enter to run it.`;
   } else {
     app.status = `Imported: ${sharedSummary(m)}.`;
@@ -647,7 +652,8 @@ function resetPlatform() {
 }
 
 export async function savePlatform(key: PlatformKey): Promise<boolean> {
-  if (!app.project) {
+  const project = app.project;
+  if (!project) {
     app.error = 'Open a project folder to save platform data.';
     return false;
   }
@@ -659,17 +665,22 @@ export async function savePlatform(key: PlatformKey): Promise<boolean> {
   }
   const path = PLATFORM_FILES[key];
   const gen = platformGen;
-  const root = app.project.root;
+  const isCurrent = () => gen === platformGen && isWriteProject(project);
   try {
     const content = platformFileText(doc);
-    await writeFile(path, content);
+    if (sec.doc === undefined) {
+      if (!(await writeNewFile(project, path, { content }, isCurrent))) return false;
+    } else {
+      await writeProjectFile(project, path, { content }, false);
+    }
     // The file is written; if the project closed (or another one opened) meanwhile, its tables are not this one's.
-    if (gen !== platformGen || app.project?.root !== root) return true;
+    if (!isCurrent()) return false;
     sec.doc = doc;
     sec.saved = JSON.stringify(doc);
     sec.exists = true;
-    // The same file open in the File tab follows, unless it has changes of its own.
-    if (fileView.path === path && fileView.content === fileView.saved) fileView.content = fileView.saved = content;
+    // The same file open in the File tab follows, unless it has changes of its own. As a new document version:
+    // a File tab save still in flight then no longer sets its (older) content as the baseline.
+    if (fileView.path === path && fileView.content === fileView.saved) setEditorDocument('file', path, content);
     app.status = 'Saved ' + path;
     await refreshFiles();
     return true;
@@ -697,6 +708,8 @@ function platformOverride(): Record<string, unknown> | undefined {
 
 // ------------------------------------------------------------------ project
 
+let projectChanging = false;
+
 export async function open(dir: string, initProject = false) {
   app.error = '';
   // The opened project's platform files take the tables' place. Unsaved rows typed without a project, or for
@@ -706,12 +719,20 @@ export async function open(dir: string, initProject = false) {
   if (unsaved.length && before !== dir && !(await confirm(before === null
     ? 'The project\'s platform files replace the platform data entered without a project. Open it?'
     : `Discard the unsaved platform data of the open project (${unsaved.join(', ')})?`))) return;
-  const r = await openProject(dir, initProject);
+  if (projectChanging) return;
+  projectChanging = true;
+  let r;
+  try {
+    r = await openProject(dir, initProject);
+    app.project = { root: r.root, files: r.files };
+  } finally {
+    projectChanging = false;
+  }
   const other = before !== r.root;
   if (other) scriptMemory.clear(); // its paths belong to the other project
-  app.project = { root: r.root, files: r.files };
   if (other) resetPlatform(); // at once: no run of the opened project uses rows typed before it
   if (other) closeIflowFlowSteps(); // their iFlows belong to the other project
+  if (other) resetWhereUsed();
   safeSet('cpiwb.project', r.root);
   await loadIflowSteps();
   if (!r.isProject && !initProject) app.status = 'Folder has no cpi-workbench.json – it still works; use "Init" to add the standard folders.';
@@ -726,7 +747,8 @@ export async function closeProject() {
   if (!(await mayDiscard('file'))) return;
   const unsaved = dirtyPlatformFiles();
   if (unsaved.length && !(await confirm(`Discard the unsaved platform data (${unsaved.join(', ')})?`))) return;
-  await closeEngineProject();
+  if (projectChanging) return;
+  closeEngineProject();
   app.project = null;
   scriptMemory.clear();
   safeSet('cpiwb.project', null);
@@ -744,13 +766,23 @@ export async function closeProject() {
   app.iflowModels = [];
   app.iflowSelected = null;
   closeIflowFlowSteps();
-  if (app.tool === 'diagram') app.tool = app.stepTool;
+  if (app.tool === 'diagram' || app.tool === 'whereused') app.tool = app.stepTool;
+  resetWhereUsed();
+}
+
+/** Empties the Where used tab and drops answers still on their way: they belong to the project before. */
+function resetWhereUsed() {
+  whereUsedSeq++;
+  indexSeq++;
+  Object.assign(whereUsed, { view: 'search', query: '', kind: '', iflow: '', hits: [], searched: '', index: [], error: '' });
 }
 
 export async function refreshFiles() {
-  if (!app.project) return;
+  const project = app.project;
+  if (!project) return;
   const r = await call('project.list');
-  app.project.files = r.files;
+  if (app.project !== project) return;
+  project.files = r.files;
   await loadPlatform(); // a platform file may have been saved, renamed or deleted
 }
 
@@ -771,7 +803,11 @@ export async function loadIflowModels() {
   } catch {
     app.iflowModels = [];
   }
-  if (!app.iflowModels.length && app.tool === 'diagram') app.tool = app.stepTool;
+  if (!app.iflowModels.length && (app.tool === 'diagram' || app.tool === 'whereused')) app.tool = app.stepTool;
+  // Results of the iFlows before a rescan or import would point at elements that may be gone.
+  if (whereUsed.iflow && !app.iflowModels.some((m) => m.iflow === whereUsed.iflow)) whereUsed.iflow = '';
+  if (whereUsed.searched || whereUsed.kind) void searchIflows();
+  if (whereUsed.index.length) void loadIflowIndex();
 }
 
 /** The step of an iFlow element that a tab can open (Groovy, XSLT, a flow step, …), if any. */
@@ -801,6 +837,9 @@ export async function importIflow(zip: string) {
     parts.push(`${rows} value mapping rows` + (replaced ? `, ${replaced} replaced` : ''));
   }
   if (skipped.length) parts.push(`skipped: ${skipped.map((s) => `${s.name} (${s.type}, ${s.reason})`).join(', ')}`);
+  // An overwrite import deletes nothing: files of the earlier version that the export lacks stay.
+  const kept: string[] = r.kept ?? [];
+  if (kept.length) parts.push(`${kept.length} earlier files not in the export were kept: ${kept.slice(0, 5).join(', ')}${kept.length > 5 ? ', …' : ''}`);
   const notes = vms.flatMap((v) => v.notes);
   app.status = `Imported ${r.imported} (${parts.join('; ')})` + (notes.length ? `. ${notes.join(' ')}` : '');
   if (vms.length) {
@@ -842,13 +881,32 @@ export async function readFile(path: string): Promise<string> {
   return (await call('file.read', { path })).content;
 }
 
-export async function writeFile(path: string, content: string) {
-  await call('file.write', { path, content });
+type Project = NonNullable<typeof app.project>;
+type FileContent = { content: string; contentBase64?: never } | { contentBase64: string; content?: never };
+
+function isWriteProject(project: Project): boolean {
+  return app.project === project && !projectChanging;
 }
 
-/** Writes bytes given as Base64 (a body that is no text). */
-export async function writeBytes(path: string, base64: string) {
-  await call('file.write', { path, contentBase64: base64 });
+async function writeProjectFile(project: Project, path: string, payload: FileContent, createNew: boolean) {
+  if (!isWriteProject(project)) throw new Error('The project changed before the file could be written.');
+  await call('file.write', { path, ...payload, createNew });
+}
+
+/** New destinations use the engine's atomic create-new, not the (possibly incomplete) file tree. */
+export async function writeNewFile(project: Project, path: string, payload: FileContent,
+  isCurrent: () => boolean = () => true): Promise<boolean> {
+  if (!isCurrent()) return false;
+  try {
+    await writeProjectFile(project, path, payload, true);
+  } catch (e) {
+    // ProjectFiles reports this conflict through both HTTP and the desktop's string error channel (isExistsConflict).
+    if (!(e instanceof EngineError) || !isExistsConflict(e)) throw e;
+    if (!isWriteProject(project) || !isCurrent()) return false;
+    if (!(await confirm(`${path} exists. Overwrite it?`, 'Overwrite')) || !isCurrent()) return false;
+    await writeProjectFile(project, path, payload, false);
+  }
+  return true;
 }
 
 /** The editor a file opens in, or null for inputs (they replace the input body, not an editor). */
@@ -862,14 +920,35 @@ function editorFor(path: string): Editor | null {
 
 type Editor = 'xslt' | 'groovy' | 'xsd' | 'file';
 
+/** A project file that is not a step (platform data, configuration, iFlow files) open in the File tab. */
+export const fileView = $state({ path: null as string | null, content: '', saved: '' });
+
+// Typing does not change the document identity. Replacing or moving it does, even at the same path.
+const documentVersion: Record<Editor, number> = { xslt: 0, groovy: 0, xsd: 0, file: 0 };
+
+function editorDocument(editor: Editor) {
+  if (editor === 'xslt') return { path: xslt.mappingPath, content: xslt.mapping, saved: xslt.savedMapping };
+  if (editor === 'groovy') return { path: groovy.scriptPath, content: groovy.script, saved: groovy.savedScript };
+  if (editor === 'xsd') return { path: xsd.schemaPath, content: xsd.schema, saved: xsd.savedSchema };
+  return { path: fileView.path, content: fileView.content, saved: fileView.saved };
+}
+
+function setEditorDocument(editor: Editor, path: string | null, content: string, saved = content) {
+  documentVersion[editor]++;
+  if (editor === 'xslt') Object.assign(xslt, { mappingPath: path, mapping: content, savedMapping: saved });
+  else if (editor === 'groovy') Object.assign(groovy, { scriptPath: path, script: content, savedScript: saved });
+  else if (editor === 'xsd') Object.assign(xsd, { schemaPath: path, schema: content, savedSchema: saved });
+  else Object.assign(fileView, { path, content, saved });
+}
+
 /** Asks before an editor's unsaved changes are replaced; true when nothing would be lost. */
 export async function mayDiscard(editor: Editor | null): Promise<boolean> {
-  const [dirty, name] = editor === 'xslt' ? [xslt.mapping !== xslt.savedMapping, xslt.mappingPath ?? 'the unsaved mapping']
-    : editor === 'groovy' ? [groovy.script !== groovy.savedScript, groovy.scriptPath ?? 'the unsaved script']
-    : editor === 'xsd' ? [xsd.schema !== xsd.savedSchema, xsd.schemaPath ?? 'the unsaved schema']
-    : editor === 'file' ? [fileView.path !== null && fileView.content !== fileView.saved, fileView.path]
-    : [false, null];
-  return !dirty || confirm(`Discard the unsaved changes to ${name}?`);
+  if (!editor) return true;
+  const { path, content, saved } = editorDocument(editor);
+  if (content === saved) return true;
+  const name = path ?? (editor === 'file' ? null : `the unsaved ${editorSaveNames[editor][0]}`);
+  if (!name) return true;
+  return confirm(`Discard the unsaved changes to ${name}?`);
 }
 
 export interface OpenOptions {
@@ -901,31 +980,21 @@ function isOpenInItsTab(path: string): boolean {
 }
 
 async function reopen(path: string) {
-  const lower = path.toLowerCase();
+  const editor = editorFor(path);
+  if (!editor || editor === 'file') return;
+  const project = app.project;
+  const version = documentVersion[editor];
   const content = await readFile(path);
-  if (lower.endsWith('.groovy') || lower.endsWith('.gsh')) {
-    if (groovy.script === groovy.savedScript && content !== groovy.savedScript) {
-      groovy.script = content;
-      groovy.savedScript = content;
-      disarmGroovy(path); // changed on disk: code the user has not started yet
-    }
-    app.tool = 'groovy';
-    if (!groovy.result) rerunIfLive('groovy');
-  } else if (lower.endsWith('.xsd')) {
-    if (xsd.schema === xsd.savedSchema && content !== xsd.savedSchema) {
-      xsd.schema = content;
-      xsd.savedSchema = content;
-    }
-    app.tool = 'xsd';
-  } else {
-    if (xslt.mapping === xslt.savedMapping && content !== xslt.savedMapping) {
-      xslt.mapping = content;
-      xslt.savedMapping = content;
-      disarmXslt(path); // changed on disk: java: calls the user has not started yet
-    }
-    app.tool = 'xslt';
-    if (!xslt.result) rerunIfLive('xslt');
+  if (app.project !== project || documentVersion[editor] !== version) return;
+  const current = editorDocument(editor);
+  if (current.content === current.saved && content !== current.saved) {
+    setEditorDocument(editor, path, content);
+    if (editor === 'groovy') disarmGroovy(path); // changed on disk: code the user has not started yet
+    if (editor === 'xslt') openXsltPreview();
   }
+  app.tool = editor;
+  if (editor === 'groovy' && !groovy.result) rerunIfLive('groovy');
+  if (editor === 'xslt' && !xslt.result) rerunIfLive('xslt');
 }
 
 export async function openFile(path: string, opts: OpenOptions = {}) {
@@ -940,18 +1009,14 @@ export async function openFile(path: string, opts: OpenOptions = {}) {
     const content = path.startsWith('inputs/') || isArchive(path) ? await readInputFile(path) : await readFile(path);
     if (content === null) return await setBinaryInput(path);
     if (lower.endsWith('.xsl') || lower.endsWith('.xslt')) {
-      xslt.mappingPath = path;
-      xslt.mapping = content;
-      xslt.savedMapping = content;
+      setEditorDocument('xslt', path, content);
       xslt.casePath = null;
       app.tool = 'xslt';
-      disarmXslt(path);
+      openXsltPreview();
       rerunIfLive('xslt');
     } else if (lower.endsWith('.groovy') || lower.endsWith('.gsh')) {
       rememberScript(); // the script that was open, before its path changes
-      groovy.scriptPath = path;
-      groovy.script = content;
-      groovy.savedScript = content;
+      setEditorDocument('groovy', path, content);
       groovy.casePath = null;
       groovy.casePlatform = null;
       const last = opts.functionName ? undefined : scriptMemory.get(path);
@@ -979,17 +1044,13 @@ export async function openFile(path: string, opts: OpenOptions = {}) {
       app.tool = 'groovy';
       disarmGroovy(path);
     } else if (lower.endsWith('.xsd')) {
-      xsd.schemaPath = path;
-      xsd.schema = content;
-      xsd.savedSchema = content;
+      setEditorDocument('xsd', path, content);
       xsd.casePath = null;
       app.tool = 'xsd';
     } else if (path.startsWith('inputs/')) {
       setInput(path, content);
     } else {
-      fileView.path = path;
-      fileView.content = content;
-      fileView.saved = content;
+      setEditorDocument('file', path, content);
       app.tool = 'file';
     }
   } catch (e) {
@@ -997,27 +1058,8 @@ export async function openFile(path: string, opts: OpenOptions = {}) {
   }
 }
 
-export async function saveMapping(): Promise<boolean> {
-  if (!app.project) {
-    app.error = 'Open a project folder to save files.';
-    return false;
-  }
-  const path = xslt.mappingPath ?? await askNewPath('mapping', null, 'mappings/mapping.xsl');
-  if (!path) return false;
-  await writeFile(path, xslt.mapping);
-  xslt.mappingPath = path;
-  xslt.savedMapping = xslt.mapping;
-  app.status = 'Saved ' + path;
-  await refreshFiles();
-  return true;
-}
-
-/** A project file that is not a step (platform data, configuration, iFlow files) open in the File tab. */
-export const fileView = $state({ path: null as string | null, content: '', saved: '' });
-
 export function closeFileView() {
-  fileView.path = null;
-  fileView.content = fileView.saved = '';
+  setEditorDocument('file', null, '');
   if (app.tool === 'file') app.tool = app.stepTool;
 }
 
@@ -1035,12 +1077,9 @@ export async function closeEditorFile(editor: 'xslt' | 'groovy' | 'xsd'): Promis
       xslt.headers = [];
       xslt.properties = [];
     }
-    runSeq++; // a run still under way belongs to the closed file
-    xslt.running = false;
-    xslt.mappingPath = xslt.casePath = null;
-    xslt.mapping = xslt.savedMapping = '';
-    xslt.result = xslt.compare = null;
-    xslt.armed = true;
+    openXsltPreview(); // a run still under way belongs to the closed file
+    setEditorDocument('xslt', null, '');
+    xslt.casePath = null;
     app.status = path ? 'Closed ' + path : 'Closed the unsaved mapping';
   } else if (editor === 'groovy') {
     const path = groovy.casePath ?? groovy.scriptPath;
@@ -1054,9 +1093,9 @@ export async function closeEditorFile(editor: 'xslt' | 'groovy' | 'xsd'): Promis
       rememberScript(); // opening it again brings back its function and arguments
     }
     forgetGroovyRun();
-    groovy.scriptPath = groovy.casePath = null;
+    setEditorDocument('groovy', null, '');
+    groovy.casePath = null;
     groovy.casePlatform = null;
-    groovy.script = groovy.savedScript = '';
     groovy.functionName = 'processData';
     groovy.mapping = null;
     groovy.functions = [];
@@ -1070,8 +1109,8 @@ export async function closeEditorFile(editor: 'xslt' | 'groovy' | 'xsd'): Promis
     xsdSeq++; // a validation still under way belongs to the closed schema
     xsd.running = false;
     if (xsd.casePath) xsd.body = '';
-    xsd.schemaPath = xsd.casePath = null;
-    xsd.schema = xsd.savedSchema = '';
+    setEditorDocument('xsd', null, '');
+    xsd.casePath = null;
     xsd.result = null;
     app.status = path ? 'Closed ' + path : 'Closed the unsaved schema';
   }
@@ -1119,22 +1158,6 @@ export function closeInput(tool: StepTool) {
 export async function closeFileTab(): Promise<boolean> {
   if (!(await mayDiscard('file'))) return false;
   closeFileView();
-  return true;
-}
-
-export async function saveFileView(): Promise<boolean> {
-  if (!fileView.path) return false;
-  await writeFile(fileView.path, fileView.content);
-  fileView.saved = fileView.content;
-  app.status = 'Saved ' + fileView.path;
-  if (fileView.path.startsWith('platform/')) {
-    // The Groovy tab's table follows the file, unless it has unsaved changes of its own: then both exist.
-    const key = PLATFORM_KEYS.find((k) => PLATFORM_FILES[k] === fileView.path);
-    if (key && platformDirty(key)) {
-      app.status = `Saved ${fileView.path}. The Groovy tab's Platform table for it still has unsaved changes; its Save would replace this file, ↻ Reload files there takes the file.`;
-    }
-    await loadPlatform();
-  }
   return true;
 }
 
@@ -1203,20 +1226,21 @@ function setFlowBody(body: string) {
 
 /** Saves the input body of the current step tool under inputs/, so it survives opening other files. */
 export async function saveInput() {
-  if (!app.project) {
+  const project = app.project;
+  if (!project) {
     app.error = 'Open a project folder to save files.';
     return;
   }
-  const body = stepBody(app.stepTool);
-  const bytes = app.stepTool === 'flow' ? flow.binary : null;
+  const tool = app.stepTool;
+  const body = stepBody(tool);
+  const bytes = tool === 'flow' ? flow.binary : null;
   const ext = bytes ? 'bin' : /^\s*[[{]/.test(body) ? 'json' : /^\s*</.test(body) ? 'xml' : 'txt';
   const r = await ask('Save input body as (path inside the project)', `inputs/input.${ext}`);
   if (!r) return;
   try {
-    if (!(await mayOverwrite(r.value))) return;
-    if (bytes) await writeBytes(r.value, bytes.base64);
-    else await writeFile(r.value, body);
-    app.inputPaths[app.stepTool] = r.value;
+    const payload = bytes ? { contentBase64: bytes.base64 } : { content: body };
+    if (!(await writeNewFile(project, r.value, payload)) || !isWriteProject(project)) return;
+    app.inputPaths[tool] = r.value;
     app.status = 'Saved input as ' + r.value;
     await refreshFiles();
   } catch (e) {
@@ -1226,23 +1250,15 @@ export async function saveInput() {
 
 /** Points the editors that show `from` to `to`; with `to` null the editor keeps the text as unsaved. */
 function movePaths(from: string, to: string | null) {
-  if (xslt.mappingPath === from) {
-    xslt.mappingPath = to;
-    if (!to) xslt.savedMapping = '';
-  }
-  if (groovy.scriptPath === from) {
-    groovy.scriptPath = to;
-    if (!to) groovy.savedScript = '';
-  }
-  if (xsd.schemaPath === from) {
-    xsd.schemaPath = to;
-    if (!to) xsd.savedSchema = '';
+  for (const editor of ['xslt', 'groovy', 'xsd'] as const) {
+    const { path, content, saved } = editorDocument(editor);
+    if (path === from) setEditorDocument(editor, to, content, to ? saved : '');
   }
   if (xslt.casePath === from) xslt.casePath = to;
   if (groovy.casePath === from) groovy.casePath = to;
   if (xsd.casePath === from) xsd.casePath = to;
   if (fileView.path === from) {
-    if (to) fileView.path = to;
+    if (to) setEditorDocument('file', to, fileView.content, fileView.saved);
     else closeFileView();
   }
 }
@@ -1261,6 +1277,8 @@ export async function deleteFile(path: string) {
 
 /** Rename and copy go through read and write: the engines have no move call, and the tree lists text files only. */
 export async function copyFile(path: string, move: boolean) {
+  const project = app.project;
+  if (!project) return;
   const r = await ask(move ? `Rename ${path} to` : `Copy ${path} to`, path);
   if (!r || r.value === path) return;
   // The same file under another spelling (./a.xsl, or A.xsl where the file system ignores case): writing it and
@@ -1270,10 +1288,12 @@ export async function copyFile(path: string, move: boolean) {
     return;
   }
   try {
-    if (!(await mayOverwrite(r.value))) return;
-    await writeFile(r.value, await readFile(path));
+    if (!isWriteProject(project)) return;
+    const content = await readFile(path);
+    if (!(await writeNewFile(project, r.value, { content })) || !isWriteProject(project)) return;
     if (move) {
       await call('file.delete', { path });
+      if (!isWriteProject(project)) return;
       movePaths(path, r.value);
     }
     app.status = (move ? 'Renamed ' : 'Copied ') + path + ' to ' + r.value;
@@ -1287,38 +1307,10 @@ function hasProfile(id: Profile) {
   return !!app.profiles.find((p) => p.id === id && p.available);
 }
 
-export async function saveScript(): Promise<boolean> {
-  if (!app.project) {
-    app.error = 'Open a project folder to save files.';
-    return false;
-  }
-  const path = groovy.scriptPath ?? await askNewPath('script', null, 'scripts/script.groovy');
-  if (!path) return false;
-  await writeFile(path, groovy.script);
-  groovy.scriptPath = path;
-  groovy.savedScript = groovy.script;
-  app.status = 'Saved ' + path;
-  await refreshFiles();
-  return true;
-}
-
 /** Switching 1.x <-> 2.x swaps the untouched sample script to the matching API. */
 export function onGroovyProfileChange() {
-  if (groovy.script === SAMPLE_GROOVY_V1 && app.groovyProfile === 'groovy-2.x') groovy.script = groovy.savedScript = SAMPLE_GROOVY_V2;
-  if (groovy.script === SAMPLE_GROOVY_V2 && app.groovyProfile === 'groovy-1.x') groovy.script = groovy.savedScript = SAMPLE_GROOVY_V1;
-}
-
-export async function saveSchema(): Promise<boolean> {
-  if (!app.project || !xsd.schemaPath) {
-    const p = await askNewPath('schema', null, 'schemas/schema.xsd');
-    if (!p) return false;
-    xsd.schemaPath = p;
-  }
-  await writeFile(xsd.schemaPath!, xsd.schema);
-  xsd.savedSchema = xsd.schema;
-  app.status = 'Saved ' + xsd.schemaPath;
-  await refreshFiles();
-  return true;
+  if (groovy.script === SAMPLE_GROOVY_V1 && app.groovyProfile === 'groovy-2.x') setEditorDocument('groovy', groovy.scriptPath, SAMPLE_GROOVY_V2);
+  if (groovy.script === SAMPLE_GROOVY_V2 && app.groovyProfile === 'groovy-1.x') setEditorDocument('groovy', groovy.scriptPath, SAMPLE_GROOVY_V1);
 }
 
 function fileExists(path: string): boolean {
@@ -1327,7 +1319,7 @@ function fileExists(path: string): boolean {
 }
 
 /**
- * A name no file has yet: `path` itself (or path + suffix), else -2, -3, ...
+ * Suggests a name not seen in the file tree: `path` itself (or path + suffix), else -2, -3, ...
  * mappings/x.xsl with suffix '-copy' -> mappings/x-copy.xsl, mappings/x-copy-2.xsl, ...
  */
 export function freePath(path: string, suffix = ''): string {
@@ -1338,60 +1330,86 @@ export function freePath(path: string, suffix = ''): string {
   return name;
 }
 
-/** True if no file has this path or the user agreed to overwrite it. */
-export async function mayOverwrite(path: string): Promise<boolean> {
-  // Files may have appeared outside the app since the tree was listed.
-  await refreshFiles().catch(() => undefined);
-  return !fileExists(path) || confirm(`${path} exists. Overwrite it?`);
-}
+const editorSaveNames = {
+  xslt: ['mapping', 'mappings/mapping.xsl'],
+  groovy: ['script', 'scripts/script.groovy'],
+  xsd: ['schema', 'schemas/schema.xsd'],
+} as const;
+export const savingEditor = $state<Record<Editor, boolean>>({ xslt: false, groovy: false, xsd: false, file: false });
 
-/** Asks for a new path; an existing file is only overwritten after a second question. */
-async function askNewPath(what: string, path: string | null, fallback: string): Promise<string | null> {
-  if (!app.project) {
+async function saveEditor(editor: Editor, saveAs = false): Promise<boolean> {
+  const project = app.project;
+  if (!project) {
     app.error = 'Open a project folder to save files.';
-    return null;
+    return false;
   }
-  const r = await ask(`Save ${what} as (path inside the project)`, path ? freePath(path, '-copy') : freePath(fallback));
-  if (!r) return null;
-  if ((!path || pathKey(r.value) !== pathKey(path)) && !(await mayOverwrite(r.value))) return null;
-  return r.value;
+  if (savingEditor[editor]) {
+    app.status = 'A save is already in progress for this editor.';
+    return false;
+  }
+  let version = documentVersion[editor];
+  const isCurrent = () => app.project === project && documentVersion[editor] === version;
+  savingEditor[editor] = true;
+  try {
+    const current = editorDocument(editor).path;
+    let path = current;
+    const choosePath = saveAs || !path;
+    if (editor !== 'file' && choosePath) {
+      const [what, fallback] = editorSaveNames[editor];
+      const r = await ask(`Save ${what} as (path inside the project)`, path ? freePath(path, '-copy') : freePath(fallback));
+      path = r?.value ?? null;
+    }
+    if (!path || !isCurrent()) return false;
+    if (projectChanging) {
+      app.error = 'Wait for the project change to finish before saving.';
+      return false;
+    }
+    const { content } = editorDocument(editor);
+    // Save As onto the editor's own file is a plain save of the same document, without an overwrite question.
+    // Exact spelling only: on a case-sensitive file system another case is another file.
+    const ownFile = current !== null && path.replace(/\\/g, '/') === current.replace(/\\/g, '/');
+    if (choosePath && !ownFile) {
+      if (!(await writeNewFile(project, path, { content }, isCurrent))) return false;
+    } else {
+      await writeProjectFile(project, path, { content }, false);
+    }
+    // The file is written, but the editor holds another document (or project) now: nothing of it was saved.
+    if (projectChanging || !isCurrent()) return false;
+
+    // The editor stays editable during the write. Its baseline is exactly what reached the file.
+    setEditorDocument(editor, path, editorDocument(editor).content, content);
+    version = documentVersion[editor];
+    if (saveAs && editor !== 'file') {
+      const state = editor === 'xslt' ? xslt : editor === 'groovy' ? groovy : xsd;
+      state.casePath = null;
+    }
+    app.status = 'Saved ' + path;
+    if (editor !== 'file') {
+      await refreshFiles();
+    } else if (path.startsWith('platform/')) {
+      // The Groovy table follows its file, unless it has unsaved changes of its own.
+      const key = PLATFORM_KEYS.find((k) => PLATFORM_FILES[k] === path);
+      if (key && platformDirty(key)) {
+        app.status = `Saved ${path}. The Groovy tab's Platform table for it still has unsaved changes; its Save would replace this file, ↻ Reload files there takes the file.`;
+      }
+      await loadPlatform();
+    }
+    return true;
+  } catch (e) {
+    if (isCurrent()) fail(e);
+    return false;
+  } finally {
+    savingEditor[editor] = false;
+  }
 }
 
-export async function saveMappingAs(): Promise<boolean> {
-  const path = await askNewPath('mapping', xslt.mappingPath, 'mappings/mapping.xsl');
-  if (!path) return false;
-  await writeFile(path, xslt.mapping);
-  xslt.mappingPath = path;
-  xslt.savedMapping = xslt.mapping;
-  xslt.casePath = null;
-  app.status = 'Saved ' + path;
-  await refreshFiles();
-  return true;
-}
-
-export async function saveScriptAs(): Promise<boolean> {
-  const path = await askNewPath('script', groovy.scriptPath, 'scripts/script.groovy');
-  if (!path) return false;
-  await writeFile(path, groovy.script);
-  groovy.scriptPath = path;
-  groovy.savedScript = groovy.script;
-  groovy.casePath = null;
-  app.status = 'Saved ' + path;
-  await refreshFiles();
-  return true;
-}
-
-export async function saveSchemaAs(): Promise<boolean> {
-  const path = await askNewPath('schema', xsd.schemaPath, 'schemas/schema.xsd');
-  if (!path) return false;
-  await writeFile(path, xsd.schema);
-  xsd.schemaPath = path;
-  xsd.savedSchema = xsd.schema;
-  xsd.casePath = null;
-  app.status = 'Saved ' + path;
-  await refreshFiles();
-  return true;
-}
+export const saveMapping = () => saveEditor('xslt');
+export const saveScript = () => saveEditor('groovy');
+export const saveSchema = () => saveEditor('xsd');
+export const saveFileView = () => saveEditor('file');
+export const saveMappingAs = () => saveEditor('xslt', true);
+export const saveScriptAs = () => saveEditor('groovy', true);
+export const saveSchemaAs = () => saveEditor('xsd', true);
 
 // ------------------------------------------------------------------ runs
 
@@ -1481,16 +1499,21 @@ function rerunIfLive(tool: StepTool) {
   else if (tool === 'groovy' && groovy.live) autoRunGroovy();
 }
 
-export async function runXslt() {
-  const seq = ++runSeq;
+export function runXslt() {
+  clearTimeout(xsltPreviewTimer);
   xslt.armed = true;
+  return executeXslt('xslt.run');
+}
+
+async function executeXslt(method: 'xslt.run' | 'xslt.preview') {
+  const seq = ++runSeq;
   xslt.running = true;
   app.error = '';
   try {
     const params = xsltRequest();
     const [r, c] = await Promise.all([
-      call<XsltResult>('xslt.run', params, app.profile),
-      xslt.compareOn ? compareRun<XsltResult>('xslt.run', params, app.profile) : Promise.resolve(null),
+      call<XsltResult>(method, params, app.profile),
+      xslt.compareOn ? compareRun<XsltResult>(method, params, app.profile) : Promise.resolve(null),
     ]);
     if (seq === runSeq) {
       xslt.result = r;
@@ -1635,9 +1658,7 @@ export async function runXpath() {
 }
 
 // ------------------------------------------------------------------ flow steps
-// XPath runs in the XML engine (Saxon, XPath 3.1 as SAP documents for the Content Modifier), Camel Simple and
-// the Content Modifier in the Groovy engine's Camel. The Router is evaluated here, route by route.
-// The MCP server repeats these calls (app/src-tauri/src/mcp/flow.rs); change the two together.
+// The calls live in flowcalls.ts, which the MCP server's flow.rs repeats; this keeps the tab's state.
 
 function namespaceMap() {
   const ns: Record<string, string> = {};
@@ -1656,162 +1677,33 @@ function flowInput() {
   return flow.binary ? { bodyBase64: flow.binary.base64, ...rows } : { body: flow.body, ...rows };
 }
 
-/**
- * Everything a flow run reads, taken when it starts: the message, the namespaces, the engines and the step's
- * settings. Edits while the run waits for the engines do not leak into it (the MCP server's Ctx does the same).
- */
-interface FlowRun {
-  input: ReturnType<typeof flowInput>;
-  namespaces: Record<string, string>;
-  xml: Profile;
-  camel: Profile;
-}
-
-async function xpathValue(run: FlowRun, expression: string, as: 'boolean' | 'string' | 'nodes', input = run.input) {
-  // Headers and properties are XPath variables ($name), as Camel's XPath resolver provides them (F39).
-  const r = await call('xpath.eval', { expression, version: '3.1', as, namespaces: run.namespaces, input }, run.xml);
-  if (!r.ok) throw new Error(r.diagnostics?.[0]?.message ?? 'XPath failed');
-  return r.value as string;
-}
-
-async function simpleEval(run: FlowRun, expression: string, mode: 'condition' | 'expression') {
-  const r = await call('simple.eval', { expression, mode, input: run.input }, run.camel);
-  if (!r.ok) throw new Error(r.diagnostics?.[0]?.message ?? 'Camel Simple failed');
-  return r as { value: string | null; evaluated?: string };
-}
-
 // A run's result goes to the step it was started for, and only if no newer run or newly opened step came since.
 let flowSeq = 0;
 const flowResultKey = { contentModifier: 'cmResult', filter: 'filterResult', router: 'routerResult', splitter: 'splitResult', gather: 'gatherResult',
   converter: 'converterResult', encoder: 'encoderResult', decoder: 'decoderResult', messageDigest: 'digestResult' } as const;
-const flowConfigKey = { contentModifier: 'cm', filter: 'filter', router: 'router', splitter: 'splitter', gather: 'gather', converter: 'converter',
-  encoder: 'encoder', decoder: 'decoder', messageDigest: 'digest' } as const;
+
+export function missingFlowRuntime(): string {
+  return missingRuntime(flow.step, flow, { xml: hasProfile(flowXmlProfile()), camel: hasProfile(flow.camel) });
+}
 
 export async function runFlowStep() {
+  const missing = missingFlowRuntime();
+  if (missing) { app.error = missing; return; }
   const seq = ++flowSeq;
   const step = flow.step;
-  const run: FlowRun = { input: $state.snapshot(flowInput()), namespaces: namespaceMap(), xml: flowXmlProfile(), camel: flow.camel };
+  const run: FlowRun = { input: $state.snapshot(flowInput()), namespaces: namespaceMap(), xml: flowXmlProfile(), camel: flow.camel,
+    call: flowEngineCall() };
   const config: any = $state.snapshot(flow[flowConfigKey[step]]);
   flow.running = true;
   app.error = '';
   try {
-    const r = step === 'contentModifier' ? await runContentModifier(run, config)
-      : step === 'filter' ? await runFilter(run, config)
-      : step === 'router' ? await runRouter(run, config)
-      : step === 'splitter' ? await runSplitter(run, config)
-      : step === 'converter' ? await runConverter(run, config)
-      : step === 'encoder' ? await call('encode.run', { scheme: config.scheme, input: run.input }, run.xml)
-      : step === 'decoder' ? await call('decode.run', { scheme: config.scheme, input: run.input }, run.xml)
-      : step === 'messageDigest' ? await call('digest.run', { ...config, namespaces: run.namespaces, input: run.input }, run.xml)
-      : await runGather(run, config);
+    const r = await runStep(run, step, config);
     if (seq === flowSeq) flow[flowResultKey[step]] = r;
   } catch (e) {
     if (seq === flowSeq) fail(e);
   } finally {
     if (seq === flowSeq) flow.running = false;
   }
-}
-
-async function runContentModifier(run: FlowRun, cm: typeof flow.cm) {
-  // XPath rows read the incoming body, which the step changes only after all header and property rows. Rows run
-  // top to bottom (SAP), so an XPath that uses $name sees the headers and properties of the rows above it.
-  const input = run.input;
-  let state = input;
-  const done: Record<'headers' | 'properties', any[]> = { headers: [], properties: [] };
-  let pending: Record<'headers' | 'properties', any[]> = { headers: [], properties: [] };
-  for (const table of ['headers', 'properties'] as const) {
-    for (const r of cm[table]) {
-      let row: any = { ...r };
-      if (r.action === 'Create' && r.type === 'xpath') {
-        if (r.value.includes('$') && (pending.headers.length || pending.properties.length)) {
-          const s = await call('contentModifier.run', { ...pending, bodyType: 'constant', body: '', input: state }, run.camel);
-          if (s.ok) state = { ...input, headers: s.output.headers, properties: s.output.properties };
-          pending = { headers: [], properties: [] };
-        }
-        try {
-          row = { ...r, resolved: await xpathValue(run, r.value, r.datatype.startsWith('org.w3c.dom.') ? 'nodes' : 'string', state) };
-        } catch (e) {
-          throw new Error(`XPath of ${r.name}: ${(e as Error).message}`);
-        }
-      }
-      done[table].push(row);
-      pending[table].push(row);
-    }
-  }
-  return await call('contentModifier.run', {
-    ...done, bodyType: cm.bodyType, body: cm.body, input,
-  }, run.camel);
-}
-
-async function runRouter(run: FlowRun, router: typeof flow.router) {
-  const routes: RouteResult[] = router.routes.map((r) => ({ status: r.default ? 'default' : 'not evaluated' }));
-  if (new Set(router.routes.filter((r) => !r.default).map((r) => r.expressionType)).size > 1) {
-    return { routes, diagnostics: [],
-      taken: 'Error: the routes mix XML and Non-XML conditions; SAP: "the evaluation fails" (Define Router).' };
-  }
-  // Whether a route was taken, apart from its name: a route's name may be empty.
-  let taken = '';
-  let decided = false;
-  for (const [i, r] of router.routes.entries()) {
-    if (r.default) continue;
-    try {
-      const s = r.expressionType === 'xml' ? { value: await xpathValue(run, r.condition, 'boolean') } : await simpleEval(run, r.condition, 'condition');
-      routes[i] = { status: s.value === 'true' ? 'true' : 'false', camel: (s as { evaluated?: string }).evaluated };
-    } catch (e) {
-      routes[i] = { status: 'error', message: (e as Error).message };
-      taken = 'Error: the route condition failed, so CPI raises an exception.';
-      decided = true;
-      break;
-    }
-    if (routes[i].status === 'true') {
-      taken = r.name || `Route ${i + 1}`;
-      decided = true;
-      break;
-    }
-  }
-  if (!decided) {
-    const d = router.routes.find((r) => r.default);
-    taken = router.throwException ? 'No route matched: Throw Exception is set, so the Router raises an exception.'
-      : d ? d.name + ' (default route)' : 'No route matched and there is no default route.';
-  }
-  return { routes, taken, diagnostics: [] };
-}
-
-async function runSplitter(run: FlowRun, s: typeof flow.splitter) {
-  // XPath and grouping may refer to a header or property (SAP); Camel Simple resolves the reference first.
-  const resolve = async (v: string) => (v.includes('${') ? (await simpleEval(run, v, 'expression')).value ?? '' : v);
-  return await call('split.run', {
-    splitter: s.splitter, expressionType: s.expressionType, expression: await resolve(s.expression),
-    grouping: await resolve(String(s.grouping ?? '')), streaming: s.streaming, namespaces: run.namespaces,
-    input: 'bodyBase64' in run.input ? { bodyBase64: run.input.bodyBase64 } : { body: run.input.body },
-  }, run.xml);
-}
-
-async function runFilter(run: FlowRun, f: typeof flow.filter) {
-  return await call('filter.run', {
-    expression: await resolveSimpleFunctions(f.expression, async (e) => (await simpleEval(run, e, 'expression')).value ?? ''),
-    valueType: f.valueType, namespaces: run.namespaces, input: run.input,
-  }, run.xml);
-}
-
-async function runGather(run: FlowRun, g: typeof flow.gather) {
-  return await call('gather.run', {
-    messageType: g.messageType, algorithm: g.algorithm, sourceXPath: g.sourceXPath, targetXPath: g.targetXPath,
-    namespaces: run.namespaces, messages: g.messages,
-  }, run.xml);
-}
-
-async function runConverter(run: FlowRun, c: typeof flow.converter) {
-  // SAP (CSV to XML 1.4): schema, target path and record marker may come from a header or property.
-  const resolve = async (v: string) => (v.includes('${') ? (await simpleEval(run, v, 'expression')).value ?? '' : v);
-  const csv = c.conversion === 'csvToXml';
-  return await call('convert.run', {
-    ...c,
-    schema: csv ? await resolve(c.schema) : c.schema,
-    targetPath: csv ? await resolve(c.targetPath) : c.targetPath,
-    recordMarker: csv ? await resolve(c.recordMarker) : c.recordMarker,
-    namespaces: run.namespaces, input: run.input,
-  }, run.xml);
 }
 
 /** The splitter's messages go to the Gather step, as in an iFlow's Splitter → … → Gather. */
@@ -1837,38 +1729,16 @@ export function useAsFlowInput(body: string | { bodyBase64: string; bodySize: nu
 }
 
 function openFlowStep(step: IflowStep) {
-  const c = step.config ?? {};
-  const row = (r: any): CmRow => ({ action: r.action === 'Delete' ? 'Delete' : 'Create', name: r.name ?? '', type: r.type ?? 'constant',
-    value: r.value ?? '', datatype: r.datatype ?? '', default: r.default ?? '' });
-  if (step.type === 'contentModifier') {
-    flow.cm = { headers: (c.headers ?? []).map(row), properties: (c.properties ?? []).map(row),
-      bodyType: c.bodyType === 'expression' ? 'expression' : 'constant', body: c.body ?? '' };
-  } else if (step.type === 'router') {
-    flow.router = { routes: c.routes ?? [], throwException: !!c.throwException };
-  } else if (step.type === 'filter') {
-    flow.filter = { expression: c.expression ?? '', valueType: c.valueType ?? 'nodelist' };
-  } else if (step.type === 'converter') {
-    // The iFlow's lists become the tab's text fields (one entry per line). Settings the step does not have start
-    // from the defaults, not from a converter opened before.
-    flow.converter = { ...converterDefaults(), ...c,
-      namespaceMapping: Array.isArray(c.namespaceMapping) ? c.namespaceMapping.map((m: any) => `${m.prefix} = ${m.namespace}`).join('\n') : c.namespaceMapping ?? '',
-      arrayPaths: Array.isArray(c.arrayPaths) ? c.arrayPaths.join('\n') : c.arrayPaths ?? '' };
-  } else if (step.type === 'encoder') {
-    flow.encoder = { scheme: c.scheme ?? '' };
-  } else if (step.type === 'decoder') {
-    flow.decoder = { scheme: c.scheme ?? '' };
-  } else if (step.type === 'messageDigest') {
-    flow.digest = { filter: c.filter ?? '', canonicalization: c.canonicalization ?? '', algorithm: c.algorithm ?? '', targetHeader: c.targetHeader ?? '' };
-  } else if (step.type === 'gather') {
-    // The messages stay: they come from the splitter, not from the iFlow.
-    flow.gather = { ...flow.gather, messageType: c.messageType ?? 'sameXml', algorithm: c.algorithm ?? 'combine',
-      sourceXPath: c.sourceXPath ?? '', targetXPath: c.targetXPath ?? '' };
-  } else {
-    flow.splitter = { splitter: c.splitter, expressionType: c.expressionType, expression: c.expression ?? '',
-      grouping: c.grouping ?? '', streaming: c.streaming !== false };
-  }
+  const type = step.type as FlowStep;
+  const settings = settingsFromIflowStep(type, step.config ?? {});
+  // Gather's messages stay: they come from the splitter, not from the iFlow.
+  if (type === 'gather') flow.gather = { ...settings, messages: flow.gather.messages };
+  else (flow as any)[flowConfigKey[type]] = settings;
   flow.step = step.type as FlowStep;
   flow.sources[step.type as FlowStep] = `${step.iflow} · ${step.name || step.id}`;
+  const missing = defaultedSettings(type, step.config ?? {});
+  if (missing.length) flow.defaulted[type] = missing.map((k) => `${k} = ${(settings as any)[k]}`).join(', ');
+  else delete flow.defaulted[type];
   // Only this step's result is out of date; the other steps keep theirs.
   flow[flowResultKey[step.type as FlowStep]] = null;
   // A run still open for the step this replaces must not write its result here.
@@ -1889,6 +1759,7 @@ export function closeFlowStep(step: FlowStep) {
   if (step === 'gather') flow.gather = { ...d.gather, messages: flow.gather.messages };
   else (flow as any)[flowConfigKey[step]] = d[flowConfigKey[step]];
   delete flow.sources[step];
+  delete flow.defaulted[step];
   flow[flowResultKey[step]] = null;
   // A run still open for the closed step must not write its result here.
   flowSeq++;
@@ -1923,11 +1794,11 @@ function joinPath(dir: string, rel: string): string {
 async function loadGroovyCase(path: string, dir: string, tc: any) {
   rememberScript();
   const scriptPath = joinPath(dir, tc.script);
-  groovy.scriptPath = scriptPath;
-  groovy.script = await readFile(scriptPath);
-  groovy.savedScript = groovy.script;
+  const script = await readFile(scriptPath);
   const body = tc.input?.body;
-  groovy.body = typeof body === 'string' ? body : body?.file ? await readFile(joinPath(dir, body.file)) : body?.text ?? '';
+  const input = typeof body === 'string' ? body : body?.file ? await readFile(joinPath(dir, body.file)) : body?.text ?? '';
+  setEditorDocument('groovy', scriptPath, script);
+  groovy.body = input;
   groovy.headers = toRows(tc.input?.headers);
   groovy.properties = toRows(tc.input?.properties);
   groovy.functionName = tc.function ?? 'processData';
@@ -1950,11 +1821,11 @@ async function loadGroovyCase(path: string, dir: string, tc: any) {
 
 async function loadXsdCase(path: string, dir: string, tc: any) {
   const schemaPath = joinPath(dir, tc.schema);
-  xsd.schemaPath = schemaPath;
-  xsd.schema = await readFile(schemaPath);
-  xsd.savedSchema = xsd.schema;
+  const schema = await readFile(schemaPath);
   const body = tc.input?.body;
-  xsd.body = typeof body === 'string' ? body : body?.file ? await readFile(joinPath(dir, body.file)) : body?.text ?? '';
+  const input = typeof body === 'string' ? body : body?.file ? await readFile(joinPath(dir, body.file)) : body?.text ?? '';
+  setEditorDocument('xsd', schemaPath, schema);
+  xsd.body = input;
   xsd.casePath = path;
   app.tool = 'xsd';
   app.status = 'Loaded test case ' + (tc.name ?? path);
@@ -1972,11 +1843,11 @@ export async function loadCase(path: string) {
     return;
   }
   const mappingPath = joinPath(dir, tc.xslt);
-  xslt.mappingPath = mappingPath;
-  xslt.mapping = await readFile(mappingPath);
-  xslt.savedMapping = xslt.mapping;
+  const mapping = await readFile(mappingPath);
   const body = tc.input?.body;
-  xslt.body = typeof body === 'string' ? body : body?.file ? await readFile(joinPath(dir, body.file)) : body?.text ?? '';
+  const input = typeof body === 'string' ? body : body?.file ? await readFile(joinPath(dir, body.file)) : body?.text ?? '';
+  setEditorDocument('xslt', mappingPath, mapping);
+  xslt.body = input;
   xslt.headers = toRows(tc.input?.headers);
   xslt.properties = toRows(tc.input?.properties);
   xslt.paramPrecedence = tc.options?.paramPrecedence ?? 'header';
@@ -1985,6 +1856,6 @@ export async function loadCase(path: string) {
   xslt.casePath = path;
   app.tool = 'xslt';
   app.status = 'Loaded test case ' + (tc.name ?? path);
-  disarmXslt('test case ' + (tc.name ?? path));
-  if (xslt.armed) await runXslt();
+  openXsltPreview();
+  await autoRunXslt();
 }

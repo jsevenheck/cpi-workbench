@@ -1,0 +1,89 @@
+{
+  "name": "converter-lists",
+  "from": "iflow",
+  "step": {
+    "type": "converter",
+    "config": {
+      "conversion": "xmlToJson",
+      "useNamespaces": true,
+      "namespaceMapping": [
+        {
+          "prefix": "o",
+          "namespace": "urn:example:order"
+        },
+        {
+          "prefix": "p",
+          "namespace": "urn:p"
+        },
+        {
+          "prefix": "q",
+          "namespace": ""
+        },
+        {
+          "namespace": "urn:r"
+        }
+      ],
+      "arrayPaths": [
+        "/a/b",
+        "/a/c"
+      ],
+      "suppressRoot": null
+    }
+  },
+  "input": {
+    "body": "<a><b>1</b></a>",
+    "headers": {
+      "h0": "x"
+    },
+    "properties": {
+      "p0": "y"
+    }
+  },
+  "namespaces": {
+    "o": "urn:example:order"
+  },
+  "answers": {},
+  "calls": [
+    {
+      "engine": "xml",
+      "method": "convert.run",
+      "params": {
+        "conversion": "xmlToJson",
+        "useNamespaces": true,
+        "separator": ":",
+        "namespaceMapping": "o = urn:example:order\np = urn:p",
+        "addRootElement": false,
+        "rootElementName": "root",
+        "rootNamespace": "",
+        "suppressRoot": false,
+        "streaming": false,
+        "streamingElements": "all",
+        "arrayPaths": "/a/b\n/a/c",
+        "outputEncoding": "",
+        "sourcePath": "",
+        "fieldSeparator": ",",
+        "csvHeader": "xml",
+        "includeParent": false,
+        "parentPath": "",
+        "includeAttributes": false,
+        "schema": "",
+        "targetPath": "",
+        "recordMarker": "",
+        "firstLineHeader": true,
+        "headerMapping": "xsd",
+        "namespaces": {
+          "o": "urn:example:order"
+        },
+        "input": {
+          "body": "<a><b>1</b></a>",
+          "headers": {
+            "h0": "x"
+          },
+          "properties": {
+            "p0": "y"
+          }
+        }
+      }
+    }
+  ]
+}

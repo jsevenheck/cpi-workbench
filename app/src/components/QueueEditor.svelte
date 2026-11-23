@@ -3,7 +3,7 @@
 
   /**
    * A String[] argument of a Message Mapping function: contexts of values, edited as rows. The text form
-   * (one JSON array per context, see queue.ts) stays the source of truth, so test cases and agents keep it;
+   * (one JSON array per context, see queue.ts) stays the source of truth, so the regression test cases and agents keep it;
    * Text shows it for copy and paste.
    */
   interface Props {
@@ -89,7 +89,7 @@
     {#if !showText}<button class="small" onclick={() => edit((q) => q.push(['']))}
       title="A new context: the values after a context change">+ Context</button>{/if}
     <button class="small" class:on={showText} aria-pressed={showText} disabled={parsed.error !== ''}
-      onclick={() => (asText = !asText)} title="One context per line as a JSON array, as in case.json">Text</button>
+      onclick={() => (asText = !asText)} title="One context per line as a JSON array">Text</button>
   </div>
 </div>
 

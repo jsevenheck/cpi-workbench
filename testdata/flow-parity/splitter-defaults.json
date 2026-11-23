@@ -1,0 +1,43 @@
+{
+  "name": "splitter-defaults",
+  "from": "iflow",
+  "step": {
+    "type": "splitter",
+    "config": {
+      "expression": "//b",
+      "grouping": 2
+    }
+  },
+  "input": {
+    "body": "<a><b>1</b></a>",
+    "headers": {
+      "h0": "x"
+    },
+    "properties": {
+      "p0": "y"
+    }
+  },
+  "namespaces": {
+    "o": "urn:example:order"
+  },
+  "answers": {},
+  "calls": [
+    {
+      "engine": "xml",
+      "method": "split.run",
+      "params": {
+        "splitter": "general",
+        "expressionType": "xpath",
+        "expression": "//b",
+        "grouping": "2",
+        "streaming": true,
+        "namespaces": {
+          "o": "urn:example:order"
+        },
+        "input": {
+          "body": "<a><b>1</b></a>"
+        }
+      }
+    }
+  ]
+}

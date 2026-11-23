@@ -67,7 +67,7 @@ The app window need not be open. Other platforms/clients and server privileges: 
 
 ## Documentation and contributing
 
-See the [documentation index](docs/README.md) for guides, [test-case/platform formats](docs/test-cases.md),
+See the [documentation index](docs/README.md) for guides, [project and platform formats](docs/project-files.md),
 [build/release steps](docs/building.md), [architecture](docs/architecture.md) and the
 [research ledger/roadmap](docs/plan.md). Issues and pull requests are welcome
 ([Contributing](CONTRIBUTING.md)); report vulnerabilities privately ([Security](SECURITY.md)).

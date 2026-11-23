@@ -6,6 +6,98 @@ of its version.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-19
+
+### Added
+
+- **Fidelity indicator.** Next to the runtime and next to *Run step* in Flow Steps, a button says how well the
+  open step's behaviour is backed: tenant-verified, documented or partly an assumption. A click lists the rows of
+  the [Fidelity](docs/fidelity.md) page for that step, which now gives each row the steps it applies to and its basis.
+- **Where used.** A new tab next to *Diagram* searches all imported iFlows offline for a host, credential or key
+  alias, queue, file, parameter or any value, and lists each iFlow's externalized parameters with value, type,
+  description and uses, marking unused ones and ones without a value. The ⌕ next to a diagram setting searches
+  for it. A sender or receiver in the diagram now also shows its adapters' settings. Over MCP: the tool
+  `iflow_where_used`. Settings are searched as the export writes them (`{{SftpHost}}`, not its value); an
+  unreadable `parameters.prop` is shown as that iFlow's error.
+
+### Changed
+
+- **Test cases are internal.** `case.json` test cases are this repository's regression tests and no longer a
+  documented user feature; a step is tested by running it in the app. *Init* no longer creates `tests/`. The
+  project layout, header types, script libraries and the `platform/` formats moved to the new page
+  [Project files and platform data](docs/project-files.md); the `case.json` format stays in
+  [Regression test cases](docs/test-cases.md) for contributors.
+
+### Fixed
+
+- **A flow step from an iFlow without some settings** now runs with the step's defaults in the app, as it already
+  did over MCP: an Encoder or Decoder without a scheme (Base64), a Message Digest without canonicalization, algorithm
+  or target header, a Splitter without its type or expression type, a Filter without its value type, a Gather
+  without its message type or algorithm. Before, the import filled them with empty values. Whether CPI
+  uses the same defaults is not known: the app names them under the step's *From* line, and the MCP server returns
+  them as `step.defaulted`.
+- **Converter lists over MCP**: an iFlow's namespace mapping and array paths reach the engine as the app sends them,
+  one entry per line; a namespace pair without prefix or namespace is left out, as before. The Flow Steps tab and the MCP server now replay shared fixtures in their tests
+  (`testdata/flow-parity`), so the two cannot drift apart unnoticed.
+- **XSLT Live previews** cannot execute reflexive Java calls, including calls in imported or included
+  stylesheets. Use **Run** or **Ctrl+Enter** each time you want to run a mapping that needs Java.
+- **Editor saves** keep edits made during a write marked as unsaved. A late Save or Save As does not
+  change the file shown in an editor that was closed or reopened meanwhile.
+- **Browser projects** are independent per tab. Files and simulations use the project selected in that tab,
+  even if another tab opens or closes a different project on the same engine.
+- **New file destinations** require overwrite confirmation even if the destination is not visible in the
+  project tree or another process creates it just before the write.
+- **Desktop engine restarts** no longer lose the selected project. The first run after an idle stop or
+  worker exit still sees project resources and Groovy platform mocks; a failed run is not replayed.
+- **Content Modifier** evaluates each row once, on one Camel exchange, including when a later XPath
+  row reads a value such as the exchange ID. A failed row stops later rows in the UI and MCP.
+- **Content Modifier** preserves binary bodies byte for byte when Message Body is empty. *Use as input*
+  and MCP `messageFrom` pass the bytes and updated headers and properties to the next step.
+- **Content Modifier** warns when a body Expression or a `java.lang.String` row reads a binary body
+  that is not valid text in the message charset, instead of silently replacing those bytes with U+FFFD.
+- **XSLT Live previews** also ask for a manual Run when a `java:` namespace is written with character
+  or entity references or as an EQName (`Q{java:…}`); other compile errors are reported as compile errors.
+- **Browser requests** have bounded uploads and queue waits. A waiting request outlives the call ahead
+  (a save during a long run waits for it); one the engine cannot admit is refused without interrupting the
+  request already running.
+- **Imports** no longer report a finished import as failed when a temporary file cannot be removed
+  (a virus scanner holding it on Windows). A failed create-new import cleans up only its own writes;
+  files added by another writer are left alone. Archives with duplicate entries are refused with the
+  entry's name. Overwrite imports list the files they keep because the new export no longer has them (`kept`).
+- **iFlow discovery** reads an iFlow reached through a link to another project folder once, not twice,
+  in Steps, Diagram and Where used.
+- **Engine info** and calls that need no project files still work after the open project folder was
+  deleted or renamed; calls that need it report *Project folder is unavailable*.
+- **Project Init and iFlow discovery** now refuse paths that lead outside the selected project through
+  a symlink or Windows junction. Init leaves existing files intact; iFlow scans report refused paths.
+- **Confirmation dialogs** keep keyboard focus inside, select Cancel first for confirmations, and
+  return focus to the control that opened the dialog.
+- **Flow Steps** works with either engine family installed and explains missing runtimes for the
+  selected step and settings.
+- **Filter** expands `function:simple(...)` calls in the original XPath only. Call-like text returned
+  by an expression stays literal, in the UI and MCP. So does call-like text in the XPath's own string
+  literals and `(: :)` comments.
+- **Save as…** onto the editor's own file saves it without asking to overwrite. A Platform table save
+  that updates the same file in the File tab no longer lets a File tab save still in flight mark older
+  content as saved.
+- **Browser mode** no longer reports running engines as "No compatible engine connected" after the open
+  project folder was deleted or renamed; it says the folder is unavailable and to reopen it.
+- **Confirmation dialogs** opened from a menu that has since closed (such as *Rename…* in the file tree)
+  return focus to the active tool tab instead of the page. Without native modal dialogs, the page
+  behind the dialog is inert.
+- **Imports** stage and validate all archives before writing project files, enforce aggregate expansion
+  limits, and publish Value Mapping tables by atomic replacement.
+- **MCP** bounds concurrent requests, queued replies and retained run data. A result that exceeds
+  the preview or run-cache limit is reported explicitly.
+- **Desktop and MCP workers** have separate queue, startup and pipe deadlines. A stalled worker is
+  stopped and reaped without replaying its request.
+- **Desktop file calls** wait for a long run on the same engine instead of failing with "Engine busy".
+  A request over the 192 MiB engine frame limit is refused with `UnsupportedInSimulator` without
+  stopping the engine.
+- **MCP** frees a request id before sending its answer, so a client can reuse it at once. A run too
+  large for the run cache returns its shortened result without a `runId` (`runNotice`), and a result
+  over the 1 MiB preview is shortened (`resultShortened`) instead of reporting a completed import as failed.
+
 ## [0.5.0] - 2026-11-17
 
 ### Added
@@ -374,7 +466,8 @@ First public release.
   supported.
 - The installers and engine jars include the licence texts and notices of the bundled components.
 
-[Unreleased]: https://github.com/jsevenheck/cpi-workbench/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/jsevenheck/cpi-workbench/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/jsevenheck/cpi-workbench/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/jsevenheck/cpi-workbench/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/jsevenheck/cpi-workbench/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/jsevenheck/cpi-workbench/compare/v0.3.0...v0.3.1

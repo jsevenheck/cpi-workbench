@@ -3,6 +3,8 @@ package io.cpiwb.groovy;
 import io.cpiwb.core.Json;
 import org.junit.jupiter.api.Test;
 
+import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -10,6 +12,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /** Rows use the iFlow encoding (types and Delete names as in exported .iflw files). Runs on both engines. */
 @SuppressWarnings("unchecked")
@@ -73,6 +76,57 @@ class ContentModifierStepTest {
     }
 
     @Test
+    void byteBodiesArePreservedUnlessReplaced() throws Exception {
+        for (String base64 : List.of("AP8H", "YWJj", "")) {
+            Json.Obj req = Json.o().with("input", Json.o().with("bodyBase64", base64))
+                    .with("headers", List.of(row("Create", "Copy", "expression", "${body}", "")))
+                    .with("properties", List.of(row("Create", "Format", "constant", "binary", "")));
+            Map<String, Object> result = (Map<String, Object>) ScriptRunnerTest.ENGINE.call("contentModifier.run", req);
+            assertEquals(base64 + ":byte[]", values(result, "headers").get("Copy"));
+            assertEquals("binary:String", values(result, "properties").get("Format"));
+            Map<String, Object> output = Json.obj(result, "output");
+            assertEquals(true, output.get("binary"));
+            assertEquals(base64, output.get("bodyBase64"));
+            assertEquals(java.util.Base64.getDecoder().decode(base64).length, ((Number) output.get("bodySize")).intValue());
+            assertFalse(output.containsKey("body"));
+            assertTrue(Json.arr(result, "diagnostics").isEmpty());
+
+            result = (Map<String, Object>) ScriptRunnerTest.ENGINE.call("contentModifier.run",
+                    req.with("body", "format=${property.Format}").with("bodyType", "expression"));
+            assertTrue(Json.bool(result, "ok", false), result.toString());
+            output = Json.obj(result, "output");
+            assertEquals("format=binary", output.get("body"));
+            assertFalse(output.containsKey("bodyBase64"));
+        }
+    }
+
+    @Test
+    void bytesThatAreNoTextWarnWhenReadAsText() throws Exception {
+        // "AP8H" is 00 ff 07: 0xff is no UTF-8. "w6Rh" is "äa" in UTF-8 and stays text without a warning.
+        for (String base64 : List.of("AP8H", "w6Rh")) {
+            boolean text = "w6Rh".equals(base64);
+            Json.Obj req = Json.o().with("input", Json.o().with("bodyBase64", base64))
+                    .with("headers", List.of(row("Create", "Text", "expression", "${body}", "java.lang.String")));
+            Map<String, Object> result = (Map<String, Object>) ScriptRunnerTest.ENGINE.call("contentModifier.run", req);
+            assertTrue(Json.bool(result, "ok", false), result.toString());
+            String diagnostics = Json.arr(result, "diagnostics").toString();
+            assertEquals(!text, diagnostics.contains("Header Text: the binary body is not valid UTF-8"), diagnostics);
+            if (text) {
+                assertEquals("äa:String", values(result, "headers").get("Text"));
+            }
+
+            result = (Map<String, Object>) ScriptRunnerTest.ENGINE.call("contentModifier.run", Json.o()
+                    .with("input", Json.o().with("bodyBase64", base64)).with("bodyType", "expression").with("body", "[${body}]"));
+            assertTrue(Json.bool(result, "ok", false), result.toString());
+            diagnostics = Json.arr(result, "diagnostics").toString();
+            assertEquals(!text, diagnostics.contains("Message Body: the binary body is not valid UTF-8"), diagnostics);
+            if (text) {
+                assertEquals("[äa]", Json.obj(result, "output").get("body"));
+            }
+        }
+    }
+
+    @Test
     void deleteByNameAndPattern() throws Exception {
         Map<String, Object> r = run(List.of(row("Delete", "$include=X-*", "constant", "", ""),
                         row("Delete", "$name=SenderId", "constant", "", "")),
@@ -83,6 +137,26 @@ class ContentModifierStepTest {
         assertTrue(values(r, "properties").containsKey("Partner"));
         // A Delete row without a name is an error, not a silent no-op.
         assertFalse(Json.bool(run(List.of(row("Delete", " ", "constant", "", "")), List.of(), "constant", ""), "ok", true));
+    }
+
+    @Test
+    void pausedRunsAreProjectBoundSingleUseAndBounded() {
+        ContentModifierStep step = new ContentModifierStep();
+        Path project = Path.of("project-a");
+        List<Map<String, Object>> tokens = new ArrayList<>();
+        for (int i = 0; i < 8; i++) {
+            Map<String, Object> partial = step.advance(Json.o().with("headers", List.of(row("Create", "ID", "constant", "" + i, ""))), project);
+            tokens.add(Json.o().with("continuation", partial.get("continuation")));
+        }
+        assertThrows(IllegalStateException.class, () -> step.advance(Json.o(), project));
+        Map<String, Object> first = tokens.get(0);
+        assertThrows(IllegalArgumentException.class, () -> step.run(first, Path.of("project-b")));
+        assertEquals(false, step.discard(first, Path.of("project-b")).get("discarded"));
+        assertEquals("0:String", values(step.run(first, project), "headers").get("ID"));
+        assertThrows(IllegalArgumentException.class, () -> step.run(first, project));
+        for (Map<String, Object> token : tokens.subList(1, tokens.size())) {
+            assertEquals(true, step.discard(token, project).get("discarded"));
+        }
     }
 
     @Test

@@ -3,7 +3,7 @@ title: "Monaco 0.57 loads every editor feature up front, TypeScript stays on 6 u
 author: Claude
 date: 2026-11-23
 branch: claude/magical-dirac-dcu53h
-cost: { minutes: 25, tokens: 397049 }
+cost: { minutes: 30, tokens: 455539 }
 id: l-000204aa
 scope: repo
 status: active
@@ -31,6 +31,8 @@ touches:
 - A failed import leaves the new, initialized project open with the error; the app deletes nothing.
 - With a project open, Import iFlow imports into that project as before; the MCP `import_iflow` still needs an open project.
 - 2026-11-24, on the owner's Windows machine: Import iFlow into a new project failed with "Not a folder: <new path>". The XML engine jar predated `project.open`'s `create` option and ignored it, so it opened a folder that did not exist. `mvn -f engine/pom.xml package -DskipTests` alone fixed it.
+- 2026-11-24, the owner: an empty Where used search was not intuitive. With an empty query and no kind, the tab shows the distinct addresses, credentials, queues, key aliases and files of the imported iFlows with their counts (a click searches the value as that kind), then each iFlow's parameters. The Search/Parameters switch is gone; ← Overview clears the search.
+- Built from `iflow.index`, which already returns every classified entry and the parameters in one call; the engine is unchanged.
 
 ## Tried and ruled out
 - `features/suggest/register` alone for completions: it only registers inline completions; the suggest widget needs `editor/contrib/suggest/browser/suggestController` (the Groovy e2e checks the widget).
@@ -41,6 +43,8 @@ touches:
 - Picking a parent folder and naming the subfolder after the iFlow: two dialogs or a name the user does not see.
 
 In the code: ProjectFiles.open (`create`), pickNewFolder in app/src/lib/engine.ts (dialog:allow-save in capabilities), importIntoNewProject in store.svelte.ts, Sidebar importZip, e2e step 8 in groovy.mjs
+- Listing every setting of every iFlow by default: thousands of rows for a package, the opposite of intuitive.
+- Opening on the Parameters view: one line, but the search stays as hard to discover.
 
 ## Watch out
 - When updating Monaco, diff `features/register.all.js` against the imports of `internal/common/workers.js` and keep the extra deep imports in `app/src/lib/monaco.ts` in line.
@@ -54,3 +58,6 @@ In the code: app/src-tauri/Cargo.lock (url 2.5.9 for RUSTSEC-2026-0592, cookie 0
 - `engine::locate` checks the folder of the app exe first (`app/src-tauri/target/debug/cpiwb-xml-*.exe`, the sidecar copies), then `engine/native/out`, then the XML jars. Stale native engines in either place win over fresh jars.
 
 In the code: app/src-tauri/src/engine.rs `locate`
+- The index is read when the tab mounts and again after a rescan or import (loadIflowModels); each read parses all iFlow models, there is no cache.
+
+In the code: inventory in app/src/lib/whereused.ts, app/src/components/WhereUsedView.svelte, e2e 4b3 and 6b in groovy.mjs

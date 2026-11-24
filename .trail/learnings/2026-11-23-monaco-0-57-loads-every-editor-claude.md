@@ -3,7 +3,7 @@ title: "Monaco 0.57 loads every editor feature up front, TypeScript stays on 6 u
 author: Claude
 date: 2026-11-23
 branch: claude/magical-dirac-dcu53h
-cost: { minutes: 24, tokens: 394524 }
+cost: { minutes: 25, tokens: 397049 }
 id: l-000204aa
 scope: repo
 status: active
@@ -30,6 +30,7 @@ touches:
 - The engine creates the folder (`project.open` with `create`), not the Tauri shell: browser mode needs the same path, and no fs plugin is needed. It uses createDirectory, so an existing folder (also an empty `dir`, which resolves to the engine's working directory) is refused, never initialized.
 - A failed import leaves the new, initialized project open with the error; the app deletes nothing.
 - With a project open, Import iFlow imports into that project as before; the MCP `import_iflow` still needs an open project.
+- 2026-11-24, on the owner's Windows machine: Import iFlow into a new project failed with "Not a folder: <new path>". The XML engine jar predated `project.open`'s `create` option and ignored it, so it opened a folder that did not exist. `mvn -f engine/pom.xml package -DskipTests` alone fixed it.
 
 ## Tried and ruled out
 - `features/suggest/register` alone for completions: it only registers inline completions; the suggest widget needs `editor/contrib/suggest/browser/suggestController` (the Groovy e2e checks the widget).
@@ -49,3 +50,7 @@ In the code: app/src/lib/monaco.ts, app/package.json, app/src-tauri/Cargo.lock
 - Name each exception and its advisory ID in the commit message so the next update can tell it apart from an accidental bump.
 
 In the code: app/src-tauri/Cargo.lock (url 2.5.9 for RUSTSEC-2026-0592, cookie 0.18.3 for RUSTSEC-2026-0594)
+- An engine older than the UI accepts unknown params silently. A new RPC option then fails with an unrelated message; first rebuild the jars (or check which engine binary runs).
+- `engine::locate` checks the folder of the app exe first (`app/src-tauri/target/debug/cpiwb-xml-*.exe`, the sidecar copies), then `engine/native/out`, then the XML jars. Stale native engines in either place win over fresh jars.
+
+In the code: app/src-tauri/src/engine.rs `locate`

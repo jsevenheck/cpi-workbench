@@ -3,6 +3,7 @@
   const LABEL: Record<string, string> = { mmap: 'Message Mapping', converter: 'Converter', contentModifier: 'Content Modifier', filter: 'Filter', router: 'Router', splitter: 'Splitter', gather: 'Gather', encoder: 'Encoder', decoder: 'Decoder', messageDigest: 'Message Digest' };
   import { adapters, outline, typeLabel, type IflowModel } from '../lib/iflowmodel';
   import { EXAMPLES } from '../lib/examples';
+  import { iflowLabels } from '../lib/whereused';
   import { shownInTree } from '../lib/paths';
   import { isDesktop, pickFolder, pickNewFolder, pickZip } from '../lib/engine';
   import { app, open, closeProject, openFile, mayDiscard, freePath, refreshFiles, writeNewFile, ask, xslt, xsd, groovy, SAMPLE_GROOVY_V1, SAMPLE_GROOVY_V2,
@@ -88,6 +89,7 @@
     }
   }
 
+  let iflowNames = $derived(iflowLabels(app.iflowModels));
   let files = $derived((app.project?.files ?? []).filter((f) => !f.dir && shownInTree(f.path)
     && (!filter || f.path.toLowerCase().includes(filter.toLowerCase()))));
   let groups = $derived.by(() => {
@@ -151,7 +153,7 @@
       {#if app.iflowModels.length}
         {#each app.iflowModels as m (m.file)}
           <button class="iflow-head" onclick={() => toggleIflow(m.file)} title={m.file} aria-expanded={!foldedIflows.has(m.file)}>
-            {foldedIflows.has(m.file) ? '▸' : '▾'} {m.name ?? m.iflow}</button>
+            {foldedIflows.has(m.file) ? '▸' : '▾'} {iflowNames.get(m.iflow)}</button>
           {#if !foldedIflows.has(m.file)}
             {#if m.error}
               <div class="node err" title={m.error}>{m.error}</div>

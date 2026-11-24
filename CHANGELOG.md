@@ -17,7 +17,8 @@ of its version.
 - **Where used opens with an overview.** Instead of an empty search, the tab lists the addresses, credentials,
   queues, key aliases and files the imported iFlows use, with the number of places each (a click searches for it),
   and below them each iFlow's externalized parameters, which had their own *Parameters* view before. A value with a
-  `{{parameter}}` also shows what it resolves to, and iFlows that share a name are told apart by their folder. A receiver
+  `{{parameter}}` also shows what it resolves to, and iFlows that share a name are told apart by their folder,
+  there and in the Diagram's iFlow picker and the sidebar's iFlow list. A receiver
   adapter's hits name the step that calls it (`SuccessFactors receiver from Get WorkOrders`), so several receivers of one
   system can be told apart.
 - **Editor features.** The code editors (Monaco 0.57) now offer Monaco's full set of editor features in every

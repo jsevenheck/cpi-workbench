@@ -206,7 +206,9 @@ come with the app; **Save** asks where to keep them, once a project is open. As 
     finds that setting everywhere. **Kind** narrows to addresses, credentials, queues, key aliases, files or
     parameters, where the adapter's setting says what it holds (from public exports; other settings are searched
     as plain values). A receiver adapter's hit names the step that calls it (*SuccessFactors receiver from Get
-    Employee*). A click shows the element in the diagram; a script or mapping opens in its tab.
+    Employee*). A click shows the element in the diagram; a script or mapping opens in its tab. Above the hits,
+    **Parameters** lists the parameters whose name or value contains the search (`dx4Auth` finds the parameter
+    whose value it is), with their uses.
   * Settings are searched as the export writes them: a setting that holds `{{SftpHost}}` is found by `SftpHost`,
     not by the host. Next to such a value, **→** shows what `parameters.prop` resolves it to (in the overview,
     *→ 2 values* when iFlows resolve it differently). A parameter used in a Content Modifier table counts as the

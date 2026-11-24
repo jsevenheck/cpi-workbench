@@ -293,6 +293,10 @@ if (process.env.CPIWB_IFLOW_ZIP) {
   if ((await page.getByLabel('Kind').inputValue()) !== 'address') fail('a value of the overview was not searched as its kind');
   await page.getByRole('button', { name: '← Overview' }).click();
   await params.waitFor({ timeout: 5000 }).catch(() => fail('← Overview did not show the overview again'));
+  // A search also lists the parameters whose value contains it: RootName's value is Orders.
+  await page.getByLabel('Search the iFlows').fill('Orders');
+  await page.locator('.wu .param-hits', { hasText: 'RootName' }).waitFor({ timeout: 10000 })
+    .catch(() => fail('a search for a parameter value did not list the parameter'));
   await page.getByLabel('Search the iFlows').fill('s4.example');
   const hit = page.locator('.wu .el', { hasText: 'SOAP receiver' });
   await hit.waitFor({ timeout: 10000 }).catch(() => fail('Where used found no SOAP receiver for s4.example'));

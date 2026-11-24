@@ -166,3 +166,12 @@ export function inventory(index: IndexedIflow[]): InventoryGroup[] {
       .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value)) }))
     .filter((g) => g.values.length);
 }
+
+/** For a search: each iFlow's parameters whose name or value contains the query (ignoring case); iFlows without one left out. */
+export function matchingParameters(index: IndexedIflow[], query: string): IndexedIflow[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return [];
+  return index.map((i) => ({ ...i, parameters: i.parameters.filter((p) =>
+    p.name.toLowerCase().includes(q) || (p.value ?? '').toLowerCase().includes(q)) }))
+    .filter((i) => i.parameters.length);
+}

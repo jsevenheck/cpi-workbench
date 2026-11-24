@@ -4,7 +4,8 @@
   // engine reads the exports (IflowIndex.java); a hit selects its element in the diagram, a script or mapping opens in its tab.
   import { onMount } from 'svelte';
   import { app, whereUsed, searchIflows, loadIflowIndex, selectIflowNode, iflowStepFor, openIflowStep } from '../lib/store.svelte';
-  import { KINDS, groupHits, highlight, inventory, iflowLabels, parameterValues, resolveParameters, type IndexEntry } from '../lib/whereused';
+  import { KINDS, groupHits, highlight, inventory, iflowLabels, matchingParameters, parameterValues, resolveParameters,
+    type IndexEntry, type IndexedIflow } from '../lib/whereused';
 
   let groups = $derived(groupHits(whereUsed.hits));
   let labels = $derived(iflowLabels(app.iflowModels));
@@ -46,7 +47,33 @@
   let searching = $derived(!!whereUsed.searched || !!whereUsed.kind);
   let shownIndex = $derived(whereUsed.index.filter((i) => !whereUsed.iflow || i.iflow === whereUsed.iflow));
   let uses = $derived(inventory(shownIndex));
+  // A search also finds parameters by name or value (parameters.prop), unless Kind asks for another kind of setting.
+  let paramHits = $derived(searching && (!whereUsed.kind || whereUsed.kind === 'parameter')
+    ? matchingParameters(shownIndex, whereUsed.searched) : []);
 </script>
+
+{#snippet paramTable(i: IndexedIflow, q: string)}
+            <table class="params">
+              <thead><tr><th>Parameter</th><th>Value</th><th>Used in</th></tr></thead>
+              <tbody>
+                {#each i.parameters as p (p.name)}
+                  <tr>
+                    <td class="mono">{@render marked(p.name, q)}
+                      {#if p.unused}<span class="flag">unused</span>{/if}
+                      {#if p.unresolved}<span class="flag warn">no value</span>{/if}
+                      {#if p.required}<span class="flag">required</span>{/if}
+                      {#if p.type}<span class="muted small">{p.type.replace(/^xsd:/, '')}</span>{/if}
+                      {#if p.description}<div class="muted small desc">{p.description}</div>{/if}</td>
+                    <td class="mono">{@render marked(p.value ?? '', q)}</td>
+                    <td>{#each p.uses as u, n}{n ? ', ' : ''}<button class="link" onclick={() => show(i.iflow, u.node)}
+                      title="Show in the diagram">{u.name || u.element}</button> <span class="muted mono small">{u.key}</span>{/each}</td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+{/snippet}
+
+{#snippet marked(text: string, q: string)}{#each highlight(text, q) as part}{#if part.match}<mark>{part.text}</mark>{:else}{part.text}{/if}{/each}{/snippet}
 
 <div class="wu">
   <header class="bar">
@@ -93,31 +120,27 @@
           {#if i.error}<p class="err">{i.error}</p>
           {:else if !i.parameters.length}<p class="muted small">No externalized parameters.</p>
           {:else}
-            <table class="params">
-              <thead><tr><th>Parameter</th><th>Value</th><th>Used in</th></tr></thead>
-              <tbody>
-                {#each i.parameters as p (p.name)}
-                  <tr>
-                    <td class="mono">{p.name}
-                      {#if p.unused}<span class="flag">unused</span>{/if}
-                      {#if p.unresolved}<span class="flag warn">no value</span>{/if}
-                      {#if p.required}<span class="flag">required</span>{/if}
-                      {#if p.type}<span class="muted small">{p.type.replace(/^xsd:/, '')}</span>{/if}
-                      {#if p.description}<div class="muted small desc">{p.description}</div>{/if}</td>
-                    <td class="mono">{p.value ?? ''}</td>
-                    <td>{#each p.uses as u, n}{n ? ', ' : ''}<button class="link" onclick={() => show(i.iflow, u.node)}
-                      title="Show in the diagram">{u.name || u.element}</button> <span class="muted mono small">{u.key}</span>{/each}</td>
-                  </tr>
-                {/each}
-              </tbody>
-            </table>
+            {@render paramTable(i, '')}
           {/if}
         {/each}
       </section>
-    {:else if !groups.length}
+    {:else if !groups.length && !paramHits.length}
       <p class="muted">Nothing in the imported iFlows uses “{whereUsed.searched}”{whereUsed.kind ? ` as ${whereUsed.kind}` : ''}.</p>
     {:else}
-      <p class="muted small">{whereUsed.hits.length} {whereUsed.hits.length === 1 ? 'place' : 'places'} in {groups.length} {groups.length === 1 ? 'iFlow' : 'iFlows'}</p>
+      {#if paramHits.length}
+        <section class="param-hits">
+          <h3>Parameters <span class="muted small">whose name or value contains “{whereUsed.searched}”</span></h3>
+          {#each paramHits as i (i.iflow)}
+            <h4>{labels.get(i.iflow) ?? i.name ?? i.iflow}</h4>
+            {@render paramTable(i, whereUsed.searched)}
+          {/each}
+        </section>
+      {/if}
+      {#if groups.length}
+        <p class="muted small">{whereUsed.hits.length} {whereUsed.hits.length === 1 ? 'place' : 'places'} in {groups.length} {groups.length === 1 ? 'iFlow' : 'iFlows'}</p>
+      {:else}
+        <p class="muted small">No setting of the iFlows contains “{whereUsed.searched}”: settings name a parameter, so use its name to find them.</p>
+      {/if}
       {#each groups as g (g.iflow)}
         <section>
           <h3>{labels.get(g.iflow) ?? g.iflow}</h3>

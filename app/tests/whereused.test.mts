@@ -63,3 +63,16 @@ test('parameters resolve per iFlow, and shared iFlow names get their folder', as
   assert.deepEqual([...iflowLabels([{ iflow: 'A', name: 'X' }, { iflow: 'B', name: 'X' }, { iflow: 'C', name: null }, { iflow: 'D', name: 'Y' }])],
     [['A', 'X · A'], ['B', 'X · B'], ['C', 'C'], ['D', 'Y']]);
 });
+
+test('a search finds parameters by name or value, ignoring case', async () => {
+  const { matchingParameters } = await import('../src/lib/whereused.ts');
+  const p = (name: string, value: string | null) => ({ name, value, type: null, required: null, description: null, uses: [], unused: true, unresolved: false });
+  const index = [
+    { iflow: 'A', name: null, file: 'a', error: null, entries: [], parameters: [p("Input Parameter Name 'Auth Token'", 'dx4Auth'), p('Host', 'x')] },
+    { iflow: 'B', name: null, file: 'b', error: null, entries: [], parameters: [p('DX4AUTH_FLAG', null)] },
+    { iflow: 'C', name: null, file: 'c', error: null, entries: [], parameters: [p('Other', 'y')] },
+  ];
+  assert.deepEqual(matchingParameters(index, ' dx4auth ').map((i) => [i.iflow, i.parameters.map((x) => x.name)]),
+    [['A', ["Input Parameter Name 'Auth Token'"]], ['B', ['DX4AUTH_FLAG']]]);
+  assert.deepEqual(matchingParameters(index, ''), []);
+});

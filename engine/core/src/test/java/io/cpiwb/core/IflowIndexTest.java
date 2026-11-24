@@ -76,7 +76,12 @@ class IflowIndexTest {
         List<Object> iflows = (List<Object>) IflowIndex.index(project()).get("iflows");
         assertEquals(2, iflows.size());
         Map<String, Map<String, Object>> in = params((Map<String, Object>) iflows.get(0));
-        assertEquals(List.of("Defined Only", "SftpHost", "Unused Param"), List.copyOf(in.keySet()));
+        assertEquals(List.of("Defined Only", "SftpHost", "Token 'Auth'", "Unused Param"), List.copyOf(in.keySet()));
+        // Used in a Content Modifier table, where the export escapes the quote once more: still one parameter, with its value.
+        Map<String, Object> token = in.get("Token 'Auth'");
+        assertEquals(false, token.get("unused"));
+        assertEquals(false, token.get("unresolved"));
+        assertEquals("CallActivity_1", ((Map<String, Object>) ((List<Object>) token.get("uses")).get(0)).get("element"));
         Map<String, Object> host = in.get("SftpHost");
         assertEquals("sftp.partner.example.com:22", host.get("value"));
         assertEquals("xsd:string", host.get("type"));

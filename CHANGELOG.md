@@ -28,6 +28,12 @@ of its version.
   Monaco 0.57, Svelte 5.57.3, the Tauri dialog plugin 2.8.4, and the Rust crates within their versions
   (Windows: `junction` 2). The engines' runtimes (Saxon, Groovy, Camel, Java) are unchanged.
 
+### Fixed
+
+- **Where used: parameters in a Content Modifier table.** A parameter whose name has a quote or another escaped
+  character, used in a header or property table, was listed twice: once escaped (`&apos;`) with *no value*, once as
+  *unused*. It is now one parameter with its value and uses.
+
 ## [0.6.0] - 2026-11-19
 
 ### Added

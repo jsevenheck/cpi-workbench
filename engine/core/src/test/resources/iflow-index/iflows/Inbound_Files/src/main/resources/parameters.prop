@@ -1,3 +1,4 @@
 #synthetic
 SftpHost=sftp.partner.example.com\:22
 Unused\ Param=left over
+Token\ 'Auth'=secret-token-alias

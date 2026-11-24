@@ -56,6 +56,10 @@ test('parameters resolve per iFlow, and shared iFlow names get their folder', as
   assert.deepEqual(inventory(index)[0].values, [{ value: 'https://{{Host}}/{{Path}}', count: 3,
     resolved: ['https://a.example/{{Path}}', 'https://b.example/{{Path}}'] }]);
   assert.equal(resolveParameters('plain', new Map([['Host', 'x']])), null);
+  // In a table the export escapes the name once more; elsewhere an entity is part of the name.
+  const quoted = new Map([["Token 'Auth'", 'T1']]);
+  assert.equal(resolveParameters("<row><cell id='Value'>{{Token &apos;Auth&apos;}}</cell></row>", quoted), "<row><cell id='Value'>T1</cell></row>");
+  assert.equal(resolveParameters('{{Token &apos;Auth&apos;}}', quoted), null);
   assert.deepEqual([...iflowLabels([{ iflow: 'A', name: 'X' }, { iflow: 'B', name: 'X' }, { iflow: 'C', name: null }, { iflow: 'D', name: 'Y' }])],
     [['A', 'X · A'], ['B', 'X · B'], ['C', 'C'], ['D', 'Y']]);
 });

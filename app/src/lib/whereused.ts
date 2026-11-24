@@ -115,7 +115,11 @@ export function parameterValues(index: IndexedIflow[]): Map<string, Map<string, 
 /** The value with each `{{parameter}}` that has a value replaced by it (IflowIndex.PARAM); null if none has one. */
 export function resolveParameters(value: string, params: Map<string, string> | undefined): string | null {
   let replaced = false;
-  const out = value.replace(/\{\{([^{}]+)\}\}/g, (all, name: string) => {
+  // A Content Modifier's table is XML text: a name in it is escaped once more (IflowIndex.unescapeXml).
+  const table = value.trimStart().startsWith('<row');
+  const entities: Record<string, string> = { lt: '<', gt: '>', amp: '&', apos: "'", quot: '"' };
+  const out = value.replace(/\{\{([^{}]+)\}\}/g, (all, raw: string) => {
+    const name = table ? raw.trim().replace(/&(lt|gt|amp|apos|quot);/g, (_, e: string) => entities[e]) : raw.trim();
     const v = params?.get(name);
     if (v == null) return all;
     replaced = true;

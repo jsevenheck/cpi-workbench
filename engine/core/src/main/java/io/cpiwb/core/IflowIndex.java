@@ -248,9 +248,13 @@ public final class IflowIndex {
         }
         Map<String, List<Object>> uses = new TreeMap<>();
         for (Json.Obj entry : e.entries) {
-            Matcher m = PARAM.matcher(String.valueOf(entry.get("value")));
+            String value = String.valueOf(entry.get("value"));
+            // A Content Modifier's table is XML text in the property: a name in it is escaped once more ('Auth' as &apos;Auth&apos;).
+            boolean table = value.stripLeading().startsWith("<row");
+            Matcher m = PARAM.matcher(value);
             while (m.find()) {
-                uses.computeIfAbsent(m.group(1).trim(), k -> new ArrayList<>()).add(Json.o().with("element", entry.get("element"))
+                String name = m.group(1).trim();
+                uses.computeIfAbsent(table ? unescapeXml(name) : name, k -> new ArrayList<>()).add(Json.o().with("element", entry.get("element"))
                         .with("node", entry.get("node")).with("name", entry.get("name")).with("key", entry.get("key")));
             }
         }
@@ -270,6 +274,22 @@ public final class IflowIndex {
                     .with("uses", u).with("unused", u.isEmpty()).with("unresolved", !u.isEmpty() && values.getProperty(name) == null));
         });
         return out;
+    }
+
+    /** The predefined XML entities and character references in text taken from XML that was not parsed. */
+    static String unescapeXml(String s) {
+        if (s.indexOf('&') < 0) {
+            return s;
+        }
+        Matcher m = Pattern.compile("&(?:(lt|gt|amp|apos|quot)|#(\\d+)|#x([0-9A-Fa-f]+));").matcher(s);
+        StringBuilder out = new StringBuilder();
+        while (m.find()) {
+            String r = m.group(1) != null ? switch (m.group(1)) {
+                case "lt" -> "<"; case "gt" -> ">"; case "amp" -> "&"; case "apos" -> "'"; default -> "\"";
+            } : Character.toString(Integer.parseInt(m.group(2) != null ? m.group(2) : m.group(3), m.group(2) != null ? 10 : 16));
+            m.appendReplacement(out, Matcher.quoteReplacement(r));
+        }
+        return m.appendTail(out).toString();
     }
 
     /** {@code parameters.propdef}: {@code <parameters><parameter><name/><type/><isRequired/><description/>} (F69). */

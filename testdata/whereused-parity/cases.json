@@ -1,0 +1,414 @@
+{
+  "_comment": "Where used: the app's functions (app/src/lib/whereused.ts, test app/tests/whereparity.test.mts) and the MCP server's (app/src-tauri/src/mcp/whereused.rs, test whereused_parity) must give these results for the same input. No engine runs.",
+  "index": [
+    {
+      "iflow": "A",
+      "name": "Orders",
+      "file": "a",
+      "error": null,
+      "entries": [
+        {
+          "iflow": "A",
+          "element": "s",
+          "node": "s",
+          "name": null,
+          "type": "step",
+          "label": "Script",
+          "key": "address",
+          "value": "https://{{Host}}/{{Path}}",
+          "kind": "address"
+        },
+        {
+          "iflow": "A",
+          "element": "s",
+          "node": "s",
+          "name": null,
+          "type": "step",
+          "label": "Script",
+          "key": "address",
+          "value": "https://b",
+          "kind": "address"
+        },
+        {
+          "iflow": "A",
+          "element": "s",
+          "node": "s",
+          "name": null,
+          "type": "step",
+          "label": "Script",
+          "key": "credentialName",
+          "value": "CRED",
+          "kind": "credential"
+        },
+        {
+          "iflow": "A",
+          "element": "s",
+          "node": "s",
+          "name": null,
+          "type": "step",
+          "label": "Script",
+          "key": "note",
+          "value": "x",
+          "kind": null
+        },
+        {
+          "iflow": "A",
+          "element": "s",
+          "node": "s",
+          "name": null,
+          "type": "step",
+          "label": "Script",
+          "key": "propertyTable",
+          "value": "<row><cell id='Action'>Create</cell><cell id='Name'>dx4Auth</cell><cell id='Default'></cell></row><row><cell id=\"Name\">other</cell><cell id='Value'>{{Token &apos;Auth&apos;}} &amp;lt;</cell></row>",
+          "kind": null
+        }
+      ],
+      "parameters": [
+        {
+          "name": "Host",
+          "value": "a.example",
+          "type": null,
+          "required": null,
+          "description": null,
+          "uses": [],
+          "unused": false,
+          "unresolved": false
+        },
+        {
+          "name": "Path",
+          "value": null,
+          "type": null,
+          "required": null,
+          "description": null,
+          "uses": [],
+          "unused": false,
+          "unresolved": true
+        },
+        {
+          "name": "Token 'Auth'",
+          "value": "T1",
+          "type": null,
+          "required": null,
+          "description": null,
+          "uses": [],
+          "unused": false,
+          "unresolved": false
+        },
+        {
+          "name": "Input Parameter Name 'Auth Token'",
+          "value": "dx4Auth",
+          "type": null,
+          "required": null,
+          "description": null,
+          "uses": [],
+          "unused": true,
+          "unresolved": false
+        }
+      ]
+    },
+    {
+      "iflow": "B",
+      "name": "Orders",
+      "file": "b",
+      "error": null,
+      "entries": [
+        {
+          "iflow": "B",
+          "element": "s",
+          "node": "s",
+          "name": null,
+          "type": "step",
+          "label": "Script",
+          "key": "address",
+          "value": "https://{{Host}}/{{Path}}",
+          "kind": "address"
+        },
+        {
+          "iflow": "B",
+          "element": "s",
+          "node": "s",
+          "name": null,
+          "type": "step",
+          "label": "Script",
+          "key": "credentialName",
+          "value": "Zeta",
+          "kind": "credential"
+        },
+        {
+          "iflow": "B",
+          "element": "s",
+          "node": "s",
+          "name": null,
+          "type": "step",
+          "label": "Script",
+          "key": "credentialName",
+          "value": "alpha",
+          "kind": "credential"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "Host",
+          "value": "b.example",
+          "type": null,
+          "required": null,
+          "description": null,
+          "uses": [],
+          "unused": false,
+          "unresolved": false
+        },
+        {
+          "name": "DX4AUTH_FLAG",
+          "value": null,
+          "type": null,
+          "required": null,
+          "description": null,
+          "uses": [],
+          "unused": true,
+          "unresolved": true
+        }
+      ]
+    },
+    {
+      "iflow": "C",
+      "name": null,
+      "file": "c",
+      "error": null,
+      "entries": [
+        {
+          "iflow": "C",
+          "element": "s",
+          "node": "s",
+          "name": null,
+          "type": "step",
+          "label": "Script",
+          "key": "address",
+          "value": "https://{{Host}}/{{Path}}",
+          "kind": "address"
+        },
+        {
+          "iflow": "C",
+          "element": "s",
+          "node": "s",
+          "name": null,
+          "type": "step",
+          "label": "Script",
+          "key": "queueName",
+          "value": "",
+          "kind": "queue"
+        }
+      ],
+      "parameters": []
+    }
+  ],
+  "overview": [
+    {
+      "kind": "address",
+      "label": "Address",
+      "values": [
+        {
+          "value": "https://{{Host}}/{{Path}}",
+          "count": 3,
+          "resolved": [
+            "https://a.example/{{Path}}",
+            "https://b.example/{{Path}}"
+          ]
+        },
+        {
+          "value": "https://b",
+          "count": 1,
+          "resolved": []
+        }
+      ]
+    },
+    {
+      "kind": "credential",
+      "label": "Credential",
+      "values": [
+        {
+          "value": "alpha",
+          "count": 1,
+          "resolved": []
+        },
+        {
+          "value": "CRED",
+          "count": 1,
+          "resolved": []
+        },
+        {
+          "value": "Zeta",
+          "count": 1,
+          "resolved": []
+        }
+      ]
+    }
+  ],
+  "parameters": [
+    {
+      "query": " dx4auth ",
+      "expected": [
+        [
+          "A",
+          [
+            "Input Parameter Name 'Auth Token'"
+          ]
+        ],
+        [
+          "B",
+          [
+            "DX4AUTH_FLAG"
+          ]
+        ]
+      ]
+    },
+    {
+      "query": "example",
+      "expected": [
+        [
+          "A",
+          [
+            "Host"
+          ]
+        ],
+        [
+          "B",
+          [
+            "Host"
+          ]
+        ]
+      ]
+    },
+    {
+      "query": "",
+      "expected": []
+    }
+  ],
+  "resolve": [
+    {
+      "value": "https://{{Host}}/{{Path}}",
+      "params": {
+        "Host": "a.example"
+      },
+      "expected": "https://a.example/{{Path}}"
+    },
+    {
+      "value": "plain",
+      "params": {
+        "Host": "x"
+      },
+      "expected": null
+    },
+    {
+      "value": "{{ Host }} and {{{Host}}}",
+      "params": {
+        "Host": "h"
+      },
+      "expected": "h and {h}"
+    },
+    {
+      "value": "{{a{b}}",
+      "params": {
+        "a{b": "x"
+      },
+      "expected": null
+    },
+    {
+      "value": "<row><cell id='Value'>{{Token &apos;Auth&apos;}}</cell></row>",
+      "params": {
+        "Token 'Auth'": "T1"
+      },
+      "expected": "<row><cell id='Value'>T1</cell></row>"
+    },
+    {
+      "value": "{{Token &apos;Auth&apos;}}",
+      "params": {
+        "Token 'Auth'": "T1"
+      },
+      "expected": null
+    }
+  ],
+  "tables": [
+    {
+      "value": "<row><cell id='Action'>Create</cell><cell id='Name'>dx4Auth</cell><cell id='Default'></cell></row><row><cell id=\"Name\">other</cell><cell id='Value'>{{Token &apos;Auth&apos;}} &amp;lt;</cell></row>",
+      "query": "DX4auth",
+      "expected": {
+        "rows": [
+          [
+            {
+              "id": "Action",
+              "text": "Create"
+            },
+            {
+              "id": "Name",
+              "text": "dx4Auth"
+            }
+          ]
+        ],
+        "hidden": 1
+      }
+    },
+    {
+      "value": "<row><cell id='Action'>Create</cell><cell id='Name'>dx4Auth</cell><cell id='Default'></cell></row><row><cell id=\"Name\">other</cell><cell id='Value'>{{Token &apos;Auth&apos;}} &amp;lt;</cell></row>",
+      "query": "'Auth'",
+      "expected": {
+        "rows": [
+          [
+            {
+              "id": "Name",
+              "text": "other"
+            },
+            {
+              "id": "Value",
+              "text": "{{Token 'Auth'}} &lt;"
+            }
+          ]
+        ],
+        "hidden": 1
+      }
+    },
+    {
+      "value": "<row><cell id='Action'>Create</cell><cell id='Name'>dx4Auth</cell><cell id='Default'></cell></row><row><cell id=\"Name\">other</cell><cell id='Value'>{{Token &apos;Auth&apos;}} &amp;lt;</cell></row>",
+      "query": "propertyTable",
+      "expected": {
+        "rows": [
+          [
+            {
+              "id": "Action",
+              "text": "Create"
+            },
+            {
+              "id": "Name",
+              "text": "dx4Auth"
+            }
+          ],
+          [
+            {
+              "id": "Name",
+              "text": "other"
+            },
+            {
+              "id": "Value",
+              "text": "{{Token 'Auth'}} &lt;"
+            }
+          ]
+        ],
+        "hidden": 0
+      }
+    },
+    {
+      "value": "${property.dx4Auth}",
+      "query": "dx4Auth",
+      "expected": null
+    },
+    {
+      "value": "<row></row>",
+      "query": "",
+      "expected": {
+        "rows": [
+          []
+        ],
+        "hidden": 0
+      }
+    }
+  ]
+}

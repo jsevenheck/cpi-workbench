@@ -4,7 +4,8 @@
 //! runId and the reference come on top (`files.rs`, `runs.rs`, `reference.rs`). A wrong argument is an
 //! error message the model can act on.
 
-use super::{files, flow, reference, runs, Server};
+use super::{files, flow, reference, runs, whereused, Server};
+use std::collections::HashMap;
 use serde_json::{json, Map, Value};
 
 pub type Args = Map<String, Value>;
@@ -204,7 +205,7 @@ schemas/*.xsd, inputs/*.xml|json|csv, platform/*.json. Folders are created.")),
         ("query", json!({ "type": "string", "description": "A value to find (a host, credential alias, queue, file, {{parameter}} or any text; ignoring case), or a property key (address) to list it everywhere." })),
         ("kind", json!({ "type": "string", "enum": ["address", "credential", "queue", "key", "file", "parameter"], "description": "Only properties that hold this, where the key says so (address, credential, queue, key: a keystore alias), the files steps use, or values with {{parameters}}." })),
         ("iflow", json!({ "type": "string", "description": "Only this iFlow (its folder under iflows/, as project_info lists it)." })),
-        ("parameters", json!({ "type": "boolean", "default": false, "description": "Instead of a search: each iFlow's externalized parameters with their values from parameters.prop, where they are used, and which are unused or have no value." })),
+        ("parameters", json!({ "type": "boolean", "default": false, "description": "Only each iFlow's externalized parameters with their values from parameters.prop, where they are used, and which are unused or have no value." })),
     ]);
     let open = obj(vec![
         ("name", json!({ "type": "string", "description": "A folder directly inside the workspace, as project_info lists it under projects (one folder name, no path)." })),
@@ -266,7 +267,12 @@ CPI, per step type, and what is not." })),
              imported iFlows' steps; their files open with read_file and run with the tools above.",
             import, &["zip"], Effect::WritesProject),
         tool("iflow_where_used", "Where used in the imported iFlows",
-            "Searches the iFlows under iflows/ (read-only, nothing connects to a tenant): which adapters, steps and routes use a \n             value (a host, credential alias, queue, file or {{parameter}}), with the iFlow, element and property key of each \n             place. With parameters: true, lists each iFlow's externalized parameters, their values, uses, and those unused \n             or without a value. Give query, kind, or both; or parameters.",
+            "The Where used tab for the iFlows under iflows/ (read-only, nothing connects to a tenant). Without query or \
+             kind: an overview of the addresses, credentials, queues, key aliases and files they use, with the number of \
+             places and what {{parameters}} resolve to, and each iFlow's externalized parameters. With query and/or kind: \
+             which adapters, steps and routes use a value (iFlow, element, property key), a {{parameter}} resolved from \
+             parameters.prop, a Content Modifier table as its matching rows, and the parameters whose name or value \
+             contains the query. With parameters: true, only the parameters.",
             where_used, &[], Effect::ReadOnly),
         tool("reference", "Simulator reference",
             "What the simulator offers, generated from its sources: the Script API (script-api), the platform/ data formats \
@@ -594,29 +600,62 @@ fn project_info(server: &Server) -> Result<Value, String> {
     Ok(info)
 }
 
-/// `iflow.search`, or with `parameters` the parameters of `iflow.index` (IflowIndex.java, which the Where used tab calls too).
+/// The Where used tab: without query or kind its overview (what the iFlows use, and their parameters); with them
+/// `iflow.search`'s hits, each with its `{{parameters}}` resolved and a Content Modifier table's matching rows,
+/// plus the parameters whose name or value contains the query; with `parameters` only the parameters. All from
+/// `iflow.index` and `iflow.search` (IflowIndex.java), viewed as the tab does (whereused.rs).
 fn where_used(server: &Server, args: &Args) -> Result<Value, String> {
     require_project(server)?;
     let rt = file_runtime(server)?;
     let iflow = str_arg(args, "iflow");
-    if args.get("parameters").and_then(Value::as_bool) == Some(true) {
-        if args.contains_key("query") || args.contains_key("kind") {
-            return Err("parameters lists the parameters; give query or kind without it.".into());
-        }
-        let r = engine_call(server, rt, "iflow.index", json!({}))?;
-        let iflows: Vec<Value> = r["iflows"].as_array().cloned().unwrap_or_default().into_iter()
-            .filter(|i| iflow.is_none_or(|f| i["iflow"] == f))
-            .map(|i| json!({ "iflow": i["iflow"], "name": i["name"], "error": i["error"], "parameters": i["parameters"] }))
-            .collect();
-        return Ok(json!({ "iflows": iflows }));
+    let only_parameters = args.get("parameters").and_then(Value::as_bool) == Some(true);
+    if only_parameters && (args.contains_key("query") || args.contains_key("kind")) {
+        return Err("parameters lists the parameters; give query or kind without it.".into());
     }
-    let mut params = json!({});
-    for key in ["query", "kind", "iflow"] {
+    let index: Vec<Value> = engine_call(server, rt, "iflow.index", json!({}))?["iflows"].as_array().cloned().unwrap_or_default()
+        .into_iter().filter(|i| iflow.is_none_or(|f| i["iflow"] == f)).collect();
+    let parameters = |index: &[Value]| -> Vec<Value> { index.iter()
+        .map(|i| json!({ "iflow": i["iflow"], "name": i["name"], "error": i["error"], "parameters": i["parameters"] })).collect() };
+    if only_parameters {
+        return Ok(json!({ "iflows": parameters(&index) }));
+    }
+    let query = str_arg(args, "query").unwrap_or_default().trim();
+    let kind = str_arg(args, "kind");
+    if query.is_empty() && kind.is_none() {
+        return Ok(json!({ "uses": whereused::inventory(&index), "iflows": parameters(&index) }));
+    }
+    let mut params = json!({ "query": query });
+    for key in ["kind", "iflow"] {
         if let Some(v) = args.get(key) {
             params[key] = v.clone();
         }
     }
-    engine_call(server, rt, "iflow.search", params)
+    let mut r = engine_call(server, rt, "iflow.search", params)?;
+    let values: HashMap<String, HashMap<String, String>> = index.iter()
+        .map(|i| (i["iflow"].as_str().unwrap_or_default().to_string(), whereused::parameter_values(i))).collect();
+    let none = HashMap::new();
+    for h in r["hits"].as_array_mut().into_iter().flatten() {
+        let p = values.get(h["iflow"].as_str().unwrap_or_default()).unwrap_or(&none);
+        let value = h["value"].as_str().unwrap_or_default().to_string();
+        if let Some(mut t) = whereused::table_hit(&value, query) {
+            // The tab shows the matching rows as cells instead of the table's XML text.
+            for c in t["rows"].as_array_mut().into_iter().flatten().flat_map(|row| row.as_array_mut().into_iter().flatten()) {
+                if let Some(v) = whereused::resolve(c["text"].as_str().unwrap_or_default(), p) {
+                    c["resolved"] = json!(v);
+                }
+            }
+            h.as_object_mut().unwrap().remove("value");
+            h["rows"] = t["rows"].take();
+            h["hiddenRows"] = t["hidden"].take();
+        } else if let Some(v) = whereused::resolve(&value, p) {
+            h["resolved"] = json!(v);
+        }
+    }
+    // Parameters by name or value, unless the kind asks for another kind of setting (as the tab does).
+    if kind.is_none_or(|k| k == "parameter") {
+        r["parameters"] = json!(parameters(&whereused::matching_parameters(&index, query)));
+    }
+    Ok(r)
 }
 
 fn run_xslt(server: &Server, args: &Args) -> Result<Value, String> {

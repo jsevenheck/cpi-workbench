@@ -640,7 +640,21 @@ fn where_used_searches_the_imported_iflows() {
     assert_eq!(host["required"], true);
 
     assert!(c.err("iflow_where_used", json!({ "parameters": true, "query": "x" })).contains("parameters lists"));
-    assert!(c.err("iflow_where_used", json!({})).contains("query"));
+    // Without query or kind: the tab's overview, with each iFlow's parameters.
+    let o = c.ok("iflow_where_used", json!({}));
+    let queue = o["uses"].as_array().unwrap().iter().find(|g| g["kind"] == "queue").expect("queues");
+    assert_eq!(queue["values"][0], json!({ "value": "ORDERS_IN", "count": 2, "resolved": [] }), "{o}");
+    assert_eq!(o["iflows"].as_array().unwrap().len(), 3, "{o}");
+    // A {{parameter}} resolves from parameters.prop; a table hit is its matching rows; parameters match by name.
+    let sftp = c.ok("iflow_where_used", json!({ "query": "{{SftpHost}}" }));
+    assert!(sftp["hits"].as_array().unwrap().iter().any(|h| h["resolved"].as_str().is_some_and(|r| r.contains("sftp.partner.example.com"))), "{sftp}");
+    let auth = c.ok("iflow_where_used", json!({ "query": "Token" }));
+    let table = auth["hits"].as_array().unwrap().iter().find(|h| h.get("rows").is_some()).expect("a table hit");
+    assert!(table.get("value").is_none(), "{table}");
+    let cell = table["rows"][0].as_array().unwrap().iter().find(|c| c["text"].as_str().unwrap().contains("{{Token 'Auth'}}")).expect("the cell");
+    assert_eq!(cell["resolved"], "secret-token-alias", "{auth}");
+    assert_eq!(auth["parameters"][0]["parameters"][0]["name"], "Token 'Auth'", "{auth}");
+    assert!(c.ok("iflow_where_used", json!({ "query": "Token", "kind": "queue" })).get("parameters").is_none());
     let _ = std::fs::remove_dir_all(&dir);
 }
 

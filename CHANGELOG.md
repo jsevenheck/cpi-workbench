@@ -14,6 +14,11 @@ of its version.
 
 ### Changed
 
+- **MCP: Where used as in the app.** `iflow_where_used` without a query returns the tab's overview (what the
+  iFlows use, with counts, and their parameters); a search resolves `{{parameters}}` from `parameters.prop`, shows
+  a Content Modifier table as its matching rows and lists the parameters whose name or value contains the query.
+  The app's overview now sorts values of equal count ignoring case on every machine, rather than by the system
+  language, so that both give the same order.
 - **A missing file is named as such.** Reading a file that does not exist (a body, script or mapping by path, in
   the app and over MCP) said only its path; it now says `No such file: <path>`.
 - **MCP: every result message names its `runId`.** A Splitter's messages and each runtime of `runtime: both` carry

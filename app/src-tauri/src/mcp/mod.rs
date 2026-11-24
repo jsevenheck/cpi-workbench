@@ -59,10 +59,13 @@ Modifier, Filter, Router, Splitter, Gather, Converter, Encoder, Decoder and Mess
 Workbench app do.\n\
 How to work: call project_info first (files, iFlow steps with their configuration, runtimes). When it lists \
 projects (a workspace) and no project is open, ask the user which one, or open_project the one the task names \
-(create: true for a new integration). Read the input \
+(create: true for a new integration; import_iflow then imports a tenant export). iflow_diagram shows how a message \
+travels through an iFlow (steps in order, a Router's routes and conditions, adapters); iflow_where_used finds where \
+a host, credential, queue or {{parameter}} is used. Read the input \
 message, the iFlow's scripts and mappings with read_file; write the step and run it with run_xslt, run_groovy, \
 validate_xsd, evaluate_xpath or run_flow_step, passing the source inline (mapping, script, schema, step) until the \
-result is right. A run that produces a message returns a runId: pass it as messageFrom to the next step instead \
+result is right. To find how a step should be configured, run variants of it on the same input: a changed copy of \
+an iFlow step's config as run_flow_step's step, a changed script or mapping inline. A run that produces a message returns a runId: pass it as messageFrom to the next step instead \
 of copying the body (body, headers and properties flow on as in an iFlow; a Splitter's messages are runId/1, \
 runId/2, …; a Gather takes messagesFrom). Long bodies come back shortened; read_file with runId shows them whole, \
 save_file with contentFrom keeps one. Run on both runtimes (runtime: both) when the version matters. Show the user the result and, for flow steps, the configuration as they would enter \
@@ -101,7 +104,7 @@ fn get_prompt(params: &Value) -> Result<Value, (i64, String)> {
         text.push_str(&format!("Sample input: {i}\n"));
     }
     text.push_str("\nUse the CPI Workbench tools:\n\
-1. project_info: the project's files, the iFlow's steps and the installed runtimes.\n\
+1. project_info: the project's files, the iFlow's steps and the installed runtimes; iflow_diagram: the order of the steps.\n\
 2. read_file: the sample input and the files of the steps around the one to build.\n\
 3. Pick the step type CPI would use and write it. For scripts or mapping functions, check reference script-api.\n\
 4. Run it on the simulator with the sample input and fix it until the output is right; try an edge case too \

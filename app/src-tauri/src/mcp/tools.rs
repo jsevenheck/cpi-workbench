@@ -118,7 +118,7 @@ pub fn definitions() -> Vec<Value> {
         ("script", json!({ "type": "string", "description": "The script source, if it is not in a file." })),
         ("function", json!({ "type": "string", "default": "processData", "description": "The function the step calls (Script Function), \
 or a custom function of a Message Mapping script: f(String, MappingContext) (single values) or f(String[], Output, MappingContext) \
-(all values of a context: called once per context))." })),
+(all values of a context: called once per context). read_file on the script lists its functions." })),
         ("args", json!({ "type": "array", "description": "Message Mapping functions only: the String and String[] arguments in order \
 (Output and MappingContext are passed by the simulator). A String argument is a string; a String[] argument is a list of contexts, \
 e.g. [[\"A\", \"B\"], [\"C\"]], whose entries are strings, {\"suppress\": true} or {\"xsiNil\": true}. The result's mapping \
@@ -126,9 +126,11 @@ holds the returned value or the output queue in the same form." })),
     ]);
     message_properties(&mut groovy, true);
     groovy.insert("bodyType".into(), json!({ "type": "string", "enum": ["String", "byte[]", "InputStream"], "default": "String",
-        "description": "The Java type of the incoming body, as the Groovy tab's Body type." }));
+        "description": "The Java type of the incoming body, what message.getBody() without a class returns: String (default), \
+byte[] or InputStream." }));
     groovy.insert("runtime".into(), runtime(GROOVY_RUNTIMES, true, None,
-        "groovy-1.x (Script API v1) or groovy-2.x (v2). Default: from the script's imports (com.sap.it.script.v2.api → 2.x), else 1.x. both runs the two."));
+        "groovy-1.x (Script API v1) or groovy-2.x (v2). Default: from the script's imports (com.sap.it.script.v2.api → 2.x), else 1.x. both runs the two. \
+For an iFlow's script step, give the runtime project_info lists for it."));
 
     let mut xsd = obj(vec![
         ("schemaPath", json!({ "type": "string", "description": "Project-relative .xsd file. Use schemaPath or schema." })),
@@ -140,23 +142,24 @@ holds the returned value or the output queue in the same form." })),
 
     let mut xpath = obj(vec![
         ("expression", json!({ "type": "string", "description": "The XPath." })),
-        ("version", json!({ "type": "string", "enum": ["1.0", "3.1"], "default": "3.1" })),
+        ("version", json!({ "type": "string", "enum": ["1.0", "3.1"], "default": "3.1", "description": "The XPath version: 3.1 \
+(default) or 1.0, e.g. to check a Message Digest's filter, which is XPath 1.0." })),
         ("namespaces", ns.clone()),
     ]);
     message_properties(&mut xpath, false);
-    xpath.insert("runtime".into(), runtime(XSLT_RUNTIMES, false, Some("saxon-he-9.9"), "The XML engine."));
+    xpath.insert("runtime".into(), runtime(XSLT_RUNTIMES, false, Some("saxon-he-9.9"), "The Saxon version that evaluates it."));
 
     let mut step = obj(vec![
         ("iflowStep", json!({ "type": "string", "description": "Name or id of a step that project_info lists under iflowSteps. Use iflowStep or step." })),
         ("iflow", json!({ "type": "string", "description": "The iFlow of iflowStep, when several iFlows have a step with that name or id." })),
-        ("step", json!({ "type": "object", "description": "A step given directly (as edited in the Flow Steps tab): {\"type\": \"contentModifier\"|\"filter\"|\"router\"|\"splitter\"|\"gather\"|\"converter\"|\"encoder\"|\"decoder\"|\"messageDigest\", \"config\": {...}}, config shaped as project_info shows it for iFlow steps.",
+        ("step", json!({ "type": "object", "description": "A step given directly: {\"type\": \"contentModifier\"|\"filter\"|\"router\"|\"splitter\"|\"gather\"|\"converter\"|\"encoder\"|\"decoder\"|\"messageDigest\", \"config\": {...}}, config shaped as project_info shows it for iFlow steps. To try another configuration of an iFlow's step (how a Content Modifier or Router should be set up), copy its type and config from project_info, change it, and run it here with the same input.",
             "properties": {
                 "type": { "type": "string", "enum": ["contentModifier", "filter", "router", "splitter", "gather", "converter", "encoder", "decoder", "messageDigest"] },
-                "config": { "type": "object", "description": "The tab's settings for the type (keys left out take the tab's defaults). \
+                "config": { "type": "object", "description": "The step's settings (keys left out take the defaults of a new step). \
 contentModifier: {headers: [row], properties: [row], bodyType: \"constant\"|\"expression\", body}, row = {action: \"Create\"|\"Delete\", name, \
-type: \"constant\"|\"header\"|\"property\"|\"xpath\"|\"expression\", value, datatype (e.g. \"java.lang.String\"), default}. \
+type: \"constant\"|\"header\"|\"property\"|\"xpath\"|\"expression\", value, datatype (e.g. \"java.lang.String\"), default} (row keys left out are empty). \
 filter: {expression (XPath), valueType: \"string\"|\"integer\"|\"boolean\"|\"node\"|\"nodelist\"}. \
-router: {routes: [{name, expressionType: \"xml\"|\"nonxml\", condition, default: bool}], throwException: bool}. \
+router: {routes: [{name, expressionType: \"xml\" (condition is an XPath)|\"nonxml\" (condition is Camel Simple, e.g. ${header.SenderId} = 'ERP'), condition, default: bool}], throwException: bool}. \
 splitter: {splitter: \"general\"|\"iterating\", expressionType: \"xpath\"|\"lineBreak\"|\"token\", expression, grouping, streaming: bool}. \
 gather: {messageType: \"sameXml\"|\"differentXml\"|\"plainText\", algorithm: \"combine\"|\"combineAtXPath\"|\"concatenate\", sourceXPath, targetXPath}. \
 converter: {conversion: \"jsonToXml\"|\"xmlToJson\"|\"xmlToCsv\"|\"csvToXml\"; JSON/XML: useNamespaces, separator, \
@@ -223,9 +226,11 @@ CPI, per step type, and what is not." })),
 
     vec![
         tool("project_info", "Project, runtimes and iFlow steps",
-            "The open project: its files, the steps of the iFlows under iflows/ (with each flow step's configuration, and \
-             each script, XSLT and XML Validator step's file, function and runtime), and the installed runtimes. With a \
-             workspace, also its project folders (projects). Call this first.",
+            "The open project: its files, the steps of the iFlows under iflows/ and the installed runtimes. A flow step \
+             comes with its type and config (run_flow_step runs it by name, or a changed copy as step); a script, XSLT or \
+             XML Validator step with its file, function and runtime for run_groovy, run_xslt or validate_xsd \
+             (functionFound: false when its script does not declare the function). iflow_diagram shows the order of the \
+             steps. With a workspace, also its project folders (projects). Call this first.",
             Map::new(), &[], Effect::ReadOnly),
         tool("open_project", "Open or create a project in the workspace",
             "Only when the server was started with --workspace: opens one of the workspace's folders as the project the \
@@ -234,7 +239,8 @@ CPI, per step type, and what is not." })),
             open, &["name"], Effect::OpensProject),
         tool("read_file", "Read a project file",
             "Reads a file of the project (a file that is no text with binary: true): an input message, a mapping, a script, a schema, an iFlow's files or the \
-             platform/ data. Long files come in parts (startLine, maxLines).",
+             platform/ data. Long files come in parts (startLine, maxLines). A Groovy script also lists the functions it \
+             declares (functions, read from its text; nothing runs).",
             read, &[], Effect::ReadOnly),
         tool("run_xslt", "Run an XSLT mapping",
             "Runs an XSLT mapping like CPI's XSLT Mapping step: headers and properties are xsl:param values, the result \
@@ -256,12 +262,13 @@ CPI, per step type, and what is not." })),
             "Runs a Content Modifier, Filter, Router, General or Iterating Splitter, Gather, converter (JSON/XML/CSV), Encoder or Decoder \
              (Base64, GZIP, ZIP) or Message Digest step on a message, like the \
              Flow Steps tab, from an iFlow of the project or from a config given here. Returns the output message(s), or \
-             for a Router each route's result and the route taken. For an iFlow's script, XSLT or XML Validator step, \
+             for a Router each route's result and the route taken: its runId passes the input on unchanged, as the \
+             message goes to that route's first step. For an iFlow's script, XSLT or XML Validator step, \
              use run_groovy, run_xslt or validate_xsd with the step's file, function and profile from project_info.",
             step, &[], Effect::RunsCode),
         tool("save_file", "Save a file to the project",
             "Writes a file into the project (text, or bytes with contentBase64 or a binary run result), e.g. a mapping, script, schema, input message or platform/ data the user \
-             wants to keep; the app shows it after ↻ in its file tree. Save only what the user asked for. An existing file \
+             wants to keep; the desktop app shows it once its file tree is refreshed. Save only what the user asked for. An existing file \
              is replaced only with overwrite: true.",
             save, &["path"], Effect::WritesProject),
         tool("import_iflow", "Import an iFlow, Value Mapping or package",
@@ -281,9 +288,12 @@ CPI, per step type, and what is not." })),
         tool("iflow_diagram", "How an imported iFlow flows",
             "The Diagram tab as text (read-only): an imported iFlow's processes (the integration process, exception \
              subprocesses, local processes), each with its elements in flow order from the start event. A Router's \
-             routes are indented under it (depth) with their name and condition; where branches meet, the element is \
-             listed again (again: true); a Process Call names the local process it calls. Each element has its type as \
-             in the editor and its settings; adapters name their system, direction and settings. Use it to follow \
+             routes are indented under it (depth + 1): a route's first element carries route (name, condition, \
+             default), and the route's further elements follow it until the next element with a route at that depth. \
+             Where branches meet, the element is listed again (again: true); a Process Call names the local process it \
+             calls (calls). Each element has its type as in the editor and its settings as written in the iFlow \
+             ({{parameters}} unresolved; project_info's configs and iflow_where_used resolve them); adapters name \
+             their system, direction and settings. Use it to follow \
              a message through the iFlow, then run the steps in that order with run_flow_step, run_groovy, run_xslt and \
              validate_xsd, passing each result on with messageFrom.",
             diagram, &[], Effect::ReadOnly),

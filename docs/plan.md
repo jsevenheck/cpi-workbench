@@ -340,9 +340,6 @@ Remaining work:
 * Permanent regression coverage for receiver coordination and browser XML warning paths
   ([status](status.md#evidence-and-automated-coverage)).
 * Current Windows/macOS performance measurements (§5.3).
-* Release 0.6.0 (decided 2026-11-17), planned in [§10.6](#106-release-060): test cases become internal,
-  UI ⇄ MCP parity tests for Flow Steps, a fidelity indicator in the app, and an offline where-used and
-  parameter overview over imported iFlows.
 
 These are open tasks and verification gaps, not a release-date commitment.
 
@@ -519,7 +516,7 @@ Usage: [iFlow import](user-guide.md#iflow-import).
 
 ### 10.6 Release 0.6.0
 
-Decided with the owner on 2026-11-17, after a second review of other CPI tools. Work happens on the branch
+Released on 2026-11-19 ([changelog](../CHANGELOG.md)); this section keeps the plan's decisions. Decided with the owner on 2026-11-17, after a second review of other CPI tools. Work happens on the branch
 `feature/0.6.0` in the order below; each part is finished with its tests and docs before the next starts.
 Ideas from that review that were *not* taken: test cases for flow steps, an MCP `run_tests` tool (both
 would make test cases a user feature, see P1), transactional publication of whole packages, trace

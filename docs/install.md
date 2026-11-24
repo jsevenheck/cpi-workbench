@@ -120,6 +120,7 @@ See the [user guide](user-guide.md#command-line).
 ## First steps
 
 1. Start the app and open a folder as a project. A new folder gets the standard layout with **Init**.
+   **Import iFlow…** creates a new project from an exported iFlow instead.
 2. Without a project, **Examples…** loads a bundled mapping or script with its input.
    For examples with includes and platform data, download the repository and open
    [`examples/demo-project`](../examples/demo-project/README.md).

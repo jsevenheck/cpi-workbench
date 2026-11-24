@@ -16,9 +16,17 @@ inspect its output, diagnostics and logs—without deploying to a tenant.
 | XSD / XPath | XML Schema 1.0 validation, XPath 3.1 or 1.0, highlighted matches and XPath at cursor. |
 | Flow Steps | Content Modifier, Filter, Router, General / Iterating Splitter, Gather, JSON ↔ XML / XML ↔ CSV converters, Encoder / Decoder (Base64, GZIP, ZIP) and Message Digest. |
 
-The project workflow includes iFlow-zip import, runtime comparison, Groovy migration hints,
-file-based CLI tests and a built-in [MCP server](docs/mcp.md) for coding agents. CPI Helper can hand
-traced messages over by pasted links, browser-mode links or an opt-in desktop receiver with confirmation.
+Around the steps:
+
+- **iFlow import**: exported iFlows, Value Mappings and integration packages, into an open project or a new one.
+  Each iFlow's steps open in their tabs with their settings and `{{parameters}}`.
+- **Diagram and Where used**: an imported iFlow drawn from its export's layout, and an offline overview of the
+  hosts, credentials, queues, files and parameters the iFlows use, with a search across all of them.
+- **Checks while you work**: runtime comparison (Saxon 9.9 vs 12), run history, Groovy migration hints and a
+  fidelity indicator per step.
+- **Automation**: file-based CLI tests and a built-in [MCP server](docs/mcp.md) for coding agents.
+- **CPI Helper**: traced messages arrive by pasted links, browser-mode links or an opt-in desktop receiver with
+  confirmation.
 
 Behaviour follows SAP's documentation, published interfaces and Saxon's/Camel's behaviour, with
 selected probes checked on one tenant. [Fidelity](docs/fidelity.md) lists the evidence, assumptions
@@ -30,6 +38,12 @@ Java calls are **not sandboxed**: run code you trust ([access rules](docs/user-g
 
 ![XSLT view](docs/images/screenshot-xslt.png)
 
+| Groovy Script | Flow Steps |
+|---|---|
+| ![Groovy view](docs/images/screenshot-groovy.png) | ![Flow Steps view](docs/images/screenshot-flow-steps.png) |
+| **Diagram** of an imported iFlow | **Where used** overview |
+| ![Diagram view](docs/images/screenshot-diagram.png) | ![Where used view](docs/images/screenshot-where-used.png) |
+
 ## Install and start
 
 Download a Windows x64 or macOS Apple Silicon installer from the
@@ -37,7 +51,7 @@ Download a Windows x64 or macOS Apple Silicon installer from the
 engines and Java runtime. Installers are unsigned; [Installing](docs/install.md) explains first-start
 warnings, managed-device restrictions and CLI/Linux alternatives.
 
-1. Open a project folder and press **Init**, or open [`examples/demo-project`](examples/demo-project/README.md).
+1. Open a project folder and press **Init**, use **Import iFlow…** for an exported iFlow, or open [`examples/demo-project`](examples/demo-project/README.md).
 2. Open a mapping or script, enter the input and press **Ctrl+Enter**.
 
 The [user guide](docs/user-guide.md) covers the tabs, CPI Helper, CLI and browser mode.

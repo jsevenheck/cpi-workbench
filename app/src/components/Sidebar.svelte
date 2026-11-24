@@ -3,10 +3,11 @@
   const LABEL: Record<string, string> = { mmap: 'Message Mapping', converter: 'Converter', contentModifier: 'Content Modifier', filter: 'Filter', router: 'Router', splitter: 'Splitter', gather: 'Gather', encoder: 'Encoder', decoder: 'Decoder', messageDigest: 'Message Digest' };
   import { adapters, outline, typeLabel, type IflowModel } from '../lib/iflowmodel';
   import { EXAMPLES } from '../lib/examples';
+  import { iflowLabels } from '../lib/whereused';
   import { shownInTree } from '../lib/paths';
-  import { isDesktop, pickFolder, pickZip } from '../lib/engine';
+  import { isDesktop, pickFolder, pickNewFolder, pickZip } from '../lib/engine';
   import { app, open, closeProject, openFile, mayDiscard, freePath, refreshFiles, writeNewFile, ask, xslt, xsd, groovy, SAMPLE_GROOVY_V1, SAMPLE_GROOVY_V2,
-    importIflow, loadExample, openIflowStep, loadIflowSteps, iflowStepFor, selectIflowNode, deleteFile, copyFile, useAsInput, fileView } from '../lib/store.svelte';
+    importIflow, importIntoNewProject, loadExample, openIflowStep, loadIflowSteps, iflowStepFor, selectIflowNode, deleteFile, copyFile, useAsInput, fileView } from '../lib/store.svelte';
 
   /** The iFlows folded in the list, by file. */
   let foldedIflows = $state(new Set<string>());
@@ -50,7 +51,13 @@
   async function importZip() {
     try {
       const zip = isDesktop ? await pickZip() : (await ask('Path of the exported iFlow, Value Mapping or package (.zip)', ''))?.value;
-      if (zip) await importIflow(zip);
+      if (!zip) return;
+      if (app.project) return await importIflow(zip);
+      // Without a project the import starts a new one, in a folder named after the export by default.
+      const name = zip.split(/[\\/]/).pop()!.replace(/\.zip$/i, '');
+      const dir = isDesktop ? await pickNewFolder(name)
+        : (await ask('New project folder for the import (it must not exist yet)', zip.replace(/\.zip$/i, '')))?.value;
+      if (dir) await importIntoNewProject(zip, dir);
     } catch (e) {
       app.error = (e as Error).message;
     }
@@ -82,6 +89,7 @@
     }
   }
 
+  let iflowNames = $derived(iflowLabels(app.iflowModels));
   let files = $derived((app.project?.files ?? []).filter((f) => !f.dir && shownInTree(f.path)
     && (!filter || f.path.toLowerCase().includes(filter.toLowerCase()))));
   let groups = $derived.by(() => {
@@ -126,11 +134,12 @@
       </div>
       <input class="filter" placeholder="Filter files" bind:value={filter} aria-label="Filter files" />
     {:else}
-      <p class="muted">Open a project folder (e.g. an exported iFlow's <code>src/main/resources</code> or your own mapping repo).</p>
+      <p class="muted">Open a project folder (e.g. an exported iFlow's <code>src/main/resources</code> or your own mapping repo), or import an exported iFlow into a new one.</p>
       {#if !isDesktop}
         <input class="mono" placeholder="/path/to/project" bind:value={dirInput} onkeydown={(e) => e.key === 'Enter' && openDialog()} aria-label="Project folder" />
       {/if}
       <button class="primary" onclick={openDialog}>{isDesktop ? 'Open folder…' : 'Open'}</button>
+      <button onclick={importZip} title="Import an iFlow, a Value Mapping or a whole integration package exported from Integration Suite (zip) into a new project folder">Import iFlow…</button>
       <p class="muted small">Without a project you can still try mappings in the editor, or load an example:</p>
       <select class="examples" aria-label="Examples" value="" onchange={(e) => { const t = e.currentTarget; void loadExample(t.value); t.value = ''; }}>
         <option value="" disabled>Examples…</option>
@@ -144,7 +153,7 @@
       {#if app.iflowModels.length}
         {#each app.iflowModels as m (m.file)}
           <button class="iflow-head" onclick={() => toggleIflow(m.file)} title={m.file} aria-expanded={!foldedIflows.has(m.file)}>
-            {foldedIflows.has(m.file) ? '▸' : '▾'} {m.name ?? m.iflow}</button>
+            {foldedIflows.has(m.file) ? '▸' : '▾'} {iflowNames.get(m.iflow)}</button>
           {#if !foldedIflows.has(m.file)}
             {#if m.error}
               <div class="node err" title={m.error}>{m.error}</div>

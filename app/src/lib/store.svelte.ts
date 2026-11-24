@@ -37,9 +37,8 @@ export const app = $state({
   iflowSelected: null as { iflow: string; id: string | null } | null,
 });
 
-/** The Where used tab: a search over the imported iFlows and their parameters (engine `iflow.search`, `iflow.index`). */
+/** The Where used tab: an overview of the imported iFlows (engine `iflow.index`) and a search (`iflow.search`). */
 export const whereUsed = $state({
-  view: 'search' as 'search' | 'parameters',
   query: '',
   kind: '',
   /** Only this iFlow; empty: all. */
@@ -77,7 +76,7 @@ export async function searchIflows() {
   }
 }
 
-/** The parameters of the imported iFlows, for the Where used tab's Parameters view. */
+/** What the imported iFlows use and their parameters, for the Where used tab's overview. */
 export async function loadIflowIndex() {
   if (!app.project) return;
   const seq = ++indexSeq;
@@ -93,7 +92,6 @@ export async function loadIflowIndex() {
 
 /** Opens the Where used tab searching for a value (from the diagram's details). */
 export function showWhereUsed(query: string, iflow = '') {
-  whereUsed.view = 'search';
   whereUsed.query = query;
   whereUsed.kind = '';
   whereUsed.iflow = iflow;
@@ -710,7 +708,7 @@ function platformOverride(): Record<string, unknown> | undefined {
 
 let projectChanging = false;
 
-export async function open(dir: string, initProject = false) {
+export async function open(dir: string, initProject = false, create = false) {
   app.error = '';
   // The opened project's platform files take the tables' place. Unsaved rows typed without a project, or for
   // another project, would otherwise go into this project's runs and, on Save, into its files.
@@ -723,7 +721,7 @@ export async function open(dir: string, initProject = false) {
   projectChanging = true;
   let r;
   try {
-    r = await openProject(dir, initProject);
+    r = await openProject(dir, initProject, create);
     app.project = { root: r.root, files: r.files };
   } finally {
     projectChanging = false;
@@ -774,7 +772,7 @@ export async function closeProject() {
 function resetWhereUsed() {
   whereUsedSeq++;
   indexSeq++;
-  Object.assign(whereUsed, { view: 'search', query: '', kind: '', iflow: '', hits: [], searched: '', index: [], error: '' });
+  Object.assign(whereUsed, { query: '', kind: '', iflow: '', hits: [], searched: '', index: [], error: '' });
 }
 
 export async function refreshFiles() {
@@ -819,6 +817,12 @@ export function iflowStepFor(iflow: string, id: string): IflowStep | undefined {
 export function selectIflowNode(iflow: string, id: string | null, show = false) {
   app.iflowSelected = { iflow, id };
   if (show) app.tool = 'diagram';
+}
+
+/** Creates `dir` as a new project and imports the export into it. A failed import leaves the new project open. */
+export async function importIntoNewProject(zip: string, dir: string) {
+  await open(dir, true, true);
+  if (app.project?.root) await importIflow(zip);
 }
 
 /** Imports an exported iFlow, Value Mapping or integration package (the engine tells them apart). */

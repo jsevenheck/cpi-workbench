@@ -30,3 +30,59 @@ test('a diagram value is searched whole, a cut one up to the cut, a skipped key 
   assert.equal(whereUsedQuery('componentNS', 'sap'), null);
   assert.equal(whereUsedQuery('address', ''), null);
 });
+
+test('the overview counts each distinct value per kind, most used first, and leaves out unclassified settings', async () => {
+  const { inventory } = await import('../src/lib/whereused.ts');
+  const e = (kind: string | null, value: string): IndexEntry => ({ ...hit('A', 's', 'k', value), kind });
+  const index = [
+    { iflow: 'A', name: null, file: 'a', error: null, parameters: [], entries: [e('address', 'https://b'), e('address', 'https://a'), e(null, 'x'), e('credential', 'CRED')] },
+    { iflow: 'B', name: null, file: 'b', error: null, parameters: [], entries: [e('address', 'https://a'), e('queue', '')] },
+  ];
+  assert.deepEqual(inventory(index), [
+    { kind: 'address', label: 'Address', values: [{ value: 'https://a', count: 2, resolved: [] }, { value: 'https://b', count: 1, resolved: [] }] },
+    { kind: 'credential', label: 'Credential', values: [{ value: 'CRED', count: 1, resolved: [] }] },
+  ]);
+});
+
+test('parameters resolve per iFlow, and shared iFlow names get their folder', async () => {
+  const { inventory, resolveParameters, iflowLabels } = await import('../src/lib/whereused.ts');
+  const p = (name: string, value: string | null) => ({ name, value, type: null, required: null, description: null, uses: [], unused: false, unresolved: value == null });
+  const e: IndexEntry = { ...hit('A', 's', 'address', 'https://{{Host}}/{{Path}}'), kind: 'address' };
+  const index = [
+    { iflow: 'A', name: 'X', file: 'a', error: null, entries: [e], parameters: [p('Host', 'a.example'), p('Path', null)] },
+    { iflow: 'B', name: 'X', file: 'b', error: null, entries: [{ ...e, iflow: 'B' }], parameters: [p('Host', 'b.example')] },
+    { iflow: 'C', name: null, file: 'c', error: null, entries: [{ ...e, iflow: 'C' }], parameters: [] },
+  ];
+  assert.deepEqual(inventory(index)[0].values, [{ value: 'https://{{Host}}/{{Path}}', count: 3,
+    resolved: ['https://a.example/{{Path}}', 'https://b.example/{{Path}}'] }]);
+  assert.equal(resolveParameters('plain', new Map([['Host', 'x']])), null);
+  // In a table the export escapes the name once more; elsewhere an entity is part of the name.
+  const quoted = new Map([["Token 'Auth'", 'T1']]);
+  assert.equal(resolveParameters("<row><cell id='Value'>{{Token &apos;Auth&apos;}}</cell></row>", quoted), "<row><cell id='Value'>T1</cell></row>");
+  assert.equal(resolveParameters('{{Token &apos;Auth&apos;}}', quoted), null);
+  assert.deepEqual([...iflowLabels([{ iflow: 'A', name: 'X' }, { iflow: 'B', name: 'X' }, { iflow: 'C', name: null }, { iflow: 'D', name: 'Y' }])],
+    [['A', 'X · A'], ['B', 'X · B'], ['C', 'C'], ['D', 'Y']]);
+});
+
+test('a search finds parameters by name or value, ignoring case', async () => {
+  const { matchingParameters } = await import('../src/lib/whereused.ts');
+  const p = (name: string, value: string | null) => ({ name, value, type: null, required: null, description: null, uses: [], unused: true, unresolved: false });
+  const index = [
+    { iflow: 'A', name: null, file: 'a', error: null, entries: [], parameters: [p("Input Parameter Name 'Auth Token'", 'dx4Auth'), p('Host', 'x')] },
+    { iflow: 'B', name: null, file: 'b', error: null, entries: [], parameters: [p('DX4AUTH_FLAG', null)] },
+    { iflow: 'C', name: null, file: 'c', error: null, entries: [], parameters: [p('Other', 'y')] },
+  ];
+  assert.deepEqual(matchingParameters(index, ' dx4auth ').map((i) => [i.iflow, i.parameters.map((x) => x.name)]),
+    [['A', ["Input Parameter Name 'Auth Token'"]], ['B', ['DX4AUTH_FLAG']]]);
+  assert.deepEqual(matchingParameters(index, ''), []);
+});
+
+test('a table hit shows only the rows that contain the query, decoded', async () => {
+  const { tableHit } = await import('../src/lib/whereused.ts');
+  const t = "<row><cell id='Action'>Create</cell><cell id='Name'>dx4Auth</cell><cell id='Default'></cell></row>"
+    + "<row><cell id='Name'>other</cell><cell id='Value'>{{Input &apos;Auth&apos;}}</cell></row>";
+  assert.deepEqual(tableHit(t, 'DX4auth'), { rows: [[{ id: 'Action', text: 'Create' }, { id: 'Name', text: 'dx4Auth' }]], hidden: 1 });
+  assert.deepEqual(tableHit(t, "'Auth'")?.rows, [[{ id: 'Name', text: 'other' }, { id: 'Value', text: "{{Input 'Auth'}}" }]]);
+  assert.equal(tableHit(t, 'propertyTable')?.rows.length, 2, 'a hit by key name shows the whole table');
+  assert.equal(tableHit('${property.dx4Auth}', 'dx4Auth'), null);
+});

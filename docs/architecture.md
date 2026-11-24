@@ -39,7 +39,8 @@ need an `X-Cpiwb` header, which forces a CORS preflight, and the origin's host i
 A request whose `Host` header does not name this machine, or whose `Origin` is not local, gets 403:
 after DNS rebinding a foreign page is same-origin for the browser and no preflight happens, but its
 requests still carry the foreign host name. The browser UI uses `/project/rpc`: every request carries
-`projectRoot` (the absolute directory returned by `project.open`, or `null` without a project). Each call
+`projectRoot` (the absolute directory returned by `project.open`, or `null` without a project; with `create`,
+`project.open` first makes the folder and refuses one that exists). Each call
 gets its own project context, so one tab's Open or Close does not alter another's. An unavailable root
 fails rather than falling back. The desktop shell wraps the same scoped request in `project.request`
 when sending it over stdio; plain stdio (used by MCP's worker calls) and the legacy local `/rpc`

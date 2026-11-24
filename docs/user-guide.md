@@ -4,7 +4,7 @@
 
 Download the installer for your platform from the
 [latest release](https://github.com/jsevenheck/cpi-workbench/releases/latest) (see
-[Installing](install.md)), install it and open a project folder. Any folder works; **Init** adds `mappings/`, `schemas/`,
+[Installing](install.md)), install it and open a project folder, or import an exported iFlow into a new one. Any folder works; **Init** adds `mappings/`, `schemas/`,
 `scripts/` and example files in `platform/` ([Project files](project-files.md)).
 
 Without a project, **Examples…** in the sidebar loads a mapping or script of the demo project with its input
@@ -31,6 +31,8 @@ come with the app; **Save** asks where to keep them, once a project is open. As 
   the open file's own path saves it without asking. Opening another
   file asks before dropping unsaved changes (the dot after the file name). You can keep typing during
   a save; edits made after the write started keep the dot until you save them too.
+* The editors are Monaco's: right-click in an editor for its context menu, **F1** for its command palette,
+  **Ctrl+G** to go to a line; sticky scroll keeps the enclosing elements or blocks at the top while scrolling.
 * Right-click a file in the tree to open, rename, copy or delete it, or to copy its path.
 * The **×** next to a file name closes that file; the file on disk stays as it is. It asks first when there
   are unsaved changes. In the mapping, script and schema panes it leaves an empty editor without a path, so
@@ -154,8 +156,12 @@ come with the app; **Save** asks where to keep them, once a project is open. As 
   an installed XML engine (Saxon-HE 9.9 by default, otherwise 12). See [Fidelity](fidelity.md#flow-steps-content-modifier-filter-router-splitter-gather-converter).
 ### iFlow import
 
-* **Import iFlow** unpacks an iFlow exported from Integration Suite (zip) into `iflows/` and lists
-  its steps. A folder that differs from one already there only in letter case or trailing dots is
+* **Without a project**, **Import iFlow…** on the start screen starts one from an export: it asks for the zip, then
+  for a new project folder (named after the zip by default). The app creates that folder with the standard layout
+  (as **Init** does) and imports into it. A folder that exists already is refused, so an existing one is never
+  initialized by mistake. If the import fails, the new project stays open for another try.
+* **Import iFlow** unpacks an iFlow exported from Integration Suite (zip) into `iflows/` of the open project and
+  lists its steps. A folder that differs from one already there only in letter case or trailing dots is
   refused, since Windows takes both for one folder. A Groovy Script or XSLT Mapping step opens its file with the step's function name and
   script version; a flow step opens in Flow Steps with its settings, with `{{parameters}}` from the
   iFlow's `parameters.prop`; the line *From <iFlow> · <step>* above its settings says where they came from, and
@@ -181,22 +187,35 @@ come with the app; **Save** asks where to keep them, once a project is open. As 
   order. A Router's routes are indented under it with their conditions, the default marked; where routes
   meet, the step is listed again with ↪; elements no flow reaches come last. A step a tab can run opens
   there, as before; any other element opens in the **Diagram** tab with its settings (read-only).
+* iFlows that share a name (a copied iFlow keeps its name) are told apart by their folder, here, in the
+  Diagram's iFlow picker and in Where used: *DoxisRESTLoginFlow · CopyDoxisObject*.
 * **Diagram** (shown once iFlows are imported) draws an iFlow in the layout its export stores, without
   SAP's icons: pools, steps, Routers, events, adapters and exception subprocesses. Scroll to zoom, drag to
   move, **Fit** shows all of it. A click shows an element's type and settings (for a sender or receiver,
   also its adapters' settings); a step that runs in the
   app (blue outline) opens with a double-click or **Open in …**. Nothing in the diagram can be changed.
   The ⌕ next to a setting searches for its value in **Where used**.
-* **Where used** (next to Diagram) searches all imported iFlows offline. Type a host, a credential or key
-  alias, a queue, a script file, a `{{parameter}}` or any value: it lists every step, adapter and Router
-  route whose settings contain it, grouped by iFlow; a key name (`address`) finds that setting everywhere.
-  **Kind** narrows to addresses, credentials, queues, key aliases, files or parameters, where the adapter's
-  setting says what it holds (from public exports; other settings are searched as plain values). Settings
-  are searched as the export writes them: a setting that holds `{{SftpHost}}` is found by `SftpHost`, not by
-  the host in `parameters.prop`. A click
-  shows the element in the diagram; a script or mapping opens in its tab. **Parameters** lists each iFlow's
-  externalized parameters with value, type and description (`parameters.prop`, `parameters.propdef`), where
-  they are used, and marks those that are *unused* or have *no value*.
+* **Where used** (next to Diagram) works offline over all imported iFlows.
+  * **Overview** (empty search): the addresses, credentials, queues, key aliases and files the iFlows' settings
+    hold, each with the number of places that use it; a click searches for that value. Files are folded and listed
+    by name (the path is the tooltip). Below, **Parameters** lists each iFlow's externalized parameters with value,
+    type and description (`parameters.prop`, `parameters.propdef`), where they are used, and marks those that are
+    *unused* or have *no value*. **← Overview** leaves a search; the iFlow picker narrows both views.
+  * **Search**: type a host, a credential or key alias, a queue, a script file, a `{{parameter}}` or any value; it
+    lists every step, adapter and Router route whose settings contain it, grouped by iFlow. A key name (`address`)
+    finds that setting everywhere. **Kind** narrows to addresses, credentials, queues, key aliases, files or
+    parameters, where the adapter's setting says what it holds (from public exports; other settings are searched
+    as plain values). A receiver adapter's hit names the step that calls it (*SuccessFactors receiver from Get
+    Employee*). A hit in a Content Modifier's header or property table shows only the rows that contain the search,
+    as their cells (*Action*, *Type*, *Name*, *Value*). A click shows the element in the diagram; a script or mapping
+    opens in its tab. Above the hits,
+    **Parameters** lists the parameters whose name or value contains the search (`dx4Auth` finds the parameter
+    whose value it is), with their uses.
+  * Settings are searched as the export writes them: a setting that holds `{{SftpHost}}` is found by `SftpHost`,
+    not by the host. Next to such a value, **→** shows what `parameters.prop` resolves it to (in the overview,
+    *→ 2 values* when iFlows resolve it differently). A parameter used in a Content Modifier table counts as the
+    same parameter, also when its name has a quote.
+
 ### Groovy completions and Message Mapping functions
 
 * **Completions** in Groovy scripts: after `message.` (or a variable declared as `Message`),

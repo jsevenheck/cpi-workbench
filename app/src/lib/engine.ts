@@ -114,9 +114,9 @@ export function flowEngineCall() {
   return (method: string, params: unknown, profile: Profile) => callInProject(method, params, profile, root);
 }
 
-export async function openProject(dir: string, init = false): Promise<any> {
+export async function openProject(dir: string, init = false, create = false): Promise<any> {
   const target = isDesktop ? fileProfile : (webProfile ?? DEFAULT_PROFILE);
-  const r = await rawCall(target, 'project.open', { dir, init }, null);
+  const r = await rawCall(target, 'project.open', { dir, init, create }, null);
   projectDir = r.root;
   return r;
 }
@@ -170,6 +170,14 @@ export async function pickFolder(): Promise<string | null> {
   if (!isDesktop) return null;
   const { open } = await import('@tauri-apps/plugin-dialog');
   const dir = await open({ directory: true, multiple: false, title: 'Open project folder' });
+  return typeof dir === 'string' ? dir : null;
+}
+
+/** Asks where a new project folder goes; the engine creates it (and refuses one that exists). */
+export async function pickNewFolder(name: string): Promise<string | null> {
+  if (!isDesktop) return null;
+  const { save } = await import('@tauri-apps/plugin-dialog');
+  const dir = await save({ title: 'Create a project folder for the import', defaultPath: name });
   return typeof dir === 'string' ? dir : null;
 }
 

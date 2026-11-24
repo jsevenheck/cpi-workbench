@@ -55,6 +55,7 @@ Opening Groovy scripts/cases waits for **Run** or **Ctrl+Enter** before the firs
 | 2.3 | **Compare** | Runs on Saxon-HE 9.9 and 12 and lists the differences, or none. |
 | 2.4 | Type an error into the mapping | The error is marked at its line; nothing crashes. |
 | 2.5 | **Format** | Re-indents; the output stays the same. |
+| 2.5a | Right-click in the mapping editor; press **F1**; open a JSON input and then another mapping | Monaco's context menu and command palette open; the editors offer the same features before and after the JSON file. |
 
 ### Groovy
 
@@ -124,10 +125,12 @@ The first run starts the Java engines and can take a few seconds.
 
 | # | Step | Expected |
 |---|---|---|
+| 3.0 | Close the project; on the start screen **Import iFlow…** with the ZIP from section 0, then a new folder name; repeat with the same name | A new project opens with `mappings/`, `platform/`, `cpi-workbench.json` and the iFlow under `iflows/`; its steps are listed. The second time the folder is refused (*exists already*) and no project opens. |
 | 3.1 | **Import iFlow** with the ZIP from section 0 | Unpacked into `iflows/`; lists the Groovy, XSLT, XML Validator, Content Modifier, Filter, Router, Splitter, Gather, Message Mapping (**M**) and converter (**T**) steps. |
 | 3.1b | **Import iFlow** with an exported Value Mapping, then with an exported integration package that has an iFlow using a script collection | The status names the value mapping rows; *Platform* → *Value Mappings* shows both directions. The package's iFlows and collections are under `iflows/`, other types are named as skipped, and the collection's script opens from the iFlow's Groovy step. |
 | 3.1c | After 3.1: the list under **iFlows**, then click *Write to data store*; in **Diagram**, double-click *Enrich order* | The list shows the HTTPS and SOAP adapters, the Router's routes *Other (default)* and *ERP* with its condition, the exception subprocess and the local process *Archive order*. *Write to data store* opens the Diagram tab with its settings (`storageName`); the double-click opens `enrich.groovy`. |
-| 3.1d | After 3.1: **Where used**, type `s4.example`; click *S4*; back in **Where used**, *Parameters* | One hit, the SOAP receiver's `address` with the match highlighted; the click selects *S4* in the Diagram, whose details show the SOAP adapter's settings. *Parameters* lists `GroupSize`, `LogLevel` and `RootName` with values and the steps that use them. |
+| 3.1d | After 3.1: **Where used**; click `https://s4.example.com/orders`; click *S4*; back in **Where used**, **← Overview** | The overview lists the addresses and (folded) files, and under *Parameters* `GroupSize`, `LogLevel` and `RootName` with values and the steps that use them. The click searches the address as *Address*: one hit, the SOAP receiver's `address` (*SOAP receiver from …*) with the match highlighted; *S4* selects it in the Diagram, whose details show the SOAP adapter's settings. **← Overview** shows the overview again; a search for `Orders` lists the parameter `RootName` (its value). |
+| 3.1e | Optional: import the ZIP from section 0 a second time under another folder name | The Diagram's iFlow picker, the iFlow list and Where used show both as *Order_Replication · <folder>*. |
 | 3.2 | Click a Groovy or XSLT step | The file opens with the step's function name and script version. |
 | 3.3 | Click the Content Modifier, Filter, Gather and *JSON to XML* | They open in Flow Steps with their settings; `{{parameters}}` come from `parameters.prop` (the converter's root element `Orders`). The **×** after *From …* gives the step its empty starting settings back; the other steps keep theirs. |
 | 3.3a | Click *Map order* (**M**) | Its script `lookup.gsh` opens with the mapping function `getHeader`. |

@@ -3,13 +3,14 @@
   // opens there (double-click, or Open in the details); the others show their settings.
   import { untrack } from 'svelte';
   import { app, iflowStepFor, openIflowStep, selectIflowNode, showWhereUsed } from '../lib/store.svelte';
-  import { SKIPPED_KEYS, whereUsedQuery } from '../lib/whereused';
+  import { SKIPPED_KEYS, iflowLabels, whereUsedQuery } from '../lib/whereused';
   import { extent, flowPath, shapeOf, typeLabel, type Box, type IflowModel, type IflowNode } from '../lib/iflowmodel';
 
   const TAB: Record<string, string> = { groovy: 'Groovy Script', xslt: 'XSLT Mapping', xsd: 'XSD Validation', mmap: 'Groovy Script' };
 
   let model = $derived<IflowModel | undefined>(
     app.iflowModels.find((m) => m.iflow === app.iflowSelected?.iflow) ?? app.iflowModels[0]);
+  let labels = $derived(iflowLabels(app.iflowModels));
   let nodes = $derived(new Map((model?.nodes ?? []).map((n) => [n.id, n])));
   let selected = $derived(app.iflowSelected?.id && app.iflowSelected.iflow === model?.iflow ? nodes.get(app.iflowSelected.id) : undefined);
   let full = $derived(model ? extent(model) : null);
@@ -156,7 +157,7 @@
   <header class="bar">
     {#if app.iflowModels.length > 1}
       <select aria-label="iFlow" value={model?.iflow} onchange={(e) => selectIflowNode(e.currentTarget.value, null)}>
-        {#each app.iflowModels as m}<option value={m.iflow}>{m.name ?? m.iflow}</option>{/each}
+        {#each app.iflowModels as m}<option value={m.iflow}>{labels.get(m.iflow)}</option>{/each}
       </select>
     {:else if model}
       <b>{model.name ?? model.iflow}</b>

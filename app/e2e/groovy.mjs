@@ -280,8 +280,28 @@ if (process.env.CPIWB_IFLOW_ZIP) {
   await page.locator('.diagram [data-node="CallActivity_1"]').dblclick();
   await page.locator('section.script h2', { hasText: 'enrich.groovy' }).waitFor({ timeout: 10000 })
     .catch(() => fail('a double-click in the diagram did not open the Groovy step'));
-  // 4b3) Where used: a value finds its adapter, a click shows it in the diagram; Parameters lists {{…}} uses.
+  // 4b3) Where used: the overview lists what the iFlow uses and its {{…}} parameters; a value finds its adapter,
+  // a click shows it in the diagram.
   await page.getByRole('tab', { name: 'Where used', exact: true }).click();
+  const params = page.locator('.wu table.params');
+  await params.waitFor({ timeout: 10000 }).catch(() => fail('no parameter table in the overview'));
+  if (!(await params.innerText()).includes('GroupSize')) fail('parameters: ' + (await params.innerText()));
+  const address = page.locator('.wu .kind-group', { hasText: 'Address' }).getByRole('button', { name: /s4\.example/ });
+  await address.first().waitFor({ timeout: 5000 }).catch(() => fail('the overview lists no s4.example address'));
+  if (shots) await page.screenshot({ path: path.join(shots, 'g5c-whereused.png') });
+  await address.first().click();
+  if ((await page.getByLabel('Kind').inputValue()) !== 'address') fail('a value of the overview was not searched as its kind');
+  await page.getByRole('button', { name: '← Overview' }).click();
+  await params.waitFor({ timeout: 5000 }).catch(() => fail('← Overview did not show the overview again'));
+  // A search also lists the parameters whose value contains it: RootName's value is Orders.
+  await page.getByLabel('Search the iFlows').fill('Orders');
+  await page.locator('.wu .param-hits', { hasText: 'RootName' }).waitFor({ timeout: 10000 })
+    .catch(() => fail('a search for a parameter value did not list the parameter'));
+  // A hit in a Content Modifier table shows its matching row as cells, not the table's XML text.
+  await page.getByLabel('Search the iFlows').fill('LogLevel');
+  const row = page.locator('.wu .el .trow', { hasText: 'LogLevel' }).first();
+  await row.waitFor({ timeout: 10000 }).catch(() => fail('the Content Modifier hit shows no table row'));
+  if ((await page.locator('.wu .el').first().innerText()).includes('<row>')) fail('a table hit still shows the XML text');
   await page.getByLabel('Search the iFlows').fill('s4.example');
   const hit = page.locator('.wu .el', { hasText: 'SOAP receiver' });
   await hit.waitFor({ timeout: 10000 }).catch(() => fail('Where used found no SOAP receiver for s4.example'));
@@ -289,12 +309,6 @@ if (process.env.CPIWB_IFLOW_ZIP) {
   await hit.locator('button.name').click();
   await page.locator('.diagram .details').waitFor({ timeout: 10000 }).catch(() => fail('a hit did not show the diagram'));
   if (!(await page.locator('.diagram .details').innerText()).includes('s4.example.com')) fail('the hit selected another element');
-  await page.getByRole('tab', { name: 'Where used', exact: true }).click();
-  await page.getByRole('tab', { name: 'Parameters' }).click();
-  const params = page.locator('.wu table.params');
-  await params.waitFor({ timeout: 10000 }).catch(() => fail('no parameter table'));
-  if (!(await params.innerText()).includes('GroupSize')) fail('parameters: ' + (await params.innerText()));
-  if (shots) await page.screenshot({ path: path.join(shots, 'g5c-whereused.png') });
   await page.getByRole('tab', { name: 'Groovy Script' }).click();
 }
 
@@ -781,9 +795,8 @@ if (process.env.CPIWB_IFLOW_ZIP) {
     if ((await page.locator('.diagram .bar .file').innerText()) !== modelPath) throw new Error('background deselection changed the rendered iFlow');
     if (shots) await page.screenshot({ path: path.join(shots, 'g6b-diagram-deselected.png') });
     console.log('diagram regressions passed: selected pan, Close details, background deselection on second iFlow');
-    // Where used: an iFlow chosen in Parameters narrows the search hits shown on going back to Search.
+    // Where used: choosing an iFlow narrows the search hits already shown.
     await page.getByRole('tab', { name: 'Where used', exact: true }).click();
-    await page.getByRole('tab', { name: 'Search' }).click();
     const wuPicker = page.locator('.wu select[aria-label="iFlow"]');
     await wuPicker.selectOption('');
     await page.getByLabel('Search the iFlows').fill('s4.example');
@@ -791,11 +804,9 @@ if (process.env.CPIWB_IFLOW_ZIP) {
     await page.locator('.wu section', { hasText: 'SOAP receiver' }).nth(1).waitFor({ timeout: 10000 })
       .catch(() => fail('Where used did not find s4.example in both iFlows'));
     await page.waitForTimeout(600); // the typed search's debounce (250 ms) must not run after the iFlow is chosen
-    await page.getByRole('tab', { name: 'Parameters' }).click();
     await wuPicker.selectOption(shown);
-    await page.getByRole('tab', { name: 'Search' }).click();
     await page.waitForFunction(() => document.querySelectorAll('.wu .body section').length === 1, null, { timeout: 10000 })
-      .catch(async () => fail('Search kept the hits for all iFlows after one was chosen in Parameters: ' + (await summary.innerText())));
+      .catch(async () => fail('Search kept the hits for all iFlows after one was chosen: ' + (await summary.innerText())));
   } finally {
     fs.rmSync(secondZip, { force: true });
   }
@@ -817,6 +828,34 @@ await page.getByRole('tab', { name: 'Groovy Script', exact: true }).click();
 const afterClose = page.waitForRequest((req) => groovyRpc.test(req.url()) && req.postDataJSON()?.method === 'groovy.run');
 await runIt();
 if ((await afterClose).postDataJSON().projectRoot !== null) fail('Groovy run after Close project still names a project');
+
+// 8) Without a project, Import iFlow… creates a new project folder and imports into it; an existing folder is refused.
+if (process.env.CPIWB_IFLOW_ZIP) {
+  const fresh = project + '-new-from-export';
+  fs.rmSync(fresh, { recursive: true, force: true });
+  const importIntoNew = async () => {
+    await page.getByRole('button', { name: 'Import iFlow…' }).click();
+    await page.locator('.dlg input.mono').fill(process.env.CPIWB_IFLOW_ZIP);
+    await page.locator('.dlg').getByRole('button', { name: 'OK' }).click();
+    await page.locator('.dlg', { hasText: 'New project folder' }).locator('input.mono').fill(fresh);
+    await page.locator('.dlg').getByRole('button', { name: 'OK' }).click();
+  };
+  try {
+    await importIntoNew();
+    await page.locator('.steps .step', { hasText: 'Enrich order' }).waitFor({ timeout: 10000 })
+      .catch(async () => fail('import into a new project: ' + (await page.locator('.status').innerText()) + ' ' + (await page.locator('.banner.error').allInnerTexts())));
+    if ((await page.locator('.proj .root').innerText()) !== path.basename(fresh)) fail('the new project is not the one open');
+    if (!fs.existsSync(path.join(fresh, 'cpi-workbench.json'))) fail('the new project was not initialized');
+    await page.getByTitle('Close project').click();
+    await importIntoNew();
+    await page.locator('.banner.error', { hasText: 'exists already' }).waitFor({ timeout: 5000 })
+      .catch(() => fail('importing into an existing folder was not refused'));
+    await page.locator('.banner.error').getByRole('button', { name: 'Dismiss' }).click();
+    if (await page.locator('.proj .root').count()) fail('a refused new project was opened anyway');
+  } finally {
+    fs.rmSync(fresh, { recursive: true, force: true });
+  }
+}
 
 if (errors.length) fail('browser errors: ' + errors.join(' | '));
 await browser.close();

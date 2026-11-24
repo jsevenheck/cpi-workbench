@@ -6,6 +6,46 @@ of its version.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-24
+
+### Added
+
+- **Import iFlow without a project.** The start screen offers **Import iFlow…** next to *Open folder…*: it asks for
+  the exported zip, then where to create a new project folder (named after the zip), creates it with the standard
+  layout and imports into it. A folder that exists already is refused.
+
+### Changed
+
+- **Where used opens with an overview.** Instead of an empty search, the tab lists the addresses, credentials,
+  queues, key aliases and files the imported iFlows use, with the number of places each (a click searches for it;
+  files are folded), and below them each iFlow's externalized parameters, which had their own *Parameters* view
+  before. A value with a `{{parameter}}` shows what `parameters.prop` resolves it to, in the overview and the hits.
+  A search also lists the parameters whose name or value contains it, with their uses, and a hit in a Content
+  Modifier table shows only the matching rows as cells instead of the table's XML text.
+- **Where used: receivers named by their caller.** A receiver adapter's hits name the step that calls it
+  (`SuccessFactors receiver from Get WorkOrders`), so several receivers of one system can be told apart. The MCP
+  tool `iflow_where_used` returns the same label.
+- **iFlows that share a name** (a copied iFlow keeps its name) are told apart by their folder in Where used, the
+  Diagram's iFlow picker and the sidebar's iFlow list.
+- **Editor features.** The code editors (Monaco 0.57) now offer Monaco's full set of editor features in every
+  editor: its own right-click menu, the command palette (F1), sticky scroll of enclosing elements and
+  go-to-line, among others. Monaco 0.57 loads these with its JSON support anyway, so before, editors opened
+  after the first JSON file had more features than earlier ones.
+- **Dependencies.** The app's UI and shell dependencies are updated: Vite 8, the Svelte plugin 7, TypeScript 6,
+  Monaco 0.57, Svelte 5.57.3, the Tauri dialog plugin 2.8.4, and the Rust crates within their versions
+  (Windows: `junction` 2). The engines' runtimes (Saxon, Groovy, Camel, Java) are unchanged.
+
+### Fixed
+
+- **Where used: parameters in a Content Modifier table.** A parameter whose name has a quote or another escaped
+  character, used in a header or property table, was listed twice: once escaped (`&apos;`) with *no value*, once as
+  *unused*. It is now one parameter with its value and uses.
+
+### Security
+
+- The desktop shell's Rust dependencies include `url` 2.5.9 and `cookie` 0.18.3, which fix RUSTSEC-2026-0592 (a stack
+  overflow on nested `blob:` URLs) and RUSTSEC-2026-0594 (repeated private-cookie nonces after a fork).
+
 ## [0.6.0] - 2026-11-19
 
 ### Added
@@ -466,7 +506,8 @@ First public release.
   supported.
 - The installers and engine jars include the licence texts and notices of the bundled components.
 
-[Unreleased]: https://github.com/jsevenheck/cpi-workbench/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/jsevenheck/cpi-workbench/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/jsevenheck/cpi-workbench/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/jsevenheck/cpi-workbench/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/jsevenheck/cpi-workbench/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/jsevenheck/cpi-workbench/compare/v0.3.1...v0.4.0

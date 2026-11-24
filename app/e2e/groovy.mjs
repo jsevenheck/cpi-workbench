@@ -818,6 +818,34 @@ const afterClose = page.waitForRequest((req) => groovyRpc.test(req.url()) && req
 await runIt();
 if ((await afterClose).postDataJSON().projectRoot !== null) fail('Groovy run after Close project still names a project');
 
+// 8) Without a project, Import iFlow… creates a new project folder and imports into it; an existing folder is refused.
+if (process.env.CPIWB_IFLOW_ZIP) {
+  const fresh = project + '-new-from-export';
+  fs.rmSync(fresh, { recursive: true, force: true });
+  const importIntoNew = async () => {
+    await page.getByRole('button', { name: 'Import iFlow…' }).click();
+    await page.locator('.dlg input.mono').fill(process.env.CPIWB_IFLOW_ZIP);
+    await page.locator('.dlg').getByRole('button', { name: 'OK' }).click();
+    await page.locator('.dlg', { hasText: 'New project folder' }).locator('input.mono').fill(fresh);
+    await page.locator('.dlg').getByRole('button', { name: 'OK' }).click();
+  };
+  try {
+    await importIntoNew();
+    await page.locator('.steps .step', { hasText: 'Enrich order' }).waitFor({ timeout: 10000 })
+      .catch(async () => fail('import into a new project: ' + (await page.locator('.status').innerText()) + ' ' + (await page.locator('.banner.error').allInnerTexts())));
+    if ((await page.locator('.proj .root').innerText()) !== path.basename(fresh)) fail('the new project is not the one open');
+    if (!fs.existsSync(path.join(fresh, 'cpi-workbench.json'))) fail('the new project was not initialized');
+    await page.getByTitle('Close project').click();
+    await importIntoNew();
+    await page.locator('.banner.error', { hasText: 'exists already' }).waitFor({ timeout: 5000 })
+      .catch(() => fail('importing into an existing folder was not refused'));
+    await page.locator('.banner.error').getByRole('button', { name: 'Dismiss' }).click();
+    if (await page.locator('.proj .root').count()) fail('a refused new project was opened anyway');
+  } finally {
+    fs.rmSync(fresh, { recursive: true, force: true });
+  }
+}
+
 if (errors.length) fail('browser errors: ' + errors.join(' | '));
 await browser.close();
 console.log(process.exitCode ? 'groovy e2e FAILED' : 'groovy e2e passed');

@@ -45,6 +45,16 @@ public final class ProjectFiles {
 
     public synchronized Map<String, Object> open(Map<String, Object> p) throws IOException {
         Path dir = Path.of(Json.str(p, "dir", "")).toAbsolutePath().normalize();
+        if (Json.bool(p, "create", false)) {
+            // A new project gets a new folder: an existing one (Downloads, say) is never initialized by mistake.
+            try {
+                Files.createDirectory(dir);
+            } catch (java.nio.file.FileAlreadyExistsException e) {
+                throw new IllegalArgumentException("exists already: " + dir);
+            } catch (java.nio.file.NoSuchFileException e) {
+                throw new IllegalArgumentException("Not a folder: " + dir.getParent());
+            }
+        }
         if (!Files.isDirectory(dir)) {
             throw new IllegalArgumentException("Not a folder: " + dir);
         }

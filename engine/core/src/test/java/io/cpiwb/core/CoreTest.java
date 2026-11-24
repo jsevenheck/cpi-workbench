@@ -354,6 +354,20 @@ class CoreTest {
     }
 
     @Test
+    void createMakesANewProjectFolderButNeverReusesOne(@TempDir Path tmp) throws Exception {
+        Path dir = tmp.resolve("Order_Replication");
+        var r = new ProjectFiles().open(Json.o().with("dir", dir.toString()).with("create", true).with("init", true));
+        assertEquals(true, r.get("isProject"));
+        assertTrue(Files.isDirectory(dir.resolve("platform")));
+        IllegalArgumentException again = assertThrows(IllegalArgumentException.class,
+                () -> new ProjectFiles().open(Json.o().with("dir", dir.toString()).with("create", true)));
+        assertTrue(again.getMessage().startsWith("exists already"), again.getMessage());
+        assertThrows(IllegalArgumentException.class,
+                () -> new ProjectFiles().open(Json.o().with("dir", tmp.resolve("missing/child").toString()).with("create", true)));
+        assertFalse(Files.exists(tmp.resolve("missing")));
+    }
+
+    @Test
     void aCaseWithAnUnknownProfileIsAnErrorNotSkipped(@TempDir Path tmp) throws Exception {
         Files.writeString(tmp.resolve("case.json"), "{\"step\":\"xslt\",\"profile\":\"saxon-he-9\"}");
         TestRunner.CaseResult r = new TestRunner(null, "saxon-he-9.9").run(tmp.resolve("case.json"));

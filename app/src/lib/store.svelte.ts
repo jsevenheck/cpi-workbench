@@ -710,7 +710,7 @@ function platformOverride(): Record<string, unknown> | undefined {
 
 let projectChanging = false;
 
-export async function open(dir: string, initProject = false) {
+export async function open(dir: string, initProject = false, create = false) {
   app.error = '';
   // The opened project's platform files take the tables' place. Unsaved rows typed without a project, or for
   // another project, would otherwise go into this project's runs and, on Save, into its files.
@@ -723,7 +723,7 @@ export async function open(dir: string, initProject = false) {
   projectChanging = true;
   let r;
   try {
-    r = await openProject(dir, initProject);
+    r = await openProject(dir, initProject, create);
     app.project = { root: r.root, files: r.files };
   } finally {
     projectChanging = false;
@@ -819,6 +819,12 @@ export function iflowStepFor(iflow: string, id: string): IflowStep | undefined {
 export function selectIflowNode(iflow: string, id: string | null, show = false) {
   app.iflowSelected = { iflow, id };
   if (show) app.tool = 'diagram';
+}
+
+/** Creates `dir` as a new project and imports the export into it. A failed import leaves the new project open. */
+export async function importIntoNewProject(zip: string, dir: string) {
+  await open(dir, true, true);
+  if (app.project?.root) await importIflow(zip);
 }
 
 /** Imports an exported iFlow, Value Mapping or integration package (the engine tells them apart). */

@@ -6,6 +6,12 @@ of its version.
 
 ## [Unreleased]
 
+### Added
+
+- **Import iFlow without a project.** The start screen offers **Import iFlow…** next to *Open folder…*: it asks for
+  the exported zip, then where to create a new project folder (named after the zip), creates it with the standard
+  layout and imports into it. A folder that exists already is refused.
+
 ### Changed
 
 - **Editor features.** The code editors (Monaco 0.57) now offer Monaco's full set of editor features in every

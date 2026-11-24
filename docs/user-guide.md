@@ -4,7 +4,7 @@
 
 Download the installer for your platform from the
 [latest release](https://github.com/jsevenheck/cpi-workbench/releases/latest) (see
-[Installing](install.md)), install it and open a project folder. Any folder works; **Init** adds `mappings/`, `schemas/`,
+[Installing](install.md)), install it and open a project folder, or import an exported iFlow into a new one. Any folder works; **Init** adds `mappings/`, `schemas/`,
 `scripts/` and example files in `platform/` ([Project files](project-files.md)).
 
 Without a project, **Examples…** in the sidebar loads a mapping or script of the demo project with its input
@@ -155,7 +155,10 @@ come with the app; **Save** asks where to keep them, once a project is open. As 
 ### iFlow import
 
 * **Import iFlow** unpacks an iFlow exported from Integration Suite (zip) into `iflows/` and lists
-  its steps. A folder that differs from one already there only in letter case or trailing dots is
+  its steps. Without an open project, **Import iFlow…** on the start screen first asks for the zip, then for a
+  new project folder (named after the zip by default); the app creates that folder with the standard layout
+  (as **Init** does) and imports into it. A folder that exists already is refused, so an existing one is never
+  initialized by mistake. If the import fails, the new project stays open for another try. A folder that differs from one already there only in letter case or trailing dots is
   refused, since Windows takes both for one folder. A Groovy Script or XSLT Mapping step opens its file with the step's function name and
   script version; a flow step opens in Flow Steps with its settings, with `{{parameters}}` from the
   iFlow's `parameters.prop`; the line *From <iFlow> · <step>* above its settings says where they came from, and

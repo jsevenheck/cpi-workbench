@@ -37,7 +37,7 @@ Download a Windows x64 or macOS Apple Silicon installer from the
 engines and Java runtime. Installers are unsigned; [Installing](docs/install.md) explains first-start
 warnings, managed-device restrictions and CLI/Linux alternatives.
 
-1. Open a project folder and press **Init**, or open [`examples/demo-project`](examples/demo-project/README.md).
+1. Open a project folder and press **Init**, use **Import iFlow…** for an exported iFlow, or open [`examples/demo-project`](examples/demo-project/README.md).
 2. Open a mapping or script, enter the input and press **Ctrl+Enter**.
 
 The [user guide](docs/user-guide.md) covers the tabs, CPI Helper, CLI and browser mode.

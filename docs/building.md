@@ -32,7 +32,10 @@ npx tauri dev                                        # development (UI hot reloa
 `cargo test` in `app/src-tauri` covers the engine supervisor, MCP and local receiver. Engine
 integration tests start all profiles over stdio and run the regression cases. Build the UI first
 (the shell embeds it), and stage the sidecars/resources or use the override below. The development
-shell finds native engines in `engine/native/out` and jars in the engine `target/` folders.
+shell looks for the XML engines next to its executable (the staged sidecars), then in `engine/native/out`, then
+as jars in the engine `target/` folders; the Groovy engines always run as jars. After pulling engine changes,
+rebuild the jars (and move stale native engines aside): an older engine accepts a new RPC option without
+error and ignores it, so the failure shows up elsewhere (for example "Not a folder" for a new project).
 `JAVA_HOME` selects the Java runtime. Without `CPIWB_REQUIRE_ENGINES=1`, missing engines may cause
 integration checks to be skipped; pure Rust tests still run.
 

@@ -502,6 +502,10 @@ fn tools_run_on_the_engines() {
     // A run of the missing function names the ones the script has (ScriptRunner).
     let missing = c.ok("run_groovy", json!({ "scriptPath": "scripts/enrich-order.groovy", "function": "enrich", "body": "<a/>" }));
     assert!(missing.to_string().contains("The script's functions with one parameter: processData."), "{missing}");
+    // The engine's list of Message Mapping functions keeps a name that says so.
+    assert!(missing.get("functions").is_none() && missing["mappingFunctions"] == json!([]), "{missing}");
+    let both = c.ok("run_groovy", json!({ "runtime": "both", "scriptPath": "scripts/mapping-functions.groovy", "function": "getHeader", "args": ["h"] }));
+    assert!(both["runs"][0]["result"]["mappingFunctions"].as_array().is_some_and(|f| !f.is_empty()), "{both}");
 
     // XSLT: header as xsl:param, on both Saxon lines.
     let x = c.ok("run_xslt", json!({ "runtime": "both", "body": "<a/>", "headers": { "h": "hello" },
@@ -910,11 +914,16 @@ fn files_are_read_saved_and_imported_inside_the_project() {
     let iflow = std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../engine/core/src/test/resources/iflow/src/main/resources/scenarioflows/integrationflow/Order_Replication.iflw")).unwrap();
     let zip = std::env::temp_dir().join(format!("cpiwb-mcp-export-{}.zip", std::process::id()));
-    std::fs::write(&zip, stored_zip(&[("src/main/resources/scenarioflows/integrationflow/Order Sync.iflw", &iflow)])).unwrap();
+    let enrich = std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../engine/core/src/test/resources/iflow/src/main/resources/script/enrich.groovy")).unwrap();
+    std::fs::write(&zip, stored_zip(&[("src/main/resources/scenarioflows/integrationflow/Order Sync.iflw", &iflow),
+        ("src/main/resources/script/enrich.groovy", &enrich)])).unwrap();
     let imp = c.ok("import_iflow", json!({ "zip": zip.to_string_lossy(), "name": "Order Sync" }));
     assert_eq!(imp["imported"], "iflows/Order_Sync", "{imp}");
     let steps = imp["steps"].as_array().unwrap();
     assert!(!steps.is_empty() && steps.iter().all(|s| s["iflow"] == "Order_Sync"), "only the imported iFlow's steps: {imp}");
+    // As in project_info: the imported step calls enrich, which its script does not declare.
+    assert_eq!(steps.iter().find(|s| s["name"] == "Enrich order").unwrap()["functionFound"], false, "{imp}");
     assert!(c.err("import_iflow", json!({ "zip": zip.to_string_lossy(), "name": "Order Sync" })).contains("exists already"));
     c.ok("import_iflow", json!({ "zip": zip.to_string_lossy(), "name": "Order Sync", "overwrite": true }));
     assert!(c.err("import_iflow", json!({ "zip": "missing.zip" })).contains("No file"));

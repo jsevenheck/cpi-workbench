@@ -217,8 +217,9 @@ pub fn import_iflow(server: &Server, args: &Args) -> Result<Value, String> {
         } else { e })?;
     let folders: Vec<String> = r["iflows"].as_array().into_iter().flatten()
         .filter_map(|f| f.as_str().map(|f| f.trim_start_matches("iflows/").to_string())).collect();
-    let steps: Vec<Value> = r["steps"].as_array().into_iter().flatten()
+    let mut steps: Value = r["steps"].as_array().into_iter().flatten()
         .filter(|s| s["iflow"].as_str().is_some_and(|i| folders.iter().any(|f| f == i))).cloned().collect();
+    super::tools::mark_functions(server, &mut steps);
     Ok(json!({ "kind": r["kind"], "imported": r["imported"], "files": r["files"], "steps": steps,
         "valueMappings": r["valueMappings"], "skipped": r["skipped"], "kept": r["kept"] }))
 }

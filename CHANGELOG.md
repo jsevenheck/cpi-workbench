@@ -21,7 +21,9 @@ of its version.
   language, so that both give the same order.
 - **MCP: a script's functions.** `read_file` on a Groovy script lists the functions it declares, read from its
   text as the Groovy tab does (nothing runs), and `project_info` marks a script step whose function the script
-  does not declare (`functionFound: false`). `open_project` no longer repeats the runtimes.
+  does not declare (`functionFound: false`), as does `import_iflow`. A run's list of Message Mapping functions is
+  called `mappingFunctions` in `run_groovy`, so it is not taken for all of the script's functions. `open_project`
+  no longer repeats the runtimes.
 - **A missing script function names the others.** When a Groovy Script step's function is not in the script, the
   error lists the script's functions with one parameter, in the app and over MCP.
 - **A missing file is named as such.** Reading a file that does not exist (a body, script or mapping by path, in

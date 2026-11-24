@@ -599,9 +599,14 @@ fn project_info(server: &Server) -> Result<Value, String> {
     }
     info["files"] = Value::Array(files.into_iter().take(MAX_FILES).collect());
     info["iflowSteps"] = engine_call(server, rt, "iflow.steps", json!({}))?["steps"].clone();
-    // A script step whose function the script does not declare fails only when it runs: say so up front, from the
-    // script's text as the Groovy tab reads it (nothing runs).
-    for step in info["iflowSteps"].as_array_mut().into_iter().flatten() {
+    mark_functions(server, &mut info["iflowSteps"]);
+    Ok(info)
+}
+
+/// A script step whose function the script does not declare fails only when it runs: `functionFound` says so up
+/// front, from the script's text as the Groovy tab reads it (nothing runs). For project_info and import_iflow.
+pub fn mark_functions(server: &Server, steps: &mut Value) {
+    for step in steps.as_array_mut().into_iter().flatten() {
         let (Some(file), Some(function)) = (step["file"].as_str(), step["function"].as_str()) else { continue };
         if step["fileFound"] != true || !(file.ends_with(".groovy") || file.ends_with(".gsh")) { continue; }
         if let Ok(script) = read_file(server, file) {
@@ -609,7 +614,6 @@ fn project_info(server: &Server) -> Result<Value, String> {
             step["functionFound"] = json!(found);
         }
     }
-    Ok(info)
 }
 
 /// The Where used tab: without query or kind its overview (what the iFlows use, and their parameters); with them
@@ -694,6 +698,16 @@ fn run_groovy(server: &Server, args: &Args) -> Result<Value, String> {
         "args": args.get("args").cloned().unwrap_or(json!([])),
     });
     let mut r = on_runtimes(server, &pick(args, "runtime", GROOVY_RUNTIMES, detected), "groovy.run", params)?;
+    // The engine's `functions` lists only Message Mapping functions; by that name an agent took it for all of them.
+    let runs = match r.get_mut("runs").and_then(Value::as_array_mut) {
+        Some(rs) => rs.iter_mut().map(|x| &mut x["result"]).collect::<Vec<_>>(),
+        None => vec![&mut r],
+    };
+    for one in runs {
+        if let Some(f) = one.as_object_mut().and_then(|o| o.remove("functions")) {
+            one["mappingFunctions"] = f;
+        }
+    }
     if str_arg(args, "runtime").is_none() {
         r["runtime"] = json!(detected);
     }

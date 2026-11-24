@@ -42,8 +42,8 @@ requests still carry the foreign host name. The browser UI uses `/project/rpc`: 
 `projectRoot` (the absolute directory returned by `project.open`, or `null` without a project; with `create`,
 `project.open` first makes the folder and refuses one that exists). Each call
 gets its own project context, so one tab's Open or Close does not alter another's. An unavailable root
-fails rather than falling back. The desktop shell wraps the same scoped request in `project.request`
-when sending it over stdio; plain stdio (used by MCP's worker calls) and the legacy local `/rpc`
+fails rather than falling back. The desktop shell and the MCP server wrap the same scoped request in `project.request`
+when sending it over stdio; plain stdio requests and the legacy local `/rpc`
 endpoint keep their stateful contract. Both HTTP endpoints admit up to four RPCs per engine, with a
 32 MiB request-body cap (HTTP 413) and a roughly ten-second request read deadline. The JDK HTTP
 server uses a 24-connection cap, a 16 KiB header cap and a bounded executor. Excess transport
@@ -53,7 +53,7 @@ running that request. Execution has a separate timeout. `serve --http` runs in a
 (`--worker`) and restarts it only when an executing call times out. After worker replacement both UIs
 still send the selected project on the first request. Failed calls are not replayed.
 
-Over stdio, the Rust supervisor allows 15 seconds for startup (ready plus any MCP project setup) and
+Over stdio, the Rust supervisor allows 15 seconds for startup (until the engine is ready) and
 32 seconds to send and receive a request; a call waits up to 50 seconds for its profile slot, longer
 than the call ahead of it can take, so a file read or save during a long run waits for it. Java's own
 default execution timeout is 30 seconds. Stdio frames are limited to 192 MiB: a larger request is
@@ -77,10 +77,12 @@ submissions and interrupts waits for the direct child, not arbitrary processes s
   only the input skips compilation.
 
 The shell's executable also runs headless as an MCP server (`cpi-workbench mcp`, [MCP server](mcp.md)):
-it starts the same engines through the same supervisor (`engine.rs`), opens the project in each engine
-when it starts, and maps each tool to engine calls. Its flow-step tool repeats the UI's calls to the engines,
-step by step (`mcp/flow.rs`). The app leads: the tools
-add no function of their own.
+it starts the same engines through the same supervisor (`engine.rs`), sends the open project with each call
+(`project.request`, so `open_project` in a `--workspace` switches without restarting an engine), and maps each
+tool to engine calls. Its flow-step tool repeats the UI's calls to the engines, step by step (`mcp/flow.rs`);
+`mcp/whereused.rs`, `mcp/functions.rs` and `mcp/iflowmodel.rs` repeat what the Where used tab, the Groovy tab's
+function list and the Diagram tab compute in TypeScript. Fixtures under `testdata/*-parity` keep each pair in step.
+The app leads: the tools add no function of their own.
 
 ## CPI Helper receiver
 

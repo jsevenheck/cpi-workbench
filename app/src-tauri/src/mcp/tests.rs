@@ -498,6 +498,11 @@ fn tools_run_on_the_engines() {
     assert_eq!(d["processes"][0]["elements"].as_array().unwrap().iter().find(|e| e["type"] == "Process Call").unwrap()["calls"], "Archive order");
     let erp = main.iter().find(|e| e["route"]["name"] == "ERP").expect("the ERP route");
     assert_eq!(erp["depth"], 1, "{d}");
+    // Each element on a route names it, not only the route's first one.
+    let on = |name: &str| main.iter().find(|e| e["name"] == name && e["again"] != true).unwrap()["onRoute"].clone();
+    assert_eq!(on("Map order"), json!({ "router": "Check sender", "route": "ERP" }), "{d}");
+    assert_eq!(on("Log payload"), json!({ "router": "Check sender", "route": "Other" }), "{d}");
+    assert!(on("Set headers").is_null(), "{d}");
     assert!(erp["route"]["condition"].as_str().unwrap().contains("SenderId"), "{d}");
     let cm = main.iter().find(|e| e["type"] == "Content Modifier").expect("a Content Modifier");
     assert!(cm["settings"].get("cmdVariantUri").is_none() && cm["settings"].as_object().is_some_and(|o| !o.is_empty()), "{cm}");

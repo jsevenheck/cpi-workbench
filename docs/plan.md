@@ -355,6 +355,12 @@ Setup, tools, protocol revisions and privileges: [MCP server](mcp.md). Decisions
   workflow to clients without filesystem tools. Test suites remain CLI-only; lint travels with script results.
 * **Source-derived reference:** generate API topics from completions and clean-room classes, platform
   formats and fidelity from the docs, to avoid a second manually maintained API description.
+* **App parity by fixtures:** what a tab computes in TypeScript (Flow Steps calls, Where used views, the
+  Groovy function list, the Diagram outline) is repeated in Rust and checked by a fixture both sides replay
+  (`testdata/*-parity`), rather than moved into the engines. The function reader was first left to the agent
+  (2026-11-13); since 2026-11-24 the server should do what the app does, so it is ported too.
+* **Workspace instead of free project paths:** `--workspace` serves its direct subfolders and `open_project`
+  switches among them; a tool that opens any path was rejected, as it would remove the file boundary.
 * **Results by reference:** opaque, bounded, process-local `runId` handles preserve bodies, headers
   and properties for chaining. Intermediate files were rejected because they persist and lose metadata.
 * **No sandbox or network server:** project file tools enforce paths; user code keeps the same
@@ -496,6 +502,7 @@ not planned (see exclusions below).
 `iflow.models` reads the model as F68 describes; `iflowmodel.ts` orders and draws it.
 The diagram uses hand-written SVG rather than bpmn-js (its licence keeps a visible mark) or Mermaid
 (which loses the exported layout). Join and parallel Multicast were not observed (F68).
+The MCP tool `iflow_diagram` returns the same outline as text (`mcp/iflowmodel.rs`, `testdata/iflowmodel-parity`).
 Usage: [iFlow import](user-guide.md#iflow-import).
 
 #### Not taken over

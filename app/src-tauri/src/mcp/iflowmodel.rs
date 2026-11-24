@@ -182,12 +182,26 @@ pub fn diagram(model: &Value) -> Value {
     let by_id: HashMap<&str, &Value> = list(&model["nodes"]).iter().map(|n| (s(&n["id"]), n)).collect();
     let processes: Vec<Value> = outline(model).into_iter().map(|(p, entries)| {
         let mut process = json!({ "id": p["id"], "name": p["name"], "kind": p["kind"] });
+        // The route each element is on, which the tab shows by indentation: per depth, the route last opened there
+        // and the gateway that opened it (the last gateway one level up).
+        let mut gateways: Vec<Value> = Vec::new();
+        let mut routes: Vec<Value> = Vec::new();
         if let Some(parent) = p.get("parent").filter(|x| !x.is_null()) {
             process["parent"] = parent.clone();
         }
         process["elements"] = Value::Array(entries.into_iter().map(|e| {
             let n = e.node;
             let mut el = json!({ "id": n["id"], "name": n["name"], "type": type_label(n), "depth": e.depth });
+            gateways.truncate(e.depth + 1);
+            routes.truncate(e.depth + 1);
+            gateways.resize(e.depth + 1, Value::Null);
+            routes.resize(e.depth + 1, Value::Null);
+            if let Some(r) = &e.route {
+                let router = if e.depth > 0 { gateways[e.depth - 1].clone() } else { gateways[e.depth].clone() };
+                routes[e.depth] = json!({ "router": router, "route": r["name"] });
+            }
+            if !routes[e.depth].is_null() { el["onRoute"] = routes[e.depth].clone(); }
+            if n["kind"] == "gateway" { gateways[e.depth] = n["name"].clone(); }
             if let Some(r) = e.route { el["route"] = r; }
             if e.again {
                 el["again"] = json!(true); // listed once more where branches meet; its settings are above

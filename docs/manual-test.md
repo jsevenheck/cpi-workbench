@@ -144,7 +144,7 @@ The first run starts the Java engines and can take a few seconds.
 * **Idle stop:** the Groovy engines stop after 10 idle minutes. Running a script afterwards starts
   them again, a little slower.
 
-## 5. MCP server with Claude Code (required)
+## 5. MCP server with Claude Code and Claude Desktop (required)
 
 Use a copy of `examples/demo-project`. Setup details: [MCP server](mcp.md).
 
@@ -160,11 +160,16 @@ Use a copy of `examples/demo-project`. Setup details: [MCP server](mcp.md).
 | 5.8 | *"Split inputs/orders.xml per Order (namespace src = urn:demo:integration:orders:source:v1) and combine the result with Gather."* | Two `run_flow_step` calls and the combined message; the Gather takes the Splitter's messages by its `runId` (`messagesFrom`), not as copied text. |
 | 5.9 | *"Read C:\Windows\win.ini as bodyPath with evaluate_xpath."* | Refused with an error: the path is outside the project. |
 | 5.10 | Keep the app open and run something there meanwhile | Both work; the agent's runs do not appear in the app (by design). |
-| 5.11 | Claude Desktop with `--project` on the copy ([MCP server](mcp.md)), without a filesystem server: *"Look at inputs/order.xml and write an XSLT that maps it to the format of schemas/salesorder.xsd; try it and validate the result."* | The agent reads both files with `read_file`, runs `run_xslt` and `validate_xsd` until the output is valid, and shows the mapping; nothing is saved. |
+| 5.11 | Claude Desktop (configuration below) on the copy, without a filesystem server: *"Look at inputs/order.xml and write an XSLT that maps it to the format of schemas/salesorder.xsd; try it and validate the result."* | The agent reads both files with `read_file`, runs `run_xslt` and `validate_xsd` until the output is valid, and shows the mapping; nothing is saved. |
 | 5.12 | *"Save it as mappings/agent-order.xsl."*, then the same again | The client may ask before the writing tool; the file appears in the app after **↻**. The second time the agent is told the file exists and asks whether to replace it. |
 | 5.13 | *"Import the iFlow from <path of an exported .zip> and tell me what its Content Modifier does with a sample message."* | `import_iflow`, then `run_flow_step` on its step; the app shows the iFlow after **↻**. |
 | 5.14 | **+** → **develop_step** with a task | The agent follows the steps of the prompt (project, input, write, run, report). |
-| 5.15 | Claude Desktop with `--workspace` on a folder holding the copy and one other project: *"Which projects are there? Open the copy, then create a new project Billing."* | `project_info` lists both under `projects`; `open_project` opens the copy, then creates `Billing` with `platform/` and `cpi-workbench.json`; nothing outside the workspace is touched. |
+| 5.15 | Claude Desktop with `--workspace` (configuration below) on a folder holding the copy and one other project: *"Which projects are there? Open the copy, then create a new project Billing."* | `project_info` lists both under `projects`; `open_project` opens the copy, then creates `Billing` with `platform/` and `cpi-workbench.json`; nothing outside the workspace is touched. |
+| 5.16 | *"Import <path of an exported iFlow .zip> into Billing and show me how a message goes through it."* | `import_iflow`, then `iflow_diagram`: the steps in order, a Router's routes with their conditions (each step on a route names it, `onRoute`), Process Calls and the connected systems. |
+| 5.17 | *"How must the Content Modifier <name> be set up so that it also sets a header <X> from <an element or attribute of the body>? Try it on a sample message."* | The agent copies the step's configuration from `project_info`, runs changed copies with `run_flow_step` until the header is right, and shows the rows as entered in the iFlow plus the resulting headers and properties. |
+| 5.18 | *"Which addresses, credentials and parameters do the iFlows use?"*, then *"Where is <one of them> used?"* | `iflow_where_used` without a query (counts, resolved `{{parameters}}`), then with the value: the places, a Content Modifier table as its matching rows. |
+| 5.19 | *"Which functions do the iFlow's scripts have, and does every script step call one that exists?"* | `read_file` on each script lists its `functions`; `project_info` marks a step with `functionFound: false` if its function is missing. Nothing runs. |
+| 5.20 | *"Run the steps of the route the Router takes for <a sample message>, in order."* | `run_flow_step` on the Router, then the route's steps with `run_flow_step`, `run_groovy` or `run_xslt`, each taking the previous result by `messageFrom`. |
 
 `.mcp.json` for the `setup.exe` install (for the `.msi`: `C:\\Program Files\\CPI Workbench\\cpi-workbench.exe`):
 
@@ -174,6 +179,22 @@ Use a copy of `examples/demo-project`. Setup details: [MCP server](mcp.md).
     "cpi-workbench": {
       "command": "${LOCALAPPDATA}\\CPI Workbench\\cpi-workbench.exe",
       "args": ["mcp"]
+    }
+  }
+}
+```
+
+Claude Desktop for 5.11 to 5.20 (`%APPDATA%\Claude\claude_desktop_config.json`, or *Settings → Developer →
+Edit Config*), `setup.exe` install, with a workspace folder `C:\work\cpi` that holds the copy (for 5.11 to 5.14
+open it first: *"Open the project <copy's folder name>"*). Replace `<user>`, then quit Claude Desktop fully
+(also from the tray) and start it again:
+
+```json
+{
+  "mcpServers": {
+    "cpi-workbench": {
+      "command": "C:\\Users\\<user>\\AppData\\Local\\CPI Workbench\\cpi-workbench.exe",
+      "args": ["mcp", "--workspace", "C:\\work\\cpi"]
     }
   }
 }
@@ -189,8 +210,8 @@ $LASTEXITCODE   # expected: 0
 
 ## 6. Other MCP clients (optional)
 
-Claude Desktop and Codex need `--project` or `--workspace`; the configurations are in [MCP server](mcp.md#setup).
-Restart the client, then repeat 5.4 and 5.5.
+Codex and other clients without a project folder need `--project` or `--workspace`; the configurations are in
+[MCP server](mcp.md#setup). Restart the client, then repeat 5.4 and 5.5 (with a workspace, open a project first).
 
 ## 7. Release
 

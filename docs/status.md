@@ -19,7 +19,7 @@ limits in [Fidelity](fidelity.md), and research evidence and future work in the 
 | CPI Helper hand-over | Pasted links/JSON, browser-mode links, opt-in desktop receiver with confirmation and malformed-body warnings | Plugin format is undocumented. Browser URL and unpacking limits apply; large traced bodies may already be cut off upstream (Q-T3). Receiver imports never run code automatically. |
 | CLI and debugging | The engine jars run a mapping, script, schema or XPath from a terminal; a script stops at breakpoints when its engine jar runs under JDWP (`docs/debugging.md`) | Breakpoints were tried with jdb only, not in an IDE, and the app has no debugger. |
 | Regression tests (internal) | `case.json` cases in `testdata/regression-project/tests` run on all four engines in CI ([format](test-cases.md)): expected bodies/headers/properties, `expect.ignore`, mapping-function arguments, JUnit XML (`test --junit`) | Not a user feature (2026-11-17). The JUnit report follows Maven Surefire's layout and has not been tried with a CI reporter. |
-| MCP | Thirteen tools, one project or a workspace of projects (`--workspace`, `open_project`), project files, iFlow import, where-used search and overview as in the app, script function lists read from the text, source-derived reference, `develop_step` prompt, run chaining by `runId` | Separate process from the UI. Same code-execution privileges as the engines; result handles are bounded and process-local. A run over the 64 MiB run cache gets no `runId`; a result over the 1 MiB preview has its longest lists cut. |
+| MCP | Thirteen tools, one project or a workspace of projects (`--workspace`, `open_project`), project files, iFlow import, where-used search and overview as in the app, the iFlow diagram as text, script function lists read from the text, source-derived reference, `develop_step` prompt, run chaining by `runId` | Separate process from the UI. Same code-execution privileges as the engines; result handles are bounded and process-local. A run over the 64 MiB run cache gets no `runId`; a result over the 1 MiB preview has its longest lists cut. |
 | Distribution | All-in-one Windows x64 and macOS Apple Silicon installers, engine jars, manual update check | No code signing/notarization or automatic update installation. No current Linux installer or Intel Mac build. |
 
 ## Evidence and automated coverage
@@ -57,10 +57,11 @@ limits in [Fidelity](fidelity.md), and research evidence and future work in the 
   Browser and MCP smoke tests chain GZIP Encoder → header-only Content Modifier → Decoder,
   checking the exact bytes and the headers passed on.
 * **Shell tests:** engine supervision over stdio, including the first desktop Groovy run after an idle
-  stop or abrupt worker exit, no-ready and blocked-pipe fixtures for deadlines and shutdown, a failed
-  start call, the frame limit on requests and responses, and MCP
-  protocol/file/result handling (including slow output, overload, immediate id reuse and
-  oversized runs and results), and the local receiver's origin, size,
+  stop or abrupt worker exit, no-ready and blocked-pipe fixtures for deadlines and shutdown,
+  the frame limit on requests and responses, and MCP
+  protocol/file/result handling (including slow output, overload, immediate id reuse,
+  oversized runs and results, and the workspace boundary), the app-parity fixtures (`testdata/*-parity`)
+  replayed by the UI's and the MCP server's tests, and the local receiver's origin, size,
   concurrency and deadline checks.
 * **CI:** engines on Linux, Windows and macOS; browser e2e on Windows; shell tests, native builds,
   installers and release-binary MCP smoke tests on Windows and macOS. Commands: [Building](building.md).

@@ -37,40 +37,38 @@ Code asks once before it starts the servers of a project's `.mcp.json`. Instead 
 command adds the server for you alone: `claude mcp add cpi-workbench -- <executable> mcp`.
 
 **Claude Desktop** (*Settings → Developer → Edit Config*, `claude_desktop_config.json`) and other
-clients without a project folder need `--project`:
+clients without a project folder name the folder the server works in. For several integrations, give a
+**workspace**: a folder that holds one project folder per integration (`C:\work\cpi\Orders`,
+`C:\work\cpi\Billing`, …), with one entry for all of them:
 
 ```json
 {
   "mcpServers": {
     "cpi-workbench": {
       "command": "C:\\Users\\<user>\\AppData\\Local\\CPI Workbench\\cpi-workbench.exe",
-      "args": ["mcp", "--project", "C:\\work\\my-cpi-project"]
+      "args": ["mcp", "--workspace", "C:\\work\\cpi"]
     }
   }
 }
 ```
+
+The server then starts without a project. `project_info` lists the workspace's folders under `projects`, and
+`open_project` opens one of them, or creates a new one with `create: true` (the layout of the app's
+*Import iFlow…* without a project). The agent works in one project at a time and never outside the workspace;
+ask it, for example, *"Open the project Orders"* or *"Create a project Billing and import C:\Downloads\Billing.zip"*.
+For a single project, give `"--project", "C:\\work\\my-cpi-project"` instead of `--workspace` (not both).
 
 **Codex** (`~/.codex/config.toml`):
 
 ```toml
 [mcp_servers.cpi-workbench]
 command = 'C:\Users\<user>\AppData\Local\CPI Workbench\cpi-workbench.exe'
-args = ["mcp", "--project", 'C:\work\my-cpi-project']
+args = ["mcp", "--workspace", 'C:\work\cpi']   # or "--project", 'C:\work\my-cpi-project'
 ```
 
-In both, replace `<user>` with your Windows user name (the folder under `C:\Users`) and the project
-path with yours, then restart the client.
-
-**Several projects with one entry:** instead of `--project`, give `--workspace` and a folder that holds your
-projects, one folder per integration (`C:\work\cpi\Orders`, `C:\work\cpi\Billing`, …):
-
-```json
-"args": ["mcp", "--workspace", "C:\\work\\cpi"]
-```
-
-The server then starts without a project. `project_info` lists the workspace's folders under `projects`, and
-`open_project` opens one of them, or creates a new one with `create: true` (the layout of the app's
-*Import iFlow…* without a project). The agent works in one project at a time and never outside the workspace.
+In both, replace `<user>` with your Windows user name (the folder under `C:\Users`) and the folder with yours,
+then restart the client. With the `.msi`, the executable is `C:\Program Files\CPI Workbench\cpi-workbench.exe`.
+The folder must exist; a workspace may start empty.
 
 The project folder is `--project`, else `CLAUDE_PROJECT_DIR`, else the server's working directory; with
 `--workspace`, the folder `open_project` opened.
@@ -86,6 +84,17 @@ mapping to the S/4 format and try it."* The agent lists the project (`project_in
 iFlow's files (`read_file`), writes the mapping and runs it (`run_xslt`) until the output is right, and shows
 you the result; for a Content Modifier or Router it shows the settings as you enter them in the iFlow. It saves
 a file (`save_file`) when you want to keep it; the app shows it after **↻** in its file tree.
+
+Other requests that work this way:
+
+* *"How does a message go through Order_Replication?"*: `iflow_diagram` gives the steps in order, the
+  Router's routes with their conditions and the connected systems.
+* *"How must the Content Modifier 'Set headers' be set up to also set the header OrderType from the order's
+  type attribute?"*: the agent takes the step's configuration from `project_info`, runs changed copies with
+  `run_flow_step` on a sample message until the headers are right, and shows the rows as you enter them.
+* *"Which hosts and credentials do the iFlows use?"*: `iflow_where_used` without a query.
+* *"Run the iFlow's steps in order on this message"*: each step with the matching tool, the message passed on
+  by `runId`.
 
 The prompt **develop_step** (in Claude Desktop under **+**) starts this with a task, an iFlow and an input.
 
@@ -107,7 +116,7 @@ agent without file access of its own what the app's file tree and **Import iFlow
 | `save_file` | **Save as…**: writes a file (`content`, bytes as `contentBase64`, or a run's output with `contentFrom`, binary or not) into the project, creating folders. An existing file is replaced only with `overwrite: true`. |
 | `import_iflow` | **Import iFlow**: an iFlow, Value Mapping or integration package exported from the tenant (`.zip`, any path): iFlows into `iflows/<name>/`, value mappings into `platform/value-mappings.json`; returns `kind`, the imported iFlows' steps (with `functionFound` as in `project_info`), `valueMappings`, `skipped` and `kept` (with `overwrite: true`, files of the earlier version that the export does not contain; they are not deleted). An existing folder or value mapping is replaced only with `overwrite: true`. |
 | `iflow_where_used` | **Where used**: without `query` or `kind`, the tab's overview (`uses`: the addresses, credentials, queues, key aliases and files the iFlows use, with the number of places and what their `{{parameters}}` resolve to; `iflows`: each iFlow's externalized parameters, their values and uses, and those unused or without a value). With `query` (a host, credential alias, queue, file, `{{parameter}}` or any text) and/or a `kind` (`address`, `credential`, `queue`, `key`, `file`, `parameter`): the adapters, steps and routes that use it, each with a `{{parameter}}` resolved from `parameters.prop` (`resolved`) and a Content Modifier table as its matching `rows` instead of its XML text, plus the `parameters` whose name or value contains the query. `iflow` limits it to one iFlow; `parameters: true` returns only the parameters. A receiver adapter's hit is labelled with the step that calls it (`SOAP receiver from Call S4`). Read-only. |
-| `iflow_diagram` | **Diagram**, as text: an imported iFlow's processes (integration process, exception subprocesses, local processes), each with its elements in flow order from the start event, as the sidebar's outline lists them: a Router's routes indented (`depth`) with their name and condition, an element where branches meet listed again (`again`), a Process Call with the process it calls. Each element has its type as in the editor and its `settings` as written in the iFlow (`{{parameters}}` unresolved; `project_info` and `iflow_where_used` resolve them); the `adapters` have their system, direction and settings. `iflow` picks the iFlow when there are several. Read-only; the drawing's geometry is left out. |
+| `iflow_diagram` | **Diagram**, as text: an imported iFlow's processes (integration process, exception subprocesses, local processes), each with its elements in flow order from the start event, as the sidebar's outline lists them: a Router's routes indented (`depth`) with their name and condition, each element on a route naming it (`onRoute`: router and route), an element where branches meet listed again (`again`), a Process Call with the process it calls. Each element has its type as in the editor and its `settings` as written in the iFlow (`{{parameters}}` unresolved; `project_info` and `iflow_where_used` resolve them); the `adapters` have their system, direction and settings. `iflow` picks the iFlow when there are several. Read-only; the drawing's geometry is left out. |
 | `reference` | No tab: what the simulator offers, generated from its sources. `script-api`: the Script API, Message Mapping and platform service methods; `platform`: the formats of the `platform/` files; `fidelity`: [Fidelity](fidelity.md). |
 
 Without `runtime`, a tool uses the app's default (Saxon-HE 9.9; Groovy from the script's imports), or the
@@ -208,4 +217,7 @@ The code is in `app/src-tauri/src/mcp/`. `flow.rs` repeats the Flow Steps tab's 
 (`app/src/lib/flowcalls.ts`); the fixtures in `testdata/flow-parity` hold the calls both must make for a
 step's settings and message, and a test on each side replays them without engines. Content Modifier
 fixtures also check results and early failures. They do not cover how the
-tab's editors or the MCP tool's arguments become those settings and that message.
+tab's editors or the MCP tool's arguments become those settings and that message. In the same way,
+`whereused.rs`, `functions.rs` and `iflowmodel.rs` repeat what the Where used tab, the Groovy tab's function list
+and the Diagram tab compute in TypeScript (`whereused.ts`, `functions.ts`, `iflowmodel.ts`), checked by
+`testdata/whereused-parity`, `testdata/functions-parity` and `testdata/iflowmodel-parity`.

@@ -21,8 +21,8 @@ of its version.
   language, so that both give the same order.
 - **MCP: an iFlow's diagram as text.** The new tool `iflow_diagram` lists an imported iFlow's processes with their
   elements in flow order, a Router's routes with their conditions, Process Calls, each element's settings and the
-  adapters with their systems, as the Diagram tab and its outline show them, so an agent can follow a message
-  through the iFlow.
+  adapters with their systems, as the Diagram tab and its outline show them; each element on a route names it
+  (`onRoute`), so an agent can follow a message through the iFlow.
 - **MCP: descriptions for agents that do not know the app.** The tools, their parameters and the server's
   instructions explain what they referred to the app's tabs for (the Groovy body type, the XPath version, a
   Router's condition types), how to try another configuration of an iFlow's step on the same input, how a

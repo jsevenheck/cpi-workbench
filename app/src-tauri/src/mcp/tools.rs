@@ -159,7 +159,8 @@ For an iFlow's script step, give the runtime project_info lists for it."));
 contentModifier: {headers: [row], properties: [row], bodyType: \"constant\"|\"expression\", body}, row = {action: \"Create\"|\"Delete\", name, \
 type: \"constant\"|\"header\"|\"property\"|\"xpath\"|\"expression\", value, datatype (e.g. \"java.lang.String\"), default} (row keys left out are empty). \
 filter: {expression (XPath), valueType: \"string\"|\"integer\"|\"boolean\"|\"node\"|\"nodelist\"}. \
-router: {routes: [{name, expressionType: \"xml\" (condition is an XPath)|\"nonxml\" (condition is Camel Simple, e.g. ${header.SenderId} = 'ERP'), condition, default: bool}], throwException: bool}. \
+router: {routes: [{name, expressionType: \"xml\" (condition is an XPath)|\"nonxml\" (condition is Camel Simple, e.g. ${header.SenderId} = 'ERP'), condition, default: bool}], throwException: bool}; SAP's =, and, or in a Simple condition run as Camel's ==, &&, || \
+(the result's camel field; reference fidelity says what is assumed). \
 splitter: {splitter: \"general\"|\"iterating\", expressionType: \"xpath\"|\"lineBreak\"|\"token\", expression, grouping, streaming: bool}. \
 gather: {messageType: \"sameXml\"|\"differentXml\"|\"plainText\", algorithm: \"combine\"|\"combineAtXPath\"|\"concatenate\", sourceXPath, targetXPath}. \
 converter: {conversion: \"jsonToXml\"|\"xmlToJson\"|\"xmlToCsv\"|\"csvToXml\"; JSON/XML: useNamespaces, separator, \
@@ -263,7 +264,7 @@ CPI, per step type, and what is not." })),
              (Base64, GZIP, ZIP) or Message Digest step on a message, like the \
              Flow Steps tab, from an iFlow of the project or from a config given here. Returns the output message(s), or \
              for a Router each route's result and the route taken: its runId passes the input on unchanged, as the \
-             message goes to that route's first step. For an iFlow's script, XSLT or XML Validator step, \
+             message goes to that route's first step; run that route's steps next yourself, with messageFrom. For an iFlow's script, XSLT or XML Validator step, \
              use run_groovy, run_xslt or validate_xsd with the step's file, function and profile from project_info.",
             step, &[], Effect::RunsCode),
         tool("save_file", "Save a file to the project",
@@ -289,10 +290,12 @@ CPI, per step type, and what is not." })),
             "The Diagram tab as text (read-only): an imported iFlow's processes (the integration process, exception \
              subprocesses, local processes), each with its elements in flow order from the start event. A Router's \
              routes are indented under it (depth + 1): a route's first element carries route (name, condition, \
-             default), and the route's further elements follow it until the next element with a route at that depth. \
+             default), and the route's further elements follow it until the next element with a route at that depth; \
+             each element on a route also names it (onRoute: router and route). \
              Where branches meet, the element is listed again (again: true); a Process Call names the local process it \
              calls (calls). Each element has its type as in the editor and its settings as written in the iFlow \
-             ({{parameters}} unresolved; project_info's configs and iflow_where_used resolve them); adapters name \
+             ({{parameters}} unresolved; project_info's configs, which run_flow_step runs, and iflow_where_used resolve \
+             them); adapters name \
              their system, direction and settings. Use it to follow \
              a message through the iFlow, then run the steps in that order with run_flow_step, run_groovy, run_xslt and \
              validate_xsd, passing each result on with messageFrom.",

@@ -77,7 +77,9 @@ For Claude Code on Windows, add `.mcp.json` to the project:
     "command": "${LOCALAPPDATA}\\CPI Workbench\\cpi-workbench.exe", "args": ["mcp"] } } }
 ```
 
-The app window need not be open. Other platforms/clients and server privileges: [MCP setup](docs/mcp.md#setup).
+The app window need not be open. Claude Desktop and Codex name a folder instead: `--project` for one project, or
+`--workspace` for a folder with one project per integration, which the agent opens and creates as needed.
+Configurations, other platforms and server privileges: [MCP setup](docs/mcp.md#setup).
 
 ## Documentation and contributing
 

@@ -17,7 +17,9 @@ of its version.
 - **Where used opens with an overview.** Instead of an empty search, the tab lists the addresses, credentials,
   queues, key aliases and files the imported iFlows use, with the number of places each (a click searches for it),
   and below them each iFlow's externalized parameters, which had their own *Parameters* view before. A value with a
-  `{{parameter}}` also shows what it resolves to, and iFlows that share a name are told apart by their folder.
+  `{{parameter}}` also shows what it resolves to, and iFlows that share a name are told apart by their folder. A receiver
+  adapter's hits name the step that calls it (`SuccessFactors receiver from Get WorkOrders`), so several receivers of one
+  system can be told apart.
 - **Editor features.** The code editors (Monaco 0.57) now offer Monaco's full set of editor features in every
   editor: its own right-click menu, the command palette (F1), sticky scroll of enclosing elements and
   go-to-line, among others. Monaco 0.57 loads these with its JSON support anyway, so before, editors opened

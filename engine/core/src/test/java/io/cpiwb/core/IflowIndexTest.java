@@ -34,10 +34,10 @@ class IflowIndexTest {
         List<Map<String, Object>> h = hits(Map.of("query", "orders_in"));
         assertEquals(List.of("Inbound_Files/MessageFlow_2/QueueName_outbound", "Outbound_Orders/MessageFlow_1/QueueName_inbound"), where(h));
         assertTrue(h.stream().allMatch(x -> "queue".equals(x.get("kind"))));
-        // An adapter's hit selects the system at its outer end and is labelled with adapter and direction.
+        // An adapter's hit selects the system at its outer end and is labelled with adapter, direction and, for a receiver, its caller.
         assertEquals("Participant_2", h.get(0).get("node"));
         assertEquals("Order queue", h.get(0).get("name"));
-        assertEquals("JMS receiver", h.get(0).get("label"));
+        assertEquals("JMS receiver from End", h.get(0).get("label")); // the step (here an end event) that calls it
         assertEquals("Participant_1", h.get(1).get("node"));
         assertEquals("JMS sender", h.get(1).get("label"));
     }

@@ -200,8 +200,13 @@ public final class IflowIndex {
                 String system = (String) (receiver ? f.get("target") : f.get("source"));
                 String node = nodes.containsKey(system) ? system : (String) (receiver ? f.get("source") : f.get("target"));
                 String name = nodes.containsKey(system) ? (String) nodes.get(system).get("name") : (String) f.get("name");
+                // Several receivers of one system look alike; the step that calls each tells them apart.
+                Map<String, Object> caller = receiver ? nodes.get(String.valueOf(f.get("source"))) : null;
+                Object callerName = caller == null ? null : caller.get("name");
+                String label = adapter + (receiver ? " receiver" : " sender")
+                        + (callerName == null || String.valueOf(callerName).isBlank() ? "" : " from " + callerName);
                 ((Map<String, Object>) f.get("properties")).forEach((k, v) ->
-                        add(out, iflow, id, node, name, "adapter", adapter + (receiver ? " receiver" : " sender"), k,
+                        add(out, iflow, id, node, name, "adapter", label, k,
                                 String.valueOf(v), kindOf(adapter, k)));
             } else if (f.get("condition") != null) {
                 // A Router's route: the gateway it leaves.

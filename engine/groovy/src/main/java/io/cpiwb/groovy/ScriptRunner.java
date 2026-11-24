@@ -120,8 +120,10 @@ public final class ScriptRunner {
         MappingFunction mapping = MappingFunction.find(scriptClass, function);
         Method fn = mapping != null ? null : findFunction(scriptClass, function);
         if (fn == null && mapping == null) {
+            List<String> steps = stepFunctions(scriptClass);
             diags.add(Diagnostic.error("Function '" + function + "' with one parameter was not found in the script. "
                     + "The Groovy Script step calls " + function + "(message)."
+                    + (steps.isEmpty() ? "" : " The script's functions with one parameter: " + String.join(", ", steps) + ".")
                     + (mappingFunctions.isEmpty() ? "" : " The script has Message Mapping functions: "
                     + String.join(", ", mappingFunctions) + ". Enter one of their names as the function to run it.")));
             return finish(result, false, "compile", diags, null, null, platform, "", t0, compileMs, cached, null);
@@ -427,6 +429,15 @@ public final class ScriptRunner {
             sb.insert(0, "Script_");
         }
         return sb.toString();
+    }
+
+    /** The script's own public instance methods with one parameter: what a Groovy Script step could call. */
+    private static List<String> stepFunctions(Class<?> cls) {
+        return java.util.Arrays.stream(cls.getDeclaredMethods())
+                .filter(m -> m.getParameterCount() == 1 && !m.isSynthetic() && !m.getName().contains("$")
+                        && java.lang.reflect.Modifier.isPublic(m.getModifiers())
+                        && !java.lang.reflect.Modifier.isStatic(m.getModifiers()))
+                .map(Method::getName).distinct().sorted().toList();
     }
 
     private static Method findFunction(Class<?> cls, String name) {

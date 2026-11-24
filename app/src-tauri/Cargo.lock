@@ -387,6 +387,7 @@ name = "cpi-workbench"
 version = "0.7.0"
 dependencies = [
  "junction",
+ "regex",
  "serde",
  "serde_json",
  "tauri",

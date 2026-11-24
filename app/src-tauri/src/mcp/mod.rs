@@ -18,6 +18,7 @@
 
 mod files;
 mod flow;
+mod functions;
 mod reference;
 mod runs;
 mod tools;

@@ -489,6 +489,19 @@ fn tools_run_on_the_engines() {
     assert!(info["files"].as_array().unwrap().iter().any(|f| f == "mappings/order-to-salesorder.xsl"), "{info}");
     assert_eq!(info["runtimes"].as_array().unwrap().len(), 4);
     assert!(info["iflowSteps"].as_array().unwrap().iter().any(|s| s["name"] == "Gather items"));
+    // A script step's function is checked against the script's text: the fixture's step calls enrich, which
+    // enrich.groovy does not declare; Log payload calls processData, which it does.
+    let step = |name: &str| info["iflowSteps"].as_array().unwrap().iter().find(|s| s["name"] == name).unwrap().clone();
+    assert_eq!(step("Enrich order")["functionFound"], false, "{info}");
+    assert_eq!(step("Log payload")["functionFound"], true, "{info}");
+    // Reading a script lists its functions, as the Groovy tab does when it opens one.
+    let script = c.ok("read_file", json!({ "path": "scripts/mapping-functions.groovy" }));
+    let fns: Vec<&str> = script["functions"].as_array().unwrap().iter().map(|f| f["signature"].as_str().unwrap()).collect();
+    assert!(fns.contains(&"getHeader(String, MappingContext)"), "{script}");
+    assert!(c.ok("read_file", json!({ "path": "tests/standard-order/input.xml" })).get("functions").is_none());
+    // A run of the missing function names the ones the script has (ScriptRunner).
+    let missing = c.ok("run_groovy", json!({ "scriptPath": "scripts/enrich-order.groovy", "function": "enrich", "body": "<a/>" }));
+    assert!(missing.to_string().contains("The script's functions with one parameter: processData."), "{missing}");
 
     // XSLT: header as xsl:param, on both Saxon lines.
     let x = c.ok("run_xslt", json!({ "runtime": "both", "body": "<a/>", "headers": { "h": "hello" },
@@ -721,6 +734,7 @@ fn a_workspace_switches_and_creates_projects() {
     let c = Call(&server);
     let info = c.ok("open_project", json!({ "name": "Orders" }));
     assert_eq!(info["created"], false, "{info}");
+    assert!(info.get("runtimes").is_none(), "{info}");
     assert!(info["iflowSteps"].as_array().is_some_and(|s| !s.is_empty()), "{info}");
     let r = c.ok("run_xslt", json!({ "mappingPath": "mappings/order-to-salesorder.xsl", "bodyPath": "tests/standard-order/input.xml" }));
     assert_eq!(r["ok"], true, "{r}");

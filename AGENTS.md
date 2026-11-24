@@ -46,7 +46,8 @@ in `docs/building.md` (*Releasing*).
 * `app/src`: the UI. `app/src-tauri`: the Rust shell; `src/mcp/` is the MCP server (`cpi-workbench mcp`).
   `mcp/flow.rs` repeats the Flow Steps tab's calls (`app/src/lib/flowcalls.ts`), including the defaults;
   change both together and add or adjust a fixture in `testdata/flow-parity`, which both sides' tests replay.
-  Likewise `mcp/whereused.rs` repeats the Where used tab's views (`app/src/lib/whereused.ts`), checked by `testdata/whereused-parity`. `mcp/reference.rs` builds its topics from `app/src/lib/completions.ts`,
+  Likewise `mcp/whereused.rs` repeats the Where used tab's views (`app/src/lib/whereused.ts`), checked by `testdata/whereused-parity`,
+  and `mcp/functions.rs` the Groovy tab's function reader (`app/src/lib/functions.ts`), checked by `testdata/functions-parity`. `mcp/reference.rs` builds its topics from `app/src/lib/completions.ts`,
   the clean-room platform classes and `docs/project-files.md` / `docs/fidelity.md`; its test names what it expects.
 * CPI Helper hand-over: `app/src/lib/share.ts` parses messages, `receiver.svelte.ts` coordinates
   confirmation/settings, and `app/src-tauri/src/receiver.rs` serves the opt-in loopback page.

@@ -19,6 +19,11 @@ of its version.
   a Content Modifier table as its matching rows and lists the parameters whose name or value contains the query.
   The app's overview now sorts values of equal count ignoring case on every machine, rather than by the system
   language, so that both give the same order.
+- **MCP: a script's functions.** `read_file` on a Groovy script lists the functions it declares, read from its
+  text as the Groovy tab does (nothing runs), and `project_info` marks a script step whose function the script
+  does not declare (`functionFound: false`). `open_project` no longer repeats the runtimes.
+- **A missing script function names the others.** When a Groovy Script step's function is not in the script, the
+  error lists the script's functions with one parameter, in the app and over MCP.
 - **A missing file is named as such.** Reading a file that does not exist (a body, script or mapping by path, in
   the app and over MCP) said only its path; it now says `No such file: <path>`.
 - **MCP: every result message names its `runId`.** A Splitter's messages and each runtime of `runtime: both` carry

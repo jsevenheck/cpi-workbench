@@ -178,6 +178,8 @@ class ScriptRunnerTest {
         Map<String, Object> r = run(s, in("", List.of(), List.of()), null);
         assertFalse(Json.bool(r, "ok", true));
         assertTrue(Json.write(r).contains("Function 'processData'"));
+        // The functions it could have called are named; the script class's own (main, run) are not.
+        assertTrue(Json.write(r).contains("The script's functions with one parameter: other."), () -> Json.write(r));
         Map<String, Object> custom = run(s, in("", List.of(), List.of()), Json.o().with("function", "other"));
         assertTrue(Json.bool(custom, "ok", false), () -> Json.write(custom));
     }

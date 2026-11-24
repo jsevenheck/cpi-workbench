@@ -226,7 +226,8 @@ CPI, per step type, and what is not." })),
             Map::new(), &[], Effect::ReadOnly),
         tool("open_project", "Open or create a project in the workspace",
             "Only when the server was started with --workspace: opens one of the workspace's folders as the project the \
-             other tools work in (create: true makes a new one), and returns its project_info. Earlier runIds stay usable.",
+             other tools work in (create: true makes a new one), and returns its project_info without the runtimes. \
+             Earlier runIds stay usable.",
             open, &["name"], Effect::OpensProject),
         tool("read_file", "Read a project file",
             "Reads a file of the project (a file that is no text with binary: true): an input message, a mapping, a script, a schema, an iFlow's files or the \
@@ -337,6 +338,7 @@ fn dispatch(server: &Server, name: &str, args: &Args) -> Result<Value, String> {
         "project_info" => project_info(server),
         "open_project" => files::open_project(server, args).and_then(|created| {
             let mut info = project_info(server)?;
+            info.as_object_mut().unwrap().remove("runtimes"); // the server's, the same in every project
             info["created"] = json!(created);
             Ok(info)
         }),
@@ -597,6 +599,16 @@ fn project_info(server: &Server) -> Result<Value, String> {
     }
     info["files"] = Value::Array(files.into_iter().take(MAX_FILES).collect());
     info["iflowSteps"] = engine_call(server, rt, "iflow.steps", json!({}))?["steps"].clone();
+    // A script step whose function the script does not declare fails only when it runs: say so up front, from the
+    // script's text as the Groovy tab reads it (nothing runs).
+    for step in info["iflowSteps"].as_array_mut().into_iter().flatten() {
+        let (Some(file), Some(function)) = (step["file"].as_str(), step["function"].as_str()) else { continue };
+        if step["fileFound"] != true || !(file.ends_with(".groovy") || file.ends_with(".gsh")) { continue; }
+        if let Ok(script) = read_file(server, file) {
+            let found = super::functions::script_functions(&script).iter().any(|f| f["name"] == function);
+            step["functionFound"] = json!(found);
+        }
+    }
     Ok(info)
 }
 

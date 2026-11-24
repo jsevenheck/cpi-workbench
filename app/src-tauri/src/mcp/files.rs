@@ -87,6 +87,10 @@ pub fn read_file(server: &Server, args: &Args) -> Result<Value, String> {
         end += 1;
     }
     let mut r = json!({ key: path, "content": text, "totalLines": total });
+    // As the Groovy tab lists a script's functions when it opens: read from the whole text, nothing runs.
+    if key == "path" && (path.ends_with(".groovy") || path.ends_with(".gsh")) {
+        r["functions"] = json!(super::functions::script_functions(&content));
+    }
     if cut_line {
         // The shown text is the cut line's beginning: the next character's offset in the whole content.
         let next: usize = lines.iter().take(end - 1).map(|l| l.chars().count()).sum::<usize>() + text.chars().count();

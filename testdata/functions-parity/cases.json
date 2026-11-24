@@ -1,0 +1,594 @@
+{
+  "_comment": "The Groovy tab's function list read from a script's text (app/src/lib/functions.ts, test app/tests/functionparity.test.mts) and the MCP server's (app/src-tauri/src/mcp/functions.rs, test functions_parity) must agree. Expected values come from the TypeScript reader.",
+  "cases": [
+    {
+      "name": "examples/demo-project/scripts/enrich-order.groovy",
+      "script": "import com.sap.gateway.ip.core.customdev.util.Message\nimport com.sap.it.api.ITApiFactory\nimport com.sap.it.api.mapping.ValueMappingApi\nimport com.sap.it.api.securestore.SecureStoreService\nimport groovy.xml.XmlUtil\n\n/*\n * Demo (Groovy Script 1.x): enrich a web shop order before the XSLT mapping.\n *  - value mapping: shop customer id -> S/4 sold-to party\n *  - secure store: technical user for a later HTTP call (only the user name is used here)\n *  - MPL: custom header property with the order number\n */\ndef Message processData(Message message) {\n    def order = new XmlParser().parseText(message.getBody(String))\n    def customerId = order.Customer[0].@id\n\n    def vm = ITApiFactory.getService(ValueMappingApi, null)\n    def soldTo = vm.getMappedValue('Shop', 'Customer', customerId, 'S4', 'SoldTo')\n    if (soldTo == null) {\n        throw new IllegalStateException(\"No sold-to party mapped for customer ${customerId}\")\n    }\n    order.Customer[0].@soldTo = soldTo\n\n    def credential = ITApiFactory.getService(SecureStoreService, null).getUserCredential('SHOP_API')\n    message.setHeader('ShopUser', credential.getUsername())\n    message.setProperty('SoldTo', soldTo)\n\n    messageLogFactory.getMessageLog(message)?.addCustomHeaderProperty('OrderNumber', order.@number)\n\n    message.setBody(XmlUtil.serialize(order))\n    return message\n}\n",
+      "expected": [
+        {
+          "name": "processData",
+          "params": [
+            {
+              "name": "message",
+              "type": "Message",
+              "kind": null
+            }
+          ],
+          "kind": "step",
+          "parameters": [
+            "Message"
+          ],
+          "signature": "processData(Message)"
+        }
+      ]
+    },
+    {
+      "name": "examples/demo-project/scripts/mapping-functions.groovy",
+      "script": "import com.sap.it.api.mapping.MappingContext\nimport com.sap.it.api.mapping.Output\n\n// Custom functions of a Message Mapping (run on their own; the mapping itself is not simulated).\n\ndef String getHeader(String headerName, MappingContext context) {\n    return context.getHeader(headerName)\n}\n\ndef String setProperty(String name, String value, MappingContext context) {\n    context.setProperty(name, value)\n    return value\n}\n\n// All values of a context (String[] arguments, Output): called once per context.\ndef void countPerContext(String[] values, Output output, MappingContext context) {\n    output.addValue(values.count { !output.isSuppress(it) })\n}\n",
+      "expected": [
+        {
+          "name": "getHeader",
+          "params": [
+            {
+              "name": "headerName",
+              "type": "String",
+              "kind": "value"
+            },
+            {
+              "name": "context",
+              "type": "MappingContext",
+              "kind": "context"
+            }
+          ],
+          "kind": "mapping",
+          "parameters": [
+            "String",
+            "MappingContext"
+          ],
+          "signature": "getHeader(String, MappingContext)"
+        },
+        {
+          "name": "setProperty",
+          "params": [
+            {
+              "name": "name",
+              "type": "String",
+              "kind": "value"
+            },
+            {
+              "name": "value",
+              "type": "String",
+              "kind": "value"
+            },
+            {
+              "name": "context",
+              "type": "MappingContext",
+              "kind": "context"
+            }
+          ],
+          "kind": "mapping",
+          "parameters": [
+            "String",
+            "String",
+            "MappingContext"
+          ],
+          "signature": "setProperty(String, String, MappingContext)"
+        },
+        {
+          "name": "countPerContext",
+          "params": [
+            {
+              "name": "values",
+              "type": "String[]",
+              "kind": "queue"
+            },
+            {
+              "name": "output",
+              "type": "Output",
+              "kind": "output"
+            },
+            {
+              "name": "context",
+              "type": "MappingContext",
+              "kind": "context"
+            }
+          ],
+          "kind": "mapping",
+          "parameters": [
+            "String[]",
+            "Output",
+            "MappingContext"
+          ],
+          "signature": "countPerContext(String[], Output, MappingContext)"
+        }
+      ]
+    },
+    {
+      "name": "examples/demo-project/scripts/route-by-partner.groovy",
+      "script": "import com.sap.it.api.ITApiFactory\nimport com.sap.it.api.pd.PartnerDirectoryService\nimport com.sap.it.script.v2.api.Message\n\n/*\n * Demo (Groovy Script 2.x): partner-dependent routing via the Partner Directory.\n * The sales channel from the header SalesChannel is mapped to a partner ID; its parameters give the\n * receiver URL and the sales organisation.\n */\ndef Message processData(Message message) {\n    def pd = ITApiFactory.getService(PartnerDirectoryService, null)\n    def channel = message.getHeader('SalesChannel', String)\n    def partnerId = pd.getPartnerId('Shop', 'Channel', channel)\n    if (partnerId == null) {\n        throw new IllegalStateException(\"No partner maintained for sales channel ${channel}\")\n    }\n    message.setProperty('PartnerId', partnerId)\n    message.setProperty('ReceiverUrl', pd.getParameter('RECEIVER_URL', partnerId, String))\n    message.setHeader('SalesOrg', pd.getParameter('SALES_ORG', partnerId, String))\n    return message\n}\n",
+      "expected": [
+        {
+          "name": "processData",
+          "params": [
+            {
+              "name": "message",
+              "type": "Message",
+              "kind": null
+            }
+          ],
+          "kind": "step",
+          "parameters": [
+            "Message"
+          ],
+          "signature": "processData(Message)"
+        }
+      ]
+    },
+    {
+      "name": "examples/demo-project/scripts/validate-order-batch.groovy",
+      "script": "import com.sap.it.script.v2.api.Message\nimport groovy.xml.XmlSlurper\n\n/*\n * Demo (Groovy Script 2.x): validates the SalesOrderBatch from mappings/orders-to-batch.xsl\n * (input: inputs/order-batch.xml) and sets headers and exchange properties. The body stays as it is.\n */\ndef Message processData(Message message) {\n    final String targetNamespace = 'urn:demo:integration:orders:target:v1'\n\n    // Fine for small messages; read large ones from a Reader or stream instead of a String copy.\n    String payload = message.getBody(String)\n    def root = new XmlSlurper(false, true).parseText(payload)\n    root.declareNamespace(t: targetNamespace)\n\n    if (root.name() != 'SalesOrderBatch' || root.namespaceURI() != targetNamespace) {\n        throw new IllegalArgumentException('Unexpected XML: SalesOrderBatch expected')\n    }\n\n    def orders = root.'t:SalesOrders'.'t:SalesOrder'\n    int orderCount = orders.size()\n    if (orderCount == 0) {\n        throw new IllegalArgumentException('The batch contains no orders')\n    }\n\n    List<String> currencies = orders.collect { order ->\n        order.'t:TotalAmount'.@currency.text()\n    }.unique()\n    if (currencies.size() != 1 || !currencies[0]) {\n        throw new IllegalArgumentException('All orders must have the same currency')\n    }\n\n    BigDecimal batchTotal = orders.inject(BigDecimal.ZERO) { BigDecimal sum, order ->\n        String amount = order.'t:TotalAmount'.text()\n        sum.add(new BigDecimal(amount))\n    }\n    String formattedTotal = batchTotal.setScale(2).toPlainString()\n    String currency = currencies[0]\n\n    // Headers, e.g. for a receiver adapter.\n    message.setHeader('Content-Type', 'application/xml; charset=UTF-8')\n    message.setHeader('X-Order-Count', orderCount.toString())\n    message.setHeader('X-Order-Total', formattedTotal)\n    message.setHeader('X-Currency', currency)\n\n    // Exchange properties, e.g. for a router, content modifier or monitoring.\n    message.setProperty('orderCount', orderCount)\n    message.setProperty('orderTotal', formattedTotal)\n    message.setProperty('orderCurrency', currency)\n\n    return message\n}\n",
+      "expected": [
+        {
+          "name": "processData",
+          "params": [
+            {
+              "name": "message",
+              "type": "Message",
+              "kind": null
+            }
+          ],
+          "kind": "step",
+          "parameters": [
+            "Message"
+          ],
+          "signature": "processData(Message)"
+        }
+      ]
+    },
+    {
+      "name": "testdata/regression-project/scripts/mapping-null.groovy",
+      "script": "import com.sap.it.api.mapping.MappingContext\n\n// A Message Mapping function that tells null from an empty string (regression: a test case's null argument).\ndef String classify(String value, MappingContext context) {\n    return value == null ? 'NULL' : value.isEmpty() ? 'EMPTY' : 'VALUE'\n}\n",
+      "expected": [
+        {
+          "name": "classify",
+          "params": [
+            {
+              "name": "value",
+              "type": "String",
+              "kind": "value"
+            },
+            {
+              "name": "context",
+              "type": "MappingContext",
+              "kind": "context"
+            }
+          ],
+          "kind": "mapping",
+          "parameters": [
+            "String",
+            "MappingContext"
+          ],
+          "signature": "classify(String, MappingContext)"
+        }
+      ]
+    },
+    {
+      "name": "testdata/regression-project/scripts/read-delivery-note.groovy",
+      "script": "import com.sap.gateway.ip.core.customdev.util.Message\n\n/*\n * Demo (Groovy Script 1.x): read a text attachment that came with the message (e.g. from a\n * mail or AS2 sender) and pass its first line on as a header.\n */\ndef Message processData(Message message) {\n    def note = message.getAttachments()['delivery-note.txt']\n    if (note == null) {\n        throw new IllegalStateException('Attachment delivery-note.txt is missing')\n    }\n    def firstLine = note.getContent().text.readLines().find { it.trim() } ?: ''\n    message.setHeader('DeliveryNote', firstLine.trim())\n    message.setProperty('AttachmentCount', message.getAttachments().size())\n    return message\n}\n",
+      "expected": [
+        {
+          "name": "processData",
+          "params": [
+            {
+              "name": "message",
+              "type": "Message",
+              "kind": null
+            }
+          ],
+          "kind": "step",
+          "parameters": [
+            "Message"
+          ],
+          "signature": "processData(Message)"
+        }
+      ]
+    },
+    {
+      "name": "engine/core/src/test/resources/iflow/src/main/resources/script/enrich.groovy",
+      "script": "import com.sap.gateway.ip.core.customdev.util.Message\ndef Message processData(Message message) { message }\n",
+      "expected": [
+        {
+          "name": "processData",
+          "params": [
+            {
+              "name": "message",
+              "type": "Message",
+              "kind": null
+            }
+          ],
+          "kind": "step",
+          "parameters": [
+            "Message"
+          ],
+          "signature": "processData(Message)"
+        }
+      ]
+    },
+    {
+      "name": "engine/core/src/test/resources/iflow/src/main/resources/script/lookup.gsh",
+      "script": "import com.sap.it.api.mapping.MappingContext\n\ndef String getHeader(String name, MappingContext context) {\n    return context.getHeader(name)\n}\n",
+      "expected": [
+        {
+          "name": "getHeader",
+          "params": [
+            {
+              "name": "name",
+              "type": "String",
+              "kind": "value"
+            },
+            {
+              "name": "context",
+              "type": "MappingContext",
+              "kind": "context"
+            }
+          ],
+          "kind": "mapping",
+          "parameters": [
+            "String",
+            "MappingContext"
+          ],
+          "signature": "getHeader(String, MappingContext)"
+        }
+      ]
+    },
+    {
+      "name": "comments and strings",
+      "script": "// def String commented(String a) {\n/* def x(String y) { */\ndef s = \"def String inString(String a) {\"\ndef t = '''\ndef String inTriple(String a) {\n'''\ndef String real(String a) { a }\n",
+      "expected": [
+        {
+          "name": "real",
+          "params": [
+            {
+              "name": "a",
+              "type": "String",
+              "kind": "value"
+            }
+          ],
+          "kind": "mapping",
+          "parameters": [
+            "String"
+          ],
+          "signature": "real(String)"
+        }
+      ]
+    },
+    {
+      "name": "escapes and an unclosed string",
+      "script": "def q = \"a \\\" def String no(String a) {\"\ndef String yes(String a) { 'x' }\ndef u = \"open\ndef String after(String a) { a }\n",
+      "expected": [
+        {
+          "name": "yes",
+          "params": [
+            {
+              "name": "a",
+              "type": "String",
+              "kind": "value"
+            }
+          ],
+          "kind": "mapping",
+          "parameters": [
+            "String"
+          ],
+          "signature": "yes(String)"
+        },
+        {
+          "name": "after",
+          "params": [
+            {
+              "name": "a",
+              "type": "String",
+              "kind": "value"
+            }
+          ],
+          "kind": "mapping",
+          "parameters": [
+            "String"
+          ],
+          "signature": "after(String)"
+        }
+      ]
+    },
+    {
+      "name": "nesting, static, private and classes",
+      "script": "class Helper {\n  def String inner(String a) { a }\n}\nstatic String st(String a) { a }\nprivate String pr(String a) { a }\ndef Message processData(Message message) {\n  if (x) { def y(z) { } }\n  return message\n}\ninterface I { }\nenum E { A }\n",
+      "expected": [
+        {
+          "name": "processData",
+          "params": [
+            {
+              "name": "message",
+              "type": "Message",
+              "kind": null
+            }
+          ],
+          "kind": "step",
+          "parameters": [
+            "Message"
+          ],
+          "signature": "processData(Message)"
+        }
+      ]
+    },
+    {
+      "name": "parameters: generics, annotations, defaults, final, varargs",
+      "script": "def String gen(Map<String, List<String>> m, String b) { }\ndef String ann(@Deprecated final String a, String b = \"x,y\") { }\ndef void va(String... values, Output output) { }\ndef String objs(Object[] values, java.lang.String s, com.sap.it.api.mapping.MappingContext c) { }\n",
+      "expected": [
+        {
+          "name": "gen",
+          "params": [
+            {
+              "name": "m",
+              "type": "Map<String, List<String>>",
+              "kind": null
+            },
+            {
+              "name": "b",
+              "type": "String",
+              "kind": "value"
+            }
+          ],
+          "kind": null,
+          "parameters": [
+            "Map<String, List<String>>",
+            "String"
+          ],
+          "signature": "gen(Map<String, List<String>>, String)"
+        },
+        {
+          "name": "ann",
+          "params": [
+            {
+              "name": "a",
+              "type": "String",
+              "kind": "value"
+            },
+            {
+              "name": "b",
+              "type": "String",
+              "kind": "value"
+            }
+          ],
+          "kind": "mapping",
+          "parameters": [
+            "String",
+            "String"
+          ],
+          "signature": "ann(String, String)"
+        },
+        {
+          "name": "va",
+          "params": [
+            {
+              "name": "values",
+              "type": "String...",
+              "kind": "queue"
+            },
+            {
+              "name": "output",
+              "type": "Output",
+              "kind": "output"
+            }
+          ],
+          "kind": "mapping",
+          "parameters": [
+            "String[]",
+            "Output"
+          ],
+          "signature": "va(String[], Output)"
+        },
+        {
+          "name": "objs",
+          "params": [
+            {
+              "name": "values",
+              "type": "Object[]",
+              "kind": "queue"
+            },
+            {
+              "name": "s",
+              "type": "java.lang.String",
+              "kind": "value"
+            },
+            {
+              "name": "c",
+              "type": "com.sap.it.api.mapping.MappingContext",
+              "kind": "context"
+            }
+          ],
+          "kind": "mapping",
+          "parameters": [
+            "String[]",
+            "String",
+            "MappingContext"
+          ],
+          "signature": "objs(String[], String, MappingContext)"
+        }
+      ]
+    },
+    {
+      "name": "kinds of one parameter",
+      "script": "def a(m) { }\ndef String b(String s) { }\ndef c(Object o) { }\ndef d(com.sap.gateway.ip.core.customdev.util.Message m) { }\ndef e(int n) { }\ndef f() { }\ndef String g(String[] v) { }\n",
+      "expected": [
+        {
+          "name": "a",
+          "params": [
+            {
+              "name": "m",
+              "type": "",
+              "kind": "value"
+            }
+          ],
+          "kind": "step",
+          "parameters": [
+            "String"
+          ],
+          "signature": "a(String)"
+        },
+        {
+          "name": "b",
+          "params": [
+            {
+              "name": "s",
+              "type": "String",
+              "kind": "value"
+            }
+          ],
+          "kind": "mapping",
+          "parameters": [
+            "String"
+          ],
+          "signature": "b(String)"
+        },
+        {
+          "name": "c",
+          "params": [
+            {
+              "name": "o",
+              "type": "Object",
+              "kind": "value"
+            }
+          ],
+          "kind": "step",
+          "parameters": [
+            "String"
+          ],
+          "signature": "c(String)"
+        },
+        {
+          "name": "d",
+          "params": [
+            {
+              "name": "m",
+              "type": "com.sap.gateway.ip.core.customdev.util.Message",
+              "kind": null
+            }
+          ],
+          "kind": "step",
+          "parameters": [
+            "com.sap.gateway.ip.core.customdev.util.Message"
+          ],
+          "signature": "d(com.sap.gateway.ip.core.customdev.util.Message)"
+        },
+        {
+          "name": "e",
+          "params": [
+            {
+              "name": "n",
+              "type": "int",
+              "kind": null
+            }
+          ],
+          "kind": null,
+          "parameters": [
+            "int"
+          ],
+          "signature": "e(int)"
+        },
+        {
+          "name": "f",
+          "params": [],
+          "kind": null,
+          "parameters": [],
+          "signature": "f()"
+        },
+        {
+          "name": "g",
+          "params": [
+            {
+              "name": "v",
+              "type": "String[]",
+              "kind": "queue"
+            }
+          ],
+          "kind": "mapping",
+          "parameters": [
+            "String[]"
+          ],
+          "signature": "g(String[])"
+        }
+      ]
+    },
+    {
+      "name": "throws, duplicates, run and keywords",
+      "script": "def Message processData(Message message) throws Exception { message }\ndef Message processData(Message message) { message }\ndef run() { }\npublic String pub(String a) { a }\nfinal foo(x) { }\nreturn bar(x) { }\n",
+      "expected": [
+        {
+          "name": "processData",
+          "params": [
+            {
+              "name": "message",
+              "type": "Message",
+              "kind": null
+            }
+          ],
+          "kind": "step",
+          "parameters": [
+            "Message"
+          ],
+          "signature": "processData(Message)"
+        },
+        {
+          "name": "pub",
+          "params": [
+            {
+              "name": "a",
+              "type": "String",
+              "kind": "value"
+            }
+          ],
+          "kind": "mapping",
+          "parameters": [
+            "String"
+          ],
+          "signature": "pub(String)"
+        }
+      ]
+    },
+    {
+      "name": "unicode and dollar names",
+      "script": "def String café(String a) { a }\ndef String $d(String $a) { a }\ndef String x1_y(String é) { }\n",
+      "expected": [
+        {
+          "name": "$d",
+          "params": [
+            {
+              "name": "$a",
+              "type": "String",
+              "kind": "value"
+            }
+          ],
+          "kind": "mapping",
+          "parameters": [
+            "String"
+          ],
+          "signature": "$d(String)"
+        },
+        {
+          "name": "x1_y",
+          "params": [
+            {
+              "name": "String é",
+              "type": "",
+              "kind": "value"
+            }
+          ],
+          "kind": "step",
+          "parameters": [
+            "String"
+          ],
+          "signature": "x1_y(String)"
+        }
+      ]
+    }
+  ]
+}

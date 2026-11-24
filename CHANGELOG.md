@@ -6,6 +6,12 @@ of its version.
 
 ## [Unreleased]
 
+### Added
+
+- **MCP: a workspace of projects.** `cpi-workbench mcp --workspace <folder>` serves the folders inside that folder,
+  one per integration, from one entry in Claude Desktop or Codex: `project_info` lists them, and the new tool
+  `open_project` opens one or creates a new project there. Before, each project needed its own `--project` entry.
+
 ## [0.7.0] - 2026-11-24
 
 ### Added

@@ -61,7 +61,19 @@ args = ["mcp", "--project", 'C:\work\my-cpi-project']
 In both, replace `<user>` with your Windows user name (the folder under `C:\Users`) and the project
 path with yours, then restart the client.
 
-The project folder is `--project`, else `CLAUDE_PROJECT_DIR`, else the server's working directory.
+**Several projects with one entry:** instead of `--project`, give `--workspace` and a folder that holds your
+projects, one folder per integration (`C:\work\cpi\Orders`, `C:\work\cpi\Billing`, …):
+
+```json
+"args": ["mcp", "--workspace", "C:\\work\\cpi"]
+```
+
+The server then starts without a project. `project_info` lists the workspace's folders under `projects`, and
+`open_project` opens one of them, or creates a new one with `create: true` (the layout of the app's
+*Import iFlow…* without a project). The agent works in one project at a time and never outside the workspace.
+
+The project folder is `--project`, else `CLAUDE_PROJECT_DIR`, else the server's working directory; with
+`--workspace`, the folder `open_project` opened.
 From a repository checkout, a debug build works too (`app/src-tauri/target/debug/cpi-workbench mcp`);
 it finds the checkout's engine jars.
 
@@ -84,7 +96,8 @@ agent without file access of its own what the app's file tree and **Import iFlow
 
 | Tool | Tab in the app |
 |---|---|
-| `project_info` | The project: its files, the steps of the iFlows under `iflows/` (flow steps with their configuration; script, XSLT and XML Validator steps with file, function and runtime) and the installed runtimes. |
+| `project_info` | The project: its files, the steps of the iFlows under `iflows/` (flow steps with their configuration; script, XSLT and XML Validator steps with file, function and runtime) and the installed runtimes; with `--workspace`, also the workspace's folders (`projects`). |
+| `open_project` | **Open folder…** / **Import iFlow…** without a project, within the workspace (`--workspace` only): opens a folder directly inside it (`name`), or creates a new project there (`create: true`), and returns its `project_info`. Calls that are running finish on the project they started on; earlier `runId`s stay usable. |
 | `read_file` | Opening a file: the text of a project file, long files in parts (`startLine`, `maxLines`), text in one long line by characters (`startChar`); a file that is no text with `binary: true` (as `contentBase64`); with `runId`, the whole output body of a run (a binary one as `contentBase64`). |
 | `run_xslt` | XSLT (`mappingPath` or `mapping`). `runtime: "both"` runs Saxon-HE 9.9 and 12, as the runtime comparison does. |
 | `run_groovy` | Groovy, with the Script API and the project's `platform/` mocks, and the body type (`bodyType`). The runtime (1.x or 2.x) follows the script's imports unless given; `both` runs both. A custom function of a Message Mapping script takes `args` instead, as the Groovy tab's *Arguments*; the result's `mapping` holds the returned value or the output queue. |
@@ -143,7 +156,8 @@ lists what is verified against CPI.
 
 ## What the server can access
 
-* **Files:** only the project folder. Bodies, mappings, scripts and schemas are read through the
+* **Files:** only the project folder (with `--workspace`, the project `open_project` opened; it opens or
+  creates only folders directly inside the workspace, and refuses a link that leads outside it). Bodies, mappings, scripts and schemas are read through the
   engines, which refuse paths outside the project, as in the app ([What a run can access](user-guide.md#what-a-run-can-access)).
   The check follows symbolic links: a link inside the project that leads outside it is refused.
   Paths that are absolute or contain `..` are refused before the engine sees them.
@@ -154,8 +168,9 @@ lists what is verified against CPI.
 * **Code:** Groovy scripts execute as ordinary Java code with your user's rights, without a sandbox;
   Camel Simple in flow steps and reflexive `java:` calls in XSLT can call methods too. An agent that can
   call `run_groovy` or `run_xslt` can run any code. The MCP annotations say so: only `project_info`,
-  `read_file`, `validate_xsd`, `evaluate_xpath` and `reference` are marked read-only and closed-world;
-  `save_file` and `import_iflow` are marked as writing (destructive, idempotent, closed-world). A client that
+  `read_file`, `validate_xsd`, `evaluate_xpath`, `iflow_where_used` and `reference` are marked read-only and closed-world;
+  `save_file` and `import_iflow` are marked as writing (destructive, idempotent, closed-world); `open_project` as
+  not read-only but not destructive (it creates a folder at most). A client that
   uses these hints can ask before the others run.
 * **Network:** MCP opens no port, starts no CPI Helper receiver and makes no external requests.
   XML runs resolve includes, documents
@@ -180,7 +195,7 @@ lists what is verified against CPI.
 * Features: tools, with `structuredContent` and the same JSON as text; one prompt (`develop_step`);
   `instructions` that tell the agent how to work with the tools. No resources, logging, sampling or roots. `notifications/cancelled` drops the answer; the engine finishes the run.
 * Engines start on first use and stop after 10 idle minutes (Groovy); an engine that hits the
-  30-second execution timeout restarts with the project open again. The supervisor also bounds queue
+  30-second execution timeout restarts; every call carries its project, as the desktop app's calls do. The supervisor also bounds queue
   wait, startup and pipe I/O independently (see [Architecture](architecture.md#engines-and-protocol)).
   The server stops when its stdin closes.
 * Tested with the official TypeScript SDK 1.32.2 and Python SDK 2.3.0 clients (both negotiate

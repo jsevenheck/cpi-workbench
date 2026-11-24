@@ -152,7 +152,7 @@ Use a copy of `examples/demo-project`. Setup details: [MCP server](mcp.md).
 |---|---|---|
 | 5.1 | Create `.mcp.json` in the project folder (below) | – |
 | 5.2 | Start `claude` in the project folder (terminal or the Code tab of the desktop app) | Claude Code asks once before it starts the project's server → allow. |
-| 5.3 | `/mcp` | `cpi-workbench` is connected with 11 tools: `project_info`, `read_file`, `run_xslt`, `run_groovy`, `validate_xsd`, `evaluate_xpath`, `run_flow_step`, `save_file`, `import_iflow`, `iflow_where_used`, `reference`. |
+| 5.3 | `/mcp` | `cpi-workbench` is connected with 12 tools: `project_info`, `open_project`, `read_file`, `run_xslt`, `run_groovy`, `validate_xsd`, `evaluate_xpath`, `run_flow_step`, `save_file`, `import_iflow`, `iflow_where_used`, `reference`. |
 | 5.4 | *"Use project_info to show what is in the project."* | Files and installed runtimes. |
 | 5.5 | *"Run mappings/order-to-salesorder.xsl on inputs/order.xml with header SenderSystem=ERP and property CustomerGroup=02, then on both Saxon versions."* | Same result as 2.2 and 2.3. |
 | 5.6 | *"Run scripts/enrich-order.groovy on inputs/order.xml and show the message log."* | Same result as 2.6; the first run is slower while the engine starts. |
@@ -164,6 +164,7 @@ Use a copy of `examples/demo-project`. Setup details: [MCP server](mcp.md).
 | 5.12 | *"Save it as mappings/agent-order.xsl."*, then the same again | The client may ask before the writing tool; the file appears in the app after **↻**. The second time the agent is told the file exists and asks whether to replace it. |
 | 5.13 | *"Import the iFlow from <path of an exported .zip> and tell me what its Content Modifier does with a sample message."* | `import_iflow`, then `run_flow_step` on its step; the app shows the iFlow after **↻**. |
 | 5.14 | **+** → **develop_step** with a task | The agent follows the steps of the prompt (project, input, write, run, report). |
+| 5.15 | Claude Desktop with `--workspace` on a folder holding the copy and one other project: *"Which projects are there? Open the copy, then create a new project Billing."* | `project_info` lists both under `projects`; `open_project` opens the copy, then creates `Billing` with `platform/` and `cpi-workbench.json`; nothing outside the workspace is touched. |
 
 `.mcp.json` for the `setup.exe` install (for the `.msi`: `C:\\Program Files\\CPI Workbench\\cpi-workbench.exe`):
 
@@ -188,7 +189,7 @@ $LASTEXITCODE   # expected: 0
 
 ## 6. Other MCP clients (optional)
 
-Claude Desktop and Codex need `--project`; the configurations are in [MCP server](mcp.md#setup).
+Claude Desktop and Codex need `--project` or `--workspace`; the configurations are in [MCP server](mcp.md#setup).
 Restart the client, then repeat 5.4 and 5.5.
 
 ## 7. Release

@@ -2,6 +2,7 @@
 //! save one, import an iFlow. Reads and writes go through the engines' file calls (`ProjectFiles`), the
 //! same the app uses, which refuse paths outside the project and symbolic links that lead outside.
 //! Saving and importing never replace an existing file or iFlow unless the call says `overwrite`.
+//! With `--workspace`, `open_project` opens or creates a folder directly inside the workspace, never one elsewhere.
 
 use super::tools::{engine_call, file_runtime, require_project, str_arg, Args};
 use super::Server;
@@ -216,6 +217,54 @@ pub fn import_iflow(server: &Server, args: &Args) -> Result<Value, String> {
         .filter(|s| s["iflow"].as_str().is_some_and(|i| folders.iter().any(|f| f == i))).cloned().collect();
     Ok(json!({ "kind": r["kind"], "imported": r["imported"], "files": r["files"], "steps": steps,
         "valueMappings": r["valueMappings"], "skipped": r["skipped"], "kept": r["kept"] }))
+}
+
+/// The folders directly inside the workspace, by name; hidden ones (`.git`) left out.
+pub fn workspace_projects(workspace: &Path) -> Result<Vec<String>, String> {
+    let entries = std::fs::read_dir(workspace).map_err(|e| format!("workspace {}: {e}", workspace.display()))?;
+    let mut names: Vec<String> = entries.flatten()
+        .filter(|e| e.path().is_dir())
+        .filter_map(|e| e.file_name().to_str().map(str::to_string))
+        .filter(|n| !n.starts_with('.'))
+        .collect();
+    names.sort_by_key(|n| n.to_lowercase());
+    Ok(names)
+}
+
+/// Opens, or with `create` creates, the workspace folder `name` as the project. Returns whether it was created.
+pub fn open_project(server: &Server, args: &Args) -> Result<bool, String> {
+    let Some(workspace) = server.workspace() else {
+        return Err("open_project needs a workspace: this server works in one project folder. Start it with \
+            --workspace <folder> to open the folders inside that folder.".into());
+    };
+    let name = str_arg(args, "name").unwrap_or_default();
+    // One folder name: no separators, drive or `..`; no trailing dot or space, which Windows drops from names.
+    if name.trim().is_empty() || name == "." || name == ".." || name.contains(['/', '\\', ':'])
+        || name.ends_with(['.', ' ']) || name.chars().any(char::is_control) {
+        return Err(format!("'{name}' is not a folder name. Give one name of a folder inside the workspace, \
+            as project_info lists it under projects."));
+    }
+    let dir = workspace.join(name);
+    let create = args.get("create").and_then(Value::as_bool).unwrap_or(false);
+    if create {
+        // The engine creates the folder (never an existing one) and the standard layout, as the app's Import does.
+        // Sent with no project, so the call acts only on the folder it is given.
+        let params = json!({ "dir": dir.to_string_lossy(), "create": true, "init": true });
+        server.engines().call_desktop(file_runtime(server)?, "project.open", params, None)
+            .map_err(|e| if e.contains("exists already") {
+                format!("A folder '{name}' exists already in the workspace. Open it without create, or give another name.")
+            } else { e })?;
+    } else if !dir.is_dir() {
+        return Err(format!("No folder '{name}' in the workspace. project_info lists them under projects; \
+            create: true makes a new one."));
+    }
+    // A link inside the workspace that leads outside it is refused, as a project's own links are.
+    let real = super::existing_folder(&dir, "project")?;
+    if !real.starts_with(workspace) || real == workspace {
+        return Err(format!("'{name}' leads outside the workspace; open_project opens only folders inside it."));
+    }
+    server.set_project(real);
+    Ok(create)
 }
 
 #[cfg(test)]

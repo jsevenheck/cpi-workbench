@@ -169,7 +169,7 @@ fn legacy_handshake_negotiates_the_version() {
     assert_eq!(by_id(&msgs, 3)["result"], json!({}));
     let list = &by_id(&msgs, 4)["result"];
     assert!(list.get("resultType").is_none() && list.get("ttlMs").is_none(), "legacy results stay legacy: {list}");
-    assert_eq!(list["tools"].as_array().unwrap().len(), 11);
+    assert_eq!(list["tools"].as_array().unwrap().len(), 12);
 }
 
 #[test]
@@ -242,7 +242,7 @@ fn protocol_errors() {
 fn tool_definitions_follow_the_spec() {
     let tools = tools::definitions();
     let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
-    assert_eq!(names, ["project_info", "read_file", "run_xslt", "run_groovy", "validate_xsd", "evaluate_xpath", "run_flow_step",
+    assert_eq!(names, ["project_info", "open_project", "read_file", "run_xslt", "run_groovy", "validate_xsd", "evaluate_xpath", "run_flow_step",
         "save_file", "import_iflow", "iflow_where_used", "reference"]);
     // Only tools that cannot run code are read-only: XSLT's java: calls and Groovy can (JavaExtensions).
     let read_only: Vec<&str> = tools.iter().filter(|t| t["annotations"]["readOnlyHint"] == true)
@@ -256,6 +256,9 @@ fn tool_definitions_follow_the_spec() {
     for name in ["run_xslt", "run_groovy", "run_flow_step"] {
         assert!(tools.iter().find(|t| t["name"] == name).unwrap().get("annotations").is_none(), "{name}");
     }
+    // Switching the project creates at most a folder and replaces nothing.
+    assert_eq!(tools.iter().find(|t| t["name"] == "open_project").unwrap()["annotations"],
+        json!({ "readOnlyHint": false, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false }));
     for t in &tools {
         let name = t["name"].as_str().unwrap();
         assert!(name.len() <= 128 && name.chars().all(|c| c.is_ascii_alphanumeric() || "_-.".contains(c)));
@@ -479,7 +482,6 @@ impl Call<'_> {
 fn tools_run_on_the_engines() {
     let Some(engines) = engines() else { return };
     let dir = project("tools");
-    *engines.on_start.lock().unwrap() = Some(("project.open".into(), json!({ "dir": dir.to_string_lossy() })));
     let server = Server::new(engines.clone(), Some(dir.clone()));
     let c = Call(&server);
 
@@ -618,7 +620,6 @@ fn where_used_searches_the_imported_iflows() {
     let dir = project("whereused");
     let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     copy_dir(&repo.join("engine/core/src/test/resources/iflow-index/iflows"), &dir.join("iflows"));
-    *engines.on_start.lock().unwrap() = Some(("project.open".into(), json!({ "dir": dir.to_string_lossy() })));
     let server = Server::new(engines.clone(), Some(dir.clone()));
     let c = Call(&server);
 
@@ -643,12 +644,95 @@ fn where_used_searches_the_imported_iflows() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+#[test]
+fn the_server_takes_a_project_or_a_workspace() {
+    let dir = std::env::temp_dir().join(format!("cpiwb-mcp-args-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let d = dir.to_string_lossy().to_string();
+    let args = |a: &[&str]| parse_args(&a.iter().map(|s| s.to_string()).collect::<Vec<_>>());
+    let real = existing_folder(&dir, "x").unwrap();
+    assert_eq!(args(&["--workspace", &d]), Ok(Folder::Workspace(real.clone())));
+    assert_eq!(args(&["--project", &d]), Ok(Folder::Project(real)));
+    assert!(args(&["--project", &d, "--workspace", &d]).unwrap_err().contains("not both"));
+    assert!(args(&["--workspace"]).unwrap_err().contains("needs a folder"));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// open_project opens folders directly inside the workspace only; checked before any engine runs.
+#[test]
+fn open_project_stays_inside_the_workspace() {
+    let c = Call(&bare());
+    assert!(c.err("open_project", json!({ "name": "a" })).contains("needs a workspace"));
+    let root = std::env::temp_dir().join(format!("cpiwb-mcp-ws-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    for f in ["Order", "billing", ".git"] {
+        std::fs::create_dir_all(root.join(f)).unwrap();
+    }
+    std::fs::write(root.join("notes.txt"), "x").unwrap();
+    let ws = existing_folder(&root, "workspace").unwrap();
+    let server = Server::in_workspace(Arc::new(Engines::default()), ws.clone());
+    let c = Call(&server);
+    let info = c.ok("project_info", json!({}));
+    assert_eq!(info["projects"], json!(["billing", "Order"]), "{info}");
+    assert!(info["project"].is_null(), "{info}");
+    assert!(c.err("read_file", json!({ "path": "a.xml" })).contains("open_project opens"));
+    for bad in ["", "..", ".", "a/b", "a\\b", "C:x", "trailing.", "../Order"] {
+        assert!(c.err("open_project", json!({ "name": bad })).contains("not a folder name"), "{bad}");
+    }
+    assert!(c.err("open_project", json!({ "name": "missing" })).contains("No folder 'missing'"));
+    assert!(c.err("open_project", json!({ "name": "notes.txt" })).contains("No folder"));
+    #[cfg(unix)]
+    {
+        let outside = std::env::temp_dir().join(format!("cpiwb-mcp-ws-out-{}", std::process::id()));
+        std::fs::create_dir_all(&outside).unwrap();
+        std::os::unix::fs::symlink(&outside, root.join("link")).unwrap();
+        assert!(c.err("open_project", json!({ "name": "link" })).contains("outside the workspace"));
+        let _ = std::fs::remove_dir_all(&outside);
+    }
+    assert!(server.project().is_none(), "a refused call opens nothing");
+    files::open_project(&server, json!({ "name": "Order" }).as_object().unwrap()).unwrap();
+    assert_eq!(server.project(), Some(ws.join("Order")));
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// A workspace's projects are opened and created on the engines; each call reads the project open at the time.
+#[test]
+fn a_workspace_switches_and_creates_projects() {
+    let Some(engines) = engines() else { return };
+    let root = std::env::temp_dir().join(format!("cpiwb-mcp-wsrun-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).unwrap();
+    std::fs::rename(project("ws"), root.join("Orders")).unwrap();
+    let server = Server::in_workspace(engines.clone(), existing_folder(&root, "workspace").unwrap());
+    let c = Call(&server);
+    let info = c.ok("open_project", json!({ "name": "Orders" }));
+    assert_eq!(info["created"], false, "{info}");
+    assert!(info["iflowSteps"].as_array().is_some_and(|s| !s.is_empty()), "{info}");
+    let r = c.ok("run_xslt", json!({ "mappingPath": "mappings/order-to-salesorder.xsl", "bodyPath": "tests/standard-order/input.xml" }));
+    assert_eq!(r["ok"], true, "{r}");
+    let run = r["runId"].as_str().unwrap().to_string();
+
+    let info = c.ok("open_project", json!({ "name": "Billing", "create": true }));
+    assert_eq!(info["created"], true, "{info}");
+    assert_eq!(info["projects"], json!(["Billing", "Orders"]), "{info}");
+    assert!(root.join("Billing/cpi-workbench.json").is_file() && root.join("Billing/platform/credentials.json").is_file());
+    let gone = c.err("read_file", json!({ "path": "tests/standard-order/input.xml" }));
+    assert!(gone.contains("Billing"), "the other project's files are gone: {gone}");
+    // A run of the first project still passes its message on.
+    c.ok("save_file", json!({ "path": "inputs/from-orders.xml", "contentFrom": run }));
+    assert!(root.join("Billing/inputs/from-orders.xml").is_file());
+    assert!(c.err("open_project", json!({ "name": "Billing", "create": true })).contains("exists already"));
+    c.ok("open_project", json!({ "name": "Orders" }));
+    assert!(c.ok("read_file", json!({ "path": "tests/standard-order/input.xml" }))["content"].is_string());
+    engines.shutdown();
+    let _ = std::fs::remove_dir_all(&root);
+}
+
 /// After a timeout the engine restarts; it must have the project open again.
 #[test]
 fn a_restarted_engine_reopens_the_project() {
     let Some(engines) = engines() else { return };
     let dir = project("restart");
-    *engines.on_start.lock().unwrap() = Some(("project.open".into(), json!({ "dir": dir.to_string_lossy() })));
     let server = Server::new(engines.clone(), Some(dir.clone()));
     let timeout = engines.call("groovy-1.x", "groovy.run", json!({ "timeoutMs": 300,
         "script": { "content": "def processData(m) { Thread.sleep(3000); m }" }, "input": { "body": "" } }));
@@ -668,7 +752,6 @@ fn iflow_picks_among_equal_step_names() {
     let dir = project("dup");
     let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     copy_dir(&repo.join("engine/core/src/test/resources/iflow"), &dir.join("iflows").join("Order_Copy"));
-    *engines.on_start.lock().unwrap() = Some(("project.open".into(), json!({ "dir": dir.to_string_lossy() })));
     let server = Server::new(engines.clone(), Some(dir.clone()));
     let c = Call(&server);
     let e = c.err("run_flow_step", json!({ "iflowStep": "CallActivity_9", "body": "<Order/>" }));
@@ -749,7 +832,6 @@ fn stored_zip(entries: &[(&str, &str)]) -> Vec<u8> {
 fn files_are_read_saved_and_imported_inside_the_project() {
     let Some(engines) = engines() else { return };
     let dir = project("files");
-    *engines.on_start.lock().unwrap() = Some(("project.open".into(), json!({ "dir": dir.to_string_lossy() })));
     let server = Server::new(engines.clone(), Some(dir.clone()));
     let c = Call(&server);
 
@@ -832,7 +914,6 @@ fn files_are_read_saved_and_imported_inside_the_project() {
 fn runs_chain_by_id() {
     let Some(engines) = engines() else { return };
     let dir = project("chain");
-    *engines.on_start.lock().unwrap() = Some(("project.open".into(), json!({ "dir": dir.to_string_lossy() })));
     let server = Server::new(engines.clone(), Some(dir.clone()));
     let c = Call(&server);
     let id = |v: &Value| v["runId"].as_str().unwrap_or_else(|| panic!("no runId: {v}")).to_string();

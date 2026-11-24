@@ -11,8 +11,9 @@
 //!   (`files.rs`, `reference.rs`), so that an
 //!   agent without file access of its own (Claude Desktop) can work in the project; one prompt. No
 //!   resources, logging, sampling or roots.
-//! * Scope: one project folder (`--project`; default `CLAUDE_PROJECT_DIR`, else the working directory).
-//!   Files are read through the engines, which refuse paths outside the project. Groovy scripts run without a sandbox, as in
+//! * Scope: one project folder (`--project`; default `CLAUDE_PROJECT_DIR`, else the working directory), or with
+//!   `--workspace` the folders directly inside it, one at a time (`open_project`). Every engine call carries the
+//!   open project (`project.request`, as the desktop app's), so switching needs no engine restart. Files are read through the engines, which refuse paths outside the project. Groovy scripts run without a sandbox, as in
 //!   the app; docs/mcp.md says so.
 
 mod files;
@@ -26,7 +27,7 @@ use serde_json::{json, Map, Value};
 use std::collections::HashMap;
 use std::io::{BufRead, Write};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
@@ -51,8 +52,11 @@ const LIST_TTL_MS: u64 = 3_600_000;
 const INSTRUCTIONS: &str = "CPI Workbench simulates SAP Integration Suite (Cloud Integration) steps locally: \
 XSLT mappings (Saxon-HE 9.9 like CPI, or 12), Groovy scripts (Script API 1.x on Groovy 2.4, \
 2.x on Groovy 4, both on Camel 3.14) and Message Mapping functions, XSD validation, XPath and the flow steps Content \
-Modifier, Filter, Router, Splitter, Gather and Converter, as the tabs of the CPI Workbench app do.\n\
-How to work: call project_info first (files, iFlow steps with their configuration, runtimes); read the input \
+Modifier, Filter, Router, Splitter, Gather, Converter, Encoder, Decoder and Message Digest, as the tabs of the CPI \
+Workbench app do.\n\
+How to work: call project_info first (files, iFlow steps with their configuration, runtimes). When it lists \
+projects (a workspace) and no project is open, ask the user which one, or open_project the one the task names \
+(create: true for a new integration). Read the input \
 message, the iFlow's scripts and mappings with read_file; write the step and run it with run_xslt, run_groovy, \
 validate_xsd, evaluate_xpath or run_flow_step, passing the source inline (mapping, script, schema, step) until the \
 result is right. A run that produces a message returns a runId: pass it as messageFrom to the next step instead \
@@ -107,51 +111,69 @@ simulator does not cover (fidelity).\n\
 
 pub struct Server {
     engines: Arc<Engines>,
-    project: Option<PathBuf>,
+    project: Mutex<Option<PathBuf>>,
+    /// With `--workspace`: the folder whose subfolders `open_project` opens.
+    workspace: Option<PathBuf>,
+    /// Tool calls hold it shared, `open_project` exclusively: a call runs on one project from start to end.
+    switching: RwLock<()>,
     runs: runs::Runs,
     /// Held from the check whether a file exists to the write: admitted requests can run in parallel, and
     /// without it two calls without `overwrite` could both find a path free and both write it.
     writes: Mutex<()>,
 }
 
-/// Entry point for `cpi-workbench mcp [--project <folder>]`. Returns the process exit code.
+/// Entry point for `cpi-workbench mcp [--project <folder> | --workspace <folder>]`. Returns the process exit code.
 pub fn main(args: &[String], resource_dir: Option<PathBuf>, cache_dir: Option<PathBuf>) -> i32 {
-    let project = match parse_args(args) {
-        Ok(p) => p,
+    let folder = match parse_args(args) {
+        Ok(f) => f,
         Err(e) => {
-            eprintln!("cpi-workbench mcp: {e}\nUsage: cpi-workbench mcp [--project <folder>]");
+            eprintln!("cpi-workbench mcp: {e}\nUsage: cpi-workbench mcp [--project <folder> | --workspace <folder>]");
             return 2;
         }
     };
     let engines = Arc::new(Engines::default());
     *engines.resource_dir.lock().unwrap() = resource_dir;
     *engines.cache_dir.lock().unwrap() = cache_dir;
-    if let Some(dir) = &project {
-        *engines.on_start.lock().unwrap() =
-            Some(("project.open".into(), json!({ "dir": dir.to_string_lossy() })));
-    }
-    eprintln!("cpi-workbench mcp: project {}; runtimes {:?}",
-        project.as_deref().map(|p| p.display().to_string()).unwrap_or_else(|| "(none)".into()), engines.available());
+    let what = if matches!(folder, Folder::Workspace(_)) { "workspace" } else { "project" };
+    let (Folder::Project(dir) | Folder::Workspace(dir)) = &folder;
+    eprintln!("cpi-workbench mcp: {what} {}; runtimes {:?}", dir.display(), engines.available());
     let idle = engines.clone();
     std::thread::spawn(move || loop {
         std::thread::sleep(Duration::from_secs(60));
         idle.stop_idle(engine::IDLE_LIMIT);
     });
-    let server = Arc::new(Server::new(engines.clone(), project));
+    let server = Arc::new(match folder {
+        Folder::Project(dir) => Server::new(engines.clone(), Some(dir)),
+        Folder::Workspace(dir) => Server::in_workspace(engines.clone(), dir),
+    });
     // Requests still running when stdin closes are dropped: the client no longer reads their answers.
     drop(serve(server, std::io::stdin().lock(), Arc::new(Mutex::new(std::io::stdout()))));
     engines.shutdown();
     0
 }
 
-fn parse_args(args: &[String]) -> Result<Option<PathBuf>, String> {
-    let mut project = None;
+/// The folder the server works in: one project, or a workspace whose subfolders are projects.
+#[derive(Debug, PartialEq)]
+enum Folder {
+    Project(PathBuf),
+    Workspace(PathBuf),
+}
+
+fn parse_args(args: &[String]) -> Result<Folder, String> {
+    let (mut project, mut workspace) = (None, None);
     let mut it = args.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
             "--project" => project = Some(it.next().ok_or("--project needs a folder")?.clone()),
+            "--workspace" => workspace = Some(it.next().ok_or("--workspace needs a folder")?.clone()),
             other => return Err(format!("unknown argument '{other}'")),
         }
+    }
+    if project.is_some() && workspace.is_some() {
+        return Err("give --project or --workspace, not both".into());
+    }
+    if let Some(w) = workspace {
+        return Ok(Folder::Workspace(existing_folder(Path::new(&w), "workspace")?));
     }
     // Default: the project Claude Code runs in (it sets CLAUDE_PROJECT_DIR for the servers it starts),
     // else the working directory.
@@ -159,11 +181,16 @@ fn parse_args(args: &[String]) -> Result<Option<PathBuf>, String> {
         Some(p) => PathBuf::from(p),
         None => std::env::current_dir().map_err(|e| e.to_string())?,
     };
-    let dir = std::fs::canonicalize(&dir).map_err(|e| format!("project folder {}: {e}", dir.display()))?;
+    Ok(Folder::Project(existing_folder(&dir, "project")?))
+}
+
+/// The folder's canonical path, without Windows' `\\?\` prefix, which Java refuses.
+pub(crate) fn existing_folder(dir: &Path, what: &str) -> Result<PathBuf, String> {
+    let dir = std::fs::canonicalize(dir).map_err(|e| format!("{what} folder {}: {e}", dir.display()))?;
     if !dir.is_dir() {
         return Err(format!("{} is not a folder", dir.display()));
     }
-    Ok(Some(engine::plain_path(dir)))
+    Ok(engine::plain_path(dir))
 }
 
 const MAX_IN_FLIGHT: usize = 8;
@@ -329,7 +356,13 @@ fn supported_versions() -> Vec<&'static str> {
 
 impl Server {
     pub fn new(engines: Arc<Engines>, project: Option<PathBuf>) -> Self {
-        Server { engines, project, runs: runs::Runs::default(), writes: Mutex::new(()) }
+        Server { engines, project: Mutex::new(project), workspace: None, switching: RwLock::new(()),
+            runs: runs::Runs::default(), writes: Mutex::new(()) }
+    }
+
+    /// A server without an open project that opens the folders inside `workspace` (`open_project`).
+    pub fn in_workspace(engines: Arc<Engines>, workspace: PathBuf) -> Self {
+        Server { workspace: Some(workspace), ..Server::new(engines, None) }
     }
 
     pub fn engines(&self) -> &Engines {
@@ -345,8 +378,17 @@ impl Server {
         self.writes.lock().unwrap_or_else(|e| e.into_inner())
     }
 
-    pub fn project(&self) -> Option<&Path> {
-        self.project.as_deref()
+    pub fn project(&self) -> Option<PathBuf> {
+        self.project.lock().unwrap().clone()
+    }
+
+    pub fn workspace(&self) -> Option<&Path> {
+        self.workspace.as_deref()
+    }
+
+    /// Makes `dir` the open project. The caller holds no `switching` guard; this waits for running tool calls.
+    pub fn set_project(&self, dir: PathBuf) {
+        *self.project.lock().unwrap() = Some(dir);
     }
 
     fn handle(&self, id: Value, method: &str, params: &Value) -> Value {
@@ -420,8 +462,16 @@ impl Server {
         if !tools::exists(name) {
             return Err((INVALID_PARAMS, format!("Unknown tool: {name}")));
         }
+        // A call keeps its project from start to end: open_project waits until running calls are done.
+        let result = if name == "open_project" {
+            let _switch = self.switching.write().unwrap_or_else(|e| e.into_inner());
+            tools::call(self, name, &args)
+        } else {
+            let _call = self.switching.read().unwrap_or_else(|e| e.into_inner());
+            tools::call(self, name, &args)
+        };
         // Wrong arguments and failed runs are tool results with isError, so the model can correct them.
-        Ok(match tools::call(self, name, &args) {
+        Ok(match result {
             Ok(v) => tool_result(name, v),
             Err(e) => json!({ "content": [{ "type": "text", "text": if e.len() <= MAX_TOOL_JSON { e }
                 else { "UnsupportedInSimulator: the tool diagnostic exceeds the 1 MiB MCP preview limit.".into() } }], "isError": true }),

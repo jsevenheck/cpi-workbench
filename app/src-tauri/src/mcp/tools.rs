@@ -73,6 +73,8 @@ enum Effect {
     WritesProject,
     /// Runs code: no hints, so clients take the protocol's defaults and assume the worst.
     RunsCode,
+    /// Changes which project the other tools use and may create a folder; replaces nothing.
+    OpensProject,
 }
 
 fn tool(name: &str, title: &str, description: &str, props: Map<String, Value>, required: &[&str], effect: Effect) -> Value {
@@ -85,6 +87,8 @@ fn tool(name: &str, title: &str, description: &str, props: Map<String, Value>, r
     match effect {
         Effect::ReadOnly => t["annotations"] = json!({ "readOnlyHint": true, "openWorldHint": false }),
         Effect::WritesProject => t["annotations"] = json!({ "readOnlyHint": false, "destructiveHint": true,
+            "idempotentHint": true, "openWorldHint": false }),
+        Effect::OpensProject => t["annotations"] = json!({ "readOnlyHint": false, "destructiveHint": false,
             "idempotentHint": true, "openWorldHint": false }),
         Effect::RunsCode => {}
     }
@@ -202,6 +206,10 @@ schemas/*.xsd, inputs/*.xml|json|csv, platform/*.json. Folders are created.")),
         ("iflow", json!({ "type": "string", "description": "Only this iFlow (its folder under iflows/, as project_info lists it)." })),
         ("parameters", json!({ "type": "boolean", "default": false, "description": "Instead of a search: each iFlow's externalized parameters with their values from parameters.prop, where they are used, and which are unused or have no value." })),
     ]);
+    let open = obj(vec![
+        ("name", json!({ "type": "string", "description": "A folder directly inside the workspace, as project_info lists it under projects (one folder name, no path)." })),
+        ("create", json!({ "type": "boolean", "default": false, "description": "Create the folder as a new project (the standard layout with example platform/ data, as the app's Import iFlow without a project does). A folder that exists is an error." })),
+    ]);
     let reference = obj(vec![
         ("topic", json!({ "type": "string", "enum": reference::TOPICS, "description": "script-api: the Script API, \
 Message Mapping and platform service methods the Groovy engines offer. platform: the formats of the mocked platform/ files \
@@ -212,8 +220,13 @@ CPI, per step type, and what is not." })),
     vec![
         tool("project_info", "Project, runtimes and iFlow steps",
             "The open project: its files, the steps of the iFlows under iflows/ (with each flow step's configuration, and \
-             each script, XSLT and XML Validator step's file, function and runtime), and the installed runtimes. Call this first.",
+             each script, XSLT and XML Validator step's file, function and runtime), and the installed runtimes. With a \
+             workspace, also its project folders (projects). Call this first.",
             Map::new(), &[], Effect::ReadOnly),
+        tool("open_project", "Open or create a project in the workspace",
+            "Only when the server was started with --workspace: opens one of the workspace's folders as the project the \
+             other tools work in (create: true makes a new one), and returns its project_info. Earlier runIds stay usable.",
+            open, &["name"], Effect::OpensProject),
         tool("read_file", "Read a project file",
             "Reads a file of the project (a file that is no text with binary: true): an input message, a mapping, a script, a schema, an iFlow's files or the \
              platform/ data. Long files come in parts (startLine, maxLines).",
@@ -316,6 +329,11 @@ pub(super) fn keep_run(server: &Server, name: &str, input: &runs::Message, resul
 fn dispatch(server: &Server, name: &str, args: &Args) -> Result<Value, String> {
     match name {
         "project_info" => project_info(server),
+        "open_project" => files::open_project(server, args).and_then(|created| {
+            let mut info = project_info(server)?;
+            info["created"] = json!(created);
+            Ok(info)
+        }),
         "run_xslt" => run_xslt(server, args),
         "run_groovy" => run_groovy(server, args),
         "validate_xsd" => validate_xsd(server, args),
@@ -398,14 +416,18 @@ pub fn file_runtime(server: &Server) -> Result<&'static str, String> {
         .ok_or_else(|| "No engine is installed.".to_string())
 }
 
+/// An engine call on the open project: every call carries it (`project.request`), as the desktop app's do, so a
+/// restarted engine and a project opened with open_project need no separate `project.open`.
 pub fn engine_call(server: &Server, runtime: &str, method: &str, params: Value) -> Result<Value, String> {
-    server.engines().call(runtime, method, params)
+    let root = server.project().map(|p| p.to_string_lossy().into_owned());
+    server.engines().call_desktop(runtime, method, params, root)
 }
 
 pub fn require_project(server: &Server) -> Result<(), String> {
-    match server.project() {
-        Some(_) => Ok(()),
-        None => Err("No project is open; start the server with --project <folder>.".into()),
+    match (server.project(), server.workspace()) {
+        (Some(_), _) => Ok(()),
+        (None, Some(_)) => Err("No project is open: open_project opens one of the workspace's folders (project_info lists them under projects).".into()),
+        (None, None) => Err("No project is open; start the server with --project <folder>.".into()),
     }
 }
 
@@ -552,6 +574,10 @@ fn project_info(server: &Server) -> Result<Value, String> {
         .map(|(id, label)| json!({ "id": id, "label": label, "installed": server.engines().locate(id).is_some() }))
         .collect();
     let mut info = json!({ "project": server.project().map(|p| p.to_string_lossy().to_string()), "runtimes": runtimes });
+    if let Some(w) = server.workspace() {
+        info["workspace"] = json!(w.to_string_lossy());
+        info["projects"] = json!(files::workspace_projects(w)?);
+    }
     if server.project().is_none() {
         return Ok(info);
     }
@@ -570,9 +596,7 @@ fn project_info(server: &Server) -> Result<Value, String> {
 
 /// `iflow.search`, or with `parameters` the parameters of `iflow.index` (IflowIndex.java, which the Where used tab calls too).
 fn where_used(server: &Server, args: &Args) -> Result<Value, String> {
-    if server.project().is_none() {
-        return Err("No project is open: start the server with a project folder.".into());
-    }
+    require_project(server)?;
     let rt = file_runtime(server)?;
     let iflow = str_arg(args, "iflow");
     if args.get("parameters").and_then(Value::as_bool) == Some(true) {

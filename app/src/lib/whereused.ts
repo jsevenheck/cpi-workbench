@@ -175,3 +175,27 @@ export function matchingParameters(index: IndexedIflow[], query: string): Indexe
     p.name.toLowerCase().includes(q) || (p.value ?? '').toLowerCase().includes(q)) }))
     .filter((i) => i.parameters.length);
 }
+
+export interface TableHit {
+  /** Each shown row's non-empty cells, by the cell's id (Action, Type, Name, Value, …). */
+  rows: { id: string; text: string }[][];
+  /** Rows of the table not shown because they do not contain the query. */
+  hidden: number;
+}
+
+/**
+ * A Content Modifier table (`<row><cell id='Name'>…</cell>…</row>…`, XML text in the property) as rows of cells, only
+ * those containing the query, or all when none does (a hit by key name). Null for a value that is no table.
+ */
+export function tableHit(value: string, query: string): TableHit | null {
+  if (!value.trimStart().startsWith('<row')) return null;
+  const entities: Record<string, string> = { lt: '<', gt: '>', amp: '&', apos: "'", quot: '"' };
+  const decode = (t: string) => t.replace(/&(lt|gt|amp|apos|quot);/g, (_, e: string) => entities[e]);
+  const rows = [...value.matchAll(/<row>([\s\S]*?)<\/row>/g)].map((r) =>
+    [...r[1].matchAll(/<cell id=['"]([^'"]*)['"]>([\s\S]*?)<\/cell>/g)]
+      .map((c) => ({ id: c[1], text: decode(c[2]) })).filter((c) => c.text !== ''));
+  if (!rows.length) return null;
+  const q = query.trim().toLowerCase();
+  const hits = q ? rows.filter((r) => r.some((c) => c.text.toLowerCase().includes(q))) : [];
+  return hits.length ? { rows: hits, hidden: rows.length - hits.length } : { rows, hidden: 0 };
+}

@@ -297,6 +297,11 @@ if (process.env.CPIWB_IFLOW_ZIP) {
   await page.getByLabel('Search the iFlows').fill('Orders');
   await page.locator('.wu .param-hits', { hasText: 'RootName' }).waitFor({ timeout: 10000 })
     .catch(() => fail('a search for a parameter value did not list the parameter'));
+  // A hit in a Content Modifier table shows its matching row as cells, not the table's XML text.
+  await page.getByLabel('Search the iFlows').fill('LogLevel');
+  const row = page.locator('.wu .el .trow', { hasText: 'LogLevel' }).first();
+  await row.waitFor({ timeout: 10000 }).catch(() => fail('the Content Modifier hit shows no table row'));
+  if ((await page.locator('.wu .el').first().innerText()).includes('<row>')) fail('a table hit still shows the XML text');
   await page.getByLabel('Search the iFlows').fill('s4.example');
   const hit = page.locator('.wu .el', { hasText: 'SOAP receiver' });
   await hit.waitFor({ timeout: 10000 }).catch(() => fail('Where used found no SOAP receiver for s4.example'));

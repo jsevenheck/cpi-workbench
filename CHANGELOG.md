@@ -18,7 +18,8 @@ of its version.
   queues, key aliases and files the imported iFlows use, with the number of places each (a click searches for it;
   files are folded), and below them each iFlow's externalized parameters, which had their own *Parameters* view
   before. A value with a `{{parameter}}` shows what `parameters.prop` resolves it to, in the overview and the hits.
-  A search also lists the parameters whose name or value contains it, with their uses.
+  A search also lists the parameters whose name or value contains it, with their uses, and a hit in a Content
+  Modifier table shows only the matching rows as cells instead of the table's XML text.
 - **Where used: receivers named by their caller.** A receiver adapter's hits name the step that calls it
   (`SuccessFactors receiver from Get WorkOrders`), so several receivers of one system can be told apart.
 - **iFlows that share a name** (a copied iFlow keeps its name) are told apart by their folder in Where used, the

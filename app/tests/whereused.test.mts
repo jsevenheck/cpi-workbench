@@ -76,3 +76,13 @@ test('a search finds parameters by name or value, ignoring case', async () => {
     [['A', ["Input Parameter Name 'Auth Token'"]], ['B', ['DX4AUTH_FLAG']]]);
   assert.deepEqual(matchingParameters(index, ''), []);
 });
+
+test('a table hit shows only the rows that contain the query, decoded', async () => {
+  const { tableHit } = await import('../src/lib/whereused.ts');
+  const t = "<row><cell id='Action'>Create</cell><cell id='Name'>dx4Auth</cell><cell id='Default'></cell></row>"
+    + "<row><cell id='Name'>other</cell><cell id='Value'>{{Input &apos;Auth&apos;}}</cell></row>";
+  assert.deepEqual(tableHit(t, 'DX4auth'), { rows: [[{ id: 'Action', text: 'Create' }, { id: 'Name', text: 'dx4Auth' }]], hidden: 1 });
+  assert.deepEqual(tableHit(t, "'Auth'")?.rows, [[{ id: 'Name', text: 'other' }, { id: 'Value', text: "{{Input 'Auth'}}" }]]);
+  assert.equal(tableHit(t, 'propertyTable')?.rows.length, 2, 'a hit by key name shows the whole table');
+  assert.equal(tableHit('${property.dx4Auth}', 'dx4Auth'), null);
+});

@@ -4,8 +4,8 @@
   // engine reads the exports (IflowIndex.java); a hit selects its element in the diagram, a script or mapping opens in its tab.
   import { onMount } from 'svelte';
   import { app, whereUsed, searchIflows, loadIflowIndex, selectIflowNode, iflowStepFor, openIflowStep } from '../lib/store.svelte';
-  import { KINDS, groupHits, highlight, inventory, iflowLabels, matchingParameters, parameterValues, resolveParameters,
-    type IndexEntry, type IndexedIflow } from '../lib/whereused';
+  import { KINDS, groupHits, highlight, inventory, iflowLabels, matchingParameters, parameterValues, resolveParameters, tableHit,
+    type IndexEntry, type IndexedIflow, type TableHit } from '../lib/whereused';
 
   let groups = $derived(groupHits(whereUsed.hits));
   let labels = $derived(iflowLabels(app.iflowModels));
@@ -72,6 +72,16 @@
               </tbody>
             </table>
 {/snippet}
+
+<!-- A Content Modifier table: the rows with the match, as their cells, not the table's XML text. -->
+{#snippet table(t: TableHit, iflow: string)}
+  {#each t.rows as row}
+    <div class="trow">{#each row as c}<span class="cell"><span class="cid">{c.id}</span> {@render marked(c.text, whereUsed.searched)}{@render resolved(c.text, iflow)}</span>{/each}</div>
+  {/each}
+  {#if t.hidden}<div class="muted small">+ {t.hidden} other {t.hidden === 1 ? 'row' : 'rows'}</div>{/if}
+{/snippet}
+
+{#snippet resolved(text: string, iflow: string)}{#if resolveParameters(text, params.get(iflow)) != null}<span class="resolved">→ {resolveParameters(text, params.get(iflow))}</span>{/if}{/snippet}
 
 {#snippet marked(text: string, q: string)}{#each highlight(text, q) as part}{#if part.match}<mark>{part.text}</mark>{:else}{part.text}{/if}{/each}{/snippet}
 
@@ -153,7 +163,8 @@
                   {#each el.hits as h}
                     <tr>
                       <td class="mono key">{h.key}{#if h.kind}<span class="kind">{h.kind}</span>{/if}</td>
-                      <td class="mono">{#each highlight(h.value, whereUsed.searched) as part}{#if part.match}<mark>{part.text}</mark>{:else}{part.text}{/if}{/each}{#if resolveParameters(h.value, params.get(h.iflow)) != null}<span class="resolved">→ {resolveParameters(h.value, params.get(h.iflow))}</span>{/if}</td>
+                      <td class="mono">{#if tableHit(h.value, whereUsed.searched)}{@render table(tableHit(h.value, whereUsed.searched)!, h.iflow)}
+                        {:else}{@render marked(h.value, whereUsed.searched)}{@render resolved(h.value, h.iflow)}{/if}</td>
                       <td>{#if h.kind === 'file' && iflowStepFor(h.iflow, h.element)}<button class="small" onclick={() => openFile(h)}>Open</button>{/if}</td>
                     </tr>
                   {/each}
@@ -177,6 +188,9 @@
   .values { list-style: none; margin: 0; padding: 0 0 0 8px; border-left: 2px solid var(--border-soft); }
   .values li { padding: 1px 0; word-break: break-all; }
   .resolved { margin-left: 6px; color: var(--muted); }
+  .trow { padding: 1px 0; }
+  .cell { margin-right: 14px; }
+  .cid { font-family: inherit; font-size: 10px; color: var(--muted); }
   summary { cursor: pointer; }
   summary h3 { display: inline; }
   table.params { table-layout: fixed; }

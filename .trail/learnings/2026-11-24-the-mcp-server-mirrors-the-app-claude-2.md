@@ -3,7 +3,7 @@ title: "The MCP server mirrors the app: a workspace of projects, and Where used 
 author: Claude
 date: 2026-11-24
 branch: claude/optimistic-dijkstra-ek2iek
-cost: { minutes: 31, tokens: 216028 }
+cost: { minutes: 58, tokens: 331772 }
 id: l-8f03408f
 scope: repo
 status: active
@@ -29,6 +29,8 @@ touches:
 * Where used's overview sorts ignoring case, then by code point, on both sides: `localeCompare` follows the system language and cannot be repeated in Rust.
 * User (2026-11-24): an agent should give an input and try how a step (Content Modifier first) would have to be configured, for every step type the app has. That already works: run_flow_step takes `step` {type, config}, so the agent copies an iFlow step's config from project_info, changes it and runs it on the same input; run_groovy/run_xslt/validate_xsd take the source inline. The instructions and descriptions now say so instead of adding a tool.
 * Tool descriptions must stand alone: no "as in the tab", no "↻". New texts describe what the simulator does and claim no CPI behaviour (fidelity claims need evidence).
+* Found while testing a real package from Claude Desktop (2026-11-24): a Groovy script that read an InputStream body (JsonSlurper) left the next step an empty body. The engine now gives Camel's InputStreamCache (the class a tenant's HTTPS sender hands on, F49) and resets it before reading the output, as Camel 3.14.7 does before and after each processor. Checked in the bytecode of CamelInternalProcessor$StreamCachingAdvice (both before and after call StreamCache.reset). Fidelity row "Stream body", basis Assumption.
+* project_info with several iFlows lists steps without config and drops files under iflows/; `iflow` gives one iFlow. The iFlow list comes from the .iflw files, because an iFlow with only adapter calls has no runnable steps.
 
 ## Tried and ruled out
 * open_project with any path: the project boundary would be gone. MCP roots: not checked in Claude Desktop, and no less configuration.
@@ -45,3 +47,7 @@ In the code: app/src-tauri/src/mcp/{mod,files,tools,whereused,functions}.rs; app
 * `cargo test` does not rebuild target/debug/cpi-workbench; run `cargo build` before trying the binary or an agent run, or the tool list is stale.
 
 In the code: app/src-tauri/src/mcp/{mod.rs INSTRUCTIONS and prompt, tools.rs definitions}; flowcalls.ts runContentModifier.
+* engine/core RpcHttpTest fails now and then in a different HTTP-limit test each time (about 1 in 5 runs here), also without any change. `mvn verify` then stops at core and never tests the Groovy modules: rerun with -Dtest='!RpcHttpTest' -Dsurefire.failIfNoSpecifiedTests=false to see the rest.
+* Bodies of real exports go through the MCP results into the agent's chat; the agent found plaintext passwords in parameters.prop of a customer package.
+
+In the code: ScriptRunner.inputBody and describeOutput; ScriptRunnerTest.aStreamBodyReadByTheScriptIsPassedOnWhole; tools.rs project_info.

@@ -682,6 +682,21 @@ fn where_used_searches_the_imported_iflows() {
     let http = out["adapters"].as_array().unwrap().iter().find(|a| a["adapter"] == "HTTP").unwrap();
     assert_eq!((http["direction"].as_str(), http["element"].as_str(), http["system"].as_str()), (Some("outbound"), Some("Send order"), Some("Backend")), "{out}");
     assert_eq!(http["settings"]["credentialName"], "partner_sftp", "{out}");
+    // Several iFlows: project_info lists the steps without configuration and leaves the iFlows' files out;
+    // iflow gives one iFlow's steps in full and its files.
+    let sum = c.ok("project_info", json!({}));
+    assert_eq!(sum["iflows"].as_array().unwrap().len(), 3, "{sum}");
+    assert!(sum["summary"].is_string() && sum["iflowSteps"].as_array().unwrap().iter().all(|s| s.get("config").is_none()), "{sum}");
+    assert!(sum["files"].as_array().unwrap().iter().all(|f| !f.as_str().unwrap().starts_with("iflows/")), "{sum}");
+    let one = c.ok("project_info", json!({ "iflow": "Order_Replication" }));
+    assert!(one.get("summary").is_none(), "{one}");
+    let steps = one["iflowSteps"].as_array().unwrap();
+    assert!(steps.iter().all(|s| s["iflow"] == "Order_Replication") && steps.iter().any(|s| s.get("config").is_some()), "{one}");
+    assert_eq!(steps.iter().find(|s| s["name"] == "Enrich order").unwrap()["functionFound"], false, "{one}");
+    let files = one["files"].as_array().unwrap();
+    assert!(files.iter().any(|f| f.as_str().unwrap().starts_with("iflows/Order_Replication/")), "{one}");
+    assert!(files.iter().all(|f| !f.as_str().unwrap().starts_with("iflows/Outbound_Orders/")), "{one}");
+    assert!(c.err("project_info", json!({ "iflow": "Nope" })).contains("Outbound_Orders"));
     // Without query or kind: the tab's overview, with each iFlow's parameters.
     let o = c.ok("iflow_where_used", json!({}));
     let queue = o["uses"].as_array().unwrap().iter().find(|g| g["kind"] == "queue").expect("queues");

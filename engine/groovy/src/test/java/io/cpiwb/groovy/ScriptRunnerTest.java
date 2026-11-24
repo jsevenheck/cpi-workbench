@@ -545,6 +545,20 @@ class ScriptRunnerTest {
         assertEquals("8", entry(r, "properties", "size").get("value"));
     }
 
+    /**
+     * An InputStream body is Camel's InputStreamCache, as behind a tenant's HTTPS sender (F49), and is reset after
+     * the step as Camel's stream caching does: a script that only reads it passes the whole body on.
+     */
+    @Test
+    void aStreamBodyReadByTheScriptIsPassedOnWhole() throws Exception {
+        Map<String, Object> r = run("def processData(m) { m.setProperty('read', m.getBody(java.io.InputStream).text); m }",
+                Json.o().with("body", "{\"type\":\"a\"}"), Json.o().with("options", Json.o().with("bodyType", "InputStream")));
+        Map<?, ?> out = (Map<?, ?>) r.get("output");
+        assertEquals("{\"type\":\"a\"}", out.get("body"), Json.write(r));
+        assertEquals("org.apache.camel.converter.stream.InputStreamCache", out.get("bodyType"), Json.write(r));
+        assertEquals("{\"type\":\"a\"}", entry(r, "properties", "read").get("value"));
+    }
+
     /** A body with a declared encoding reaches a script's stream in that encoding (review 2026-11-10). */
     @Test
     void bodyWithADeclaredEncodingAsStream() throws Exception {

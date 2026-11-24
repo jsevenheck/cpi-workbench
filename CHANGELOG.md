@@ -27,6 +27,8 @@ of its version.
   instructions explain what they referred to the app's tabs for (the Groovy body type, the XPath version, a
   Router's condition types), how to try another configuration of an iFlow's step on the same input, how a
   Router's result passes the message on, and when to use `iflow_diagram` and `iflow_where_used`.
+- **MCP: packages stay readable.** For a project with several iFlows, `project_info` lists the steps without
+  their configuration and leaves the iFlows' files out; `project_info` with `iflow` gives one iFlow in full.
 - **MCP: a script's functions.** `read_file` on a Groovy script lists the functions it declares, read from its
   text as the Groovy tab does (nothing runs), and `project_info` marks a script step whose function the script
   does not declare (`functionFound: false`), as does `import_iflow`. A run's list of Message Mapping functions is
@@ -38,6 +40,13 @@ of its version.
   the app and over MCP) said only its path; it now says `No such file: <path>`.
 - **MCP: every result message names its `runId`.** A Splitter's messages and each runtime of `runtime: both` carry
   their own `runId` (`run-…/2`, `run-…/saxon-he-12`), so an agent no longer builds it from the convention.
+
+### Fixed
+
+- **A Groovy script that reads a stream body no longer empties it.** With the body type `InputStream`, a script
+  gets Camel's `InputStreamCache`, the type a tenant's HTTPS sender hands on (F49), and the body is reset after the
+  step as Camel's stream caching does. Before, a script that only read the body (to parse JSON, say) passed on an
+  empty body to the next step, in the app and over MCP.
 
 ## [0.7.0] - 2026-11-24
 

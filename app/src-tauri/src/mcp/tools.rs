@@ -127,7 +127,8 @@ holds the returned value or the output queue in the same form." })),
     message_properties(&mut groovy, true);
     groovy.insert("bodyType".into(), json!({ "type": "string", "enum": ["String", "byte[]", "InputStream"], "default": "String",
         "description": "The Java type of the incoming body, what message.getBody() without a class returns: String (default), \
-byte[] or InputStream." }));
+byte[] or InputStream. InputStream gives Camel's InputStreamCache, the type a tenant's HTTPS sender handed on (reference \
+fidelity, Stream body); after the step it is reset, so the body passes on whole." }));
     groovy.insert("runtime".into(), runtime(GROOVY_RUNTIMES, true, None,
         "groovy-1.x (Script API v1) or groovy-2.x (v2). Default: from the script's imports (com.sap.it.script.v2.api → 2.x), else 1.x. both runs the two. \
 For an iFlow's script step, give the runtime project_info lists for it."));
@@ -231,8 +232,11 @@ CPI, per step type, and what is not." })),
              comes with its type and config (run_flow_step runs it by name, or a changed copy as step); a script, XSLT or \
              XML Validator step with its file, function and runtime for run_groovy, run_xslt or validate_xsd \
              (functionFound: false when its script does not declare the function). iflow_diagram shows the order of the \
-             steps. With a workspace, also its project folders (projects). Call this first.",
-            Map::new(), &[], Effect::ReadOnly),
+             steps. With several iFlows (a package), the steps come without configuration and the iFlows' files are \
+             left out: give iflow for one iFlow's steps and files. With a workspace, also its project folders \
+             (projects). Call this first.",
+            obj(vec![("iflow", json!({ "type": "string", "description": "Only this iFlow (its folder under iflows/, as listed in iflows or with each step): its steps with configuration and functionFound, and its files plus the script collection files its steps use." }))]),
+            &[], Effect::ReadOnly),
         tool("open_project", "Open or create a project in the workspace",
             "Only when the server was started with --workspace: opens one of the workspace's folders as the project the \
              other tools work in (create: true makes a new one), and returns its project_info without the runtimes. \
@@ -360,9 +364,9 @@ pub(super) fn keep_run(server: &Server, name: &str, input: &runs::Message, resul
 
 fn dispatch(server: &Server, name: &str, args: &Args) -> Result<Value, String> {
     match name {
-        "project_info" => project_info(server),
+        "project_info" => project_info(server, args),
         "open_project" => files::open_project(server, args).and_then(|created| {
-            let mut info = project_info(server)?;
+            let mut info = project_info(server, &Args::new())?;
             info.as_object_mut().unwrap().remove("runtimes"); // the server's, the same in every project
             info["created"] = json!(created);
             Ok(info)
@@ -603,11 +607,12 @@ fn pick<'a>(args: &'a Args, key: &str, choices: &'a [&'a str], default: &'a str)
     }
 }
 
-fn project_info(server: &Server) -> Result<Value, String> {
+fn project_info(server: &Server, args: &Args) -> Result<Value, String> {
     let runtimes: Vec<Value> = RUNTIME_LABELS.iter()
         .map(|(id, label)| json!({ "id": id, "label": label, "installed": server.engines().locate(id).is_some() }))
         .collect();
     let mut info = json!({ "project": server.project().map(|p| p.to_string_lossy().to_string()), "runtimes": runtimes });
+    let only = str_arg(args, "iflow");
     if let Some(w) = server.workspace() {
         info["workspace"] = json!(w.to_string_lossy());
         info["projects"] = json!(files::workspace_projects(w)?);
@@ -618,14 +623,44 @@ fn project_info(server: &Server) -> Result<Value, String> {
     let rt = file_runtime(server)?;
     let listing = engine_call(server, rt, "project.list", json!({}))?;
     const MAX_FILES: usize = 1000;
-    let files: Vec<Value> = listing["files"].as_array().into_iter().flatten()
+    let mut files: Vec<Value> = listing["files"].as_array().into_iter().flatten()
         .filter(|f| f["dir"] != true).map(|f| f["path"].clone()).collect();
     if files.len() > MAX_FILES {
         info["filesTruncated"] = json!(files.len());
     }
+    let mut steps: Vec<Value> = engine_call(server, rt, "iflow.steps", json!({}))?["steps"].as_array().cloned().unwrap_or_default();
+    // Every folder with an iFlow model, also one without runnable steps (only adapter calls).
+    let mut iflows: Vec<String> = Vec::new();
+    let models = files.iter().filter_map(|f| f.as_str()?.strip_prefix("iflows/")?.split_once("/src/main/resources/scenarioflows/integrationflow/"));
+    for i in models.map(|(i, _)| i).chain(steps.iter().filter_map(|s| s["iflow"].as_str())) {
+        if !iflows.iter().any(|x| x == i) { iflows.push(i.to_string()); }
+    }
+    let under = |f: &Value, i: &str| f.as_str().is_some_and(|f| f.starts_with(&format!("iflows/{i}/")));
+    if let Some(i) = only {
+        if !iflows.iter().any(|x| x == i) {
+            return Err(format!("No iFlow '{i}' under iflows/. The iFlows: {iflows:?}."));
+        }
+        steps.retain(|s| s["iflow"] == i);
+        // The iFlow's own files and those its steps use (a package's script collection lies beside it).
+        let used: Vec<&Value> = steps.iter().map(|s| &s["file"]).filter(|f| f.is_string()).collect();
+        files.retain(|f| !f.as_str().unwrap_or_default().starts_with("iflows/") || under(f, i) || used.contains(&f));
+    } else if iflows.len() > 1 {
+        // A package: the steps of all its iFlows with their configuration overflow a model's context.
+        files.retain(|f| !f.as_str().unwrap_or_default().starts_with("iflows/"));
+        steps = steps.iter().map(|s| json!({ "iflow": s["iflow"], "id": s["id"], "name": s["name"], "type": s["type"] })).collect();
+        info["iflows"] = json!(iflows);
+        info["summary"] = json!("Several iFlows: their steps are listed without configuration and the files under \
+            iflows/ are left out. Call project_info with iflow for one iFlow's steps (config, file, function, \
+            functionFound) and files.");
+    }
+    if files.len() > MAX_FILES {
+        info["filesTruncated"] = json!(files.len());
+    }
     info["files"] = Value::Array(files.into_iter().take(MAX_FILES).collect());
-    info["iflowSteps"] = engine_call(server, rt, "iflow.steps", json!({}))?["steps"].clone();
-    mark_functions(server, &mut info["iflowSteps"]);
+    info["iflowSteps"] = Value::Array(steps);
+    if info.get("summary").is_none() {
+        mark_functions(server, &mut info["iflowSteps"]);
+    }
     Ok(info)
 }
 

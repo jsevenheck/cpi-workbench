@@ -466,7 +466,8 @@ public final class ScriptRunner {
             case "byte[]":
                 return in.getBody();
             case "InputStream":
-                return new ByteArrayInputStream(in.getBody());
+                // A tenant's HTTPS sender hands on an InputStreamCache (F49): Camel's resettable stream cache.
+                return new org.apache.camel.converter.stream.InputStreamCache(in.getBody());
             case "String":
             default:
                 return in.getBodyAsString();
@@ -477,6 +478,11 @@ public final class ScriptRunner {
 
     static Json.Obj describeOutput(Exchange exchange, Charset charset, List<Diagnostic> diags) {
         Object body = exchange.getIn().getBody();
+        // Camel resets a stream cache after each processor (StreamCachingAdvice.after), so the next step reads the
+        // body from its start, also when the script read it to the end.
+        if (body instanceof org.apache.camel.StreamCache) {
+            ((org.apache.camel.StreamCache) body).reset();
+        }
         String text;
         String bodyClass = body == null ? "null" : body.getClass().getName();
         try {

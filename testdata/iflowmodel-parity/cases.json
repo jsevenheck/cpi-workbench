@@ -1,0 +1,1692 @@
+{
+  "_comment": "The Diagram tab's outline, adapters and type labels (app/src/lib/iflowmodel.ts, test app/tests/iflowmodelparity.test.mts) and the MCP server's (app/src-tauri/src/mcp/iflowmodel.rs, test iflowmodel_parity) must agree. Models: a synthetic one and what iflow.models returns for the engine's iFlow fixtures (geometry left out). Expected values come from the TypeScript side.",
+  "cases": [
+    {
+      "model": {
+        "iflow": "Synthetic",
+        "file": "iflows/Synthetic/x.iflw",
+        "processes": [
+          {
+            "id": "P2",
+            "name": "Local",
+            "kind": "local"
+          },
+          {
+            "id": "E1",
+            "name": "Errors",
+            "kind": "exception",
+            "parent": "P1"
+          },
+          {
+            "id": "P1",
+            "name": "Main",
+            "kind": "main"
+          }
+        ],
+        "nodes": [
+          {
+            "id": "Shop",
+            "name": "Shop",
+            "kind": "sender",
+            "process": null,
+            "properties": {}
+          },
+          {
+            "id": "S",
+            "name": "S",
+            "kind": "start",
+            "process": "P1",
+            "properties": {}
+          },
+          {
+            "id": "A",
+            "name": "A",
+            "kind": "step",
+            "process": "P1",
+            "properties": {},
+            "activityType": "Enricher"
+          },
+          {
+            "id": "G",
+            "name": "G",
+            "kind": "gateway",
+            "process": "P1",
+            "properties": {},
+            "activityType": "ExclusiveGateway"
+          },
+          {
+            "id": "B",
+            "name": "B",
+            "kind": "step",
+            "process": "P1",
+            "properties": {},
+            "activityType": "DBstorage",
+            "variant": "put"
+          },
+          {
+            "id": "C",
+            "name": "C",
+            "kind": "step",
+            "process": "P1",
+            "properties": {},
+            "activityType": "SomethingNew",
+            "variant": "newThing"
+          },
+          {
+            "id": "J",
+            "name": "J",
+            "kind": "gateway",
+            "process": "P1",
+            "properties": {}
+          },
+          {
+            "id": "End",
+            "name": "End",
+            "kind": "end",
+            "process": "P1",
+            "properties": {},
+            "event": "message"
+          },
+          {
+            "id": "Lost",
+            "name": "Lost",
+            "kind": "step",
+            "process": "P1",
+            "properties": {}
+          },
+          {
+            "id": "E1",
+            "name": "E1",
+            "kind": "subprocess",
+            "process": "P1",
+            "properties": {}
+          },
+          {
+            "id": "ES",
+            "name": "ES",
+            "kind": "start",
+            "process": "E1",
+            "properties": {},
+            "event": "error"
+          },
+          {
+            "id": "LS",
+            "name": "LS",
+            "kind": "start",
+            "process": "P2",
+            "properties": {}
+          },
+          {
+            "id": "Call",
+            "name": "Call",
+            "kind": "step",
+            "process": "P1",
+            "properties": {},
+            "calls": "P2",
+            "activityType": "ProcessCallElement",
+            "subActivityType": "LoopingProcess"
+          },
+          {
+            "id": "ERP",
+            "name": "ERP",
+            "kind": "receiver",
+            "process": null,
+            "properties": {}
+          },
+          {
+            "id": "Loop",
+            "name": "Loop",
+            "kind": "step",
+            "process": "P2",
+            "properties": {}
+          },
+          {
+            "id": "Back",
+            "name": "Back",
+            "kind": "step",
+            "process": "P2",
+            "properties": {}
+          }
+        ],
+        "flows": [
+          {
+            "id": "M",
+            "kind": "message",
+            "name": "HTTPS",
+            "source": "Shop",
+            "target": "S",
+            "adapter": "HTTPS",
+            "direction": "Sender"
+          },
+          {
+            "id": "M2",
+            "kind": "message",
+            "name": "OData",
+            "source": "B",
+            "target": "ERP",
+            "adapter": "OData",
+            "direction": "Receiver"
+          },
+          {
+            "id": "1",
+            "kind": "sequence",
+            "name": "",
+            "source": "S",
+            "target": "A"
+          },
+          {
+            "id": "2",
+            "kind": "sequence",
+            "name": "",
+            "source": "A",
+            "target": "G"
+          },
+          {
+            "id": "3",
+            "kind": "sequence",
+            "name": "ERP",
+            "source": "G",
+            "target": "B",
+            "condition": "${header.x} = 'ERP'"
+          },
+          {
+            "id": "4",
+            "kind": "sequence",
+            "name": "Other",
+            "source": "G",
+            "target": "C",
+            "default": true
+          },
+          {
+            "id": "5",
+            "kind": "sequence",
+            "name": "",
+            "source": "B",
+            "target": "J"
+          },
+          {
+            "id": "6",
+            "kind": "sequence",
+            "name": "",
+            "source": "C",
+            "target": "J"
+          },
+          {
+            "id": "7",
+            "kind": "sequence",
+            "name": "",
+            "source": "J",
+            "target": "Call"
+          },
+          {
+            "id": "8",
+            "kind": "sequence",
+            "name": "",
+            "source": "Call",
+            "target": "End"
+          },
+          {
+            "id": "9",
+            "kind": "sequence",
+            "name": "",
+            "source": "LS",
+            "target": "Loop"
+          },
+          {
+            "id": "10",
+            "kind": "sequence",
+            "name": "",
+            "source": "Loop",
+            "target": "Back"
+          },
+          {
+            "id": "11",
+            "kind": "sequence",
+            "name": "",
+            "source": "Back",
+            "target": "Loop"
+          }
+        ]
+      },
+      "outline": [
+        {
+          "process": "P1",
+          "entries": [
+            {
+              "node": "S",
+              "depth": 0,
+              "route": null,
+              "again": false,
+              "unreachable": false
+            },
+            {
+              "node": "A",
+              "depth": 0,
+              "route": null,
+              "again": false,
+              "unreachable": false
+            },
+            {
+              "node": "G",
+              "depth": 0,
+              "route": null,
+              "again": false,
+              "unreachable": false
+            },
+            {
+              "node": "B",
+              "depth": 1,
+              "route": {
+                "name": "ERP",
+                "condition": "${header.x} = 'ERP'"
+              },
+              "again": false,
+              "unreachable": false
+            },
+            {
+              "node": "J",
+              "depth": 1,
+              "route": null,
+              "again": false,
+              "unreachable": false
+            },
+            {
+              "node": "Call",
+              "depth": 1,
+              "route": null,
+              "again": false,
+              "unreachable": false
+            },
+            {
+              "node": "End",
+              "depth": 1,
+              "route": null,
+              "again": false,
+              "unreachable": false
+            },
+            {
+              "node": "C",
+              "depth": 1,
+              "route": {
+                "name": "Other",
+                "default": true
+              },
+              "again": false,
+              "unreachable": false
+            },
+            {
+              "node": "J",
+              "depth": 1,
+              "route": null,
+              "again": true,
+              "unreachable": false
+            },
+            {
+              "node": "Lost",
+              "depth": 0,
+              "route": null,
+              "again": false,
+              "unreachable": true
+            }
+          ]
+        },
+        {
+          "process": "E1",
+          "entries": [
+            {
+              "node": "ES",
+              "depth": 0,
+              "route": null,
+              "again": false,
+              "unreachable": false
+            }
+          ]
+        },
+        {
+          "process": "P2",
+          "entries": [
+            {
+              "node": "LS",
+              "depth": 0,
+              "route": null,
+              "again": false,
+              "unreachable": false
+            },
+            {
+              "node": "Loop",
+              "depth": 0,
+              "route": null,
+              "again": false,
+              "unreachable": false
+            },
+            {
+              "node": "Back",
+              "depth": 0,
+              "route": null,
+              "again": false,
+              "unreachable": false
+            },
+            {
+              "node": "Loop",
+              "depth": 0,
+              "route": null,
+              "again": true,
+              "unreachable": false
+            }
+          ]
+        }
+      ],
+      "adapters": [
+        {
+          "flow": "M",
+          "system": "Shop",
+          "inbound": true
+        },
+        {
+          "flow": "M2",
+          "system": "ERP",
+          "inbound": false
+        }
+      ],
+      "labels": {
+        "Shop": "Sender",
+        "S": "Start event",
+        "A": "Content Modifier",
+        "G": "Router",
+        "B": "Data Store (put)",
+        "C": "newThing",
+        "J": "gateway",
+        "End": "End (message)",
+        "Lost": "step",
+        "E1": "subprocess",
+        "ES": "Start (error)",
+        "LS": "Start event",
+        "Call": "Looping Process Call",
+        "ERP": "Receiver",
+        "Loop": "step",
+        "Back": "step"
+      }
+    },
+    {
+      "model": {
+        "name": "Inbound_Files",
+        "processes": [
+          {
+            "id": "Process_1",
+            "name": "Integration Process",
+            "kind": "main",
+            "pool": "Participant_Process_1"
+          }
+        ],
+        "nodes": [
+          {
+            "id": "Participant_1",
+            "name": "Partner SFTP",
+            "kind": "sender",
+            "element": "participant",
+            "process": null,
+            "activityType": null,
+            "subActivityType": null,
+            "variant": null,
+            "properties": {
+              "ifl:type": "EndpointSender"
+            }
+          },
+          {
+            "id": "Participant_2",
+            "name": "Order queue",
+            "kind": "receiver",
+            "element": "participant",
+            "process": null,
+            "activityType": null,
+            "subActivityType": null,
+            "variant": null,
+            "properties": {
+              "ifl:type": "EndpointRecevier"
+            }
+          },
+          {
+            "id": "StartEvent_1",
+            "name": "Start",
+            "kind": "start",
+            "element": "startEvent",
+            "process": "Process_1",
+            "activityType": null,
+            "subActivityType": null,
+            "variant": null,
+            "properties": {},
+            "event": "message"
+          },
+          {
+            "id": "CallActivity_1",
+            "name": "Set source",
+            "kind": "step",
+            "element": "callActivity",
+            "process": "Process_1",
+            "activityType": "Enricher",
+            "subActivityType": null,
+            "variant": null,
+            "properties": {
+              "activityType": "Enricher",
+              "headerTable": "<row><cell id='Name'>Source</cell><cell id='Value'>{{SftpHost}}</cell></row><row><cell id='Name'>Auth</cell><cell id='Value'>{{Token &apos;Auth&apos;}}</cell></row>"
+            }
+          },
+          {
+            "id": "EndEvent_1",
+            "name": "End",
+            "kind": "end",
+            "element": "endEvent",
+            "process": "Process_1",
+            "activityType": null,
+            "subActivityType": null,
+            "variant": null,
+            "properties": {},
+            "event": "message"
+          }
+        ],
+        "flows": [
+          {
+            "id": "MessageFlow_1",
+            "kind": "message",
+            "name": "SFTP",
+            "source": "Participant_1",
+            "target": "StartEvent_1",
+            "adapter": "SFTP",
+            "direction": "Sender",
+            "properties": {
+              "ComponentType": "SFTP",
+              "direction": "Sender",
+              "host": "{{SftpHost}}",
+              "path": "/out/orders",
+              "credential_name": "partner_sftp",
+              "cmdVariantUri": "ctype::AdapterVariant/cname::sap:SFTP/tp::SFTP/mp::None/direction::Sender/version::1.11.0"
+            }
+          },
+          {
+            "id": "MessageFlow_2",
+            "kind": "message",
+            "name": "JMS",
+            "source": "EndEvent_1",
+            "target": "Participant_2",
+            "adapter": "JMS",
+            "direction": "Receiver",
+            "properties": {
+              "ComponentType": "JMS",
+              "direction": "Receiver",
+              "QueueName_outbound": "ORDERS_IN"
+            }
+          },
+          {
+            "id": "SequenceFlow_1",
+            "kind": "sequence",
+            "name": "",
+            "source": "StartEvent_1",
+            "target": "CallActivity_1",
+            "condition": null,
+            "expressionType": null,
+            "properties": {}
+          },
+          {
+            "id": "SequenceFlow_2",
+            "kind": "sequence",
+            "name": "",
+            "source": "CallActivity_1",
+            "target": "EndEvent_1",
+            "condition": null,
+            "expressionType": null,
+            "properties": {}
+          }
+        ],
+        "hasLayout": false,
+        "iflow": "Inbound_Files",
+        "file": "iflows/Inbound_Files/src/main/resources/scenarioflows/integrationflow/Inbound_Files.iflw"
+      },
+      "outline": [
+        {
+          "process": "Process_1",
+          "entries": [
+            {
+              "node": "StartEvent_1",
+              "depth": 0,
+              "route": null,
+              "again": false,
+              "unreachable": false
+            },
+            {
+              "node": "CallActivity_1",
+              "depth": 0,
+              "route": null,
+              "again": false,
+              "unreachable": false
+            },
+            {
+              "node": "EndEvent_1",
+              "depth": 0,
+              "route": null,
+              "again": false,
+              "unreachable": false
+            }
+          ]
+        }
+      ],
+      "adapters": [
+        {
+          "flow": "MessageFlow_1",
+          "system": "Participant_1",
+          "inbound": true
+        },
+        {
+          "flow": "MessageFlow_2",
+          "system": "Participant_2",
+          "inbound": false
+        }
+      ],
+      "labels": {
+        "Participant_1": "Sender",
+        "Participant_2": "Receiver",
+        "StartEvent_1": "Start (message)",
+        "CallActivity_1": "Content Modifier",
+        "EndEvent_1": "End (message)"
+      }
+    },
+    {
+      "model": {
+        "name": "Order_Replication",
+        "processes": [
+          {
+            "id": "Process_1",
+            "name": "Integration Process",
+            "kind": "main",
+            "pool": "Participant_Process_1"
+          },
+          {
+            "id": "SubProcess_1",
+            "name": "Exception Subprocess 1",
+            "kind": "exception",
+            "parent": "Process_1"
+          },
+          {
+            "id": "Process_2",
+            "name": "Archive order",
+            "kind": "local",
+            "pool": "Participant_Process_2"
+          }
+        ],
+        "nodes": [
+          {
+            "id": "Participant_1",
+            "name": "Shop",
+            "kind": "sender",
+            "element": "participant",
+            "process": null,
+            "activityType": null,
+            "subActivityType": null,
+            "variant": null,
+            "properties": {
+              "enableBasicAuthentication": "false",
+              "ifl:type": "EndpointSender"
+            }
+          },
+          {
+            "id": "Participant_2",
+            "name": "S4",
+            "kind": "receiver",
+            "element": "participant",
+            "process": null,
+            "activityType": null,
+            "subActivityType": null,
+            "variant": null,
+            "properties": {
+              "ifl:type": "EndpointRecevier"
+            }
+          },
+          {
+            "id": "CallActivity_1",
+            "name": "Enrich order",
+            "kind": "step",
+            "element": "callActivity",
+            "process": "Process_1",
+            "activityType": "Script",
+            "subActivityType": "GroovyScript",
+            "variant": null,
+            "properties": {
+              "scriptFunction": "enrich",
+              "componentVersion": "2.0",
+              "activityType": "Script",
+              "subActivityType": "GroovyScript",
+              "script": "enrich.groovy"
+            }
+          },
+          {
+            "id": "CallActivity_2",
+            "name": "Map to sales order",
+            "kind": "step",
+            "element": "callActivity",
+            "process": "Process_1",
+            "activityType": "Mapping",
+            "subActivityType": "XSLTMapping",
+            "variant": null,
+            "properties": {
+              "componentVersion": "1.2",
+              "activityType": "Mapping",
+              "subActivityType": "XSLTMapping",
+              "mappinguri": "dir://mapping/xslt/src/main/resources/mapping/order.xsl"
+            }
+          },
+          {
+            "id": "CallActivity_4",
+            "name": "Log payload",
+            "kind": "step",
+            "element": "callActivity",
+            "process": "Process_1",
+            "activityType": "Script",
+            "subActivityType": "GroovyScript",
+            "variant": "GroovyScript",
+            "properties": {
+              "scriptFunction": "",
+              "componentVersion": "1.0",
+              "activityType": "Script",
+              "cmdVariantUri": "ctype::FlowstepVariant/cname::GroovyScript/version::1.0.1",
+              "subActivityType": "GroovyScript",
+              "script": "enrich.groovy"
+            }
+          },
+          {
+            "id": "CallActivity_5",
+            "name": "Dynamic mapping",
+            "kind": "step",
+            "element": "callActivity",
+            "process": "Process_1",
+            "activityType": "Mapping",
+            "subActivityType": "XSLTMapping",
+            "variant": null,
+            "properties": {
+              "mappingHeaderNameKey": "xsltmappingname",
+              "mappingSource": "mappingSrcHeader",
+              "activityType": "Mapping",
+              "subActivityType": "XSLTMapping"
+            }
+          },
+          {
+            "id": "CallActivity_6",
+            "name": "Validate",
+            "kind": "step",
+            "element": "callActivity",
+            "process": "Process_1",
+            "activityType": "XmlValidator",
+            "subActivityType": null,
+            "variant": null,
+            "properties": {
+              "componentVersion": "2.0",
+              "activityType": "XmlValidator",
+              "xmlSchemaSource": "/xsd/order.xsd"
+            }
+          },
+          {
+            "id": "CallActivity_3",
+            "name": "Set headers",
+            "kind": "step",
+            "element": "callActivity",
+            "process": "Process_1",
+            "activityType": "Enricher",
+            "subActivityType": null,
+            "variant": null,
+            "properties": {
+              "bodyType": "expression",
+              "propertyTable": "<row><cell id='Action'>Create</cell><cell id='Type'>constant</cell><cell id='Value'>{{LogLevel}}</cell><cell id='Default'></cell><cell id='Name'>P_Log</cell><cell id='Datatype'></cell></row>",
+              "headerTable": "<row><cell id='Action'>Create</cell><cell id='Type'>xpath</cell><cell id='Value'>//Order/@id</cell><cell id='Default'></cell><cell id='Name'>OrderId</cell><cell id='Datatype'>java.lang.String</cell></row><row><cell id='Action'>Delete</cell><cell id='Type'>constant</cell><cell id='Value'></cell><cell id='Default'></cell><cell id='Name'>$include=X-*</cell><cell id='Datatype'></cell></row>",
+              "wrapContent": "<Wrapped>${in.body}</Wrapped>",
+              "componentVersion": "1.6",
+              "activityType": "Enricher"
+            }
+          },
+          {
+            "id": "CallActivity_7",
+            "name": "Split items",
+            "kind": "step",
+            "element": "callActivity",
+            "process": "Process_1",
+            "activityType": "Splitter",
+            "subActivityType": null,
+            "variant": null,
+            "properties": {
+              "exprType": "XPath",
+              "Streaming": "true",
+              "splitExprValue": "/Order/Item/",
+              "activityType": "Splitter",
+              "grouping": "{{GroupSize}}",
+              "splitType": "GeneralSplitter"
+            }
+          },
+          {
+            "id": "CallActivity_8",
+            "name": "Gather items",
+            "kind": "step",
+            "element": "callActivity",
+            "process": "Process_1",
+            "activityType": "Gather",
+            "subActivityType": null,
+            "variant": null,
+            "properties": {
+              "gatherFileNames": "",
+              "sourceXPath": "/Order/Item",
+              "targetXPath": "",
+              "componentVersion": "1.2",
+              "messageType": "SameXMLFormat",
+              "activityType": "Gather",
+              "aggregationAlgorithm": "xpath-merge-strategy"
+            }
+          },
+          {
+            "id": "CallActivity_9",
+            "name": "Keep items",
+            "kind": "step",
+            "element": "callActivity",
+            "process": "Process_1",
+            "activityType": "Filter",
+            "subActivityType": null,
+            "variant": null,
+            "properties": {
+              "xpathType": "Nodelist",
+              "componentVersion": "1.1",
+              "activityType": "Filter",
+              "wrapContent": "/Order/Item"
+            }
+          },
+          {
+            "id": "CallActivity_10",
+            "name": "Map order",
+            "kind": "step",
+            "element": "callActivity",
+            "process": "Process_1",
+            "activityType": "Mapping",
+            "subActivityType": null,
+            "variant": null,
+            "properties": {
+              "mappingname": "order",
+              "mappingpath": "src/main/resources/mapping/order",
+              "activityType": "Mapping",
+              "mappinguri": "dir://mmap/src/main/resources/mapping/order.mmap"
+            }
+          },
+          {
+            "id": "CallActivity_11",
+            "name": "JSON to XML",
+            "kind": "step",
+            "element": "callActivity",
+            "process": "Process_1",
+            "activityType": "JsonToXmlConverter",
+            "subActivityType": null,
+            "variant": "JsonToXmlConverter",
+            "properties": {
+              "componentVersion": "1.1",
+              "activityType": "JsonToXmlConverter",
+              "cmdVariantUri": "ctype::FlowstepVariant/cname::JsonToXmlConverter/version::1.1.2",
+              "useNamespaces": "true",
+              "jsonNamespaceSeparator": ":",
+              "jsonNamespaceMapping": "<row><cell>ord</cell><cell>urn:orders</cell></row>",
+              "addXMLRootElement": "true",
+              "additionalRootElementName": "{{RootName}}"
+            }
+          },
+          {
+            "id": "CallActivity_12",
+            "name": "CSV to XML",
+            "kind": "step",
+            "element": "callActivity",
+            "process": "Process_1",
+            "activityType": "CsvToXmlConverter",
+            "subActivityType": null,
+            "variant": null,
+            "properties": {
+              "componentVersion": "1.4",
+              "activityType": "CsvToXmlConverter",
+              "XML_Schema_File_Path": "/xsd/order.xsd",
+              "XPath_Field_Location": "Order/Item",
+              "Field_Separator_in_CSV": ";",
+              "ignoreFirstLineAsHeader": "true",
+              "headerMapping": "mapHeadersToXSD"
+            }
+          },
+          {
+            "id": "ExclusiveGateway_1",
+            "name": "Check sender",
+            "kind": "gateway",
+            "element": "exclusiveGateway",
+            "process": "Process_1",
+            "activityType": "ExclusiveGateway",
+            "subActivityType": null,
+            "variant": null,
+            "properties": {
+              "activityType": "ExclusiveGateway",
+              "throwException": "false"
+            }
+          },
+          {
+            "id": "StartEvent_1",
+            "name": "Start",
+            "kind": "start",
+            "element": "startEvent",
+            "process": "Process_1",
+            "activityType": null,
+            "subActivityType": null,
+            "variant": "MessageStartEvent",
+            "properties": {
+              "componentVersion": "1.0",
+              "cmdVariantUri": "ctype::FlowstepVariant/cname::MessageStartEvent/version::1.0"
+            },
+            "event": "message"
+          },
+          {
+            "id": "EndEvent_1",
+            "name": "End",
+            "kind": "end",
+            "element": "endEvent",
+            "process": "Process_1",
+            "activityType": null,
+            "subActivityType": null,
+            "variant": "MessageEndEvent",
+            "properties": {
+              "componentVersion": "1.1",
+              "cmdVariantUri": "ctype::FlowstepVariant/cname::MessageEndEvent/version::1.1.0"
+            },
+            "event": "message"
+          },
+          {
+            "id": "CallActivity_13",
+            "name": "Archive",
+            "kind": "step",
+            "element": "callActivity",
+            "process": "Process_1",
+            "activityType": "ProcessCallElement",
+            "subActivityType": "NonLoopingProcess",
+            "variant": "NonLoopingProcess",
+            "properties": {
+              "activityType": "ProcessCallElement",
+              "subActivityType": "NonLoopingProcess",
+              "processId": "Process_2",
+              "cmdVariantUri": "ctype::FlowstepVariant/cname::NonLoopingProcess/version::1.0.3"
+            },
+            "calls": "Process_2"
+          },
+          {
+            "id": "SubProcess_1",
+            "name": "Exception Subprocess 1",
+            "kind": "subprocess",
+            "element": "subProcess",
+            "process": "Process_1",
+            "activityType": "ErrorEventSubProcessTemplate",
+            "subActivityType": null,
+            "variant": "ErrorEventSubProcessTemplate",
+            "properties": {
+              "activityType": "ErrorEventSubProcessTemplate",
+              "cmdVariantUri": "ctype::FlowstepVariant/cname::ErrorEventSubProcessTemplate/version::1.1.0"
+            }
+          },
+          {
+            "id": "StartEvent_3",
+            "name": "Error Start",
+            "kind": "start",
+            "element": "startEvent",
+            "process": "SubProcess_1",
+            "activityType": "StartErrorEvent",
+            "subActivityType": null,
+            "variant": null,
+            "properties": {
+              "activityType": "StartErrorEvent"
+            },
+            "event": "error"
+          },
+          {
+            "id": "EndEvent_3",
+            "name": "Error End",
+            "kind": "end",
+            "element": "endEvent",
+            "process": "SubProcess_1",
+            "activityType": "EndErrorEvent",
+            "subActivityType": null,
+            "variant": null,
+            "properties": {
+              "activityType": "EndErrorEvent"
+            },
+            "event": "error"
+          },
+          {
+            "id": "StartEvent_2",
+            "name": "Start 1",
+            "kind": "start",
+            "element": "startEvent",
+            "process": "Process_2",
+            "activityType": null,
+            "subActivityType": null,
+            "variant": "StartEvent",
+            "properties": {
+              "cmdVariantUri": "ctype::FlowstepVariant/cname::StartEvent"
+            }
+          },
+          {
+            "id": "CallActivity_14",
+            "name": "Write to data store",
+            "kind": "step",
+            "element": "callActivity",
+            "process": "Process_2",
+            "activityType": "DBstorage",
+            "subActivityType": "put",
+            "variant": "put",
+            "properties": {
+              "activityType": "DBstorage",
+              "subActivityType": "put",
+              "storageName": "orders",
+              "cmdVariantUri": "ctype::FlowstepVariant/cname::put/version::1.6.0"
+            }
+          },
+          {
+            "id": "EndEvent_2",
+            "name": "End 1",
+            "kind": "end",
+            "element": "endEvent",
+            "process": "Process_2",
+            "activityType": null,
+            "subActivityType": null,
+            "variant": "EndEvent",
+            "properties": {
+              "cmdVariantUri": "ctype::FlowstepVariant/cname::EndEvent"
+            }
+          }
+        ],
+        "flows": [
+          {
+            "id": "MessageFlow_1",
+            "kind": "message",
+            "name": "HTTPS",
+            "source": "Participant_1",
+            "target": "StartEvent_1",
+            "adapter": "HTTPS",
+            "direction": "Sender",
+            "properties": {
+              "ComponentType": "HTTPS",
+              "direction": "Sender",
+              "urlPath": "/orders",
+              "cmdVariantUri": "ctype::AdapterVariant/cname::sap:HTTPS/tp::HTTPS/mp::None/direction::Sender/version::1.5.0"
+            }
+          },
+          {
+            "id": "MessageFlow_2",
+            "kind": "message",
+            "name": "SOAP",
+            "source": "EndEvent_1",
+            "target": "Participant_2",
+            "adapter": "SOAP",
+            "direction": "Receiver",
+            "properties": {
+              "ComponentType": "SOAP",
+              "direction": "Receiver",
+              "address": "https://s4.example.com/orders",
+              "cmdVariantUri": "ctype::AdapterVariant/cname::sap:SOAP/tp::HTTP/mp::SOAP 1.x/direction::Receiver/version::1.11.0"
+            }
+          },
+          {
+            "id": "SequenceFlow_9",
+            "kind": "sequence",
+            "name": "Other",
+            "source": "ExclusiveGateway_1",
+            "target": "CallActivity_1",
+            "condition": null,
+            "expressionType": "XML",
+            "properties": {
+              "expressionType": "XML"
+            },
+            "default": true
+          },
+          {
+            "id": "SequenceFlow_8",
+            "kind": "sequence",
+            "name": "ERP",
+            "source": "ExclusiveGateway_1",
+            "target": "CallActivity_2",
+            "condition": "${header.SenderId} = 'ERP'",
+            "expressionType": "NonXML",
+            "properties": {
+              "expressionType": "NonXML"
+            }
+          },
+          {
+            "id": "SequenceFlow_20",
+            "kind": "sequence",
+            "name": "",
+            "source": "StartEvent_1",
+            "target": "CallActivity_3",
+            "condition": null,
+            "expressionType": null,
+            "properties": {}
+          },
+          {
+            "id": "SequenceFlow_21",
+            "kind": "sequence",
+            "name": "",
+            "source": "CallActivity_3",
+            "target": "CallActivity_6",
+            "condition": null,
+            "expressionType": null,
+            "properties": {}
+          },
+          {
+            "id": "SequenceFlow_22",
+            "kind": "sequence",
+            "name": "",
+            "source": "CallActivity_6",
+            "target": "CallActivity_7",
+            "condition": null,
+            "expressionType": null,
+            "properties": {}
+          },
+          {
+            "id": "SequenceFlow_23",
+            "kind": "sequence",
+            "name": "",
+            "source": "CallActivity_7",
+            "target": "CallActivity_9",
+            "condition": null,
+            "expressionType": null,
+            "properties": {}
+          },
+          {
+            "id": "SequenceFlow_24",
+            "kind": "sequence",
+            "name": "",
+            "source": "CallActivity_9",
+            "target": "CallActivity_8",
+            "condition": null,
+            "expressionType": null,
+            "properties": {}
+          },
+          {
+            "id": "SequenceFlow_25",
+            "kind": "sequence",
+            "name": "",
+            "source": "CallActivity_8",
+            "target": "ExclusiveGateway_1",
+            "condition": null,
+            "expressionType": null,
+            "properties": {}
+          },
+          {
+            "id": "SequenceFlow_26",
+            "kind": "sequence",
+            "name": "",
+            "source": "CallActivity_2",
+            "target": "CallActivity_10",
+            "condition": null,
+            "expressionType": null,
+            "properties": {}
+          },
+          {
+            "id": "SequenceFlow_27",
+            "kind": "sequence",
+            "name": "",
+            "source": "CallActivity_10",
+            "target": "CallActivity_11",
+            "condition": null,
+            "expressionType": null,
+            "properties": {}
+          },
+          {
+            "id": "SequenceFlow_28",
+            "kind": "sequence",
+            "name": "",
+            "source": "CallActivity_11",
+            "target": "CallActivity_12",
+            "condition": null,
+            "expressionType": null,
+            "properties": {}
+          },
+          {
+            "id": "SequenceFlow_29",
+            "kind": "sequence",
+            "name": "",
+            "source": "CallActivity_12",
+            "target": "CallActivity_13",
+            "condition": null,
+            "expressionType": null,
+            "properties": {}
+          },
+          {
+            "id": "SequenceFlow_30",
+            "kind": "sequence",
+            "name": "",
+            "source": "CallActivity_13",
+            "target": "EndEvent_1",
+            "condition": null,
+            "expressionType": null,
+            "properties": {}
+          },
+          {
+            "id": "SequenceFlow_31",
+            "kind": "sequence",
+            "name": "",
+            "source": "CallActivity_1",
+            "target": "CallActivity_4",
+            "condition": null,
+            "expressionType": null,
+            "properties": {}
+          },
+          {
+            "id": "SequenceFlow_32",
+            "kind": "sequence",
+            "name": "",
+            "source": "CallActivity_4",
+            "target": "CallActivity_5",
+            "condition": null,
+            "expressionType": null,
+            "properties": {}
+          },
+          {
+            "id": "SequenceFlow_33",
+            "kind": "sequence",
+            "name": "",
+            "source": "CallActivity_5",
+            "target": "EndEvent_1",
+            "condition": null,
+            "expressionType": null,
+            "properties": {}
+          },
+          {
+            "id": "SequenceFlow_40",
+            "kind": "sequence",
+            "name": "",
+            "source": "StartEvent_3",
+            "target": "EndEvent_3",
+            "condition": null,
+            "expressionType": null,
+            "properties": {}
+          },
+          {
+            "id": "SequenceFlow_50",
+            "kind": "sequence",
+            "name": "",
+            "source": "StartEvent_2",
+            "target": "CallActivity_14",
+            "condition": null,
+            "expressionType": null,
+            "properties": {}
+          },
+          {
+            "id": "SequenceFlow_51",
+            "kind": "sequence",
+            "name": "",
+            "source": "CallActivity_14",
+            "target": "EndEvent_2",
+            "condition": null,
+            "expressionType": null,
+            "properties": {}
+          }
+        ],
+        "hasLayout": true,
+        "iflow": "Order_Replication",
+        "file": "iflows/Order_Replication/src/main/resources/scenarioflows/integrationflow/Order_Replication.iflw"
+      },
+      "outline": [
+        {
+          "process": "Process_1",
+          "entries": [
+            {
+              "node": "StartEvent_1",
+              "depth": 0,
+              "route": null,
+              "again": false,
+              "unreachable": false
+            },
+            {
+              "node": "CallActivity_3",
+              "depth": 0,
+              "route": null,
+              "again": false,
+              "unreachable": false
+            },
+            {
+              "node": "CallActivity_6",
+              "depth": 0,
+              "route": null,
+              "again": false,
+              "unreachable": false
+            },
+            {
+              "node": "CallActivity_7",
+              "depth": 0,
+              "route": null,
+              "again": false,
+              "unreachable": false
+            },
+            {
+              "node": "CallActivity_9",
+              "depth": 0,
+              "route": null,
+              "again": false,
+              "unreachable": false
+            },
+            {
+              "node": "CallActivity_8",
+              "depth": 0,
+              "route": null,
+              "again": false,
+              "unreachable": false
+            },
+            {
+              "node": "ExclusiveGateway_1",
+              "depth": 0,
+              "route": null,
+              "again": false,
+              "unreachable": false
+            },
+            {
+              "node": "CallActivity_1",
+              "depth": 1,
+              "route": {
+                "name": "Other",
+                "condition": null,
+                "default": true
+              },
+              "again": false,
+              "unreachable": false
+            },
+            {
+              "node": "CallActivity_4",
+              "depth": 1,
+              "route": null,
+              "again": false,
+              "unreachable": false
+            },
+            {
+              "node": "CallActivity_5",
+              "depth": 1,
+              "route": null,
+              "again": false,
+              "unreachable": false
+            },
+            {
+              "node": "EndEvent_1",
+              "depth": 1,
+              "route": null,
+              "again": false,
+              "unreachable": false
+            },
+            {
+              "node": "CallActivity_2",
+              "depth": 1,
+              "route": {
+                "name": "ERP",
+                "condition": "${header.SenderId} = 'ERP'"
+              },
+              "again": false,
+              "unreachable": false
+            },
+            {
+              "node": "CallActivity_10",
+              "depth": 1,
+              "route": null,
+              "again": false,
+              "unreachable": false
+            },
+            {
+              "node": "CallActivity_11",
+              "depth": 1,
+              "route": null,
+              "again": false,
+              "unreachable": false
+            },
+            {
+              "node": "CallActivity_12",
+              "depth": 1,
+              "route": null,
+              "again": false,
+              "unreachable": false
+            },
+            {
+              "node": "CallActivity_13",
+              "depth": 1,
+              "route": null,
+              "again": false,
+              "unreachable": false
+            },
+            {
+              "node": "EndEvent_1",
+              "depth": 1,
+              "route": null,
+              "again": true,
+              "unreachable": false
+            }
+          ]
+        },
+        {
+          "process": "SubProcess_1",
+          "entries": [
+            {
+              "node": "StartEvent_3",
+              "depth": 0,
+              "route": null,
+              "again": false,
+              "unreachable": false
+            },
+            {
+              "node": "EndEvent_3",
+              "depth": 0,
+              "route": null,
+              "again": false,
+              "unreachable": false
+            }
+          ]
+        },
+        {
+          "process": "Process_2",
+          "entries": [
+            {
+              "node": "StartEvent_2",
+              "depth": 0,
+              "route": null,
+              "again": false,
+              "unreachable": false
+            },
+            {
+              "node": "CallActivity_14",
+              "depth": 0,
+              "route": null,
+              "again": false,
+              "unreachable": false
+            },
+            {
+              "node": "EndEvent_2",
+              "depth": 0,
+              "route": null,
+              "again": false,
+              "unreachable": false
+            }
+          ]
+        }
+      ],
+      "adapters": [
+        {
+          "flow": "MessageFlow_1",
+          "system": "Participant_1",
+          "inbound": true
+        },
+        {
+          "flow": "MessageFlow_2",
+          "system": "Participant_2",
+          "inbound": false
+        }
+      ],
+      "labels": {
+        "Participant_1": "Sender",
+        "Participant_2": "Receiver",
+        "CallActivity_1": "Groovy Script",
+        "CallActivity_2": "XSLT Mapping",
+        "CallActivity_4": "Groovy Script",
+        "CallActivity_5": "XSLT Mapping",
+        "CallActivity_6": "XML Validator",
+        "CallActivity_3": "Content Modifier",
+        "CallActivity_7": "Splitter",
+        "CallActivity_8": "Gather",
+        "CallActivity_9": "Filter",
+        "CallActivity_10": "Mapping",
+        "CallActivity_11": "JSON to XML Converter",
+        "CallActivity_12": "CSV to XML Converter",
+        "ExclusiveGateway_1": "Router",
+        "StartEvent_1": "Start (message)",
+        "EndEvent_1": "End (message)",
+        "CallActivity_13": "Process Call",
+        "SubProcess_1": "Exception Subprocess",
+        "StartEvent_3": "Start (error)",
+        "EndEvent_3": "End (error)",
+        "StartEvent_2": "Start event",
+        "CallActivity_14": "Data Store (put)",
+        "EndEvent_2": "End event"
+      }
+    },
+    {
+      "model": {
+        "name": "Outbound_Orders",
+        "processes": [
+          {
+            "id": "Process_1",
+            "name": "Integration Process",
+            "kind": "main",
+            "pool": "Participant_Process_1"
+          }
+        ],
+        "nodes": [
+          {
+            "id": "Participant_1",
+            "name": "Order queue",
+            "kind": "sender",
+            "element": "participant",
+            "process": null,
+            "activityType": null,
+            "subActivityType": null,
+            "variant": null,
+            "properties": {
+              "ifl:type": "EndpointSender"
+            }
+          },
+          {
+            "id": "Participant_2",
+            "name": "Backend",
+            "kind": "receiver",
+            "element": "participant",
+            "process": null,
+            "activityType": null,
+            "subActivityType": null,
+            "variant": null,
+            "properties": {
+              "ifl:type": "EndpointRecevier"
+            }
+          },
+          {
+            "id": "Participant_3",
+            "name": "Database",
+            "kind": "receiver",
+            "element": "participant",
+            "process": null,
+            "activityType": null,
+            "subActivityType": null,
+            "variant": null,
+            "properties": {
+              "ifl:type": "EndpointRecevier"
+            }
+          },
+          {
+            "id": "StartEvent_1",
+            "name": "Start",
+            "kind": "start",
+            "element": "startEvent",
+            "process": "Process_1",
+            "activityType": null,
+            "subActivityType": null,
+            "variant": null,
+            "properties": {},
+            "event": "message"
+          },
+          {
+            "id": "CallActivity_1",
+            "name": "Send order",
+            "kind": "step",
+            "element": "serviceTask",
+            "process": "Process_1",
+            "activityType": "ExternalCall",
+            "subActivityType": null,
+            "variant": null,
+            "properties": {
+              "activityType": "ExternalCall"
+            }
+          },
+          {
+            "id": "CallActivity_2",
+            "name": "Store order",
+            "kind": "step",
+            "element": "serviceTask",
+            "process": "Process_1",
+            "activityType": "ExternalCall",
+            "subActivityType": null,
+            "variant": null,
+            "properties": {
+              "activityType": "ExternalCall"
+            }
+          },
+          {
+            "id": "EndEvent_1",
+            "name": "End",
+            "kind": "end",
+            "element": "endEvent",
+            "process": "Process_1",
+            "activityType": null,
+            "subActivityType": null,
+            "variant": null,
+            "properties": {},
+            "event": "message"
+          }
+        ],
+        "flows": [
+          {
+            "id": "MessageFlow_1",
+            "kind": "message",
+            "name": "JMS",
+            "source": "Participant_1",
+            "target": "StartEvent_1",
+            "adapter": "JMS",
+            "direction": "Sender",
+            "properties": {
+              "ComponentType": "JMS",
+              "direction": "Sender",
+              "QueueName_inbound": "ORDERS_IN"
+            }
+          },
+          {
+            "id": "MessageFlow_2",
+            "kind": "message",
+            "name": "HTTP",
+            "source": "CallActivity_1",
+            "target": "Participant_2",
+            "adapter": "HTTP",
+            "direction": "Receiver",
+            "properties": {
+              "ComponentType": "HTTP",
+              "direction": "Receiver",
+              "httpAddressWithoutQuery": "{{BackendUrl}}/orders",
+              "credentialName": "partner_sftp"
+            }
+          },
+          {
+            "id": "MessageFlow_3",
+            "kind": "message",
+            "name": "JDBC",
+            "source": "CallActivity_2",
+            "target": "Participant_3",
+            "adapter": "JDBC",
+            "direction": "Receiver",
+            "properties": {
+              "ComponentType": "JDBC",
+              "direction": "Receiver",
+              "alias": "orders_ds"
+            }
+          },
+          {
+            "id": "SequenceFlow_1",
+            "kind": "sequence",
+            "name": "",
+            "source": "StartEvent_1",
+            "target": "CallActivity_1",
+            "condition": null,
+            "expressionType": null,
+            "properties": {}
+          },
+          {
+            "id": "SequenceFlow_2",
+            "kind": "sequence",
+            "name": "EU",
+            "source": "CallActivity_1",
+            "target": "CallActivity_2",
+            "condition": "${header.Region} = 'EU'",
+            "expressionType": "NonXML",
+            "properties": {
+              "componentVersion": "1.0",
+              "expressionType": "NonXML"
+            }
+          },
+          {
+            "id": "SequenceFlow_3",
+            "kind": "sequence",
+            "name": "",
+            "source": "CallActivity_2",
+            "target": "EndEvent_1",
+            "condition": null,
+            "expressionType": null,
+            "properties": {}
+          }
+        ],
+        "hasLayout": false,
+        "iflow": "Outbound_Orders",
+        "file": "iflows/Outbound_Orders/src/main/resources/scenarioflows/integrationflow/Outbound_Orders.iflw"
+      },
+      "outline": [
+        {
+          "process": "Process_1",
+          "entries": [
+            {
+              "node": "StartEvent_1",
+              "depth": 0,
+              "route": null,
+              "again": false,
+              "unreachable": false
+            },
+            {
+              "node": "CallActivity_1",
+              "depth": 0,
+              "route": null,
+              "again": false,
+              "unreachable": false
+            },
+            {
+              "node": "CallActivity_2",
+              "depth": 0,
+              "route": null,
+              "again": false,
+              "unreachable": false
+            },
+            {
+              "node": "EndEvent_1",
+              "depth": 0,
+              "route": null,
+              "again": false,
+              "unreachable": false
+            }
+          ]
+        }
+      ],
+      "adapters": [
+        {
+          "flow": "MessageFlow_1",
+          "system": "Participant_1",
+          "inbound": true
+        },
+        {
+          "flow": "MessageFlow_2",
+          "system": "Participant_2",
+          "inbound": false
+        },
+        {
+          "flow": "MessageFlow_3",
+          "system": "Participant_3",
+          "inbound": false
+        }
+      ],
+      "labels": {
+        "Participant_1": "Sender",
+        "Participant_2": "Receiver",
+        "Participant_3": "Receiver",
+        "StartEvent_1": "Start (message)",
+        "CallActivity_1": "ExternalCall",
+        "CallActivity_2": "ExternalCall",
+        "EndEvent_1": "End (message)"
+      }
+    }
+  ]
+}

@@ -49,7 +49,7 @@ check(init.result?.protocolVersion === '2025-11-25', 'initialize (2025-11-25)', 
 child.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
 
 const list = await request('tools/list', {});
-check(list.result?.tools?.length === 12, 'tools/list', list);
+check(list.result?.tools?.length === 13, 'tools/list', list);
 const prompts = await request('prompts/list', {});
 check(prompts.result?.prompts?.[0]?.name === 'develop_step', 'prompts/list', prompts);
 

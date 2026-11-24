@@ -4,7 +4,7 @@
 //! runId and the reference come on top (`files.rs`, `runs.rs`, `reference.rs`). A wrong argument is an
 //! error message the model can act on.
 
-use super::{files, flow, reference, runs, whereused, Server};
+use super::{files, flow, iflowmodel, reference, runs, whereused, Server};
 use std::collections::HashMap;
 use serde_json::{json, Map, Value};
 
@@ -211,6 +211,9 @@ schemas/*.xsd, inputs/*.xml|json|csv, platform/*.json. Folders are created.")),
         ("name", json!({ "type": "string", "description": "A folder directly inside the workspace, as project_info lists it under projects (one folder name, no path)." })),
         ("create", json!({ "type": "boolean", "default": false, "description": "Create the folder as a new project (the standard layout with example platform/ data, as the app's Import iFlow without a project does). A folder that exists is an error." })),
     ]);
+    let diagram = obj(vec![
+        ("iflow", json!({ "type": "string", "description": "The iFlow: its folder under iflows/, as project_info lists it with each step. Needed when the project has more than one." })),
+    ]);
     let reference = obj(vec![
         ("topic", json!({ "type": "string", "enum": reference::TOPICS, "description": "script-api: the Script API, \
 Message Mapping and platform service methods the Groovy engines offer. platform: the formats of the mocked platform/ files \
@@ -275,6 +278,15 @@ CPI, per step type, and what is not." })),
              parameters.prop, a Content Modifier table as its matching rows, and the parameters whose name or value \
              contains the query. With parameters: true, only the parameters.",
             where_used, &[], Effect::ReadOnly),
+        tool("iflow_diagram", "How an imported iFlow flows",
+            "The Diagram tab as text (read-only): an imported iFlow's processes (the integration process, exception \
+             subprocesses, local processes), each with its elements in flow order from the start event. A Router's \
+             routes are indented under it (depth) with their name and condition; where branches meet, the element is \
+             listed again (again: true); a Process Call names the local process it calls. Each element has its type as \
+             in the editor and its settings; adapters name their system, direction and settings. Use it to follow \
+             a message through the iFlow, then run the steps in that order with run_flow_step, run_groovy, run_xslt and \
+             validate_xsd, passing each result on with messageFrom.",
+            diagram, &[], Effect::ReadOnly),
         tool("reference", "Simulator reference",
             "What the simulator offers, generated from its sources: the Script API (script-api), the platform/ data formats \
              (platform) and what is verified against CPI (fidelity). Read it before writing a script that uses \
@@ -351,6 +363,7 @@ fn dispatch(server: &Server, name: &str, args: &Args) -> Result<Value, String> {
         "save_file" => files::save_file(server, args),
         "import_iflow" => files::import_iflow(server, args),
         "iflow_where_used" => where_used(server, args),
+        "iflow_diagram" => iflow_diagram(server, args),
         "reference" => Ok(json!({ "topic": str_arg(args, "topic"), "text": reference::topic(str_arg(args, "topic").unwrap_or_default())? })),
         _ => Err(format!("Unknown tool: {name}")),
     }
@@ -672,6 +685,24 @@ fn where_used(server: &Server, args: &Args) -> Result<Value, String> {
         r["parameters"] = json!(parameters(&whereused::matching_parameters(&index, query)));
     }
     Ok(r)
+}
+
+/// `iflow.models` (IflowModel.java, which the Diagram tab draws), read as the tab's outline (iflowmodel.rs).
+fn iflow_diagram(server: &Server, args: &Args) -> Result<Value, String> {
+    require_project(server)?;
+    let models = engine_call(server, file_runtime(server)?, "iflow.models", json!({}))?["models"].as_array().cloned().unwrap_or_default();
+    let folders: Vec<&str> = models.iter().filter_map(|m| m["iflow"].as_str()).collect();
+    let model = match str_arg(args, "iflow") {
+        Some(f) => models.iter().find(|m| m["iflow"] == f)
+            .ok_or_else(|| format!("No iFlow '{f}' under iflows/. The iFlows: {folders:?}."))?,
+        None if models.len() == 1 => &models[0],
+        None if models.is_empty() => return Err("The project has no iFlows under iflows/; import_iflow imports one.".into()),
+        None => return Err(format!("The project has several iFlows; give iflow, one of {folders:?}.")),
+    };
+    if let Some(e) = model["error"].as_str() {
+        return Err(format!("The iFlow {} could not be read: {e}", model["iflow"]));
+    }
+    Ok(iflowmodel::diagram(model))
 }
 
 fn run_xslt(server: &Server, args: &Args) -> Result<Value, String> {

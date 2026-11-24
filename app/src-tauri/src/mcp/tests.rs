@@ -169,7 +169,7 @@ fn legacy_handshake_negotiates_the_version() {
     assert_eq!(by_id(&msgs, 3)["result"], json!({}));
     let list = &by_id(&msgs, 4)["result"];
     assert!(list.get("resultType").is_none() && list.get("ttlMs").is_none(), "legacy results stay legacy: {list}");
-    assert_eq!(list["tools"].as_array().unwrap().len(), 12);
+    assert_eq!(list["tools"].as_array().unwrap().len(), 13);
 }
 
 #[test]
@@ -243,11 +243,11 @@ fn tool_definitions_follow_the_spec() {
     let tools = tools::definitions();
     let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
     assert_eq!(names, ["project_info", "open_project", "read_file", "run_xslt", "run_groovy", "validate_xsd", "evaluate_xpath", "run_flow_step",
-        "save_file", "import_iflow", "iflow_where_used", "reference"]);
+        "save_file", "import_iflow", "iflow_where_used", "iflow_diagram", "reference"]);
     // Only tools that cannot run code are read-only: XSLT's java: calls and Groovy can (JavaExtensions).
     let read_only: Vec<&str> = tools.iter().filter(|t| t["annotations"]["readOnlyHint"] == true)
         .map(|t| t["name"].as_str().unwrap()).collect();
-    assert_eq!(read_only, ["project_info", "read_file", "validate_xsd", "evaluate_xpath", "iflow_where_used", "reference"]);
+    assert_eq!(read_only, ["project_info", "read_file", "validate_xsd", "evaluate_xpath", "iflow_where_used", "iflow_diagram", "reference"]);
     // Writing tools say so, so that a client can ask before they run; tools that run code keep the defaults.
     for name in ["save_file", "import_iflow"] {
         let a = &tools.iter().find(|t| t["name"] == name).unwrap()["annotations"];
@@ -489,6 +489,21 @@ fn tools_run_on_the_engines() {
     assert!(info["files"].as_array().unwrap().iter().any(|f| f == "mappings/order-to-salesorder.xsl"), "{info}");
     assert_eq!(info["runtimes"].as_array().unwrap().len(), 4);
     assert!(info["iflowSteps"].as_array().unwrap().iter().any(|s| s["name"] == "Gather items"));
+    // The Diagram as text: the processes in order, the Router's routes indented with their names, settings once.
+    let d = c.ok("iflow_diagram", json!({}));
+    let kinds: Vec<&str> = d["processes"].as_array().unwrap().iter().map(|p| p["kind"].as_str().unwrap()).collect();
+    assert_eq!(kinds, ["main", "exception", "local"], "{d}");
+    let main = d["processes"][0]["elements"].as_array().unwrap();
+    assert_eq!(main[0]["type"], "Start (message)", "{d}");
+    assert_eq!(d["processes"][0]["elements"].as_array().unwrap().iter().find(|e| e["type"] == "Process Call").unwrap()["calls"], "Archive order");
+    let erp = main.iter().find(|e| e["route"]["name"] == "ERP").expect("the ERP route");
+    assert_eq!(erp["depth"], 1, "{d}");
+    assert!(erp["route"]["condition"].as_str().unwrap().contains("SenderId"), "{d}");
+    let cm = main.iter().find(|e| e["type"] == "Content Modifier").expect("a Content Modifier");
+    assert!(cm["settings"].get("cmdVariantUri").is_none() && cm["settings"].as_object().is_some_and(|o| !o.is_empty()), "{cm}");
+    assert!(main.iter().any(|e| e["again"] == true && e.get("settings").is_none()), "a meeting point is listed again, without settings");
+    assert!(d["adapters"].as_array().is_some_and(|a| !a.is_empty()), "{d}");
+    assert!(c.err("iflow_diagram", json!({ "iflow": "Nope" })).contains("Order_Replication"));
     // A script step's function is checked against the script's text: the fixture's step calls enrich, which
     // enrich.groovy does not declare; Log payload calls processData, which it does.
     let step = |name: &str| info["iflowSteps"].as_array().unwrap().iter().find(|s| s["name"] == name).unwrap().clone();
@@ -657,6 +672,11 @@ fn where_used_searches_the_imported_iflows() {
     assert_eq!(host["required"], true);
 
     assert!(c.err("iflow_where_used", json!({ "parameters": true, "query": "x" })).contains("parameters lists"));
+    assert!(c.err("iflow_diagram", json!({})).contains("several iFlows"));
+    let out = c.ok("iflow_diagram", json!({ "iflow": "Outbound_Orders" }));
+    let http = out["adapters"].as_array().unwrap().iter().find(|a| a["adapter"] == "HTTP").unwrap();
+    assert_eq!((http["direction"].as_str(), http["element"].as_str(), http["system"].as_str()), (Some("outbound"), Some("Send order"), Some("Backend")), "{out}");
+    assert_eq!(http["settings"]["credentialName"], "partner_sftp", "{out}");
     // Without query or kind: the tab's overview, with each iFlow's parameters.
     let o = c.ok("iflow_where_used", json!({}));
     let queue = o["uses"].as_array().unwrap().iter().find(|g| g["kind"] == "queue").expect("queues");

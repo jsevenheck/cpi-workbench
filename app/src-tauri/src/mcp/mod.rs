@@ -19,6 +19,7 @@
 mod files;
 mod flow;
 mod functions;
+mod iflowmodel;
 mod reference;
 mod runs;
 mod tools;

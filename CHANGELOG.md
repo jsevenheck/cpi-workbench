@@ -19,6 +19,10 @@ of its version.
   a Content Modifier table as its matching rows and lists the parameters whose name or value contains the query.
   The app's overview now sorts values of equal count ignoring case on every machine, rather than by the system
   language, so that both give the same order.
+- **MCP: an iFlow's diagram as text.** The new tool `iflow_diagram` lists an imported iFlow's processes with their
+  elements in flow order, a Router's routes with their conditions, Process Calls, each element's settings and the
+  adapters with their systems, as the Diagram tab and its outline show them, so an agent can follow a message
+  through the iFlow.
 - **MCP: a script's functions.** `read_file` on a Groovy script lists the functions it declares, read from its
   text as the Groovy tab does (nothing runs), and `project_info` marks a script step whose function the script
   does not declare (`functionFound: false`), as does `import_iflow`. A run's list of Message Mapping functions is

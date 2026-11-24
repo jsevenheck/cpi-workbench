@@ -16,7 +16,8 @@ inspect its output, diagnostics and logs—without deploying to a tenant.
 | XSD / XPath | XML Schema 1.0 validation, XPath 3.1 or 1.0, highlighted matches and XPath at cursor. |
 | Flow Steps | Content Modifier, Filter, Router, General / Iterating Splitter, Gather, JSON ↔ XML / XML ↔ CSV converters, Encoder / Decoder (Base64, GZIP, ZIP) and Message Digest. |
 
-The project workflow includes iFlow-zip import, runtime comparison, Groovy migration hints,
+The project workflow includes iFlow-zip import (also into a new project), an iFlow diagram and
+where-used overview, runtime comparison, Groovy migration hints,
 file-based CLI tests and a built-in [MCP server](docs/mcp.md) for coding agents. CPI Helper can hand
 traced messages over by pasted links, browser-mode links or an opt-in desktop receiver with confirmation.
 

@@ -13,7 +13,8 @@ my-project/
 ```
 
 **Init** in the app creates `mappings/`, `schemas/`, `scripts/` and `platform/` with example files, and
-`cpi-workbench.json`. Any folder can be opened as a project, including a symlink or Windows junction
+`cpi-workbench.json`. **Import iFlow…** without a project does the same in a new folder it creates (never an
+existing one) and imports the export into it. Any folder can be opened as a project, including a symlink or Windows junction
 that points to the intended root. Init checks its destinations before writing and never replaces existing
 files. Links below the selected root must resolve inside it. The file tree omits paths it cannot follow;
 iFlow discovery reports blocked branches or files without reading them. A link to another folder inside the

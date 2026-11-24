@@ -30,3 +30,16 @@ test('a diagram value is searched whole, a cut one up to the cut, a skipped key 
   assert.equal(whereUsedQuery('componentNS', 'sap'), null);
   assert.equal(whereUsedQuery('address', ''), null);
 });
+
+test('the overview counts each distinct value per kind, most used first, and leaves out unclassified settings', async () => {
+  const { inventory } = await import('../src/lib/whereused.ts');
+  const e = (kind: string | null, value: string): IndexEntry => ({ ...hit('A', 's', 'k', value), kind });
+  const index = [
+    { iflow: 'A', name: null, file: 'a', error: null, parameters: [], entries: [e('address', 'https://b'), e('address', 'https://a'), e(null, 'x'), e('credential', 'CRED')] },
+    { iflow: 'B', name: null, file: 'b', error: null, parameters: [], entries: [e('address', 'https://a'), e('queue', '')] },
+  ];
+  assert.deepEqual(inventory(index), [
+    { kind: 'address', label: 'Address', values: [{ value: 'https://a', count: 2 }, { value: 'https://b', count: 1 }] },
+    { kind: 'credential', label: 'Credential', values: [{ value: 'CRED', count: 1 }] },
+  ]);
+});

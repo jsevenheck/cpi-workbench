@@ -105,3 +105,26 @@ export function highlight(value: string, query: string): { text: string; match: 
   if (at < value.length) out.push({ text: value.slice(at), match: false });
   return out;
 }
+
+export interface InventoryGroup {
+  kind: string;
+  label: string;
+  /** Each distinct value with the number of places that use it, most used first. */
+  values: { value: string; count: number }[];
+}
+
+/** The overview of an empty search: the distinct addresses, credentials, queues, key aliases and files the iFlows use. */
+export function inventory(index: IndexedIflow[]): InventoryGroup[] {
+  const kinds = KINDS.filter(([id]) => id && id !== 'parameter');
+  const counts = new Map<string, Map<string, number>>(kinds.map(([id]) => [id, new Map()]));
+  for (const i of index) {
+    for (const e of i.entries) {
+      const byValue = e.kind ? counts.get(e.kind) : undefined;
+      if (byValue && e.value) byValue.set(e.value, (byValue.get(e.value) ?? 0) + 1);
+    }
+  }
+  return kinds.map(([kind, label]) => ({ kind, label,
+    values: [...counts.get(kind)!].map(([value, count]) => ({ value, count }))
+      .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value)) }))
+    .filter((g) => g.values.length);
+}

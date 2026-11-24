@@ -1,9 +1,10 @@
 <script lang="ts">
-  // Where an address, credential, queue, key alias, file or parameter is used across the imported iFlows, and each iFlow's
-  // externalized parameters. Read-only: the engine reads the exports (IflowIndex.java); a hit selects its element in
-  // the diagram, a script or mapping opens in its tab.
+  // Where an address, credential, queue, key alias, file or parameter is used across the imported iFlows. An empty
+  // search shows an overview: what the iFlows use, by kind, and each iFlow's externalized parameters. Read-only: the
+  // engine reads the exports (IflowIndex.java); a hit selects its element in the diagram, a script or mapping opens in its tab.
+  import { onMount } from 'svelte';
   import { app, whereUsed, searchIflows, loadIflowIndex, selectIflowNode, iflowStepFor, openIflowStep } from '../lib/store.svelte';
-  import { KINDS, groupHits, highlight, type IndexEntry } from '../lib/whereused';
+  import { KINDS, groupHits, highlight, inventory, type IndexEntry } from '../lib/whereused';
 
   let groups = $derived(groupHits(whereUsed.hits));
   let names = $derived(new Map(app.iflowModels.map((m) => [m.iflow, m.name ?? m.iflow])));
@@ -23,27 +24,37 @@
     if (step) openIflowStep(step);
   }
 
-  function parameters() {
-    whereUsed.view = 'parameters';
-    void loadIflowIndex();
+  /** Searches for a value of the overview, as that kind. */
+  function pick(kind: string, value: string) {
+    clearTimeout(timer);
+    whereUsed.query = value;
+    whereUsed.kind = kind;
+    void searchIflows();
   }
 
+  function overview() {
+    clearTimeout(timer);
+    whereUsed.query = '';
+    whereUsed.kind = '';
+    void searchIflows();
+  }
+
+  // Read each time the tab opens: a rescan or import since may have changed the iFlows.
+  onMount(() => void loadIflowIndex());
+
+  let searching = $derived(!!whereUsed.searched || !!whereUsed.kind);
   let shownIndex = $derived(whereUsed.index.filter((i) => !whereUsed.iflow || i.iflow === whereUsed.iflow));
+  let uses = $derived(inventory(shownIndex));
 </script>
 
 <div class="wu">
   <header class="bar">
-    <div class="tabs" role="tablist" aria-label="Where used view">
-      <button role="tab" class:active={whereUsed.view === 'search'} onclick={() => (whereUsed.view = 'search')}>Search</button>
-      <button role="tab" class:active={whereUsed.view === 'parameters'} onclick={parameters}>Parameters</button>
-    </div>
-    {#if whereUsed.view === 'search'}
-      <input class="mono q" bind:value={whereUsed.query} oninput={typed} onkeydown={(e) => e.key === 'Enter' && searchIflows()}
-        placeholder="A host, credential alias, queue, file, {'{{'}parameter{'}}'} or any value" aria-label="Search the iFlows" />
-      <select bind:value={whereUsed.kind} onchange={() => searchIflows()} aria-label="Kind">
-        {#each KINDS as [id, label]}<option value={id}>{label}</option>{/each}
-      </select>
-    {/if}
+    {#if searching}<button class="small" onclick={overview} title="Clear the search and show what the iFlows use">← Overview</button>{/if}
+    <input class="mono q" bind:value={whereUsed.query} oninput={typed} onkeydown={(e) => e.key === 'Enter' && searchIflows()}
+      placeholder="A host, credential alias, queue, file, {'{{'}parameter{'}}'} or any value" aria-label="Search the iFlows" />
+    <select bind:value={whereUsed.kind} onchange={() => searchIflows()} aria-label="Kind">
+      {#each KINDS as [id, label]}<option value={id}>{label}</option>{/each}
+    </select>
     {#if app.iflowModels.length > 1}
       <select bind:value={whereUsed.iflow} onchange={() => searchIflows()} aria-label="iFlow">
         <option value="">All iFlows</option>
@@ -54,46 +65,27 @@
   {#if whereUsed.error}<p class="err">{whereUsed.error}</p>{/if}
 
   <div class="body">
-    {#if whereUsed.view === 'search'}
-      {#if !whereUsed.searched && !whereUsed.kind}
-        <p class="muted">Type a value to find every adapter, step and route of the imported iFlows that uses it: a host,
-          a credential alias, a queue, a script, an externalized parameter. A key name (<code>address</code>) finds that
-          property everywhere. <i>Kind</i> narrows to addresses, credentials, queues, key aliases, files or parameters where the key says what it holds.
-          Settings are searched as the export writes them: one that holds a <code>{'{{'}parameter{'}}'}</code> is found by the
-          parameter's name, not by its value from <code>parameters.prop</code> (<i>Parameters</i> shows the values).</p>
-      {:else if !groups.length}
-        <p class="muted">Nothing in the imported iFlows uses “{whereUsed.searched}”{whereUsed.kind ? ` as ${whereUsed.kind}` : ''}.</p>
-      {:else}
-        <p class="muted small">{whereUsed.hits.length} {whereUsed.hits.length === 1 ? 'place' : 'places'} in {groups.length} {groups.length === 1 ? 'iFlow' : 'iFlows'}</p>
-        {#each groups as g (g.iflow)}
-          <section>
-            <h3>{names.get(g.iflow) ?? g.iflow}</h3>
-            {#each g.elements as el (el.element)}
-              <div class="el">
-                <button class="link name" onclick={() => show(g.iflow, el.node)} title="Show in the diagram">{el.name}</button>
-                <span class="muted small">{el.label}</span>
-                <table>
-                  <tbody>
-                    {#each el.hits as h}
-                      <tr>
-                        <td class="mono key">{h.key}{#if h.kind}<span class="kind">{h.kind}</span>{/if}</td>
-                        <td class="mono">{#each highlight(h.value, whereUsed.searched) as part}{#if part.match}<mark>{part.text}</mark>{:else}{part.text}{/if}{/each}</td>
-                        <td>{#if h.kind === 'file' && iflowStepFor(h.iflow, h.element)}<button class="small" onclick={() => openFile(h)}>Open</button>{/if}</td>
-                      </tr>
-                    {/each}
-                  </tbody>
-                </table>
-              </div>
+    {#if !searching}
+      <p class="muted small">What the imported iFlows use. Click a value to see every place that uses it, or type any
+        value, a key name (<code>address</code>) or a <code>{'{{'}parameter{'}}'}</code> above. Settings are searched as the
+        export writes them: one that holds a parameter is found by the parameter's name, not by its value.</p>
+      {#each uses as g (g.kind)}
+        <section class="kind-group">
+          <h3>{g.label} <span class="muted small">{g.values.length}</span></h3>
+          <ul class="values">
+            {#each g.values as v (v.value)}
+              <li><button class="link mono" onclick={() => pick(g.kind, v.value)} title="Show where it is used">{v.value}</button>
+                <span class="muted small">{v.count} {v.count === 1 ? 'place' : 'places'}</span></li>
             {/each}
-          </section>
-        {/each}
-      {/if}
-    {:else}
-      <p class="muted small">Externalized parameters (<code>{'{{'}name{'}}'}</code>) with their values from each export's
-        <code>parameters.prop</code>, type and description from <code>parameters.propdef</code>. <b>Unused</b>: given a value or a definition, but nothing uses it. <b>No value</b>: used, but the export has no value for it.</p>
-      {#each shownIndex as i (i.iflow)}
-        <section>
-          <h3>{i.name ?? i.iflow}</h3>
+          </ul>
+        </section>
+      {/each}
+      <section>
+        <h3>Parameters</h3>
+        <p class="muted small">Externalized parameters (<code>{'{{'}name{'}}'}</code>) with their values from each export's
+          <code>parameters.prop</code>, type and description from <code>parameters.propdef</code>. <b>Unused</b>: given a value or a definition, but nothing uses it. <b>No value</b>: used, but the export has no value for it.</p>
+        {#each shownIndex as i (i.iflow)}
+          <h4>{i.name ?? i.iflow}</h4>
           {#if i.error}<p class="err">{i.error}</p>
           {:else if !i.parameters.length}<p class="muted small">No externalized parameters.</p>
           {:else}
@@ -116,6 +108,32 @@
               </tbody>
             </table>
           {/if}
+        {/each}
+      </section>
+    {:else if !groups.length}
+      <p class="muted">Nothing in the imported iFlows uses “{whereUsed.searched}”{whereUsed.kind ? ` as ${whereUsed.kind}` : ''}.</p>
+    {:else}
+      <p class="muted small">{whereUsed.hits.length} {whereUsed.hits.length === 1 ? 'place' : 'places'} in {groups.length} {groups.length === 1 ? 'iFlow' : 'iFlows'}</p>
+      {#each groups as g (g.iflow)}
+        <section>
+          <h3>{names.get(g.iflow) ?? g.iflow}</h3>
+          {#each g.elements as el (el.element)}
+            <div class="el">
+              <button class="link name" onclick={() => show(g.iflow, el.node)} title="Show in the diagram">{el.name}</button>
+              <span class="muted small">{el.label}</span>
+              <table>
+                <tbody>
+                  {#each el.hits as h}
+                    <tr>
+                      <td class="mono key">{h.key}{#if h.kind}<span class="kind">{h.kind}</span>{/if}</td>
+                      <td class="mono">{#each highlight(h.value, whereUsed.searched) as part}{#if part.match}<mark>{part.text}</mark>{:else}{part.text}{/if}{/each}</td>
+                      <td>{#if h.kind === 'file' && iflowStepFor(h.iflow, h.element)}<button class="small" onclick={() => openFile(h)}>Open</button>{/if}</td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            </div>
+          {/each}
         </section>
       {/each}
     {/if}
@@ -128,6 +146,9 @@
   .q { flex: 1; min-width: 220px; padding: 4px 6px; }
   .body { overflow: auto; padding: 10px 14px; flex: 1; }
   h3 { font-size: 13px; margin: 14px 0 6px; }
+  h4 { font-size: 12px; margin: 10px 0 4px; }
+  .values { list-style: none; margin: 0; padding: 0 0 0 8px; border-left: 2px solid var(--border-soft); }
+  .values li { padding: 1px 0; word-break: break-all; }
   .el { margin: 0 0 10px; padding-left: 8px; border-left: 2px solid var(--border-soft); }
   .name { font-weight: 600; }
   table { border-collapse: collapse; width: 100%; font-size: 12px; margin-top: 4px; }

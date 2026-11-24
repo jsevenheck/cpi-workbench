@@ -14,6 +14,9 @@ of its version.
 
 ### Changed
 
+- **Where used opens with an overview.** Instead of an empty search, the tab lists the addresses, credentials,
+  queues, key aliases and files the imported iFlows use, with the number of places each (a click searches for it),
+  and below them each iFlow's externalized parameters, which had their own *Parameters* view before.
 - **Editor features.** The code editors (Monaco 0.57) now offer Monaco's full set of editor features in every
   editor: its own right-click menu, the command palette (F1), sticky scroll of enclosing elements and
   go-to-line, among others. Monaco 0.57 loads these with its JSON support anyway, so before, editors opened

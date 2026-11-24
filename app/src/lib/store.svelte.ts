@@ -37,9 +37,8 @@ export const app = $state({
   iflowSelected: null as { iflow: string; id: string | null } | null,
 });
 
-/** The Where used tab: a search over the imported iFlows and their parameters (engine `iflow.search`, `iflow.index`). */
+/** The Where used tab: an overview of the imported iFlows (engine `iflow.index`) and a search (`iflow.search`). */
 export const whereUsed = $state({
-  view: 'search' as 'search' | 'parameters',
   query: '',
   kind: '',
   /** Only this iFlow; empty: all. */
@@ -77,7 +76,7 @@ export async function searchIflows() {
   }
 }
 
-/** The parameters of the imported iFlows, for the Where used tab's Parameters view. */
+/** What the imported iFlows use and their parameters, for the Where used tab's overview. */
 export async function loadIflowIndex() {
   if (!app.project) return;
   const seq = ++indexSeq;
@@ -93,7 +92,6 @@ export async function loadIflowIndex() {
 
 /** Opens the Where used tab searching for a value (from the diagram's details). */
 export function showWhereUsed(query: string, iflow = '') {
-  whereUsed.view = 'search';
   whereUsed.query = query;
   whereUsed.kind = '';
   whereUsed.iflow = iflow;
@@ -774,7 +772,7 @@ export async function closeProject() {
 function resetWhereUsed() {
   whereUsedSeq++;
   indexSeq++;
-  Object.assign(whereUsed, { view: 'search', query: '', kind: '', iflow: '', hits: [], searched: '', index: [], error: '' });
+  Object.assign(whereUsed, { query: '', kind: '', iflow: '', hits: [], searched: '', index: [], error: '' });
 }
 
 export async function refreshFiles() {

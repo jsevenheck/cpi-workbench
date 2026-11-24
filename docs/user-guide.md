@@ -190,14 +190,17 @@ come with the app; **Save** asks where to keep them, once a project is open. As 
   also its adapters' settings); a step that runs in the
   app (blue outline) opens with a double-click or **Open in …**. Nothing in the diagram can be changed.
   The ⌕ next to a setting searches for its value in **Where used**.
-* **Where used** (next to Diagram) searches all imported iFlows offline. Type a host, a credential or key
+* **Where used** (next to Diagram) opens with an overview of the imported iFlows: the addresses, credentials,
+  queues, key aliases and files their settings hold, each with the number of places that use it (a click
+  searches for it), and each iFlow's externalized parameters (below). **← Overview** goes back to it.
+  The search covers all imported iFlows offline. Type a host, a credential or key
   alias, a queue, a script file, a `{{parameter}}` or any value: it lists every step, adapter and Router
   route whose settings contain it, grouped by iFlow; a key name (`address`) finds that setting everywhere.
   **Kind** narrows to addresses, credentials, queues, key aliases, files or parameters, where the adapter's
   setting says what it holds (from public exports; other settings are searched as plain values). Settings
   are searched as the export writes them: a setting that holds `{{SftpHost}}` is found by `SftpHost`, not by
   the host in `parameters.prop`. A click
-  shows the element in the diagram; a script or mapping opens in its tab. **Parameters** lists each iFlow's
+  shows the element in the diagram; a script or mapping opens in its tab. The overview's **Parameters** list each iFlow's
   externalized parameters with value, type and description (`parameters.prop`, `parameters.propdef`), where
   they are used, and marks those that are *unused* or have *no value*.
 ### Groovy completions and Message Mapping functions

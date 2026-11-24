@@ -192,7 +192,9 @@ come with the app; **Save** asks where to keep them, once a project is open. As 
   The ⌕ next to a setting searches for its value in **Where used**.
 * **Where used** (next to Diagram) opens with an overview of the imported iFlows: the addresses, credentials,
   queues, key aliases and files their settings hold, each with the number of places that use it (a click
-  searches for it), and each iFlow's externalized parameters (below). **← Overview** goes back to it.
+  searches for it; files are folded), and each iFlow's externalized parameters (below). A value with a
+  `{{parameter}}` shows what it resolves to from `parameters.prop` (→ …), here and in the hits; iFlows that share a
+  name get their folder after it. **← Overview** goes back to it.
   The search covers all imported iFlows offline. Type a host, a credential or key
   alias, a queue, a script file, a `{{parameter}}` or any value: it lists every step, adapter and Router
   route whose settings contain it, grouped by iFlow; a key name (`address`) finds that setting everywhere.

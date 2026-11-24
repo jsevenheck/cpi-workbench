@@ -4,10 +4,11 @@
   // engine reads the exports (IflowIndex.java); a hit selects its element in the diagram, a script or mapping opens in its tab.
   import { onMount } from 'svelte';
   import { app, whereUsed, searchIflows, loadIflowIndex, selectIflowNode, iflowStepFor, openIflowStep } from '../lib/store.svelte';
-  import { KINDS, groupHits, highlight, inventory, type IndexEntry } from '../lib/whereused';
+  import { KINDS, groupHits, highlight, inventory, iflowLabels, parameterValues, resolveParameters, type IndexEntry } from '../lib/whereused';
 
   let groups = $derived(groupHits(whereUsed.hits));
-  let names = $derived(new Map(app.iflowModels.map((m) => [m.iflow, m.name ?? m.iflow])));
+  let labels = $derived(iflowLabels(app.iflowModels));
+  let params = $derived(parameterValues(whereUsed.index));
   let timer: ReturnType<typeof setTimeout> | undefined;
 
   function typed() {
@@ -58,7 +59,7 @@
     {#if app.iflowModels.length > 1}
       <select bind:value={whereUsed.iflow} onchange={() => searchIflows()} aria-label="iFlow">
         <option value="">All iFlows</option>
-        {#each app.iflowModels as m}<option value={m.iflow}>{m.name ?? m.iflow}</option>{/each}
+        {#each app.iflowModels as m}<option value={m.iflow}>{labels.get(m.iflow)}</option>{/each}
       </select>
     {/if}
   </header>
@@ -70,22 +71,25 @@
         value, a key name (<code>address</code>) or a <code>{'{{'}parameter{'}}'}</code> above. Settings are searched as the
         export writes them: one that holds a parameter is found by the parameter's name, not by its value.</p>
       {#each uses as g (g.kind)}
-        <section class="kind-group">
-          <h3>{g.label} <span class="muted small">{g.values.length}</span></h3>
+        <!-- Files are many and each used once or twice: folded, by file name. -->
+        <details class="kind-group" open={g.kind !== 'file'}>
+          <summary><h3>{g.label} <span class="muted small">{g.values.length}</span></h3></summary>
           <ul class="values">
             {#each g.values as v (v.value)}
-              <li><button class="link mono" onclick={() => pick(g.kind, v.value)} title="Show where it is used">{v.value}</button>
+              <li><button class="link mono" onclick={() => pick(g.kind, v.value)} title={g.kind === 'file' ? v.value : 'Show where it is used'}>{g.kind === 'file' ? v.value.split('/').pop() : v.value}</button>
+                {#if v.resolved.length === 1}<span class="mono resolved">→ {v.resolved[0]}</span>
+                {:else if v.resolved.length > 1}<span class="mono resolved" title={v.resolved.join('\n')}>→ {v.resolved.length} values</span>{/if}
                 <span class="muted small">{v.count} {v.count === 1 ? 'place' : 'places'}</span></li>
             {/each}
           </ul>
-        </section>
+        </details>
       {/each}
       <section>
         <h3>Parameters</h3>
         <p class="muted small">Externalized parameters (<code>{'{{'}name{'}}'}</code>) with their values from each export's
           <code>parameters.prop</code>, type and description from <code>parameters.propdef</code>. <b>Unused</b>: given a value or a definition, but nothing uses it. <b>No value</b>: used, but the export has no value for it.</p>
         {#each shownIndex as i (i.iflow)}
-          <h4>{i.name ?? i.iflow}</h4>
+          <h4>{labels.get(i.iflow) ?? i.name ?? i.iflow}</h4>
           {#if i.error}<p class="err">{i.error}</p>
           {:else if !i.parameters.length}<p class="muted small">No externalized parameters.</p>
           {:else}
@@ -116,7 +120,7 @@
       <p class="muted small">{whereUsed.hits.length} {whereUsed.hits.length === 1 ? 'place' : 'places'} in {groups.length} {groups.length === 1 ? 'iFlow' : 'iFlows'}</p>
       {#each groups as g (g.iflow)}
         <section>
-          <h3>{names.get(g.iflow) ?? g.iflow}</h3>
+          <h3>{labels.get(g.iflow) ?? g.iflow}</h3>
           {#each g.elements as el (el.element)}
             <div class="el">
               <button class="link name" onclick={() => show(g.iflow, el.node)} title="Show in the diagram">{el.name}</button>
@@ -126,7 +130,7 @@
                   {#each el.hits as h}
                     <tr>
                       <td class="mono key">{h.key}{#if h.kind}<span class="kind">{h.kind}</span>{/if}</td>
-                      <td class="mono">{#each highlight(h.value, whereUsed.searched) as part}{#if part.match}<mark>{part.text}</mark>{:else}{part.text}{/if}{/each}</td>
+                      <td class="mono">{#each highlight(h.value, whereUsed.searched) as part}{#if part.match}<mark>{part.text}</mark>{:else}{part.text}{/if}{/each}{#if resolveParameters(h.value, params.get(h.iflow)) != null}<span class="resolved">→ {resolveParameters(h.value, params.get(h.iflow))}</span>{/if}</td>
                       <td>{#if h.kind === 'file' && iflowStepFor(h.iflow, h.element)}<button class="small" onclick={() => openFile(h)}>Open</button>{/if}</td>
                     </tr>
                   {/each}
@@ -149,6 +153,12 @@
   h4 { font-size: 12px; margin: 10px 0 4px; }
   .values { list-style: none; margin: 0; padding: 0 0 0 8px; border-left: 2px solid var(--border-soft); }
   .values li { padding: 1px 0; word-break: break-all; }
+  .resolved { margin-left: 6px; color: var(--muted); }
+  summary { cursor: pointer; }
+  summary h3 { display: inline; }
+  table.params { table-layout: fixed; }
+  table.params th:nth-child(1) { width: 30%; }
+  table.params th:nth-child(2) { width: 30%; }
   .el { margin: 0 0 10px; padding-left: 8px; border-left: 2px solid var(--border-soft); }
   .name { font-weight: 600; }
   table { border-collapse: collapse; width: 100%; font-size: 12px; margin-top: 4px; }

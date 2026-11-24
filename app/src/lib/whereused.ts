@@ -106,25 +106,59 @@ export function highlight(value: string, query: string): { text: string; match: 
   return out;
 }
 
+/** Per iFlow, each externalized parameter's value from `parameters.prop`. */
+export function parameterValues(index: IndexedIflow[]): Map<string, Map<string, string>> {
+  return new Map(index.map((i) => [i.iflow,
+    new Map(i.parameters.filter((p) => p.value != null).map((p) => [p.name, p.value as string]))]));
+}
+
+/** The value with each `{{parameter}}` that has a value replaced by it (IflowIndex.PARAM); null if none has one. */
+export function resolveParameters(value: string, params: Map<string, string> | undefined): string | null {
+  let replaced = false;
+  const out = value.replace(/\{\{([^{}]+)\}\}/g, (all, name: string) => {
+    const v = params?.get(name);
+    if (v == null) return all;
+    replaced = true;
+    return v;
+  });
+  return replaced ? out : null;
+}
+
+/** The iFlows' display names; a name that several iFlows share gets the iFlow's folder after it. */
+export function iflowLabels(models: { iflow: string; name?: string | null }[]): Map<string, string> {
+  const count = new Map<string, number>();
+  for (const m of models) count.set(m.name ?? m.iflow, (count.get(m.name ?? m.iflow) ?? 0) + 1);
+  return new Map(models.map((m) => {
+    const name = m.name ?? m.iflow;
+    return [m.iflow, count.get(name)! > 1 && name !== m.iflow ? `${name} · ${m.iflow}` : name];
+  }));
+}
+
 export interface InventoryGroup {
   kind: string;
   label: string;
-  /** Each distinct value with the number of places that use it, most used first. */
-  values: { value: string; count: number }[];
+  /** Each distinct value with the number of places that use it, most used first, and what its parameters resolve to. */
+  values: { value: string; count: number; resolved: string[] }[];
 }
 
 /** The overview of an empty search: the distinct addresses, credentials, queues, key aliases and files the iFlows use. */
 export function inventory(index: IndexedIflow[]): InventoryGroup[] {
   const kinds = KINDS.filter(([id]) => id && id !== 'parameter');
-  const counts = new Map<string, Map<string, number>>(kinds.map(([id]) => [id, new Map()]));
+  const params = parameterValues(index);
+  const counts = new Map<string, Map<string, { count: number; resolved: Set<string> }>>(kinds.map(([id]) => [id, new Map()]));
   for (const i of index) {
     for (const e of i.entries) {
       const byValue = e.kind ? counts.get(e.kind) : undefined;
-      if (byValue && e.value) byValue.set(e.value, (byValue.get(e.value) ?? 0) + 1);
+      if (!byValue || !e.value) continue;
+      let v = byValue.get(e.value);
+      if (!v) byValue.set(e.value, (v = { count: 0, resolved: new Set() }));
+      v.count++;
+      const r = resolveParameters(e.value, params.get(i.iflow));
+      if (r != null) v.resolved.add(r);
     }
   }
   return kinds.map(([kind, label]) => ({ kind, label,
-    values: [...counts.get(kind)!].map(([value, count]) => ({ value, count }))
+    values: [...counts.get(kind)!].map(([value, v]) => ({ value, count: v.count, resolved: [...v.resolved].sort() }))
       .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value)) }))
     .filter((g) => g.values.length);
 }

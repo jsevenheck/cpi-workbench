@@ -39,7 +39,23 @@ test('the overview counts each distinct value per kind, most used first, and lea
     { iflow: 'B', name: null, file: 'b', error: null, parameters: [], entries: [e('address', 'https://a'), e('queue', '')] },
   ];
   assert.deepEqual(inventory(index), [
-    { kind: 'address', label: 'Address', values: [{ value: 'https://a', count: 2 }, { value: 'https://b', count: 1 }] },
-    { kind: 'credential', label: 'Credential', values: [{ value: 'CRED', count: 1 }] },
+    { kind: 'address', label: 'Address', values: [{ value: 'https://a', count: 2, resolved: [] }, { value: 'https://b', count: 1, resolved: [] }] },
+    { kind: 'credential', label: 'Credential', values: [{ value: 'CRED', count: 1, resolved: [] }] },
   ]);
+});
+
+test('parameters resolve per iFlow, and shared iFlow names get their folder', async () => {
+  const { inventory, resolveParameters, iflowLabels } = await import('../src/lib/whereused.ts');
+  const p = (name: string, value: string | null) => ({ name, value, type: null, required: null, description: null, uses: [], unused: false, unresolved: value == null });
+  const e: IndexEntry = { ...hit('A', 's', 'address', 'https://{{Host}}/{{Path}}'), kind: 'address' };
+  const index = [
+    { iflow: 'A', name: 'X', file: 'a', error: null, entries: [e], parameters: [p('Host', 'a.example'), p('Path', null)] },
+    { iflow: 'B', name: 'X', file: 'b', error: null, entries: [{ ...e, iflow: 'B' }], parameters: [p('Host', 'b.example')] },
+    { iflow: 'C', name: null, file: 'c', error: null, entries: [{ ...e, iflow: 'C' }], parameters: [] },
+  ];
+  assert.deepEqual(inventory(index)[0].values, [{ value: 'https://{{Host}}/{{Path}}', count: 3,
+    resolved: ['https://a.example/{{Path}}', 'https://b.example/{{Path}}'] }]);
+  assert.equal(resolveParameters('plain', new Map([['Host', 'x']])), null);
+  assert.deepEqual([...iflowLabels([{ iflow: 'A', name: 'X' }, { iflow: 'B', name: 'X' }, { iflow: 'C', name: null }, { iflow: 'D', name: 'Y' }])],
+    [['A', 'X · A'], ['B', 'X · B'], ['C', 'C'], ['D', 'Y']]);
 });

@@ -124,7 +124,8 @@ A run that produces a message returns a `runId`: `run_xslt`, `run_groovy`, `vali
 passes on, as the XML Validator lets it), `run_flow_step` (the Router passes the message on, unless it raises an
 exception: then `ok` is false; a Splitter's
 messages are `runId/1`, `runId/2`, …; with `runtime: both`, `runId/saxon-he-12` and so on). A failed run and an
-invalid message get none. The input (with a Gather's `messagesFrom`) is read once, before the step runs, so the
+invalid message get none. Each of these messages also carries its own id as `runId` in the result (a
+Splitter's `messages[]`, the entries of `runs[]`). The input (with a Gather's `messagesFrom`) is read once, before the step runs, so the
 kept message is the one the step got. `messageFrom: "<runId>"` makes that message (body, headers, properties) the input of
 the next call, as it flows to the next step in an iFlow; `body`, `headers` and `properties` given in the same call
 replace the body or the rows of the same name. A Gather takes `messagesFrom` (a Splitter's `runId`, or a list).

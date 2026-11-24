@@ -24,8 +24,8 @@ fn relative(server: &Server, path: &str) -> Result<PathBuf, String> {
         || path.split(['/', '\\']).any(|part| part == "..")
         || p.components().any(|c| !matches!(c, Component::Normal(_) | Component::CurDir));
     if bad {
-        return Err(format!("'{path}' is not a project-relative path. Give a path inside the project, such as \
-            mappings/order.xsl; project_info lists the files."));
+        return Err(format!("'{path}' is not a project-relative path: the tools read and write only inside the open \
+            project. Give a path such as mappings/order.xsl; project_info lists the files."));
     }
     Ok(server.project().unwrap().join(p))
 }
@@ -241,8 +241,8 @@ pub fn open_project(server: &Server, args: &Args) -> Result<bool, String> {
     // One folder name: no separators, drive or `..`; no trailing dot or space, which Windows drops from names.
     if name.trim().is_empty() || name == "." || name == ".." || name.contains(['/', '\\', ':'])
         || name.ends_with(['.', ' ']) || name.chars().any(char::is_control) {
-        return Err(format!("'{name}' is not a folder name. Give one name of a folder inside the workspace, \
-            as project_info lists it under projects."));
+        return Err(format!("'{name}' is not a folder name: open_project opens only folders directly inside the \
+            workspace. Give one name as project_info lists it under projects."));
     }
     let dir = workspace.join(name);
     let create = args.get("create").and_then(Value::as_bool).unwrap_or(false);

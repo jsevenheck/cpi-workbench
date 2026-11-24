@@ -740,7 +740,7 @@ fn a_restarted_engine_reopens_the_project() {
     // A script given by path is read from the project by the restarted engine.
     let r = Call(&server).ok("run_groovy", json!({ "runtime": "groovy-1.x", "scriptPath": "scripts/enrich-order.groovy", "body": "<a/>" }));
     assert!(r["ok"].is_boolean(), "{r}");
-    assert!(!r.to_string().contains("NoSuchFile"), "{r}");
+    assert!(!r.to_string().contains("NoSuchFile") && !r.to_string().contains("No such file"), "{r}");
     engines.shutdown();
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -943,6 +943,7 @@ fn runs_chain_by_id() {
     // Splitter, then Gather all its messages; one part on its own.
     let split = c.ok("run_flow_step", json!({ "messageFrom": id(&cm), "step": { "type": "splitter", "config": { "expression": "/Order/Item" } } }));
     let rs = id(&split);
+    assert_eq!(split["messages"][1]["runId"], format!("{rs}/2"), "each part names its id: {split}");
     let part = c.ok("evaluate_xpath", json!({ "messageFrom": format!("{rs}/2"), "expression": "string(//Item)" }));
     assert_eq!(part["items"][0]["value"], "b", "{part}");
     assert!(part.get("runId").is_none(), "XPath produces no message");
@@ -955,6 +956,7 @@ fn runs_chain_by_id() {
         "mapping": "<xsl:stylesheet version='2.0' xmlns:xsl='http://www.w3.org/1999/XSL/Transform'><xsl:output method='text'/>\
             <xsl:template match='/'><xsl:value-of select='system-property(\"xsl:product-version\")'/></xsl:template></xsl:stylesheet>" }));
     let rb = id(&both);
+    assert_eq!(both["runs"][1]["runId"], format!("{rb}/{}", both["runs"][1]["runtime"].as_str().unwrap()), "{both}");
     assert_eq!(c.ok("read_file", json!({ "runId": format!("{rb}/saxon-he-12") }))["content"], "HE 12.9", "{both}");
 
     // A long body comes back shortened; read_file and save_file take it whole by id.

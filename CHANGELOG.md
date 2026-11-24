@@ -12,6 +12,13 @@ of its version.
   one per integration, from one entry in Claude Desktop or Codex: `project_info` lists them, and the new tool
   `open_project` opens one or creates a new project there. Before, each project needed its own `--project` entry.
 
+### Changed
+
+- **A missing file is named as such.** Reading a file that does not exist (a body, script or mapping by path, in
+  the app and over MCP) said only its path; it now says `No such file: <path>`.
+- **MCP: every result message names its `runId`.** A Splitter's messages and each runtime of `runtime: both` carry
+  their own `runId` (`run-…/2`, `run-…/saxon-he-12`), so an agent no longer builds it from the convention.
+
 ## [0.7.0] - 2026-11-24
 
 ### Added

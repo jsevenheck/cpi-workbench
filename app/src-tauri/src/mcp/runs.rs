@@ -239,6 +239,10 @@ pub fn shorten(result: &mut Value, id: Option<&str>, input_body: &str) {
     if let Some(runs) = result.get_mut("runs").and_then(Value::as_array_mut) {
         for r in runs {
             let rt = r["runtime"].as_str().unwrap_or_default().to_string();
+            // Each runtime's message under its own id, as `produced` kept it, so the agent need not build the name.
+            if let Some(part) = sub(&rt).filter(|_| r["result"]["ok"] != false && Message::from_output(&r["result"]["output"]).is_some()) {
+                r["runId"] = json!(part);
+            }
             cut(&mut r["result"]["output"], sub(&rt).as_deref(), PREVIEW_CHARS, input_body);
         }
         return;
@@ -249,6 +253,9 @@ pub fn shorten(result: &mut Value, id: Option<&str>, input_body: &str) {
     cut(result, id, PREVIEW_CHARS, input_body);
     if let Some(ms) = result.get_mut("messages").and_then(Value::as_array_mut) {
         for (i, m) in ms.iter_mut().enumerate() {
+            if let Some(part) = sub(&(i + 1).to_string()).filter(|_| m["body"].is_string()) {
+                m["runId"] = json!(part);
+            }
             cut(m, sub(&(i + 1).to_string()).as_deref(), PART_PREVIEW_CHARS, "");
         }
     }

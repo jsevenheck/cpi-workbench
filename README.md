@@ -38,6 +38,12 @@ Java calls are **not sandboxed**: run code you trust ([access rules](docs/user-g
 
 ![XSLT view](docs/images/screenshot-xslt.png)
 
+| Groovy Script | Flow Steps |
+|---|---|
+| ![Groovy view](docs/images/screenshot-groovy.png) | ![Flow Steps view](docs/images/screenshot-flow-steps.png) |
+| **Diagram** of an imported iFlow | **Where used** overview |
+| ![Diagram view](docs/images/screenshot-diagram.png) | ![Where used view](docs/images/screenshot-where-used.png) |
+
 ## Install and start
 
 Download a Windows x64 or macOS Apple Silicon installer from the

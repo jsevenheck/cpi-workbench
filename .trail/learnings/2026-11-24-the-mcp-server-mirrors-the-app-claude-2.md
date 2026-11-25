@@ -3,7 +3,7 @@ title: "The MCP server mirrors the app: a workspace of projects, and Where used 
 author: Claude
 date: 2026-11-24
 branch: claude/optimistic-dijkstra-ek2iek
-cost: { minutes: 58, tokens: 331772 }
+cost: { minutes: 76, tokens: 985843 }
 id: l-8f03408f
 scope: repo
 status: active
@@ -31,11 +31,17 @@ touches:
 * Tool descriptions must stand alone: no "as in the tab", no "↻". New texts describe what the simulator does and claim no CPI behaviour (fidelity claims need evidence).
 * Found while testing a real package from Claude Desktop (2026-11-24): a Groovy script that read an InputStream body (JsonSlurper) left the next step an empty body. The engine now gives Camel's InputStreamCache (the class a tenant's HTTPS sender hands on, F49) and resets it before reading the output, as Camel 3.14.7 does before and after each processor. Checked in the bytecode of CamelInternalProcessor$StreamCachingAdvice (both before and after call StreamCache.reset). Fidelity row "Stream body", basis Assumption.
 * project_info with several iFlows lists steps without config and drops files under iflows/; `iflow` gives one iFlow. The iFlow list comes from the .iflw files, because an iFlow with only adapter calls has no runnable steps.
+* `brief` (run_xslt, run_groovy, run_flow_step) keeps only output headers and properties that differ from the step's input. It compares with the resolved input, not with `changes`, because Encoder, Decoder and Message Digest results have no `changes`.
+* project_info for a package groups steps per iFlow (name, type): ids like CallActivity_1 repeat in every iFlow.
+* A property of type null: Camel 3.14.7's AbstractExchange.setProperty removes the property for a null value (bytecode checked), so the engines set properties through it and warn. Before, putAll into Camel's ConcurrentHashMap threw a bare NullPointerException. Headers may stay null.
 
 ## Tried and ruled out
 * open_project with any path: the project boundary would be gone. MCP roots: not checked in Claude Desktop, and no less configuration.
 * Listing functions by compiling the script for read_file: compiling Groovy can run code (AST transformations); reading must not.
 * Treating contentModifier.advance/discard as an app feature to port: they are the engine calls a Content Modifier with XPath rows makes between rows (flowcalls.ts, flow.rs), already in the MCP server.
+* Chasing "loggingEnabled missing in one output" from a user's agent report: a chain CM -> logging script -> stream-reading script kept every property, typed Boolean or empty too. Properties come back in Camel's map order, not the CM's row order, which makes one easy to overlook.
+
+In the code: runs.rs brief; tools.rs project_info; SimpleStep.exchange/nullProperties, ScriptRunner, ContentModifierStep.
 
 ## Watch out
 * A headless agent run (claude -p, --strict-mcp-config, only mcp__cpi-workbench) costs about 0.3 USD and 40 s and finds the friction; reports mix real issues with fixture quirks (the iflow test fixture lacks gone.gsh and the `enrich` function on purpose) and unverified CPI claims.

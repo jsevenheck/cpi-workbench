@@ -48,6 +48,10 @@ fn message_properties(props: &mut Map<String, Value>, headers: bool) {
     if headers {
         props.insert("headers".into(), values_schema("Message headers"));
         props.insert("properties".into(), values_schema("Exchange properties"));
+        props.insert("brief".into(), json!({ "type": "boolean", "default": false, "description": "A shorter result for \
+running steps one after another: of the output's headers and properties only those that differ from the input \
+(added or changed; changes, where a step reports it, also names removed ones), and no engine, timing, trace or empty lists. The run keeps the whole message for \
+messageFrom; run without brief to see all headers and properties." }));
     }
 }
 
@@ -232,8 +236,8 @@ CPI, per step type, and what is not." })),
              comes with its type and config (run_flow_step runs it by name, or a changed copy as step); a script, XSLT or \
              XML Validator step with its file, function and runtime for run_groovy, run_xslt or validate_xsd \
              (functionFound: false when its script does not declare the function). iflow_diagram shows the order of the \
-             steps. With several iFlows (a package), the steps come without configuration and the iFlows' files are \
-             left out: give iflow for one iFlow's steps and files. With a workspace, also its project folders \
+             steps. With several iFlows (a package), iflows lists each iFlow's steps by name and type, without \
+             configuration, and the iFlows' files are left out: give iflow for one iFlow's steps and files. With a workspace, also its project folders \
              (projects). Call this first.",
             obj(vec![("iflow", json!({ "type": "string", "description": "Only this iFlow (its folder under iflows/, as listed in iflows or with each step): its steps with configuration and functionFound, and its files plus the script collection files its steps use." }))]),
             &[], Effect::ReadOnly),
@@ -249,12 +253,14 @@ CPI, per step type, and what is not." })),
             read, &[], Effect::ReadOnly),
         tool("run_xslt", "Run an XSLT mapping",
             "Runs an XSLT mapping like CPI's XSLT Mapping step: headers and properties are xsl:param values, the result \
-             is the new body. Returns the output message, xsl:message output and diagnostics.",
+             is the new body. Returns the output message, xsl:message output and diagnostics. An unchanged body comes back \
+             as bodyUnchanged, a long one shortened (bodyShortened); read_file with the runId gives it whole.",
             xslt, &[], Effect::RunsCode),
         tool("run_groovy", "Run a Groovy script",
             "Runs a Groovy script like CPI's Groovy Script step with the clean-room Script API (Message, MessageLog, \
              ITApiFactory with the project's platform/ files), or one custom function of a Message Mapping's script \
              (the graphical mapping itself is not simulated). Returns the output message, log entries and diagnostics. \
+             An unchanged body comes back as bodyUnchanged, a long one shortened (bodyShortened). \
              The script runs without a sandbox. reference script-api lists the API.",
             groovy, &[], Effect::RunsCode),
         tool("validate_xsd", "Validate XML against an XSD",
@@ -269,7 +275,9 @@ CPI, per step type, and what is not." })),
              Flow Steps tab, from an iFlow of the project or from a config given here. Returns the output message(s), or \
              for a Router each route's result and the route taken: its runId passes the input on unchanged, as the \
              message goes to that route's first step; run that route's steps next yourself, with messageFrom. For an iFlow's script, XSLT or XML Validator step, \
-             use run_groovy, run_xslt or validate_xsd with the step's file, function and profile from project_info.",
+             use run_groovy, run_xslt or validate_xsd with the step's file, function and profile from project_info. \
+             An unchanged body comes back as bodyUnchanged (a Content Modifier that sets only headers, for instance), a \
+             long one shortened (bodyShortened).",
             step, &[], Effect::RunsCode),
         tool("save_file", "Save a file to the project",
             "Writes a file into the project (text, or bytes with contentBase64 or a binary run result), e.g. a mapping, script, schema, input message or platform/ data the user \
@@ -342,6 +350,9 @@ pub fn call(server: &Server, name: &str, args: &Args) -> Result<Value, String> {
         let input = runs::Message::from_output(&args[RESOLVED_INPUT])
             .unwrap_or_else(|| runs::Message::text("", json!([]), json!([])));
         keep_run(server, name, &input, &mut result);
+    }
+    if args.get("brief").and_then(Value::as_bool) == Some(true) {
+        runs::brief(&mut result, args.get(RESOLVED_INPUT).unwrap_or(&Value::Null));
     }
     Ok(result)
 }
@@ -646,19 +657,22 @@ fn project_info(server: &Server, args: &Args) -> Result<Value, String> {
         files.retain(|f| !f.as_str().unwrap_or_default().starts_with("iflows/") || under(f, i) || used.contains(&f));
     } else if iflows.len() > 1 {
         // A package: the steps of all its iFlows with their configuration overflow a model's context.
+        // Grouped by iFlow, each step by name and type: ids such as CallActivity_1 repeat in every iFlow.
         files.retain(|f| !f.as_str().unwrap_or_default().starts_with("iflows/"));
-        steps = steps.iter().map(|s| json!({ "iflow": s["iflow"], "id": s["id"], "name": s["name"], "type": s["type"] })).collect();
-        info["iflows"] = json!(iflows);
-        info["summary"] = json!("Several iFlows: their steps are listed without configuration and the files under \
-            iflows/ are left out. Call project_info with iflow for one iFlow's steps (config, file, function, \
+        info["iflows"] = Value::Array(iflows.iter().map(|i| json!({ "iflow": i, "steps": steps.iter()
+            .filter(|s| s["iflow"] == i.as_str()).map(|s| json!({ "name": s["name"], "type": s["type"] })).collect::<Vec<_>>() }))
+            .collect());
+        steps.clear();
+        info["summary"] = json!("Several iFlows: each iFlow's steps by name and type, without configuration, and the \
+            files under iflows/ left out. Call project_info with iflow for one iFlow's steps (config, file, function, \
             functionFound) and files.");
     }
     if files.len() > MAX_FILES {
         info["filesTruncated"] = json!(files.len());
     }
     info["files"] = Value::Array(files.into_iter().take(MAX_FILES).collect());
-    info["iflowSteps"] = Value::Array(steps);
     if info.get("summary").is_none() {
+        info["iflowSteps"] = Value::Array(steps);
         mark_functions(server, &mut info["iflowSteps"]);
     }
     Ok(info)

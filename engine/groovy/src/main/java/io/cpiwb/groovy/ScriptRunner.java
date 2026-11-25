@@ -150,7 +150,11 @@ public final class ScriptRunner {
         }
         exchange.getIn().setBody(inputBody(in, bodyType));
         exchange.getIn().getHeaders().putAll(in.getHeaders());
-        exchange.getProperties().putAll(in.getProperties());
+        in.getProperties().forEach(exchange::setProperty); // Camel's setProperty: a null value removes the property
+        Diagnostic dropped = SimpleStep.nullProperties(in);
+        if (dropped != null) {
+            diags.add(dropped);
+        }
         MessageSupport<?> message = null;
         if (mapping == null) {
             message = newMessage(fn.getParameterTypes()[0], exchange, diags);

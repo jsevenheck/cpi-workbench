@@ -67,8 +67,9 @@ validate_xsd, evaluate_xpath or run_flow_step, passing the source inline (mappin
 result is right. To find how a step should be configured, run variants of it on the same input: a changed copy of \
 an iFlow step's config as run_flow_step's step, a changed script or mapping inline. A run that produces a message returns a runId: pass it as messageFrom to the next step instead \
 of copying the body (body, headers and properties flow on as in an iFlow; a Splitter's messages are runId/1, \
-runId/2, …; a Gather takes messagesFrom). Long bodies come back shortened; read_file with runId shows them whole, \
-save_file with contentFrom keeps one. Run on both runtimes (runtime: both) when the version matters. Show the user the result and, for flow steps, the configuration as they would enter \
+runId/2, …; a Gather takes messagesFrom). Long bodies come back shortened (bodyShortened), and a body the step \
+left as it was is not repeated (bodyUnchanged instead of body); read_file with runId shows a body whole, save_file \
+with contentFrom keeps one. In a chain of steps, brief: true keeps results short. Run on both runtimes (runtime: both) when the version matters. Show the user the result and, for flow steps, the configuration as they would enter \
 it in the iFlow. Save files with save_file only when the user wants them; the app shows them after a refresh. \
 reference explains the Script API, the platform/ data formats and what is verified against CPI.\n\
 Paths are relative to the project folder; the tools read and write inside it only. Groovy scripts, and reflexive \

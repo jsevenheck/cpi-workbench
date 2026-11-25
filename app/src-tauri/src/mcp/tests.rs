@@ -514,6 +514,20 @@ fn tools_run_on_the_engines() {
     let step = |name: &str| info["iflowSteps"].as_array().unwrap().iter().find(|s| s["name"] == name).unwrap().clone();
     assert_eq!(step("Enrich order")["functionFound"], false, "{info}");
     assert_eq!(step("Log payload")["functionFound"], true, "{info}");
+    // brief: of the output's headers and properties only what the step added or changed; the run keeps the rest.
+    let full = c.ok("run_groovy", json!({ "body": "<a/>", "headers": { "kept": "1" }, "properties": { "p": "1" },
+        "script": "def processData(m) { m.setHeader('added', 'x'); m }" }));
+    let short = c.ok("run_groovy", json!({ "body": "<a/>", "headers": { "kept": "1" }, "properties": { "p": "1" }, "brief": true,
+        "script": "def processData(m) { m.setHeader('added', 'x'); m }" }));
+    assert!(full["output"]["headers"].as_array().unwrap().len() == 2 && full.get("engine").is_some(), "{full}");
+    assert_eq!(short["output"]["headers"], json!([{ "name": "added", "type": "String", "value": "x" }]), "{short}");
+    assert_eq!(short["output"]["properties"], json!([]), "{short}");
+    assert!(short.get("engine").is_none() && short.get("timing").is_none() && short["brief"].is_string(), "{short}");
+    let next = c.ok("run_groovy", json!({ "messageFrom": short["runId"], "script": "def processData(m) { m.setBody(m.getHeaders()['kept'] + m.getProperty('p')); m }" }));
+    assert_eq!(next["output"]["body"], "11", "the run kept the whole message: {next}");
+    let both = c.ok("run_xslt", json!({ "runtime": "both", "body": "<a/>", "headers": { "h": "1" }, "brief": true,
+        "mapping": "<xsl:stylesheet version='2.0' xmlns:xsl='http://www.w3.org/1999/XSL/Transform'><xsl:template match='/'><b/></xsl:template></xsl:stylesheet>" }));
+    assert!(both["runs"][0]["result"].get("engine").is_none(), "{both}");
     // Reading a script lists its functions, as the Groovy tab does when it opens one.
     let script = c.ok("read_file", json!({ "path": "scripts/mapping-functions.groovy" }));
     let fns: Vec<&str> = script["functions"].as_array().unwrap().iter().map(|f| f["signature"].as_str().unwrap()).collect();
@@ -686,7 +700,11 @@ fn where_used_searches_the_imported_iflows() {
     // iflow gives one iFlow's steps in full and its files.
     let sum = c.ok("project_info", json!({}));
     assert_eq!(sum["iflows"].as_array().unwrap().len(), 3, "{sum}");
-    assert!(sum["summary"].is_string() && sum["iflowSteps"].as_array().unwrap().iter().all(|s| s.get("config").is_none()), "{sum}");
+    assert!(sum["summary"].is_string() && sum.get("iflowSteps").is_none(), "{sum}");
+    let order = sum["iflows"].as_array().unwrap().iter().find(|i| i["iflow"] == "Order_Replication").unwrap();
+    assert!(order["steps"].as_array().unwrap().iter().any(|s| *s == json!({ "name": "Set headers", "type": "contentModifier" })), "{sum}");
+    let outbound = sum["iflows"].as_array().unwrap().iter().find(|i| i["iflow"] == "Outbound_Orders").unwrap();
+    assert_eq!(outbound["steps"], json!([]), "an iFlow with only adapter calls is listed: {sum}");
     assert!(sum["files"].as_array().unwrap().iter().all(|f| !f.as_str().unwrap().starts_with("iflows/")), "{sum}");
     let one = c.ok("project_info", json!({ "iflow": "Order_Replication" }));
     assert!(one.get("summary").is_none(), "{one}");
@@ -979,7 +997,7 @@ fn files_are_read_saved_and_imported_inside_the_project() {
     assert!(std::fs::read_to_string(dir.join("platform/value-mappings.json")).unwrap().contains("\"targetValue\":\"R1\""));
     let _ = std::fs::remove_file(&vm_zip);
     let info = c.ok("project_info", json!({}));
-    assert!(info["iflowSteps"].as_array().unwrap().iter().any(|s| s["iflow"] == "Order_Sync"));
+    assert!(info["iflows"].as_array().unwrap().iter().any(|i| i["iflow"] == "Order_Sync"), "{info}");
 
     engines.shutdown();
     let _ = std::fs::remove_file(&zip);

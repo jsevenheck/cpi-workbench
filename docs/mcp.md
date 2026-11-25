@@ -105,7 +105,7 @@ agent without file access of its own what the app's file tree and **Import iFlow
 
 | Tool | Tab in the app |
 |---|---|
-| `project_info` | The project: its files, the steps of the iFlows under `iflows/` (flow steps with their configuration; script, XSLT and XML Validator steps with file, function and runtime; a script step's `functionFound` says whether its script declares that function). With several iFlows (a package), the steps come without configuration and the files under `iflows/` are left out, so the answer stays small; `iflow` gives one iFlow's steps in full, its files and the script collection files its steps use and the installed runtimes; with `--workspace`, also the workspace's folders (`projects`). |
+| `project_info` | The project: its files, the steps of the iFlows under `iflows/` (flow steps with their configuration; script, XSLT and XML Validator steps with file, function and runtime; a script step's `functionFound` says whether its script declares that function). With several iFlows (a package), `iflows` lists each iFlow's steps by name and type, without configuration, and the files under `iflows/` are left out, so the answer stays small; `iflow` gives one iFlow's steps in full, its files and the script collection files its steps use and the installed runtimes; with `--workspace`, also the workspace's folders (`projects`). |
 | `open_project` | **Open folder…** / **Import iFlow…** without a project, within the workspace (`--workspace` only): opens a folder directly inside it (`name`), or creates a new project there (`create: true`), and returns its `project_info` (without the runtimes, which do not change). Calls that are running finish on the project they started on; earlier `runId`s stay usable. |
 | `read_file` | Opening a file: the text of a project file (a Groovy script's also with the `functions` it declares, read from its text as the Groovy tab does; nothing runs), long files in parts (`startLine`, `maxLines`), text in one long line by characters (`startChar`); a file that is no text with `binary: true` (as `contentBase64`); with `runId`, the whole output body of a run (a binary one as `contentBase64`). |
 | `run_xslt` | XSLT (`mappingPath` or `mapping`). `runtime: "both"` runs Saxon-HE 9.9 and 12, as the runtime comparison does. |
@@ -139,6 +139,11 @@ Splitter's `messages[]`, the entries of `runs[]`). The input (with a Gather's `m
 kept message is the one the step got. `messageFrom: "<runId>"` makes that message (body, headers, properties) the input of
 the next call, as it flows to the next step in an iFlow; `body`, `headers` and `properties` given in the same call
 replace the body or the rows of the same name. A Gather takes `messagesFrom` (a Splitter's `runId`, or a list).
+
+When steps run one after another, `brief: true` on `run_xslt`, `run_groovy` and `run_flow_step` shortens each
+result to what changed: of the output's headers and properties only those that differ from the input (a result's
+`changes` also names removed ones), without engine, timing, trace and empty lists. The run keeps the whole message
+for `messageFrom`.
 
 To keep results small, a body the step left as it was (from 200 characters) is left out, with
 `bodyUnchanged` saying so; bodies longer than 20,000 characters, and a Splitter's messages longer than 2,000,

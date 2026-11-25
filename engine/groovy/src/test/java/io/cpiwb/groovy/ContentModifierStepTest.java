@@ -63,6 +63,20 @@ class ContentModifierStepTest {
         assertTrue(((List<Object>) Json.obj(Json.obj(r, "changes"), "headers").get("added")).contains("Order"));
     }
 
+    /** A null input property does not fail the step: Camel leaves it out, and a warning says so. */
+    @Test
+    void aNullInputPropertyIsLeftOut() throws Exception {
+        Map<String, Object> input = ScriptRunnerTest.in("<a/>", List.of(),
+                List.of(ScriptRunnerTest.hv("gone", "", "null"), ScriptRunnerTest.hv("kept", "1", "String")));
+        Map<String, Object> r = (Map<String, Object>) ScriptRunnerTest.ENGINE.call("contentModifier.run", Json.o()
+                .with("headers", List.of()).with("properties", List.of(row("Create", "P", "property", "kept", "")))
+                .with("bodyType", "constant").with("body", "").with("input", input));
+        Map<String, String> p = values(r, "properties");
+        assertEquals("1:String", p.get("P"));
+        assertFalse(p.containsKey("gone"));
+        assertTrue(Json.write(r).contains("Properties with the value null are left out: gone."), () -> Json.write(r));
+    }
+
     @Test
     void xpathRowsArriveEvaluated() throws Exception {
         Map<String, Object> xp = row("Create", "Id", "xpath", "//ID/text()", "java.lang.Integer");

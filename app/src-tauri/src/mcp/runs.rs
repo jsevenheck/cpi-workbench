@@ -261,6 +261,42 @@ pub fn shorten(result: &mut Value, id: Option<&str>, input_body: &str) {
     }
 }
 
+/// `brief`: a result for steps run one after another. The output keeps only the headers and properties that differ
+/// from the step's input (added or changed; a result's `changes` also names removed ones); engine, timing and trace go,
+/// and so do empty lists and an empty message log. The run itself keeps the whole message.
+pub fn brief(result: &mut Value, input: &Value) {
+    if let Some(runs) = result.get_mut("runs").and_then(Value::as_array_mut) {
+        for r in runs {
+            brief(&mut r["result"], input);
+        }
+        return;
+    }
+    let Some(o) = result.as_object_mut() else { return };
+    for key in ["engine", "timing", "runMs", "transformMs", "trace"] {
+        o.remove(key);
+    }
+    let empty = |v: &Value| v.as_array().is_some_and(Vec::is_empty) || v.as_str() == Some("")
+        || v.as_object().is_some_and(|m| m.values().all(|x| x.as_array().is_some_and(Vec::is_empty) || x.is_boolean()));
+    o.retain(|k, v| !(matches!(k.as_str(), "apiCalls" | "attachments" | "console" | "soapHeaders" | "mappingFunctions" | "mpl" | "cpiCalls" | "messages") && empty(v)));
+    if let Some(out) = o.get_mut("output").and_then(Value::as_object_mut) {
+        for list in ["headers", "properties"] {
+            let before = input[list].as_array().cloned().unwrap_or_default();
+            if let Some(rows) = out.get_mut(list).and_then(Value::as_array_mut) {
+                rows.retain(|r| !before.contains(r));
+            }
+        }
+        out.remove("encoding");
+    }
+    // A Splitter's messages carry the input's headers and properties unchanged.
+    if let Some(ms) = o.get_mut("messages").and_then(Value::as_array_mut) {
+        for m in ms.iter_mut().filter_map(Value::as_object_mut) {
+            m.remove("headers");
+            m.remove("properties");
+        }
+    }
+    o.insert("brief".into(), json!("Shortened (brief): only headers and properties that differ from the input are shown."));
+}
+
 /// Rows of `over` replace the rows of `base` with the same name; the others are added.
 pub fn merge_rows(base: &Value, over: &Value) -> Value {
     let mut rows: Vec<Value> = base.as_array().cloned().unwrap_or_default();

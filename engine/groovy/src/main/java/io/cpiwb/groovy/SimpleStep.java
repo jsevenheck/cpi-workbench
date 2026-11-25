@@ -49,7 +49,12 @@ public final class SimpleStep {
             if (expr.isBlank()) {
                 throw new IllegalArgumentException("Enter an expression.");
             }
-            Exchange exchange = exchange(SimExchange.fromJson(Json.obj(req, "input")));
+            SimExchange in = SimExchange.fromJson(Json.obj(req, "input"));
+            Diagnostic dropped = nullProperties(in);
+            if (dropped != null) {
+                diags.add(dropped.toJson());
+            }
+            Exchange exchange = exchange(in);
             Language simple = exchange.getContext().resolveLanguage("simple");
             if (condition) {
                 result.with("value", String.valueOf(simple.createPredicate(camel).matches(exchange))).with("type", "Boolean");
@@ -83,8 +88,17 @@ public final class SimpleStep {
         Exchange exchange = Exchanges.create();
         exchange.getIn().setBody(binaryBody ? in.getBody() : in.getBodyAsString());
         exchange.getIn().getHeaders().putAll(in.getHeaders());
-        exchange.getProperties().putAll(in.getProperties());
+        // Through Camel's setProperty: a null value removes the property (AbstractExchange.setProperty).
+        in.getProperties().forEach(exchange::setProperty);
         return exchange;
+    }
+
+    /** A warning naming the input properties whose value is null, which Camel does not keep; null if there are none. */
+    static Diagnostic nullProperties(SimExchange in) {
+        List<String> names = in.getProperties().entrySet().stream().filter(e -> e.getValue() == null)
+                .map(Map.Entry::getKey).toList();
+        return names.isEmpty() ? null : Diagnostic.warning("Properties with the value null are left out: "
+                + String.join(", ", names) + ". Camel keeps no property with a null value (Exchange.setProperty removes it).");
     }
 
     /**

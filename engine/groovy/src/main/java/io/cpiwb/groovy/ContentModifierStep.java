@@ -73,6 +73,10 @@ public final class ContentModifierStep {
             this.inputHeaders = message.getHeaders();
             this.inputProperties = message.getProperties();
             this.exchange = SimpleStep.exchange(message, input != null && input.get("bodyBase64") != null);
+            Diagnostic dropped = SimpleStep.nullProperties(message);
+            if (dropped != null) {
+                diags.add(dropped);
+            }
         }
     }
 

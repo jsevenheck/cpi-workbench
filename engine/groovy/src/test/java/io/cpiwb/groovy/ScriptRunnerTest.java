@@ -545,6 +545,17 @@ class ScriptRunnerTest {
         assertEquals("8", entry(r, "properties", "size").get("value"));
     }
 
+    /** A property with the value null: Camel keeps none (Exchange.setProperty removes it), so it is left out with a warning. */
+    @Test
+    void aNullPropertyIsLeftOutAsCamelDoes() throws Exception {
+        Map<String, Object> r = run("def processData(m) { m.setProperty('seen', String.valueOf(m.getProperties().containsKey('gone'))); m }",
+                in("x", List.of(), List.of(hv("gone", "", "null"), hv("kept", "1", "String"))), null);
+        assertTrue(Json.bool(r, "ok", false), () -> Json.write(r));
+        assertEquals("false", entry(r, "properties", "seen").get("value"));
+        assertEquals("1", entry(r, "properties", "kept").get("value"));
+        assertTrue(Json.write(r).contains("Properties with the value null are left out: gone."), () -> Json.write(r));
+    }
+
     /**
      * An InputStream body is Camel's InputStreamCache, as behind a tenant's HTTPS sender (F49), and is reset after
      * the step as Camel's stream caching does: a script that only reads it passes the whole body on.

@@ -133,7 +133,7 @@ holds the returned value or the output queue in the same form." })),
     groovy.insert("bodyType".into(), json!({ "type": "string", "enum": ["String", "byte[]", "InputStream"], "default": "String",
         "description": "The Java type of the incoming body, what message.getBody() without a class returns: String (default), \
 byte[] or InputStream. InputStream gives Camel's InputStreamCache, the type a tenant's HTTPS sender handed on (reference \
-fidelity, Stream body); after the step it is reset, so the body passes on whole." }));
+fidelity, Stream body; project_info with iflow lists an iFlow's senders); after the step it is reset, so the body passes on whole." }));
     groovy.insert("runtime".into(), runtime(GROOVY_RUNTIMES, true, None,
         "groovy-1.x (Script API v1) or groovy-2.x (v2). Default: from the script's imports (com.sap.it.script.v2.api → 2.x), else 1.x. both runs the two. \
 For an iFlow's script step, give the runtime project_info lists for it."));
@@ -242,7 +242,7 @@ CPI, per step type, and what is not." })),
              steps. With several iFlows (a package), iflows lists each iFlow's steps by name and type, without \
              configuration, and the iFlows' files are left out: give iflow for one iFlow's steps and files. With a workspace, also its project folders \
              (projects). Call this first.",
-            obj(vec![("iflow", json!({ "type": "string", "description": "Only this iFlow (its folder under iflows/, as listed in iflows or with each step): its steps with configuration and functionFound, and only its own files plus the script collection files its steps use (the project's other files come without iflow). The steps are in the order the export lists them; iflow_diagram gives the flow order." }))]),
+            obj(vec![("iflow", json!({ "type": "string", "description": "Only this iFlow (its folder under iflows/, as listed in iflows or with each step): its steps with configuration and functionFound, and only its own files plus the script collection files its steps use (the project's other files come without iflow), and its sender adapters (senders). The steps are in the order the export lists them; iflow_diagram gives the flow order." }))]),
             &[], Effect::ReadOnly),
         tool("open_project", "Open or create a project in the workspace",
             "Only when the server was started with --workspace: opens one of the workspace's folders as the project the \
@@ -360,6 +360,13 @@ pub fn call(server: &Server, name: &str, args: &Args) -> Result<Value, String> {
             .unwrap_or_else(|| runs::Message::text("", json!([]), json!([])));
         input.body_class = input_class(server, &args);
         keep_run(server, name, &input, &mut result);
+    }
+    // The class the run hands the body on as, where it kept the input's (a Content Modifier that left a stream body
+    // as it was): the engine reports the text it worked on.
+    if let Some(class) = result["runId"].as_str().and_then(|id| server.runs().message(id).ok()?.body_class) {
+        if let Some(out) = result.get_mut("output").filter(|o| o.get("bodyType").is_some()) {
+            out["bodyType"] = json!(class);
+        }
     }
     if args.get("brief").and_then(Value::as_bool) == Some(true) {
         runs::brief(&mut result, args.get(RESOLVED_INPUT).unwrap_or(&Value::Null));
@@ -691,6 +698,14 @@ fn project_info(server: &Server, args: &Args) -> Result<Value, String> {
             return Err(format!("No iFlow '{i}' under iflows/. The iFlows: {iflows:?}."));
         }
         steps.retain(|s| s["iflow"] == i);
+        // Who sends to the iFlow, as the Diagram tab shows it: a script's body type follows from it (an HTTPS
+        // sender hands on a stream, fidelity.md, Stream body).
+        let models = engine_call(server, rt, "iflow.models", json!({}))?;
+        if let Some(model) = models["models"].as_array().into_iter().flatten().find(|m| m["iflow"] == i) {
+            info["senders"] = Value::Array(iflowmodel::adapters(model).into_iter().filter(|(_, _, inbound)| *inbound)
+                .map(|(f, system, _)| json!({ "adapter": f["adapter"], "system": system.map(|n| n["name"].clone()) }))
+                .collect());
+        }
         // Only the iFlow's own files and those its steps use (a package's script collection lies beside it); the
         // project's other files are in project_info without iflow, which an agent has usually called already.
         let used: Vec<&Value> = steps.iter().map(|s| &s["file"]).filter(|f| f.is_string()).collect();

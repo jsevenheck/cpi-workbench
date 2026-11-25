@@ -3,7 +3,7 @@ title: "The MCP server mirrors the app: a workspace of projects, and Where used 
 author: Claude
 date: 2026-11-24
 branch: claude/optimistic-dijkstra-ek2iek
-cost: { minutes: 106, tokens: 2413693 }
+cost: { minutes: 112, tokens: 2437512 }
 id: l-8f03408f
 scope: repo
 status: active
@@ -39,6 +39,8 @@ touches:
 * The user's dev build ran the engines on the system's Java 25; Groovy runs now warn on any Java but 21 (F48). For Claude Desktop the JRE comes from the client's environment, not the terminal that started tauri dev: set JAVA_HOME in the server's "env" in claude_desktop_config.json.
 
 In the code: runs.rs Message.body_class and produced(); tools.rs input_class and run_groovy; ScriptRunner.javaVersion; reference.rs fidelity_for.
+* User (2026-11-25), after five rounds of "agent tests, Claude fixes, agent tests again": an agent asked for criticism always finds something. From now on a finding is fixed only if it is (1) wrong or misleading, (2) something the app can do and the MCP server cannot, or (3) recurring across several runs. Comfort wishes are collected, not built; further feedback comes from real use.
+* Before fixing, sort each finding: engine (affects the app too, needs evidence for any CPI behaviour and a fidelity.md row), UI, or MCP only (presentation for an agent, no new CPI claim). The user wants MCP-only fixes kept MCP-only, so the app and CPI research are touched only when the engine is really wrong.
 
 ## Tried and ruled out
 * open_project with any path: the project boundary would be gone. MCP roots: not checked in Claude Desktop, and no less configuration.
@@ -62,3 +64,6 @@ In the code: app/src-tauri/src/mcp/{mod.rs INSTRUCTIONS and prompt, tools.rs def
 * Bodies of real exports go through the MCP results into the agent's chat; the agent found plaintext passwords in parameters.prop of a customer package.
 
 In the code: ScriptRunner.inputBody and describeOutput; ScriptRunnerTest.aStreamBodyReadByTheScriptIsPassedOnWhole; tools.rs project_info.
+* The engine fixes of 2026-11-24/25 (stream body as InputStreamCache, null properties, missing file and function messages, Java warning) were real for the app too; agents found them because they run chains, which a person in one tab rarely does.
+
+In the code: app/src-tauri/src/mcp/ (MCP only); engine/groovy ScriptRunner, SimpleStep, ContentModifierStep (engine fixes).

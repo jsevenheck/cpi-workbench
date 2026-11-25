@@ -552,6 +552,7 @@ fn tools_run_on_the_engines() {
     let s2 = c.ok("run_groovy", json!({ "messageFrom": cm1["runId"], "runtime": "groovy-1.x", "script": read }));
     let cls = |r: &Value| r["output"]["properties"].as_array().unwrap().iter().find(|p| p["name"] == "cls").unwrap()["value"].clone();
     assert_eq!(cls(&s2), "InputStreamCache", "{s2}");
+    assert_eq!(cm1["output"]["bodyType"], "org.apache.camel.converter.stream.InputStreamCache", "the class handed on is shown: {cm1}");
     assert!(s2["bodyTypeFrom"].is_string(), "{s2}");
     let set = c.ok("run_groovy", json!({ "messageFrom": s2["runId"], "runtime": "groovy-1.x",
         "script": "def processData(m) { m.setBody('{\"a\":1}'); m }" }));
@@ -763,6 +764,7 @@ fn where_used_searches_the_imported_iflows() {
     let steps = one["iflowSteps"].as_array().unwrap();
     assert!(steps.iter().all(|s| s["iflow"] == "Order_Replication") && steps.iter().any(|s| s.get("config").is_some()), "{one}");
     assert_eq!(steps.iter().find(|s| s["name"] == "Enrich order").unwrap()["functionFound"], false, "{one}");
+    assert_eq!(one["senders"], json!([{ "adapter": "HTTPS", "system": "Shop" }]), "{one}");
     let files = one["files"].as_array().unwrap();
     assert!(files.iter().any(|f| f.as_str().unwrap().starts_with("iflows/Order_Replication/")), "{one}");
     assert!(files.iter().all(|f| f.as_str().unwrap().starts_with("iflows/Order_Replication/")), "only the iFlow's own files: {one}");

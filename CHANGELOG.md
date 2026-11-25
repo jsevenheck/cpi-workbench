@@ -39,7 +39,8 @@ of its version.
   statuses (`statusNote`).
 - **MCP: the body's type travels with the message.** Without `bodyType`, `run_groovy` gives a message from
   `messageFrom` the type a script handed it on as, while later steps left the body as it was: a stream stays a
-  stream through a Content Modifier with an empty body (`bodyTypeFrom` says so).
+  stream through a Content Modifier with an empty body (`bodyTypeFrom` says so, and that step's `output.bodyType`
+  shows the class it hands on). `project_info` with `iflow` lists the iFlow's sender adapters (`senders`).
 - **MCP: smaller answers.** `reference` with `topic: fidelity` takes `step` for that step's rows only, and
   `read_file` returns a file's text as its own content block, as written, instead of inside escaped JSON.
 - **A Groovy run on another Java than 21 warns.** A development build starts the engines on the system's Java; a

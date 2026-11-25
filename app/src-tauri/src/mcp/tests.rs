@@ -506,6 +506,14 @@ fn tools_run_on_the_engines() {
     assert!(erp["route"]["condition"].as_str().unwrap().contains("SenderId"), "{d}");
     let cm = main.iter().find(|e| e["type"] == "Content Modifier").expect("a Content Modifier");
     assert!(cm["settings"].get("cmdVariantUri").is_none() && cm["settings"].as_object().is_some_and(|o| !o.is_empty()), "{cm}");
+    // A Content Modifier table comes as one object per row; a table whose cells have no ids stays text.
+    assert_eq!(cm["settings"]["headerTable"][0]["Name"], "OrderId", "{cm}");
+    assert_eq!(cm["settings"]["headerTable"][0]["Type"], "xpath", "{cm}");
+    let json_to_xml = main.iter().find(|e| e["name"] == "JSON to XML").unwrap();
+    assert!(json_to_xml["settings"]["jsonNamespaceMapping"].is_string(), "{json_to_xml}");
+    let bare = c.ok("iflow_diagram", json!({ "settings": false }));
+    assert!(!bare.to_string().contains("\"settings\""), "settings: false leaves them out: {bare}");
+    assert_eq!(bare["processes"][0]["elements"].as_array().unwrap().len(), main.len());
     assert!(main.iter().any(|e| e["again"] == true && e.get("settings").is_none()), "a meeting point is listed again, without settings");
     assert!(d["adapters"].as_array().is_some_and(|a| !a.is_empty()), "{d}");
     assert!(c.err("iflow_diagram", json!({ "iflow": "Nope" })).contains("Order_Replication"));
@@ -815,6 +823,16 @@ fn a_workspace_switches_and_creates_projects() {
     assert!(c.err("open_project", json!({ "name": "Billing", "create": true })).contains("exists already"));
     c.ok("open_project", json!({ "name": "Orders" }));
     assert!(c.ok("read_file", json!({ "path": "tests/standard-order/input.xml" }))["content"].is_string());
+    // A package: open_project gives each iFlow's number of steps only; project_info names them.
+    let pkg = root.join("Package");
+    std::fs::rename(project("ws-pkg"), &pkg).unwrap();
+    copy_dir(&Path::new(env!("CARGO_MANIFEST_DIR")).join("../../engine/core/src/test/resources/iflow-index/iflows"), &pkg.join("iflows"));
+    let opened = c.ok("open_project", json!({ "name": "Package" }));
+    let counts: Vec<(String, u64)> = opened["iflows"].as_array().unwrap().iter()
+        .map(|i| (i["iflow"].as_str().unwrap().to_string(), i["stepCount"].as_u64().unwrap())).collect();
+    assert!(counts.contains(&("Outbound_Orders".into(), 0)) && counts.iter().any(|(i, n)| i == "Order_Replication" && *n > 5), "{opened}");
+    assert!(opened["iflows"][0].get("steps").is_none() && opened.get("iflowSteps").is_none(), "{opened}");
+    assert!(c.ok("project_info", json!({}))["iflows"][0]["steps"].is_array());
     engines.shutdown();
     let _ = std::fs::remove_dir_all(&root);
 }

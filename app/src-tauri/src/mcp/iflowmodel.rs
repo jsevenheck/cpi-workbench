@@ -172,12 +172,24 @@ const SKIPPED: &[&str] = &["cmdVariantUri", "componentVersion", "componentNS", "
 fn settings(props: &Value) -> Value {
     Value::Object(props.as_object().into_iter().flatten()
         .filter(|(k, v)| !SKIPPED.contains(&k.as_str()) && !s(v).is_empty())
-        .map(|(k, v)| (k.clone(), v.clone())).collect::<Map<_, _>>())
+        .map(|(k, v)| (k.clone(), table(v).unwrap_or_else(|| v.clone()))).collect::<Map<_, _>>())
+}
+
+/// A Content Modifier table (`<row><cell id='Name'>…</cell>…</row>`, XML text in the export) as one object per row,
+/// cell id to text, as Where used shows a table (whereused.rs). A table whose cells have no ids stays text.
+fn table(v: &Value) -> Option<Value> {
+    let t = super::whereused::table_hit(s(v), "")?;
+    let rows = t["rows"].as_array()?;
+    if rows.iter().any(|r| r.as_array().is_none_or(Vec::is_empty)) {
+        return None;
+    }
+    Some(Value::Array(rows.iter().map(|r| Value::Object(list(r).iter()
+        .map(|c| (s(&c["id"]).to_string(), c["text"].clone())).collect())).collect()))
 }
 
 /// What `iflow_diagram` returns for one model: its processes with their elements in flow order (each with its
 /// settings, once), and the adapters with their systems.
-pub fn diagram(model: &Value) -> Value {
+pub fn diagram(model: &Value, with_settings: bool) -> Value {
     let names: HashMap<&str, &str> = list(&model["processes"]).iter().map(|p| (s(&p["id"]), s(&p["name"]))).collect();
     let by_id: HashMap<&str, &Value> = list(&model["nodes"]).iter().map(|n| (s(&n["id"]), n)).collect();
     let processes: Vec<Value> = outline(model).into_iter().map(|(p, entries)| {
@@ -213,7 +225,7 @@ pub fn diagram(model: &Value) -> Value {
             }
             if n["loop"] == true { el["loop"] = json!(true); }
             let props = settings(&n["properties"]);
-            if props.as_object().is_some_and(|o| !o.is_empty()) { el["settings"] = props; }
+            if with_settings && props.as_object().is_some_and(|o| !o.is_empty()) { el["settings"] = props; }
             el
         }).collect());
         process
@@ -225,7 +237,7 @@ pub fn diagram(model: &Value) -> Value {
             "direction": if inbound { "inbound" } else { "outbound" },
             "system": system.map(|n| n["name"].clone()), "element": inner });
         let props = settings(&f["properties"]);
-        if props.as_object().is_some_and(|o| !o.is_empty()) { a["settings"] = props; }
+        if with_settings && props.as_object().is_some_and(|o| !o.is_empty()) { a["settings"] = props; }
         a
     }).collect();
     json!({ "iflow": model["iflow"], "name": model["name"], "file": model["file"], "processes": processes, "adapters": adapters })

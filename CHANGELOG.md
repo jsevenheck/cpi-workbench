@@ -22,14 +22,16 @@ of its version.
 - **MCP: an iFlow's diagram as text.** The new tool `iflow_diagram` lists an imported iFlow's processes with their
   elements in flow order, a Router's routes with their conditions, Process Calls, each element's settings and the
   adapters with their systems, as the Diagram tab and its outline show them; each element on a route names it
-  (`onRoute`), so an agent can follow a message through the iFlow.
+  (`onRoute`), so an agent can follow a message through the iFlow. A Content Modifier table comes as one object
+  per row instead of XML text, and `settings: false` gives the order alone.
 - **MCP: descriptions for agents that do not know the app.** The tools, their parameters and the server's
   instructions explain what they referred to the app's tabs for (the Groovy body type, the XPath version, a
   Router's condition types), how to try another configuration of an iFlow's step on the same input, how a
   Router's result passes the message on, and when to use `iflow_diagram` and `iflow_where_used`.
 - **MCP: packages stay readable.** For a project with several iFlows, `project_info` lists each iFlow's steps by
   name and type, without configuration, and leaves the iFlows' files out; `project_info` with `iflow` gives one
-  iFlow in full, with only its own files and the script collection files its steps use.
+  iFlow in full, with only its own files and the script collection files its steps use. `open_project` gives
+  only each iFlow's number of steps.
 - **MCP: `brief` results.** `run_xslt`, `run_groovy` and `run_flow_step` take `brief: true`: of the output's
   headers and properties only those that differ from the input, and no engine, timing or trace, for steps run one
   after another. The tool descriptions also explain `bodyUnchanged`, and a Router's result explains its route

@@ -223,6 +223,7 @@ schemas/*.xsd, inputs/*.xml|json|csv, platform/*.json. Folders are created.")),
     ]);
     let diagram = obj(vec![
         ("iflow", json!({ "type": "string", "description": "The iFlow: its folder under iflows/, as project_info lists it with each step. Needed when the project has more than one." })),
+        ("settings", json!({ "type": "boolean", "default": true, "description": "false leaves out the elements' and adapters' settings, for the order of the steps and routes alone." })),
     ]);
     let reference = obj(vec![
         ("topic", json!({ "type": "string", "enum": reference::TOPICS, "description": "script-api: the Script API, \
@@ -244,7 +245,8 @@ CPI, per step type, and what is not." })),
             &[], Effect::ReadOnly),
         tool("open_project", "Open or create a project in the workspace",
             "Only when the server was started with --workspace: opens one of the workspace's folders as the project the \
-             other tools work in (create: true makes a new one), and returns its project_info without the runtimes. \
+             other tools work in (create: true makes a new one), and returns its project_info without the runtimes; \
+             for several iFlows only each iFlow's number of steps (stepCount). \
              Earlier runIds stay usable.",
             open, &["name"], Effect::OpensProject),
         tool("read_file", "Read a project file",
@@ -307,10 +309,11 @@ CPI, per step type, and what is not." })),
              default), and the route's further elements follow it until the next element with a route at that depth; \
              each element on a route also names it (onRoute: router and route). \
              Where branches meet, the element is listed again (again: true); a Process Call names the local process it \
-             calls (calls). Each element has its type as in the editor and its settings as written in the iFlow \
+             calls (calls). Each element has its type as in the editor and its settings as written in the iFlow, a Content \
+             Modifier table as one object per row (cell id to text) \
              ({{parameters}} unresolved; project_info's configs, which run_flow_step runs, and iflow_where_used resolve \
              them); adapters name \
-             their system, direction and settings. Use it to follow \
+             their system, direction and settings (settings: false leaves all settings out). Use it to follow \
              a message through the iFlow, then run the steps in that order with run_flow_step, run_groovy, run_xslt and \
              validate_xsd, passing each result on with messageFrom.",
             diagram, &[], Effect::ReadOnly),
@@ -381,6 +384,16 @@ fn dispatch(server: &Server, name: &str, args: &Args) -> Result<Value, String> {
         "open_project" => files::open_project(server, args).and_then(|created| {
             let mut info = project_info(server, &Args::new())?;
             info.as_object_mut().unwrap().remove("runtimes"); // the server's, the same in every project
+            // A package: only each iFlow's number of steps; project_info names them, with iflow in full.
+            if let Some(iflows) = info.get_mut("iflows").and_then(Value::as_array_mut) {
+                for i in iflows.iter_mut() {
+                    let n = i["steps"].as_array().map_or(0, Vec::len);
+                    i.as_object_mut().unwrap().remove("steps");
+                    i["stepCount"] = json!(n);
+                }
+                info["summary"] = json!("Several iFlows, each with its number of runnable steps. project_info lists \
+                    each iFlow's steps by name and type; project_info with iflow gives one iFlow's steps in full and its files.");
+            }
             info["created"] = json!(created);
             Ok(info)
         }),
@@ -767,7 +780,7 @@ fn iflow_diagram(server: &Server, args: &Args) -> Result<Value, String> {
     if let Some(e) = model["error"].as_str() {
         return Err(format!("The iFlow {} could not be read: {e}", model["iflow"]));
     }
-    Ok(iflowmodel::diagram(model))
+    Ok(iflowmodel::diagram(model, args.get("settings").and_then(Value::as_bool) != Some(false)))
 }
 
 fn run_xslt(server: &Server, args: &Args) -> Result<Value, String> {

@@ -504,6 +504,17 @@ fn tool_result(tool: &str, v: Value) -> Value {
             return json!({ "content": [{ "type": "text", "text": message }], "isError": true });
         }
     };
+    // A file's text as itself, not as an escaped JSON string: the model reads a script or a mapping as written. The
+    // rest of the result (path, lines, functions) follows as JSON; structuredContent holds it all.
+    if tool == "read_file" {
+        if let Some(file) = v.get("content").and_then(Value::as_str) {
+            let mut meta = v.clone();
+            meta.as_object_mut().unwrap().remove("content");
+            let meta = serde_json::to_string_pretty(&meta).unwrap_or_default();
+            return json!({ "content": [{ "type": "text", "text": file }, { "type": "text", "text": meta }],
+                "structuredContent": v, "isError": false });
+        }
+    }
     json!({ "content": [{ "type": "text", "text": text }], "structuredContent": v, "isError": false })
 }
 

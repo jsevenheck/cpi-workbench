@@ -230,6 +230,7 @@ schemas/*.xsd, inputs/*.xml|json|csv, platform/*.json. Folders are created.")),
 Message Mapping and platform service methods the Groovy engines offer. platform: the formats of the mocked platform/ files \
 (value mappings, secure store, partner directory, keystore, number ranges). fidelity: what is simulated and verified against \
 CPI, per step type, and what is not." })),
+        ("step", json!({ "type": "string", "description": "With topic fidelity: only the rows for this step (e.g. router, contentModifier, groovy, xslt, splitter), not the whole page." })),
     ]);
 
     vec![
@@ -322,7 +323,7 @@ CPI, per step type, and what is not." })),
             diagram, &[], Effect::ReadOnly),
         tool("reference", "Simulator reference",
             "What the simulator offers, generated from its sources: the Script API (script-api), the platform/ data formats \
-             (platform) and what is verified against CPI (fidelity). Read it before writing a script that uses \
+             (platform) and what is verified against CPI (fidelity; with step only that step's rows). Read it before writing a script that uses \
              services or mapping functions.",
             reference, &["topic"], Effect::ReadOnly),
     ]
@@ -355,8 +356,9 @@ pub fn call(server: &Server, name: &str, args: &Args) -> Result<Value, String> {
     let mut result = dispatch(server, name, &args)?;
     // A run that produced a message keeps it under a runId; long bodies come back shortened.
     if runs_step && result["ok"] != false && result["valid"] != false {
-        let input = runs::Message::from_output(&args[RESOLVED_INPUT])
+        let mut input = runs::Message::from_output(&args[RESOLVED_INPUT])
             .unwrap_or_else(|| runs::Message::text("", json!([]), json!([])));
+        input.body_class = input_class(server, &args);
         keep_run(server, name, &input, &mut result);
     }
     if args.get("brief").and_then(Value::as_bool) == Some(true) {
@@ -412,7 +414,15 @@ fn dispatch(server: &Server, name: &str, args: &Args) -> Result<Value, String> {
         "import_iflow" => files::import_iflow(server, args),
         "iflow_where_used" => where_used(server, args),
         "iflow_diagram" => iflow_diagram(server, args),
-        "reference" => Ok(json!({ "topic": str_arg(args, "topic"), "text": reference::topic(str_arg(args, "topic").unwrap_or_default())? })),
+        "reference" => {
+            let topic = str_arg(args, "topic").unwrap_or_default();
+            let text = match str_arg(args, "step") {
+                Some(step) if topic == "fidelity" => reference::fidelity_for(step)?,
+                Some(_) => return Err("step goes with topic fidelity.".into()),
+                None => reference::topic(topic)?,
+            };
+            Ok(json!({ "topic": topic, "text": text }))
+        }
         _ => Err(format!("Unknown tool: {name}")),
     }
 }
@@ -583,7 +593,16 @@ fn read_body(server: &Server, path: &str) -> Result<runs::Message, String> {
 fn read_bytes(server: &Server, path: &str) -> Result<runs::Message, String> {
     let r = engine_call(server, file_runtime(server)?, "file.read", json!({ "path": path, "binary": true }))?;
     Ok(runs::Message { body: String::new(), body_base64: Some(r["contentBase64"].as_str().unwrap_or_default().to_string()),
-        headers: json!([]), properties: json!([]) })
+        headers: json!([]), properties: json!([]), body_class: None })
+}
+
+/// The class the input's body has after the step `messageFrom` names, when this call keeps that body (no body or
+/// bodyPath of its own): a Groovy step's InputStreamCache stays one through steps that leave the body as it is.
+fn input_class(server: &Server, args: &Args) -> Option<String> {
+    if args.contains_key("body") || args.contains_key("bodyPath") {
+        return None;
+    }
+    server.runs().message(str_arg(args, "messageFrom")?).ok()?.body_class
 }
 
 /// The messages of `messagesFrom`, as the call resolved them before the step (`call`), or now.
@@ -804,11 +823,19 @@ fn run_groovy(server: &Server, args: &Args) -> Result<Value, String> {
         (None, Some(text)) => installed_or(server, api_runtime(text), GROOVY_RUNTIMES),
         (None, None) => installed_or(server, api_runtime(&read_file(server, str_arg(args, "scriptPath").unwrap_or_default())?), GROOVY_RUNTIMES),
     };
+    // Without bodyType, the body keeps the type the step before handed it on as (a stream after a script that read
+    // one from a tenant's HTTPS sender, through a Content Modifier that left the body as it was).
+    let inherited = input_class(server, args).and_then(|c| match c.as_str() {
+        c if c.contains("InputStream") => Some("InputStream"),
+        "[B" => Some("byte[]"),
+        _ => None,
+    });
+    let body_type = str_arg(args, "bodyType").or(inherited).unwrap_or("String");
     let params = json!({
         "script": script,
         "function": str_arg(args, "function").unwrap_or("processData"),
         "input": message(server, args)?,
-        "options": { "bodyType": str_arg(args, "bodyType").unwrap_or("String") },
+        "options": { "bodyType": body_type },
         "args": args.get("args").cloned().unwrap_or(json!([])),
     });
     let mut r = on_runtimes(server, &pick(args, "runtime", GROOVY_RUNTIMES, detected), "groovy.run", params)?;
@@ -817,7 +844,7 @@ fn run_groovy(server: &Server, args: &Args) -> Result<Value, String> {
         Some(rs) => rs.iter_mut().map(|x| &mut x["result"]).collect::<Vec<_>>(),
         None => vec![&mut r],
     };
-    let as_string = str_arg(args, "bodyType").is_none_or(|t| t == "String");
+    let as_string = body_type == "String";
     for one in runs {
         if let Some(f) = one.as_object_mut().and_then(|o| o.remove("functions")) {
             one["mappingFunctions"] = f;
@@ -835,6 +862,10 @@ InputStreamCache (reference fidelity, Stream body)." }));
     }
     if str_arg(args, "runtime").is_none() {
         r["runtime"] = json!(detected);
+    }
+    if str_arg(args, "bodyType").is_none() && inherited.is_some() {
+        r["bodyTypeFrom"] = json!(format!("bodyType {body_type}: the step that messageFrom names handed the body on as \
+            a stream or bytes, and the steps since left it as it was. Give bodyType to choose another."));
     }
     Ok(r)
 }

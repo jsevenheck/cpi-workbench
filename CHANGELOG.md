@@ -37,6 +37,13 @@ of its version.
   configuration, and attachments (also the message log's) by name and size, for steps run one after another. A script that fails on a String body calling a method with it
   gets a hint to try `bodyType: InputStream`. The tool descriptions also explain `bodyUnchanged`, and a Router's result explains its route
   statuses (`statusNote`).
+- **MCP: the body's type travels with the message.** Without `bodyType`, `run_groovy` gives a message from
+  `messageFrom` the type a script handed it on as, while later steps left the body as it was: a stream stays a
+  stream through a Content Modifier with an empty body (`bodyTypeFrom` says so).
+- **MCP: smaller answers.** `reference` with `topic: fidelity` takes `step` for that step's rows only, and
+  `read_file` returns a file's text as its own content block, as written, instead of inside escaped JSON.
+- **A Groovy run on another Java than 21 warns.** A development build starts the engines on the system's Java; a
+  tenant runs Groovy scripts on Java 21 (F48), and JDK-dependent output can differ.
 - **MCP: a script's functions.** `read_file` on a Groovy script lists the functions it declares, read from its
   text as the Groovy tab does (nothing runs), and `project_info` marks a script step whose function the script
   does not declare (`functionFound: false`), as does `import_iflow`. A run's list of Message Mapping functions is

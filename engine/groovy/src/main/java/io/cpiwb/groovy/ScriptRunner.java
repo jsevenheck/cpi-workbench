@@ -87,6 +87,10 @@ public final class ScriptRunner {
         Platform platform = Platform.fromJson(platformData(req, baseDir), baseDir);
         Platform.setCurrent(platform);
         lint(source, apiVersion, diags);
+        Diagnostic java = javaVersion(Runtime.version().feature());
+        if (java != null) {
+            diags.add(java);
+        }
 
         // ---- compile (cached by source, name and classpath)
         List<String> classpath = new ArrayList<>();
@@ -433,6 +437,16 @@ public final class ScriptRunner {
             sb.insert(0, "Script_");
         }
         return sb.toString();
+    }
+
+    /**
+     * A warning when the engine runs on another Java than a tenant's 21 (F48), as a development build does on the
+     * system's Java; null on Java 21.
+     */
+    static Diagnostic javaVersion(int feature) {
+        return feature == 21 ? null : Diagnostic.warning("This engine runs on Java " + feature + "; a tenant runs Groovy "
+                + "scripts on Java 21 (F48), so behaviour that depends on the JDK (such as XmlUtil.serialize, F25, or date "
+                + "and number formats) can differ. Set JAVA_HOME to a Java 21 for a like-for-like run.");
     }
 
     /** The script's own public instance methods with one parameter: what a Groovy Script step could call. */

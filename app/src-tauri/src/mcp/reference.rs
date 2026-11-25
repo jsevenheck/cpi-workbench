@@ -50,6 +50,54 @@ pub fn topic(name: &str) -> Result<String, String> {
     }
 }
 
+/// The steps fidelity.md's rows name in their *Applies to* column, as `step` filters by.
+fn fidelity_cell(row: &str) -> Option<Vec<&str>> {
+    let cells: Vec<&str> = row.split('|').collect();
+    (row.starts_with("| ") && cells.len() > 4).then(|| cells[2].split(',').map(str::trim).filter(|s| !s.is_empty()).collect())
+}
+
+/// docs/fidelity.md cut to the rows for one step (`router`, `groovy`, …), with their sections' headings and table
+/// headers: the whole page is long for one question.
+pub fn fidelity_for(step: &str) -> Result<String, String> {
+    let lines: Vec<&str> = FIDELITY.lines().collect();
+    let mut known: Vec<&str> = Vec::new();
+    let (mut out, mut heading, mut shown) = (String::new(), "", "");
+    let mut i = 0;
+    while i < lines.len() {
+        if lines[i].starts_with('#') {
+            heading = lines[i];
+        }
+        // A table: its header, the separator, then rows.
+        if lines[i].starts_with("| ") && lines.get(i + 1).is_some_and(|l| l.starts_with("|---")) {
+            let start = i;
+            i += 2;
+            let mut rows = Vec::new();
+            while i < lines.len() && lines[i].starts_with("| ") {
+                let steps = fidelity_cell(lines[i]).unwrap_or_default();
+                for s in &steps {
+                    if !known.contains(s) { known.push(s); }
+                }
+                if steps.contains(&step) { rows.push(lines[i]); }
+                i += 1;
+            }
+            if !rows.is_empty() {
+                if heading != shown {
+                    out.push_str(&format!("\n{heading}\n\n"));
+                    shown = heading;
+                }
+                out.push_str(&format!("{}\n{}\n{}\n", lines[start], lines[start + 1], rows.join("\n")));
+            }
+            continue;
+        }
+        i += 1;
+    }
+    if out.is_empty() {
+        known.retain(|s| *s != "Applies to");
+        return Err(format!("No fidelity rows for '{step}'. The steps: {}.", known.join(", ")));
+    }
+    Ok(format!("Fidelity rows for {step} (docs/fidelity.md; Basis: Documented, Tenant, Assumption or Not supported):\n{out}"))
+}
+
 /// A Markdown section from its heading to the next heading of the same or a higher level.
 pub fn section(md: &str, heading: &str) -> Option<String> {
     let level = heading.chars().take_while(|c| *c == '#').count();

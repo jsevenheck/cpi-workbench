@@ -545,6 +545,13 @@ class ScriptRunnerTest {
         assertEquals("8", entry(r, "properties", "size").get("value"));
     }
 
+    /** Another Java than a tenant's 21 is named in a warning; the test JVM may be either. */
+    @Test
+    void anotherJavaThanATenantsIsNamed() {
+        assertEquals(null, ScriptRunner.javaVersion(21));
+        assertTrue(ScriptRunner.javaVersion(25).getMessage().contains("Java 25"));
+    }
+
     /** A property with the value null: Camel keeps none (Exchange.setProperty removes it), so it is left out with a warning. */
     @Test
     void aNullPropertyIsLeftOutAsCamelDoes() throws Exception {

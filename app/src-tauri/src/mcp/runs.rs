@@ -32,6 +32,9 @@ pub struct Message {
     /// Rows as the engines take and give them: [{name, value, type}].
     pub headers: Value,
     pub properties: Value,
+    /// The Java class a Groovy step handed the body on as (its output's `bodyType`), kept while later steps leave the
+    /// body as it is; `run_groovy` takes it as the default body type. Not sent to the engines.
+    pub body_class: Option<String>,
 }
 
 impl Message {
@@ -45,15 +48,16 @@ impl Message {
             body_base64,
             headers: o.get("headers").filter(|v| v.is_array()).cloned().unwrap_or(json!([])),
             properties: o.get("properties").filter(|v| v.is_array()).cloned().unwrap_or(json!([])),
+            body_class: None,
         })
     }
 
     pub fn text(body: &str, headers: Value, properties: Value) -> Message {
-        Message { body: body.to_string(), body_base64: None, headers, properties }
+        Message { body: body.to_string(), body_base64: None, headers, properties, body_class: None }
     }
 
     pub fn with_body(&self, body: &str) -> Message {
-        Message { body: body.to_string(), body_base64: None, ..self.clone() }
+        Message { body: body.to_string(), body_base64: None, body_class: None, ..self.clone() }
     }
 
     /// The message as the engines take it: `body`, or `bodyBase64` for bytes.
@@ -162,7 +166,10 @@ pub fn produced(tool: &str, input: &Message, result: &Value) -> Produced {
     if let Some(runs) = result.get("runs").and_then(Value::as_array) {
         // runtime: both. Each runtime's output by name; the first is the run's message.
         for r in runs.iter().filter(|r| r["result"]["ok"] != false) {
-            if let (Some(rt), Some(m)) = (r["runtime"].as_str(), Message::from_output(&r["result"]["output"])) {
+            if let (Some(rt), Some(mut m)) = (r["runtime"].as_str(), Message::from_output(&r["result"]["output"])) {
+                if tool == "run_groovy" {
+                    m.body_class = r["result"]["output"]["bodyType"].as_str().map(str::to_string);
+                }
                 p.main.get_or_insert_with(|| m.clone());
                 p.parts.push((rt.to_string(), m));
             }
@@ -172,14 +179,26 @@ pub fn produced(tool: &str, input: &Message, result: &Value) -> Produced {
         }
         return p;
     }
+    // A step that leaves the body as it is hands it on as the same object, so its class stays (a Content Modifier
+    // with an empty body: fidelity.md, Content Modifier rows, F38).
+    let keep_class = |mut m: Message| {
+        if m.body == input.body && m.body_base64 == input.body_base64 {
+            m.body_class = input.body_class.clone();
+        }
+        m
+    };
     match tool {
-        "run_xslt" | "run_groovy" => p.main = Message::from_output(&result["output"]),
+        "run_xslt" => p.main = Message::from_output(&result["output"]),
+        "run_groovy" => p.main = Message::from_output(&result["output"]).map(|mut m| {
+            m.body_class = result["output"]["bodyType"].as_str().map(str::to_string);
+            m
+        }),
         // The XML Validator and the Router pass the message on unchanged.
         "validate_xsd" => p.main = Some(input.clone()),
         "run_flow_step" => match result["step"]["type"].as_str().unwrap_or_default() {
             // The Message Digest's output is the input with its header; the Encoder's and Decoder's may be bytes,
             // and ZIP sets CamelFileName.
-            "contentModifier" | "messageDigest" | "encoder" | "decoder" => p.main = Message::from_output(&result["output"]),
+            "contentModifier" | "messageDigest" | "encoder" | "decoder" => p.main = Message::from_output(&result["output"]).map(keep_class),
             "router" => p.main = Some(input.clone()),
             "splitter" => {
                 for (i, m) in result["messages"].as_array().into_iter().flatten().enumerate() {
@@ -354,7 +373,7 @@ mod tests {
     fn oversized_run_does_not_get_a_handle_or_evict_a_previous_run() {
         let runs = Runs::default();
         let id = runs.keep(Produced { main: Some(msg("keep me")), parts: vec![] }).unwrap().unwrap();
-        let large = Message { body: "x".repeat(MAX_BYTES), body_base64: None, headers: json!([]), properties: json!([]) };
+        let large = Message { body: "x".repeat(MAX_BYTES), body_base64: None, headers: json!([]), properties: json!([]), body_class: None };
         assert!(runs.keep(Produced { main: Some(large), parts: vec![] }).unwrap_err().contains("64 MiB"));
         assert_eq!(runs.message(&id).unwrap().body, "keep me");
     }

@@ -322,6 +322,12 @@ fn prompts_list_and_get() {
 /// The reference is generated from the sources; renaming a doc section or a Java class must not empty it.
 #[test]
 fn reference_topics_come_from_the_sources() {
+    // fidelity for one step: its rows with their headings and table headers, not the whole page.
+    let router = reference::fidelity_for("router").unwrap();
+    assert!(router.contains("| Router | router |") && router.contains("| Area | Applies to |") && !router.contains("| Groovy versions |"), "{router}");
+    let e = reference::fidelity_for("nope").unwrap_err();
+    assert!(e.contains("router") && e.contains("groovy") && !e.contains("Applies to"), "{e}");
+    assert!(Call(&bare()).err("reference", json!({ "topic": "platform", "step": "router" })).contains("topic fidelity"));
     let api = reference::topic("script-api").unwrap();
     for member in ["`Object getBody()`", "`void setHeader(String name, Object value)`", "`void resetBodyStream()`",
         "`MessageLog getMessageLog(Object message)`", "`void addValue(Object value)`: Appends a value.",
@@ -537,6 +543,22 @@ fn tools_run_on_the_engines() {
     let both = c.ok("run_xslt", json!({ "runtime": "both", "body": "<a/>", "headers": { "h": "1" }, "brief": true,
         "mapping": "<xsl:stylesheet version='2.0' xmlns:xsl='http://www.w3.org/1999/XSL/Transform'><xsl:template match='/'><b/></xsl:template></xsl:stylesheet>" }));
     assert!(both["runs"][0]["result"].get("engine").is_none(), "{both}");
+    // The body's type travels with the message: a stream stays a stream through a Content Modifier that leaves the
+    // body as it is, and the next script gets it without bodyType; a script that sets a String ends it.
+    let read = "def processData(m) { m.setProperty('cls', m.getBody().getClass().getSimpleName()); m }";
+    let s1 = c.ok("run_groovy", json!({ "body": "{}", "bodyType": "InputStream", "runtime": "groovy-1.x", "script": read }));
+    let cm1 = c.ok("run_flow_step", json!({ "messageFrom": s1["runId"], "step": { "type": "contentModifier", "config": {
+        "properties": [{ "action": "Create", "name": "p", "type": "constant", "value": "1" }] } } }));
+    let s2 = c.ok("run_groovy", json!({ "messageFrom": cm1["runId"], "runtime": "groovy-1.x", "script": read }));
+    let cls = |r: &Value| r["output"]["properties"].as_array().unwrap().iter().find(|p| p["name"] == "cls").unwrap()["value"].clone();
+    assert_eq!(cls(&s2), "InputStreamCache", "{s2}");
+    assert!(s2["bodyTypeFrom"].is_string(), "{s2}");
+    let set = c.ok("run_groovy", json!({ "messageFrom": s2["runId"], "runtime": "groovy-1.x",
+        "script": "def processData(m) { m.setBody('{\"a\":1}'); m }" }));
+    let s3 = c.ok("run_groovy", json!({ "messageFrom": set["runId"], "runtime": "groovy-1.x", "script": read }));
+    assert!(cls(&s3) == "String" && s3.get("bodyTypeFrom").is_none(), "{s3}");
+    let own = c.ok("run_groovy", json!({ "messageFrom": cm1["runId"], "body": "x", "runtime": "groovy-1.x", "script": read }));
+    assert_eq!(cls(&own), "String", "a body given in the call is text: {own}");
     // brief gives the message log's attachments by name and size: a logging script attaches the whole body.
     let logged = c.ok("run_groovy", json!({ "body": "<a>payload</a>", "brief": true, "runtime": "groovy-1.x",
         "script": "def processData(m) { messageLogFactory.getMessageLog(m).addAttachmentAsString('Payload', m.getBody(String), 'text/plain'); m }" }));
@@ -555,6 +577,10 @@ fn tools_run_on_the_engines() {
     assert_eq!(as_stream["ok"], true, "{as_stream}");
     // Reading a script lists its functions, as the Groovy tab does when it opens one.
     let script = c.ok("read_file", json!({ "path": "scripts/mapping-functions.groovy" }));
+    // The file's text comes as its own content block, as written; the rest as JSON beside it.
+    let blocks = tool_result("read_file", script.clone())["content"].clone();
+    assert_eq!(blocks[0]["text"], script["content"], "{blocks}");
+    assert!(blocks[1]["text"].as_str().is_some_and(|m| m.contains("\"functions\"") && !m.contains("\"content\"")), "{blocks}");
     let fns: Vec<&str> = script["functions"].as_array().unwrap().iter().map(|f| f["signature"].as_str().unwrap()).collect();
     assert!(fns.contains(&"getHeader(String, MappingContext)"), "{script}");
     assert!(c.ok("read_file", json!({ "path": "tests/standard-order/input.xml" })).get("functions").is_none());

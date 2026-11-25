@@ -3,7 +3,7 @@ title: "The MCP server mirrors the app: a workspace of projects, and Where used 
 author: Claude
 date: 2026-11-24
 branch: claude/optimistic-dijkstra-ek2iek
-cost: { minutes: 76, tokens: 985843 }
+cost: { minutes: 106, tokens: 2413693 }
 id: l-8f03408f
 scope: repo
 status: active
@@ -34,6 +34,11 @@ touches:
 * `brief` (run_xslt, run_groovy, run_flow_step) keeps only output headers and properties that differ from the step's input. It compares with the resolved input, not with `changes`, because Encoder, Decoder and Message Digest results have no `changes`.
 * project_info for a package groups steps per iFlow (name, type): ids like CallActivity_1 repeat in every iFlow.
 * A property of type null: Camel 3.14.7's AbstractExchange.setProperty removes the property for a null value (bytecode checked), so the engines set properties through it and warn. Before, putAll into Camel's ConcurrentHashMap threw a bare NullPointerException. Headers may stay null.
+* A chain script (stream) -> Content Modifier (empty body) -> script turned the stream into a String, unlike CPI where the CM leaves the body object alone (F38 assumption). The run store now keeps the body class a Groovy step handed on (output bodyType) while later steps leave the body text unchanged; run_groovy without bodyType inherits it (bodyTypeFrom says so).
+* The class is not sent to the engines: flow.rs passes the input message into engine params, and the flow-parity fixtures compare those params exactly.
+* The user's dev build ran the engines on the system's Java 25; Groovy runs now warn on any Java but 21 (F48). For Claude Desktop the JRE comes from the client's environment, not the terminal that started tauri dev: set JAVA_HOME in the server's "env" in claude_desktop_config.json.
+
+In the code: runs.rs Message.body_class and produced(); tools.rs input_class and run_groovy; ScriptRunner.javaVersion; reference.rs fidelity_for.
 
 ## Tried and ruled out
 * open_project with any path: the project boundary would be gone. MCP roots: not checked in Claude Desktop, and no less configuration.

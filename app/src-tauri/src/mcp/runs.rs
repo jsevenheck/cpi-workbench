@@ -287,6 +287,19 @@ pub fn brief(result: &mut Value, input: &Value) {
         }
         out.remove("encoding");
     }
+    // Attachments by name and size: a logging script often attaches the whole body, which the output holds already.
+    let attachments = |list: Option<&mut Value>| {
+        for a in list.and_then(Value::as_array_mut).into_iter().flatten().filter_map(Value::as_object_mut) {
+            for key in ["content", "contentBase64"] {
+                if let Some(c) = a.remove(key) {
+                    let size = c.as_str().map_or(0, |t| if key == "content" { t.chars().count() } else { t.len() / 4 * 3 });
+                    a.insert(if key == "content" { "chars" } else { "bytes" }.into(), json!(size));
+                }
+            }
+        }
+    };
+    attachments(o.get_mut("mpl").and_then(|m| m.get_mut("attachments")));
+    attachments(o.get_mut("attachments"));
     // The step's configuration as it ran: the agent gave it or read it in project_info.
     if let Some(step) = o.get_mut("step").and_then(Value::as_object_mut) {
         step.remove("config");
@@ -298,7 +311,9 @@ pub fn brief(result: &mut Value, input: &Value) {
             m.remove("properties");
         }
     }
-    o.insert("brief".into(), json!("Shortened (brief): only headers and properties that differ from the input are shown."));
+    o.insert("brief".into(), json!("Shortened (brief): only headers and properties that differ from the input are shown; \
+        the body is in output.body (bodyUnchanged when the step left it as it was), attachments by name and size. Run \
+        without brief for everything."));
 }
 
 /// Rows of `over` replace the rows of `base` with the same name; the others are added.

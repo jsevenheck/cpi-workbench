@@ -515,6 +515,7 @@ fn tools_run_on_the_engines() {
     assert!(!bare.to_string().contains("\"settings\""), "settings: false leaves them out: {bare}");
     assert_eq!(bare["processes"][0]["elements"].as_array().unwrap().len(), main.len());
     assert!(main.iter().any(|e| e["again"] == true && e.get("settings").is_none()), "a meeting point is listed again, without settings");
+    assert!(d["againNote"].as_str().is_some_and(|n| n.contains("first occurrence")), "{d}");
     assert!(d["adapters"].as_array().is_some_and(|a| !a.is_empty()), "{d}");
     assert!(c.err("iflow_diagram", json!({ "iflow": "Nope" })).contains("Order_Replication"));
     // A script step's function is checked against the script's text: the fixture's step calls enrich, which
@@ -536,6 +537,12 @@ fn tools_run_on_the_engines() {
     let both = c.ok("run_xslt", json!({ "runtime": "both", "body": "<a/>", "headers": { "h": "1" }, "brief": true,
         "mapping": "<xsl:stylesheet version='2.0' xmlns:xsl='http://www.w3.org/1999/XSL/Transform'><xsl:template match='/'><b/></xsl:template></xsl:stylesheet>" }));
     assert!(both["runs"][0]["result"].get("engine").is_none(), "{both}");
+    // brief gives the message log's attachments by name and size: a logging script attaches the whole body.
+    let logged = c.ok("run_groovy", json!({ "body": "<a>payload</a>", "brief": true, "runtime": "groovy-1.x",
+        "script": "def processData(m) { messageLogFactory.getMessageLog(m).addAttachmentAsString('Payload', m.getBody(String), 'text/plain'); m }" }));
+    let att = &logged["mpl"]["attachments"][0];
+    assert!(att.get("content").is_none() && att["chars"] == 14 && att["name"] == "Payload", "{logged}");
+    assert!(logged["brief"].as_str().is_some_and(|t| t.contains("output.body")), "{logged}");
     // brief leaves the step's configuration out of a flow step's result; type and name stay.
     let routed = c.ok("run_flow_step", json!({ "body": "<a/>", "headers": { "SenderId": "ERP" }, "brief": true, "step": { "type": "router",
         "config": { "routes": [{ "name": "ERP", "expressionType": "nonxml", "condition": "${header.SenderId} = 'ERP'" }, { "name": "Other", "default": true }] } } }));

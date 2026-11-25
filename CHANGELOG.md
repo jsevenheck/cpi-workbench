@@ -34,7 +34,7 @@ of its version.
   only each iFlow's number of steps (`stepCount`, the steps the simulator runs).
 - **MCP: `brief` results.** `run_xslt`, `run_groovy` and `run_flow_step` take `brief: true`: of the output's
   headers and properties only those that differ from the input, and no engine, timing, trace or step
-  configuration, for steps run one after another. A script that fails on a String body calling a method with it
+  configuration, and attachments (also the message log's) by name and size, for steps run one after another. A script that fails on a String body calling a method with it
   gets a hint to try `bodyType: InputStream`. The tool descriptions also explain `bodyUnchanged`, and a Router's result explains its route
   statuses (`statusNote`).
 - **MCP: a script's functions.** `read_file` on a Groovy script lists the functions it declares, read from its

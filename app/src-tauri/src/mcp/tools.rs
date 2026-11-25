@@ -51,7 +51,7 @@ fn message_properties(props: &mut Map<String, Value>, headers: bool) {
         props.insert("properties".into(), values_schema("Exchange properties"));
         props.insert("brief".into(), json!({ "type": "boolean", "default": false, "description": "A shorter result for \
 running steps one after another: of the output's headers and properties only those that differ from the input \
-(added or changed; changes, where a step reports it, also names removed ones), and no engine, timing, trace, empty lists or the step's configuration. The run keeps the whole message for \
+(added or changed; changes, where a step reports it, also names removed ones), and no engine, timing, trace, empty lists or the step's configuration; attachments (also the message log's) by name and size. The run keeps the whole message for \
 messageFrom; run without brief to see all headers and properties." }));
     }
 }

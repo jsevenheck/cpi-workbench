@@ -240,7 +240,12 @@ pub fn diagram(model: &Value, with_settings: bool) -> Value {
         if with_settings && props.as_object().is_some_and(|o| !o.is_empty()) { a["settings"] = props; }
         a
     }).collect();
-    json!({ "iflow": model["iflow"], "name": model["name"], "file": model["file"], "processes": processes, "adapters": adapters })
+    let mut d = json!({ "iflow": model["iflow"], "name": model["name"], "file": model["file"], "processes": processes, "adapters": adapters });
+    if d.to_string().contains("\"again\":true") {
+        d["againNote"] = json!("An element with again: true is one where branches meet, listed a second time: what \
+            follows it is listed once, after its first occurrence.");
+    }
+    d
 }
 
 #[cfg(test)]

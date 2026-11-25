@@ -27,7 +27,8 @@ const RUNTIME_LABELS: &[(&str, &str)] = &[
 fn values_schema(what: &str) -> Value {
     json!({
         "type": "object",
-        "description": format!("{what} by name: a string value, or {{\"value\": \"...\", \"type\": \"Integer\"}} for another Java type."),
+        "description": format!("{what} by name: a string value, or {{\"value\": \"...\", \"type\": \"Integer\"}} for another Java type. \
+A property of type null is left out with a warning: Camel keeps no property with a null value."),
         "additionalProperties": {
             "anyOf": [
                 { "type": "string" },
@@ -239,7 +240,7 @@ CPI, per step type, and what is not." })),
              steps. With several iFlows (a package), iflows lists each iFlow's steps by name and type, without \
              configuration, and the iFlows' files are left out: give iflow for one iFlow's steps and files. With a workspace, also its project folders \
              (projects). Call this first.",
-            obj(vec![("iflow", json!({ "type": "string", "description": "Only this iFlow (its folder under iflows/, as listed in iflows or with each step): its steps with configuration and functionFound, and its files plus the script collection files its steps use." }))]),
+            obj(vec![("iflow", json!({ "type": "string", "description": "Only this iFlow (its folder under iflows/, as listed in iflows or with each step): its steps with configuration and functionFound, and only its own files plus the script collection files its steps use (the project's other files come without iflow). The steps are in the order the export lists them; iflow_diagram gives the flow order." }))]),
             &[], Effect::ReadOnly),
         tool("open_project", "Open or create a project in the workspace",
             "Only when the server was started with --workspace: opens one of the workspace's folders as the project the \
@@ -274,7 +275,8 @@ CPI, per step type, and what is not." })),
              (Base64, GZIP, ZIP) or Message Digest step on a message, like the \
              Flow Steps tab, from an iFlow of the project or from a config given here. Returns the output message(s), or \
              for a Router each route's result and the route taken: its runId passes the input on unchanged, as the \
-             message goes to that route's first step; run that route's steps next yourself, with messageFrom. For an iFlow's script, XSLT or XML Validator step, \
+             message goes to that route's first step; run that route's steps next yourself, with messageFrom. \
+             statusNote explains the route statuses (true, false, not evaluated, default). For an iFlow's script, XSLT or XML Validator step, \
              use run_groovy, run_xslt or validate_xsd with the step's file, function and profile from project_info. \
              An unchanged body comes back as bodyUnchanged (a Content Modifier that sets only headers, for instance), a \
              long one shortened (bodyShortened).",
@@ -652,9 +654,10 @@ fn project_info(server: &Server, args: &Args) -> Result<Value, String> {
             return Err(format!("No iFlow '{i}' under iflows/. The iFlows: {iflows:?}."));
         }
         steps.retain(|s| s["iflow"] == i);
-        // The iFlow's own files and those its steps use (a package's script collection lies beside it).
+        // Only the iFlow's own files and those its steps use (a package's script collection lies beside it); the
+        // project's other files are in project_info without iflow, which an agent has usually called already.
         let used: Vec<&Value> = steps.iter().map(|s| &s["file"]).filter(|f| f.is_string()).collect();
-        files.retain(|f| !f.as_str().unwrap_or_default().starts_with("iflows/") || under(f, i) || used.contains(&f));
+        files.retain(|f| under(f, i) || used.contains(&f));
     } else if iflows.len() > 1 {
         // A package: the steps of all its iFlows with their configuration overflow a model's context.
         // Grouped by iFlow, each step by name and type: ids such as CallActivity_1 repeat in every iFlow.

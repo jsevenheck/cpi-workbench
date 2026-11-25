@@ -601,6 +601,7 @@ fn tools_run_on_the_engines() {
     assert!(c.err("run_flow_step", json!({ "iflowStep": "Check sender", "iflow": "Other_Flow" })).contains("No iFlow step"));
     let other = c.ok("run_flow_step", json!({ "iflowStep": "Check sender", "headers": { "SenderId": "Shop" } }));
     assert_eq!(other["taken"], "Other (default route)", "{other}");
+    assert!(other["statusNote"].as_str().is_some_and(|n| n.contains("not evaluated")), "the statuses are explained: {other}");
 
     let split = c.ok("run_flow_step", json!({ "iflowStep": "Split items", "body": order }));
     let parts: Vec<Value> = split["messages"].as_array().unwrap().iter().map(|m| m["body"].clone()).collect();
@@ -713,7 +714,7 @@ fn where_used_searches_the_imported_iflows() {
     assert_eq!(steps.iter().find(|s| s["name"] == "Enrich order").unwrap()["functionFound"], false, "{one}");
     let files = one["files"].as_array().unwrap();
     assert!(files.iter().any(|f| f.as_str().unwrap().starts_with("iflows/Order_Replication/")), "{one}");
-    assert!(files.iter().all(|f| !f.as_str().unwrap().starts_with("iflows/Outbound_Orders/")), "{one}");
+    assert!(files.iter().all(|f| f.as_str().unwrap().starts_with("iflows/Order_Replication/")), "only the iFlow's own files: {one}");
     assert!(c.err("project_info", json!({ "iflow": "Nope" })).contains("Outbound_Orders"));
     // Without query or kind: the tab's overview, with each iFlow's parameters.
     let o = c.ok("iflow_where_used", json!({}));

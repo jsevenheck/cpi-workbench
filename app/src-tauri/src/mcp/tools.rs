@@ -51,7 +51,7 @@ fn message_properties(props: &mut Map<String, Value>, headers: bool) {
         props.insert("properties".into(), values_schema("Exchange properties"));
         props.insert("brief".into(), json!({ "type": "boolean", "default": false, "description": "A shorter result for \
 running steps one after another: of the output's headers and properties only those that differ from the input \
-(added or changed; changes, where a step reports it, also names removed ones), and no engine, timing, trace or empty lists. The run keeps the whole message for \
+(added or changed; changes, where a step reports it, also names removed ones), and no engine, timing, trace, empty lists or the step's configuration. The run keeps the whole message for \
 messageFrom; run without brief to see all headers and properties." }));
     }
 }
@@ -246,7 +246,9 @@ CPI, per step type, and what is not." })),
         tool("open_project", "Open or create a project in the workspace",
             "Only when the server was started with --workspace: opens one of the workspace's folders as the project the \
              other tools work in (create: true makes a new one), and returns its project_info without the runtimes; \
-             for several iFlows only each iFlow's number of steps (stepCount). \
+             for several iFlows only each iFlow's number of steps (stepCount: the steps the simulator runs, i.e. flow \
+             steps, scripts, mappings and validators; not events, Process Calls or adapter calls, so an iFlow of only \
+             those has 0). \
              Earlier runIds stay usable.",
             open, &["name"], Effect::OpensProject),
         tool("read_file", "Read a project file",
@@ -308,7 +310,8 @@ CPI, per step type, and what is not." })),
              routes are indented under it (depth + 1): a route's first element carries route (name, condition, \
              default), and the route's further elements follow it until the next element with a route at that depth; \
              each element on a route also names it (onRoute: router and route). \
-             Where branches meet, the element is listed again (again: true); a Process Call names the local process it \
+             Where branches meet, the element is listed again (again: true) without what follows it: the elements after \
+             it are listed once, at its first occurrence. A Process Call names the local process it \
              calls (calls). Each element has its type as in the editor and its settings as written in the iFlow, a Content \
              Modifier table as one object per row (cell id to text) \
              ({{parameters}} unresolved; project_info's configs, which run_flow_step runs, and iflow_where_used resolve \
@@ -391,8 +394,10 @@ fn dispatch(server: &Server, name: &str, args: &Args) -> Result<Value, String> {
                     i.as_object_mut().unwrap().remove("steps");
                     i["stepCount"] = json!(n);
                 }
-                info["summary"] = json!("Several iFlows, each with its number of runnable steps. project_info lists \
-                    each iFlow's steps by name and type; project_info with iflow gives one iFlow's steps in full and its files.");
+                info["summary"] = json!("Several iFlows, each with stepCount: the steps the simulator runs (flow steps, \
+                    scripts, mappings, validators), not events, Process Calls or adapter calls, so an iFlow of only those \
+                    has 0; iflow_diagram shows all its elements. project_info lists each iFlow's steps by name and type; \
+                    project_info with iflow gives one iFlow's steps in full and its files.");
             }
             info["created"] = json!(created);
             Ok(info)
@@ -812,9 +817,20 @@ fn run_groovy(server: &Server, args: &Args) -> Result<Value, String> {
         Some(rs) => rs.iter_mut().map(|x| &mut x["result"]).collect::<Vec<_>>(),
         None => vec![&mut r],
     };
+    let as_string = str_arg(args, "bodyType").is_none_or(|t| t == "String");
     for one in runs {
         if let Some(f) = one.as_object_mut().and_then(|o| o.remove("functions")) {
             one["mappingFunctions"] = f;
+        }
+        // A script written for a stream body fails on a String one (JsonSlurper.parse(String), for instance).
+        let string_call = one["diagnostics"].as_array().is_some_and(|ds| ds.iter().any(|d| d["message"].as_str()
+            .is_some_and(|m| m.contains("No signature of method") && (m.contains("(java.lang.String") || m.contains("(String")))));
+        if as_string && one["ok"] == false && string_call {
+            if let Some(ds) = one["diagnostics"].as_array_mut() {
+                ds.push(json!({ "severity": "info", "message": "The body reached the script as a String (bodyType String). \
+If the step follows one that hands on a stream, run it with bodyType: InputStream: a tenant's HTTPS sender hands on an \
+InputStreamCache (reference fidelity, Stream body)." }));
+            }
         }
     }
     if str_arg(args, "runtime").is_none() {

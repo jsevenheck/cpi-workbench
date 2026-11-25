@@ -31,10 +31,11 @@ of its version.
 - **MCP: packages stay readable.** For a project with several iFlows, `project_info` lists each iFlow's steps by
   name and type, without configuration, and leaves the iFlows' files out; `project_info` with `iflow` gives one
   iFlow in full, with only its own files and the script collection files its steps use. `open_project` gives
-  only each iFlow's number of steps.
+  only each iFlow's number of steps (`stepCount`, the steps the simulator runs).
 - **MCP: `brief` results.** `run_xslt`, `run_groovy` and `run_flow_step` take `brief: true`: of the output's
-  headers and properties only those that differ from the input, and no engine, timing or trace, for steps run one
-  after another. The tool descriptions also explain `bodyUnchanged`, and a Router's result explains its route
+  headers and properties only those that differ from the input, and no engine, timing, trace or step
+  configuration, for steps run one after another. A script that fails on a String body calling a method with it
+  gets a hint to try `bodyType: InputStream`. The tool descriptions also explain `bodyUnchanged`, and a Router's result explains its route
   statuses (`statusNote`).
 - **MCP: a script's functions.** `read_file` on a Groovy script lists the functions it declares, read from its
   text as the Groovy tab does (nothing runs), and `project_info` marks a script step whose function the script

@@ -287,6 +287,10 @@ pub fn brief(result: &mut Value, input: &Value) {
         }
         out.remove("encoding");
     }
+    // The step's configuration as it ran: the agent gave it or read it in project_info.
+    if let Some(step) = o.get_mut("step").and_then(Value::as_object_mut) {
+        step.remove("config");
+    }
     // A Splitter's messages carry the input's headers and properties unchanged.
     if let Some(ms) = o.get_mut("messages").and_then(Value::as_array_mut) {
         for m in ms.iter_mut().filter_map(Value::as_object_mut) {

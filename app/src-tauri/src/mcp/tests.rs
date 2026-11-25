@@ -536,6 +536,16 @@ fn tools_run_on_the_engines() {
     let both = c.ok("run_xslt", json!({ "runtime": "both", "body": "<a/>", "headers": { "h": "1" }, "brief": true,
         "mapping": "<xsl:stylesheet version='2.0' xmlns:xsl='http://www.w3.org/1999/XSL/Transform'><xsl:template match='/'><b/></xsl:template></xsl:stylesheet>" }));
     assert!(both["runs"][0]["result"].get("engine").is_none(), "{both}");
+    // brief leaves the step's configuration out of a flow step's result; type and name stay.
+    let routed = c.ok("run_flow_step", json!({ "body": "<a/>", "headers": { "SenderId": "ERP" }, "brief": true, "step": { "type": "router",
+        "config": { "routes": [{ "name": "ERP", "expressionType": "nonxml", "condition": "${header.SenderId} = 'ERP'" }, { "name": "Other", "default": true }] } } }));
+    assert!(routed["step"].get("config").is_none() && routed["step"]["type"] == "router" && routed["taken"] == "ERP", "{routed}");
+    // A script written for a stream body, run on a String one: a hint names bodyType InputStream.
+    let json_script = "import groovy.json.JsonSlurper\ndef processData(m) { m.setProperty('t', new JsonSlurper().parse(m.getBody()).type); m }";
+    let as_string = c.ok("run_groovy", json!({ "body": "{\"type\":\"a\"}", "script": json_script }));
+    assert!(as_string["ok"] == false && as_string["diagnostics"].to_string().contains("bodyType: InputStream"), "{as_string}");
+    let as_stream = c.ok("run_groovy", json!({ "body": "{\"type\":\"a\"}", "bodyType": "InputStream", "script": json_script }));
+    assert_eq!(as_stream["ok"], true, "{as_stream}");
     // Reading a script lists its functions, as the Groovy tab does when it opens one.
     let script = c.ok("read_file", json!({ "path": "scripts/mapping-functions.groovy" }));
     let fns: Vec<&str> = script["functions"].as_array().unwrap().iter().map(|f| f["signature"].as_str().unwrap()).collect();
@@ -832,6 +842,7 @@ fn a_workspace_switches_and_creates_projects() {
         .map(|i| (i["iflow"].as_str().unwrap().to_string(), i["stepCount"].as_u64().unwrap())).collect();
     assert!(counts.contains(&("Outbound_Orders".into(), 0)) && counts.iter().any(|(i, n)| i == "Order_Replication" && *n > 5), "{opened}");
     assert!(opened["iflows"][0].get("steps").is_none() && opened.get("iflowSteps").is_none(), "{opened}");
+    assert!(opened["summary"].as_str().is_some_and(|t| t.contains("not events, Process Calls or adapter calls")), "{opened}");
     assert!(c.ok("project_info", json!({}))["iflows"][0]["steps"].is_array());
     engines.shutdown();
     let _ = std::fs::remove_dir_all(&root);

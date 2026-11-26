@@ -6,6 +6,8 @@ of its version.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-26
+
 ### Added
 
 - **MCP: a workspace of projects.** `cpi-workbench mcp --workspace <folder>` serves the folders inside that folder,
@@ -567,7 +569,8 @@ First public release.
   supported.
 - The installers and engine jars include the licence texts and notices of the bundled components.
 
-[Unreleased]: https://github.com/jsevenheck/cpi-workbench/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/jsevenheck/cpi-workbench/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/jsevenheck/cpi-workbench/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/jsevenheck/cpi-workbench/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/jsevenheck/cpi-workbench/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/jsevenheck/cpi-workbench/compare/v0.4.0...v0.5.0

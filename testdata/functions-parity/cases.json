@@ -589,6 +589,27 @@
           "signature": "x1_y(String)"
         }
       ]
+    },
+    {
+      "name": "byte order mark (whitespace to JavaScript's \\s)",
+      "script": "﻿def processData(m) { m }\ndef String﻿trim(String a) { a }\n",
+      "expected": [
+        {
+          "name": "processData",
+          "params": [
+            {
+              "name": "m",
+              "type": "",
+              "kind": "value"
+            }
+          ],
+          "kind": "step",
+          "parameters": [
+            "String"
+          ],
+          "signature": "processData(String)"
+        }
+      ]
     }
   ]
 }

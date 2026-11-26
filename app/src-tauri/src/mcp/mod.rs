@@ -393,7 +393,7 @@ impl Server {
         self.workspace.as_deref()
     }
 
-    /// Makes `dir` the open project. The caller holds no `switching` guard; this waits for running tool calls.
+    /// Makes `dir` the open project. The caller holds the `switching` write guard, so no tool call is running.
     pub fn set_project(&self, dir: PathBuf) {
         *self.project.lock().unwrap() = Some(dir);
     }

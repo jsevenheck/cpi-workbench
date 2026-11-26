@@ -134,7 +134,8 @@ pub fn script_functions(src: &str) -> Vec<Value> {
     let depth = depths(&code);
     let mut out: Vec<Value> = Vec::new();
     // [modifiers] (def | Type) name ( params ) [throws ...] {
-    let decl = re(&DECL, r"(^|[\s;}])((?:[A-Za-z_$][0-9A-Za-z_$.]*(?:<[^>{};]*>)?(?:\[\])*[ \t]+)+)([A-Za-z_$][0-9A-Za-z_$]*)\s*\(([^()]*)\)\s*(?:throws\s+[0-9A-Za-z_$.,\s]+)?\{");
+    // JavaScript's \s also matches U+FEFF (a byte order mark), Rust's does not.
+    let decl = re(&DECL, r"(^|[\s\x{FEFF};}])((?:[A-Za-z_$][0-9A-Za-z_$.]*(?:<[^>{};]*>)?(?:\[\])*[ \t]+)+)([A-Za-z_$][0-9A-Za-z_$]*)[\s\x{FEFF}]*\(([^()]*)\)[\s\x{FEFF}]*(?:throws[\s\x{FEFF}]+[0-9A-Za-z_$.,\s\x{FEFF}]+)?\{");
     for m in decl.captures_iter(&code) {
         if depth[m.get(2).unwrap().start()] != 0 { continue; }
         let words: Vec<&str> = m[2].split_whitespace().collect();

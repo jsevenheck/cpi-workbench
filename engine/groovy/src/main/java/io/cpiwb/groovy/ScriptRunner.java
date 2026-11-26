@@ -87,10 +87,6 @@ public final class ScriptRunner {
         Platform platform = Platform.fromJson(platformData(req, baseDir), baseDir);
         Platform.setCurrent(platform);
         lint(source, apiVersion, diags);
-        Diagnostic java = javaVersion(Runtime.version().feature());
-        if (java != null) {
-            diags.add(java);
-        }
 
         // ---- compile (cached by source, name and classpath)
         List<String> classpath = new ArrayList<>();
@@ -560,6 +556,11 @@ public final class ScriptRunner {
             result.with("failedPhase", failedPhase);
         }
         platform.notes().forEach(n -> diags.add(Diagnostic.info(n)));
+        // Last, so a compile or runtime error stays the first diagnostic.
+        Diagnostic java = javaVersion(Runtime.version().feature());
+        if (java != null) {
+            diags.add(java);
+        }
         List<Object> d = new ArrayList<>();
         diags.forEach(x -> d.add(x.toJson()));
         result.with("diagnostics", d);

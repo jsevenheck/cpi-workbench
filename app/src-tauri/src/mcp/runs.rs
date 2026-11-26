@@ -179,10 +179,12 @@ pub fn produced(tool: &str, input: &Message, result: &Value) -> Produced {
         }
         return p;
     }
-    // A step that leaves the body as it is hands it on as the same object, so its class stays (a Content Modifier
-    // with an empty body: fidelity.md, Content Modifier rows, F38).
+    // A step that leaves the body as it is hands it on as the same object, so its class stays. An assumption, as
+    // for a Content Modifier with an empty body (fidelity.md, Content Modifier rows, F38); one that sets a body,
+    // even the same text, hands on that text.
+    let sets_body = !result["step"]["config"]["body"].as_str().unwrap_or_default().is_empty();
     let keep_class = |mut m: Message| {
-        if m.body == input.body && m.body_base64 == input.body_base64 {
+        if !sets_body && m.body == input.body && m.body_base64 == input.body_base64 {
             m.body_class = input.body_class.clone();
         }
         m
@@ -311,7 +313,7 @@ pub fn brief(result: &mut Value, input: &Value) {
         for a in list.and_then(Value::as_array_mut).into_iter().flatten().filter_map(Value::as_object_mut) {
             for key in ["content", "contentBase64"] {
                 if let Some(c) = a.remove(key) {
-                    let size = c.as_str().map_or(0, |t| if key == "content" { t.chars().count() } else { t.len() / 4 * 3 });
+                    let size = c.as_str().map_or(0, |t| if key == "content" { t.chars().count() } else { (t.len() / 4 * 3).saturating_sub(t.bytes().rev().take_while(|&b| b == b'=').count()) });
                     a.insert(if key == "content" { "chars" } else { "bytes" }.into(), json!(size));
                 }
             }

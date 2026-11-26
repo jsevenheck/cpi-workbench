@@ -176,11 +176,12 @@ fn settings(props: &Value) -> Value {
 }
 
 /// A Content Modifier table (`<row><cell id='Name'>…</cell>…</row>`, XML text in the export) as one object per row,
-/// cell id to text, as Where used shows a table (whereused.rs). A table whose cells have no ids stays text.
+/// cell id to text, as Where used shows a table (whereused.rs); rows without a filled cell left out. A table
+/// whose cells have no ids stays text.
 fn table(v: &Value) -> Option<Value> {
     let t = super::whereused::table_hit(s(v), "")?;
-    let rows = t["rows"].as_array()?;
-    if rows.iter().any(|r| r.as_array().is_none_or(Vec::is_empty)) {
+    let rows: Vec<&Value> = t["rows"].as_array()?.iter().filter(|r| !list(r).is_empty()).collect();
+    if rows.is_empty() {
         return None;
     }
     Some(Value::Array(rows.iter().map(|r| Value::Object(list(r).iter()
@@ -208,6 +209,10 @@ pub fn diagram(model: &Value, with_settings: bool) -> Value {
             routes.truncate(e.depth + 1);
             gateways.resize(e.depth + 1, Value::Null);
             routes.resize(e.depth + 1, Value::Null);
+            // A new walk (another start event, or an element no start reaches) is on no route.
+            if e.depth == 0 && (e.unreachable || n["kind"] == "start") {
+                routes[0] = Value::Null;
+            }
             if let Some(r) = &e.route {
                 let router = if e.depth > 0 { gateways[e.depth - 1].clone() } else { gateways[e.depth].clone() };
                 routes[e.depth] = json!({ "router": router, "route": r["name"] });
@@ -267,6 +272,24 @@ mod tests {
             assert_eq!(Value::Array(got), c["adapters"], "adapters of {}", m["iflow"]);
             let got: Map<String, Value> = list(&m["nodes"]).iter().map(|n| (s(&n["id"]).to_string(), json!(type_label(n)))).collect();
             assert_eq!(Value::Object(got), c["labels"], "labels of {}", m["iflow"]);
+        }
+    }
+
+    /// A Router with one labelled route at depth 0 puts what follows on that route; another start event and an
+    /// element no start reaches are not on it.
+    #[test]
+    fn on_route_ends_with_the_walk() {
+        let n = |id: &str, kind: &str| json!({ "id": id, "name": id, "kind": kind, "process": "P" });
+        let f = |a: &str, b: &str, name: &str| json!({ "kind": "sequence", "source": a, "target": b, "name": name });
+        let model = json!({ "processes": [{ "id": "P", "name": "P", "kind": "main" }],
+            "nodes": [n("Start1", "start"), n("Gateway", "gateway"), n("Step1", "task"), n("Start2", "start"),
+                n("Step2", "task"), n("Orphan", "task")],
+            "flows": [f("Start1", "Gateway", ""), f("Gateway", "Step1", "R1"), f("Start2", "Step2", "")] });
+        let d = diagram(&model, false);
+        let on = |id: &str| list(&d["processes"][0]["elements"]).iter().find(|e| e["id"] == id).unwrap()["onRoute"].clone();
+        assert_eq!(on("Step1"), json!({ "router": "Gateway", "route": "R1" }), "{d}");
+        for id in ["Start2", "Step2", "Orphan"] {
+            assert!(on(id).is_null(), "{id}: {d}");
         }
     }
 }

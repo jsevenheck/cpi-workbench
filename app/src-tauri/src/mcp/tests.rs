@@ -554,6 +554,10 @@ fn tools_run_on_the_engines() {
     assert_eq!(cls(&s2), "InputStreamCache", "{s2}");
     assert_eq!(cm1["output"]["bodyType"], "org.apache.camel.converter.stream.InputStreamCache", "the class handed on is shown: {cm1}");
     assert!(s2["bodyTypeFrom"].is_string(), "{s2}");
+    // A Content Modifier that sets a body hands on text, even when it is the same text.
+    let cm2 = c.ok("run_flow_step", json!({ "messageFrom": s1["runId"], "step": { "type": "contentModifier",
+        "config": { "bodyType": "constant", "body": "{}" } } }));
+    assert_eq!(cls(&c.ok("run_groovy", json!({ "messageFrom": cm2["runId"], "runtime": "groovy-1.x", "script": read }))), "String", "{cm2}");
     let set = c.ok("run_groovy", json!({ "messageFrom": s2["runId"], "runtime": "groovy-1.x",
         "script": "def processData(m) { m.setBody('{\"a\":1}'); m }" }));
     let s3 = c.ok("run_groovy", json!({ "messageFrom": set["runId"], "runtime": "groovy-1.x", "script": read }));
@@ -819,16 +823,18 @@ fn open_project_stays_inside_the_workspace() {
     assert_eq!(info["projects"], json!(["billing", "Order"]), "{info}");
     assert!(info["project"].is_null(), "{info}");
     assert!(c.err("read_file", json!({ "path": "a.xml" })).contains("open_project opens"));
-    for bad in ["", "..", ".", "a/b", "a\\b", "C:x", "trailing.", "../Order"] {
+    for bad in ["", "..", ".", ".git", "a/b", "a\\b", "C:x", "trailing.", "../Order"] {
         assert!(c.err("open_project", json!({ "name": bad })).contains("not a folder name"), "{bad}");
     }
     assert!(c.err("open_project", json!({ "name": "missing" })).contains("No folder 'missing'"));
     assert!(c.err("open_project", json!({ "name": "notes.txt" })).contains("No folder"));
-    #[cfg(unix)]
     {
         let outside = std::env::temp_dir().join(format!("cpiwb-mcp-ws-out-{}", std::process::id()));
         std::fs::create_dir_all(&outside).unwrap();
+        #[cfg(unix)]
         std::os::unix::fs::symlink(&outside, root.join("link")).unwrap();
+        #[cfg(windows)]
+        junction::create(&outside, root.join("link")).unwrap();
         assert!(c.err("open_project", json!({ "name": "link" })).contains("outside the workspace"));
         let _ = std::fs::remove_dir_all(&outside);
     }

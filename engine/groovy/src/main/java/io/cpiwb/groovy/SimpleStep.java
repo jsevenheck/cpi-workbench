@@ -45,15 +45,13 @@ public final class SimpleStep {
             result.with("evaluated", camel);
         }
         boolean ok = true;
+        Diagnostic dropped = null;
         try {
             if (expr.isBlank()) {
                 throw new IllegalArgumentException("Enter an expression.");
             }
             SimExchange in = SimExchange.fromJson(Json.obj(req, "input"));
-            Diagnostic dropped = nullProperties(in);
-            if (dropped != null) {
-                diags.add(dropped.toJson());
-            }
+            dropped = nullProperties(in);
             Exchange exchange = exchange(in);
             Language simple = exchange.getContext().resolveLanguage("simple");
             if (condition) {
@@ -66,6 +64,9 @@ public final class SimpleStep {
         } catch (RuntimeException e) {
             ok = false;
             diags.add(Diagnostic.error(e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage()).toJson());
+        }
+        if (dropped != null) {
+            diags.add(dropped.toJson()); // after an error: callers report the first diagnostic as the failure
         }
         return result.with("ok", ok)
                 .with("diagnostics", diags)

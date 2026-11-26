@@ -130,10 +130,12 @@ e.g. [[\"A\", \"B\"], [\"C\"]], whose entries are strings, {\"suppress\": true} 
 holds the returned value or the output queue in the same form." })),
     ]);
     message_properties(&mut groovy, true);
-    groovy.insert("bodyType".into(), json!({ "type": "string", "enum": ["String", "byte[]", "InputStream"], "default": "String",
-        "description": "The Java type of the incoming body, what message.getBody() without a class returns: String (default), \
+    groovy.insert("bodyType".into(), json!({ "type": "string", "enum": ["String", "byte[]", "InputStream"],
+        "description": "The Java type of the incoming body, what message.getBody() without a class returns: String, \
 byte[] or InputStream. InputStream gives Camel's InputStreamCache, the type a tenant's HTTPS sender handed on (reference \
-fidelity, Stream body; project_info with iflow lists an iFlow's senders); after the step it is reset, so the body passes on whole." }));
+fidelity, Stream body; project_info with iflow lists an iFlow's senders); after the step it is reset, so the body passes on whole. \
+Default: String; with messageFrom, the type a script handed the body on as when the steps after it left the body as it was \
+(a Content Modifier without a body, say; an assumption), as bodyTypeFrom in the result says." }));
     groovy.insert("runtime".into(), runtime(GROOVY_RUNTIMES, true, None,
         "groovy-1.x (Script API v1) or groovy-2.x (v2). Default: from the script's imports (com.sap.it.script.v2.api → 2.x), else 1.x. both runs the two. \
 For an iFlow's script step, give the runtime project_info lists for it."));
@@ -149,7 +151,7 @@ For an iFlow's script step, give the runtime project_info lists for it."));
     let mut xpath = obj(vec![
         ("expression", json!({ "type": "string", "description": "The XPath." })),
         ("version", json!({ "type": "string", "enum": ["1.0", "3.1"], "default": "3.1", "description": "The XPath version: 3.1 \
-(default) or 1.0, e.g. to check a Message Digest's filter, which is XPath 1.0." })),
+(default) or 1.0, e.g. to check a Message Digest's filter, which the simulator evaluates as XPath 1.0 (not verified on a tenant)." })),
         ("namespaces", ns.clone()),
     ]);
     message_properties(&mut xpath, false);
@@ -218,7 +220,7 @@ schemas/*.xsd, inputs/*.xml|json|csv, platform/*.json. Folders are created.")),
         ("parameters", json!({ "type": "boolean", "default": false, "description": "Only each iFlow's externalized parameters with their values from parameters.prop, where they are used, and which are unused or have no value." })),
     ]);
     let open = obj(vec![
-        ("name", json!({ "type": "string", "description": "A folder directly inside the workspace, as project_info lists it under projects (one folder name, no path)." })),
+        ("name", json!({ "type": "string", "description": "A folder directly inside the workspace, as project_info lists it under projects (one folder name, no path; hidden folders such as .git are refused)." })),
         ("create", json!({ "type": "boolean", "default": false, "description": "Create the folder as a new project (the standard layout with example platform/ data, as the app's Import iFlow without a project does). A folder that exists is an error." })),
     ]);
     let diagram = obj(vec![
@@ -682,9 +684,6 @@ fn project_info(server: &Server, args: &Args) -> Result<Value, String> {
     const MAX_FILES: usize = 1000;
     let mut files: Vec<Value> = listing["files"].as_array().into_iter().flatten()
         .filter(|f| f["dir"] != true).map(|f| f["path"].clone()).collect();
-    if files.len() > MAX_FILES {
-        info["filesTruncated"] = json!(files.len());
-    }
     let mut steps: Vec<Value> = engine_call(server, rt, "iflow.steps", json!({}))?["steps"].as_array().cloned().unwrap_or_default();
     // Every folder with an iFlow model, also one without runnable steps (only adapter calls).
     let mut iflows: Vec<String> = Vec::new();

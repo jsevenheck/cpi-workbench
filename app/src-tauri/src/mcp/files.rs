@@ -243,8 +243,9 @@ pub fn open_project(server: &Server, args: &Args) -> Result<bool, String> {
             --workspace <folder> to open the folders inside that folder.".into());
     };
     let name = str_arg(args, "name").unwrap_or_default();
-    // One folder name: no separators, drive or `..`; no trailing dot or space, which Windows drops from names.
-    if name.trim().is_empty() || name == "." || name == ".." || name.contains(['/', '\\', ':'])
+    // One folder name: no separators, drive or `..`; no trailing dot or space, which Windows drops from names;
+    // no hidden folder (`.git`), which project_info does not list either.
+    if name.trim().is_empty() || name.starts_with('.') || name.contains(['/', '\\', ':'])
         || name.ends_with(['.', ' ']) || name.chars().any(char::is_control) {
         return Err(format!("'{name}' is not a folder name: open_project opens only folders directly inside the \
             workspace. Give one name as project_info lists it under projects."));

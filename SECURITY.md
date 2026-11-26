@@ -11,7 +11,7 @@ not in a public issue. You should get an answer within a week.
 CPI Workbench runs locally and never connects to a tenant. Relevant reports include:
 
 - XML runs (XSLT, XSD, XPath, flow steps, converters) that read or write files outside the open project folder,
-- file operations that escape the project folder,
+- file or MCP workspace operations that escape the open project or workspace folder,
 - web pages that can drive a local engine in browser mode,
 - receiver requests that bypass import confirmation, cause automatic code execution, or bypass
   input/resource limits. The receiver is opt-in and loopback-only; any page may open a message link,

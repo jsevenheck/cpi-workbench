@@ -130,7 +130,7 @@ Why: the goal is to behave like CPI. CPI executes scripts with Groovy, converts 
 
 | Component | What it does |
 |---|---|
-| **CPI Exchange model** | Message, headers, exchange properties, attachments with Java types; one-shot stream semantics |
+| **CPI Exchange model** | Message, headers, exchange properties, attachments with Java types; stream body as Camel's `InputStreamCache`, reset after the step |
 | **Script API v1 + v2 implementations** (clean-room) | Same package/class names as SAP, so scripts run unchanged |
 | **Groovy step runner** | Loads the script with the right Groovy version, calls the configured function, captures results, maps errors to script lines |
 | **MPL emulation** | `messageLogFactory`, string properties, custom header properties, log attachments |
@@ -191,10 +191,11 @@ Reference products (GrooveBox, Contiva, go-xslt's desktop app, CPI's own simulat
 ┌───────────────────────────────┐        ┌────────────────────────────────┐
 │ cpiwb-xml (NATIVE binary)     │        │ cpiwb-groovy (JVM, one per     │
 │  CPI XSLT step, XSD, XPath,   │        │  script version)               │
-│  XPath flow steps, converters │        │  Script API v1 / v2, MPL,      │
-│  Saxon-HE 9.9 or 12           │        │  platform API mocks, Camel     │
-│  compiled with GraalVM        │        │  Simple, Content Modifier      │
-│  → no JVM at runtime          │        │  Groovy 2.4.21 | 4.0.29        │
+│  XPath flow steps, converters,│        │  Script API v1 / v2, MPL,      │
+│  Encoder / Decoder, Digest    │        │  platform API mocks, Camel     │
+│  Saxon-HE 9.9 or 12           │        │  Simple, Content Modifier      │
+│  compiled with GraalVM        │        │  Groovy 2.4.21 | 4.0.29        │
+│  → no JVM at runtime          │        │                                │
 └───────────────────────────────┘        └────────────────────────────────┘
           shared code base: engine/core (Java 17+) — JSON-RPC, project files,
           test runner, iFlow import
@@ -521,125 +522,29 @@ Usage: [iFlow import](user-guide.md#iflow-import).
 | Saving a test case from the app | — | Removed on purpose (2026-10-25): test cases are written by hand and run from the CLI. |
 | A VS Code extension | S33, S34 | A second UI to maintain; the CLI and the MCP server connect editors. |
 
-### 10.6 Release 0.6.0
+### 10.6 Decisions from 0.6.0
 
-Released on 2026-11-19 ([changelog](../CHANGELOG.md)); this section keeps the plan's decisions. Decided with the owner on 2026-11-17, after a second review of other CPI tools. Work happens on the branch
-`feature/0.6.0` in the order below; each part is finished with its tests and docs before the next starts.
-Ideas from that review that were *not* taken: test cases for flow steps, an MCP `run_tests` tool (both
-would make test cases a user feature, see P1), transactional publication of whole packages, trace
-redaction, an architecture document generator, schema / contract diffs and change-impact reports.
-The review follow-up stages and validates archives before publishing and atomically replaces the Value
-Mapping table; filesystem failures while publishing folders can still leave a partial package.
+Released on 2026-11-19 ([changelog](../CHANGELOG.md)); decided on 2026-11-17 after a second review of other CPI
+tools. Ideas from that review that were *not* taken: test cases for flow steps, an MCP `run_tests` tool (both
+would make test cases a user feature), transactional publication of whole packages, trace redaction, an
+architecture document generator, schema / contract diffs and change-impact reports. The review follow-up stages
+and validates archives before publishing and atomically replaces the Value Mapping table; filesystem failures
+while publishing folders can still leave a partial package.
 
-#### P1. Test cases are internal
-
-`case.json` test cases exist for this repository's regression tests in CI. Users test a step by running
-it in the app. The `test` command and the test runner stay; only the user-facing surface goes.
-
-1. **Split `docs/test-cases.md`.** A new user page, `docs/project-files.md` (*Project files and platform
-   data*), takes what users need: the project layout (without `tests/`), header and property types, script
-   inputs (attachments, SOAP headers, `lib/`, Java calls from XSLT), the Message Mapping function semantics
-   and *Mocked platform data*. `docs/test-cases.md` keeps the `case.json` format, the `test` command,
-   `--junit` and `expect.ignore`, retitled for contributors and linked from `docs/building.md`, not from the
-   user index.
-2. **Repoint links.** `mcp/reference.rs` reads the platform topic from the new page (its error text and
-   `mcp/tests.rs` follow); anchors in `user-guide.md`, `mcp.md`, `README.md`, `docs/README.md`,
-   `install.md` and this plan move with the sections.
-3. **User guide and install.** Remove test-case wording (Init's `tests/`, closing a case, a case's
-   attachments and `platform` object, the *test cases* bullet, "as in `case.json`"). The command-line
-   sections keep the run commands and drop `test`; `status.md` drops the *Tests and CLI* row's user claim.
-4. **App.** *Init* no longer creates `tests/` (`ProjectFiles.java`, the Sidebar tooltip). Texts that name
-   test cases (`PlatformPanel.svelte`, `QueueEditor.svelte`) are reworded. Opening a `case.json` keeps
-   loading it into its tab, unadvertised: the e2e tests and `manual-test.md` use it to load regression cases.
-5. **Release notes.** The release body in `build.yml` stops advertising test runs for the jars.
-6. **Changelog** under *Unreleased*: Init no longer creates `tests/`; test cases are documented for
-   contributors only.
-
-#### P2. UI ⇄ MCP parity tests for Flow Steps
-
-Today the Flow Steps tab (`store.svelte.ts`) and `mcp/flow.rs` build the engine calls separately, kept in
-step by comments. Known drift: from an iFlow step without a value, the app sends an empty encoder / decoder
-scheme and digest settings where the MCP server sends the defaults; converter lists travel as text from the
-app and as arrays from the MCP server (the engine accepts both).
-
-1. **A seam in TypeScript.** Move the defaults (`converterDefaults`, `flowStepDefaults`), the iFlow-step →
-   settings conversion (`openFlowStep`'s mapping) and the `run*` builders into a plain module
-   `app/src/lib/flowcalls.ts` that takes the engine call as a parameter. `store.svelte.ts` passes the real
-   `call` and keeps only state.
-2. **A seam in Rust.** The step functions in `mcp/flow.rs` call the engine through a function in `Ctx`
-   instead of `tools::engine_call` directly, so a test can record calls without engines.
-3. **Shared fixtures** in `testdata/flow-parity/<step>-<case>.json`: the step as `FlowSteps` emits it from
-   an iFlow (and, where it differs, as manual settings), the input message, scripted engine answers for
-   multi-call steps (`simple.eval`, `xpath.eval`, router routes) and the expected call sequence
-   (`engine`, `method`, `params`). One fixture per step type at least, plus the defaults and the known drift.
-4. **Two runners.** `app/tests/flowparity.test.mts` and a test in `mcp/tests.rs` replay every fixture
-   with a recording caller and compare the calls; neither needs engines, so both run in CI as they are.
-5. **Fix the drift** the fixtures expose: one rule for missing values (the defaults, as the MCP server
-   does, which the tab already shows for a manual step) and one list form towards the engine.
-6. **Docs.** `AGENTS.md` and `architecture.md` name the fixtures instead of "change both together";
-   changelog line for the iFlow-step defaults if the app's behaviour changes.
-
-Result shapes stay free: the MCP server may add fields (`ok`, a route's `name`) that the tab does not need.
-
-#### P3. Fidelity indicator
-
-The app shows next to each Flow Step, and next to the XSLT / Groovy runtime selector, how well its
-behaviour is backed, derived from `docs/fidelity.md` so there is one source.
-
-1. **Make `fidelity.md` machine-readable.** Each table gets two columns: *Applies to* (step ids as the
-   app uses them: `xslt`, `xsd`, `xpath`, `groovy`, `mapping`, `contentModifier`, `filter`, `router`,
-   `splitter`, `gather`, `converter`, `encoder`, `decoder`, `messageDigest`, `camelSimple`) and *Basis*,
-   one of **Tenant** (seen on a tenant, with its F id), **Documented** (SAP's docs or Camel's / Saxon's
-   behaviour, not seen on a tenant), **Assumption** and **Not supported** (`UnsupportedInSimulator`). A row
-   that holds several statuses (Gather) takes its weakest. Existing prose stays as the *Status* text.
-2. **Parse it once.** `app/src/lib/fidelity.ts` parses the tables from `fidelity.md` imported with Vite's
-   `?raw` (the docs folder is added to `server.fs.allow`). A unit test checks every row has a valid
-   *Basis* and every step id has rows. `mcp/tests.rs` checks the same for the MCP `fidelity` topic.
-3. **Show it.** A small label per step tab in `FlowStepsView.svelte` and at the runtime selector in
-   `App.svelte`: the weakest *Basis* of the step's rows. A click opens a `Dialog` with the rows (area,
-   basis, status text, F/Q ids). Offline only: no link to GitHub, so the release-page-only open command
-   stays as it is. Hard-coded hints that repeat fidelity (the Encoder / Decoder "assumption" hint) go.
-4. **Keep it current.** `AGENTS.md`'s rule "update `docs/fidelity.md`" now changes the app as well; the
-   Gather learning (Q-F1) and the encoder probe (Q-E1) move rows to **Tenant** when their results come.
-5. **Docs and changelog**: user guide (*Flow Steps*, *Desktop app*), `status.md`, changelog line.
-
-#### P4. Offline where-used and parameter overview
-
-Read-only search over the iFlows under `iflows/`. It widens the scope from simulating steps to reading
-iFlows, beyond the outline and diagram (W11); nothing connects to a tenant. Seen as tenant-side tools in
-CPI Explorer and CPI Flow Visualizer; only the idea is taken.
-
-1. **Evidence first.** Record as a new finding which property keys adapters (HTTPS, SOAP, SFTP, JMS, AS2,
-   OData, Mail, ProcessDirect, IDoc) use for address, credential and queue, and the format of
-   `parameters.propdef`, from public iFlow exports, as F62 did for encoders. Until a key is recorded,
-   the search treats it like any other property. *Done: F69, S55.*
-2. **One implementation in the engine.** A new RPC `iflow.index` in `engine/core` (`IflowIndex.java`)
-   on both engine kinds, so the app and the MCP server share it. Per iFlow:
-   * every element (adapter flows, participants, steps) with its property map, as `iflow.models` reads it,
-     with typed references where known: script / XSLT / XSD / mapping file (as `iflow.steps` resolves
-     them, including script collections), value mapping, credential alias, address, queue;
-   * the parameters: `parameters.prop` values, `parameters.propdef` definitions, every `{{name}}` use
-     (element, key), and the derived lists *unused* and *unresolved* (used without a value).
-3. **Search.** `iflow.search {query, kind?}` matches values and keys case-insensitively across all
-   iFlows; `kind` narrows to a typed reference (e.g. credential alias). Results carry iFlow, element id,
-   element name, key and value.
-4. **App: a *Where used* tab** in the iFlow area next to *Diagram*: a search field with kind filters and
-   results grouped by iFlow; a click selects the element in the diagram (`selectIflowNode(…, true)`), a
-   script or mapping opens in its tab. A *Parameters* view lists each iFlow's parameters with value, uses,
-   *unused* and *unresolved* marked. The diagram's details aside gets a "Where else is this used?" action.
-5. **MCP.** A tool `iflow_where_used` (`query`, `kind`, `iflow`; `parameters: true` lists the parameters
-   instead, which keeps `project_info` short), from the same RPCs.
-6. **Fixtures and tests.** Extend `engine/core/src/test/resources/iflow` (or add a second iFlow) with
-   adapters that carry an address, a credential alias and a queue, shared references between two iFlows,
-   a `parameters.propdef`, an unused and an unresolved parameter. Java tests for index and search, unit
-   tests for the result grouping, a Rust test for the MCP tool, an e2e step in `app/e2e`.
-7. **Docs and changelog**: user guide (*iFlow import*), `mcp.md`, `status.md`, `architecture.md`,
-   changelog; this table moves from *planned* to the changelog when released.
-
-#### Release
-
-After P1–P4: `CHANGELOG.md` section 0.6.0 and the version, as for 0.5.0 (`docs/building.md`, *Releasing*);
-manual checks for the new tab and the indicator in `manual-test.md`.
+* **Test cases are internal:** `case.json` test cases are this repository's regression tests in CI, not a user
+  feature; user-facing project and `platform/` formats live in [Project files](project-files.md), while the
+  regression format stays in [Regression test cases](test-cases.md). Opening a `case.json` still loads it in the
+  app for e2e and manual regression checks.
+* **UI ⇄ MCP parity fixtures:** Flow Steps calls (`app/src/lib/flowcalls.ts` and `app/src-tauri/src/mcp/flow.rs`)
+  replay shared fixtures in `testdata/flow-parity` without engines; result shapes stay free so MCP can add fields
+  the UI does not need. The same pattern was later extended to Where used, script functions and the Diagram outline
+  (§10.1).
+* **Single-source fidelity indicator:** `docs/fidelity.md` carries *Applies to* and *Basis* columns parsed at
+  build time by `app/src/lib/fidelity.ts` (and checked by `app/tests/fidelity.test.mts` and `mcp/tests.rs`),
+  displayed offline in the app without external links.
+* **Engine-backed offline Where used:** `IflowIndex` (`iflow.index` / `iflow.search`) in `engine/core` backs both
+  the **Where used** tab and `iflow_where_used`, classifying adapter keys recorded from public exports (F69, S55)
+  and treating all other keys as plain values.
 
 ---
 

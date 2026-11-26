@@ -177,12 +177,14 @@ lists what is verified against CPI.
 ## What the server can access
 
 * **Files:** only the project folder (with `--workspace`, the project `open_project` opened; it opens or
-  creates only folders directly inside the workspace, and refuses a link that leads outside it). Bodies, mappings, scripts and schemas are read through the
+  creates only folders directly inside the workspace, and refuses hidden folders such as `.git` and any link
+  that leads outside it). Bodies, mappings, scripts and schemas are read through the
   engines, which refuse paths outside the project, as in the app ([What a run can access](user-guide.md#what-a-run-can-access)).
   The check follows symbolic links: a link inside the project that leads outside it is refused.
   Paths that are absolute or contain `..` are refused before the engine sees them.
   Only `save_file` and `import_iflow` write into the project, and they replace nothing without
-  `overwrite: true`; `import_iflow` reads the zip from the path it is given, also outside the project.
+  `overwrite: true` (`open_project` with `create: true` creates a new project folder inside the workspace and
+  refuses one that already exists); `import_iflow` reads the zip from the path it is given, also outside the project.
   The engines keep caches in the temp folder and the user's cache folder, as in the app. Groovy
   scripts can write files (next point).
 * **Code:** Groovy scripts execute as ordinary Java code with your user's rights, without a sandbox;

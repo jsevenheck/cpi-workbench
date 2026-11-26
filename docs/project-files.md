@@ -61,7 +61,7 @@ Camel keeps no property with a null value (`Exchange.setProperty` removes it). A
   signature decides how the function is called: with `String` arguments once (*Single values*), with
   `String[]` arguments once per context (*All values of a context*), which needs the same number of
   contexts in every `String[]` argument. `MappingContext` reads and sets the input's headers and
-  properties. How to enter the arguments: [User guide](user-guide.md#groovy-xslt-and-platform-data).
+  properties. How to enter the arguments: [User guide](user-guide.md#groovy-completions-and-message-mapping-functions).
 
 ## Mocked platform data (`platform/`)
 

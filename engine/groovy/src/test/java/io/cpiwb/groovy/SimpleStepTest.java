@@ -71,4 +71,15 @@ class SimpleStepTest {
         assertEquals("acme", value(eval("expression", "${property.Partner.toLowerCase()}")));
         assertEquals("true", value(eval("condition", "${in.header.SenderId.length} = 1")));
     }
+
+    @Test
+    void aNullPropertyWarningComesAfterTheError() throws Exception {
+        Map<String, Object> input = ScriptRunnerTest.in("<a/>", List.of(), List.of(ScriptRunnerTest.hv("gone", "", "null")));
+        Map<String, Object> r = (Map<String, Object>) ScriptRunnerTest.ENGINE.call("simple.eval",
+                Json.o().with("expression", "${header.x").with("mode", "condition").with("input", input));
+        assertFalse(Json.bool(r, "ok", true));
+        List<Object> d = Json.arr(r, "diagnostics");
+        assertEquals("error", ((Map<String, Object>) d.get(0)).get("severity"), () -> Json.write(r));
+        assertTrue(Json.write(d.get(1)).contains("left out: gone"), () -> Json.write(r));
+    }
 }

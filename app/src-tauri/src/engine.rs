@@ -97,9 +97,6 @@ pub struct Engines {
     pub resource_dir: Mutex<Option<PathBuf>>,
     /// Where JVM class-data archives (AppCDS) are kept for faster starts.
     pub cache_dir: Mutex<Option<PathBuf>>,
-    /// A call sent to every engine right after it starts (the MCP server opens its project with it),
-    /// so an engine that restarted after a timeout is in the same state as before.
-    pub on_start: Mutex<Option<(String, Value)>>,
 }
 
 impl Engines {
@@ -177,18 +174,7 @@ impl Engines {
         if guard.is_none() {
             let cache = self.cache_dir.lock().unwrap().clone();
             let deadline = Instant::now() + limits.startup;
-            let mut proc = start(launch, profile, cache.as_deref(), deadline, &self.stopping, limits.frame)?;
-            let init = self.on_start.lock().unwrap().clone();
-            if let Some((method, params)) = init {
-                match exchange(&mut proc, &method, params, deadline, &self.stopping, limits.frame) {
-                    Ok(Exchange::Result(_)) => {}
-                    Ok(Exchange::Error { message, .. }) => return Err(format!("{method} failed: {message}")),
-                    Err(e) => {
-                        proc.terminate();
-                        return Err(format!("Engine startup ({method}): {e}"));
-                    }
-                }
-            }
+            let proc = start(launch, profile, cache.as_deref(), deadline, &self.stopping, limits.frame)?;
             *guard = Some(proc);
         }
         let proc = guard.as_mut().unwrap();
@@ -603,24 +589,6 @@ mod tests {
         assert!(e.starts_with("UnsupportedInSimulator: the engine response exceeds the 1024-byte frame limit"), "{e}");
         assert!(pid(&engines).is_none());
         assert_eq!(engines.call_with("framed", &Launch::Fixture("echo"), "again", json!({}), limits).unwrap(), "again");
-        engines.shutdown();
-    }
-
-    #[test]
-    fn a_failed_start_call_leaves_no_worker() {
-        let engines = Engines::default();
-        let limits = Deadlines { startup: Duration::from_secs(6), ..DEADLINES };
-        *engines.on_start.lock().unwrap() = Some(("fail".into(), json!({})));
-        let e = engines.call_with("init", &Launch::Fixture("echo"), "ping", json!({}), limits).unwrap_err();
-        assert_eq!(e, "fail failed: refused");
-        assert!(engines.slot("init").lock().unwrap().is_none());
-        *engines.on_start.lock().unwrap() = Some(("open".into(), json!({})));
-        let now = Instant::now();
-        let e = engines.call_with("init", &Launch::Fixture("partial"), "ping", json!({}), limits).unwrap_err();
-        assert!(e.starts_with("Engine startup (open): timeout"), "{e}");
-        assert!(now.elapsed() < limits.startup + Duration::from_secs(2), "{:?}", now.elapsed());
-        assert!(engines.slot("init").lock().unwrap().is_none());
-        assert_eq!(engines.call_with("init", &Launch::Fixture("echo"), "ping", json!({}), limits).unwrap(), "ping");
         engines.shutdown();
     }
 

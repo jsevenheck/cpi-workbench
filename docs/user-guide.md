@@ -60,6 +60,10 @@ come with the app; **Save** asks where to keep them, once a project is open. As 
 ### Groovy, XSLT and platform data
 
 * **Parameters** (XSLT) shows how each `xsl:param` was bound: header, property or default.
+* **Body type** (Groovy, `as` above the input body) picks what `message.getBody()` returns without a class:
+  `String` (default), `byte[]` or `InputStream`. `InputStream` gives Camel's `InputStreamCache` and is reset
+  after the step so a script that only reads the body passes it on whole ([Fidelity](fidelity.md#groovy-script));
+  if a script run on a `String` body fails calling a method with that `String`, a diagnostic suggests `InputStream`.
 * **MPL**, **Console** and **API calls** (Groovy) show message processing log entries, `println`
   output and the calls to SAP APIs with their arguments.
 * **Attachments** and **SOAP** (Groovy, next to Headers and Properties) hold what the script reads with
@@ -337,9 +341,10 @@ The optional CPI Helper receiver accepts browser traffic on loopback only; it ne
 ## Coding agents (MCP)
 
 `cpi-workbench mcp` gives an agent such as Claude Code or Claude Desktop the app's tabs (XSLT, Groovy, XSD,
-XPath, Flow Steps) over the Model Context Protocol, plus reading and saving project files, importing an iFlow and
-a reference of the Script API, so it can write a step and try it on the simulator. Setup, tools and what the
-server can access: [MCP server](mcp.md).
+XPath, Flow Steps, Where used, Diagram) over the Model Context Protocol, plus reading and saving project files,
+importing an iFlow and a reference of the Script API, so it can write a step, try configurations on a sample
+message and follow a message through an iFlow on the simulator. With `--workspace`, one configuration serves a
+folder of projects, one per integration. Setup, tools and what the server can access: [MCP server](mcp.md).
 
 ## Command line
 

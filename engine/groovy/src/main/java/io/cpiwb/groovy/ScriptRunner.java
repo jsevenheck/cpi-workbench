@@ -120,8 +120,10 @@ public final class ScriptRunner {
         MappingFunction mapping = MappingFunction.find(scriptClass, function);
         Method fn = mapping != null ? null : findFunction(scriptClass, function);
         if (fn == null && mapping == null) {
+            List<String> steps = stepFunctions(scriptClass);
             diags.add(Diagnostic.error("Function '" + function + "' with one parameter was not found in the script. "
                     + "The Groovy Script step calls " + function + "(message)."
+                    + (steps.isEmpty() ? "" : " The script's functions with one parameter: " + String.join(", ", steps) + ".")
                     + (mappingFunctions.isEmpty() ? "" : " The script has Message Mapping functions: "
                     + String.join(", ", mappingFunctions) + ". Enter one of their names as the function to run it.")));
             return finish(result, false, "compile", diags, null, null, platform, "", t0, compileMs, cached, null);
@@ -148,7 +150,11 @@ public final class ScriptRunner {
         }
         exchange.getIn().setBody(inputBody(in, bodyType));
         exchange.getIn().getHeaders().putAll(in.getHeaders());
-        exchange.getProperties().putAll(in.getProperties());
+        in.getProperties().forEach(exchange::setProperty); // Camel's setProperty: a null value removes the property
+        Diagnostic dropped = SimpleStep.nullProperties(in);
+        if (dropped != null) {
+            diags.add(dropped);
+        }
         MessageSupport<?> message = null;
         if (mapping == null) {
             message = newMessage(fn.getParameterTypes()[0], exchange, diags);
@@ -429,6 +435,25 @@ public final class ScriptRunner {
         return sb.toString();
     }
 
+    /**
+     * A warning when the engine runs on another Java than a tenant's 21 (F48), as a development build does on the
+     * system's Java; null on Java 21.
+     */
+    static Diagnostic javaVersion(int feature) {
+        return feature == 21 ? null : Diagnostic.warning("This engine runs on Java " + feature + "; a tenant runs Groovy "
+                + "scripts on Java 21 (F48), so behaviour that depends on the JDK (such as XmlUtil.serialize, F25, or date "
+                + "and number formats) can differ. Set JAVA_HOME to a Java 21 for a like-for-like run.");
+    }
+
+    /** The script's own public instance methods with one parameter: what a Groovy Script step could call. */
+    private static List<String> stepFunctions(Class<?> cls) {
+        return java.util.Arrays.stream(cls.getDeclaredMethods())
+                .filter(m -> m.getParameterCount() == 1 && !m.isSynthetic() && !m.getName().contains("$")
+                        && java.lang.reflect.Modifier.isPublic(m.getModifiers())
+                        && !java.lang.reflect.Modifier.isStatic(m.getModifiers()))
+                .map(Method::getName).distinct().sorted().toList();
+    }
+
     private static Method findFunction(Class<?> cls, String name) {
         for (Method m : cls.getMethods()) {
             if (m.getName().equals(name) && m.getParameterCount() == 1) {
@@ -455,7 +480,8 @@ public final class ScriptRunner {
             case "byte[]":
                 return in.getBody();
             case "InputStream":
-                return new ByteArrayInputStream(in.getBody());
+                // A tenant's HTTPS sender hands on an InputStreamCache (F49): Camel's resettable stream cache.
+                return new org.apache.camel.converter.stream.InputStreamCache(in.getBody());
             case "String":
             default:
                 return in.getBodyAsString();
@@ -466,6 +492,11 @@ public final class ScriptRunner {
 
     static Json.Obj describeOutput(Exchange exchange, Charset charset, List<Diagnostic> diags) {
         Object body = exchange.getIn().getBody();
+        // Camel resets a stream cache after each processor (StreamCachingAdvice.after), so the next step reads the
+        // body from its start, also when the script read it to the end.
+        if (body instanceof org.apache.camel.StreamCache) {
+            ((org.apache.camel.StreamCache) body).reset();
+        }
         String text;
         String bodyClass = body == null ? "null" : body.getClass().getName();
         try {
@@ -525,6 +556,11 @@ public final class ScriptRunner {
             result.with("failedPhase", failedPhase);
         }
         platform.notes().forEach(n -> diags.add(Diagnostic.info(n)));
+        // Last, so a compile or runtime error stays the first diagnostic.
+        Diagnostic java = javaVersion(Runtime.version().feature());
+        if (java != null) {
+            diags.add(java);
+        }
         List<Object> d = new ArrayList<>();
         diags.forEach(x -> d.add(x.toJson()));
         result.with("diagnostics", d);

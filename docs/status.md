@@ -10,7 +10,7 @@ limits in [Fidelity](fidelity.md), and research evidence and future work in the 
 |---|---|---|
 | XSLT Mapping | Saxon-HE 9.9 and 12, typed parameter binding, `hci:` functions, project-local includes, JDK `java:` calls, error locations | Not Saxon-EE: no schema awareness or streaming; HE 9.9 lacks higher-order functions and dynamic evaluation. Reflexive Java calls require an explicit Run (including when used in a module). Java argument conversion is partial; project jars are not available to XSLT. |
 | XSD and XPath | XML Schema 1.0 validation; XPath 3.1 (Saxon) and 1.0 (JDK), namespaces, result locations, XPath at cursor and session history | CPI's XML Validator implementation is unverified (Q-V1). Entity references disable the UI's text-based node locations. |
-| Groovy Script | 1.x on Groovy 2.4.21; 2.x on 4.0.29; both on Camel 3.14.7 and Java 21, UTC and `en_US`; clean-room Script APIs, diagnostics, MPL, console and API call log | No sandbox. SAP-internal classes and some extension APIs are unavailable. `ScriptLogger` output destination on CPI is unknown. |
+| Groovy Script | 1.x on Groovy 2.4.21; 2.x on 4.0.29; both on Camel 3.14.7 and Java 21, UTC and `en_US`; clean-room Script APIs, a stream body as Camel's `InputStreamCache` (F49), diagnostics, MPL, console and API call log | No sandbox. SAP-internal classes and some extension APIs are unavailable. `ScriptLogger` output destination on CPI is unknown. |
 | Message Mapping functions | Single-value and per-context calls, `MappingContext`, `Output`, function picker and context editor | No graphical `.mmap` execution. Single-value functions run once with the supplied arguments, not automatically once per queue value. Marker identity semantics remain an assumption (Q-M1). |
 | Platform mocks | Secure Store, Value Mapping, Partner Directory, Keystore and number ranges; Groovy input tables, attachments and SOAP headers | Test data only. Fixed OAuth2 tokens, number ranges per run, no Data Store API. Keystore and advanced platform fields use files. |
 | Flow Steps | Content Modifier, Filter, Router, General / Iterating Splitter, Gather, JSON ↔ XML and XML ↔ CSV converters, Encoder and Decoder (Base64, GZIP, ZIP), Message Digest; binary bodies as input and result; UI and MCP | Some rules are inferred from SAP examples. Encoder, Decoder and Message Digest are not probed on a tenant yet (Q-E1; `probes/encoders/` is prepared): they follow Camel's data formats (F64), and Base64 line wrapping, the ZIP entry's name and the digest's *None* are assumptions. A Groovy script's binary result is not preserved as bytes: it is shown as text with an `UnsupportedInSimulator` warning. No MIME Multipart, no parallel splitter execution, Zip/Tar Gather, EDI or XML Modifier. No flow-step CLI command. |
@@ -19,7 +19,7 @@ limits in [Fidelity](fidelity.md), and research evidence and future work in the 
 | CPI Helper hand-over | Pasted links/JSON, browser-mode links, opt-in desktop receiver with confirmation and malformed-body warnings | Plugin format is undocumented. Browser URL and unpacking limits apply; large traced bodies may already be cut off upstream (Q-T3). Receiver imports never run code automatically. |
 | CLI and debugging | The engine jars run a mapping, script, schema or XPath from a terminal; a script stops at breakpoints when its engine jar runs under JDWP (`docs/debugging.md`) | Breakpoints were tried with jdb only, not in an IDE, and the app has no debugger. |
 | Regression tests (internal) | `case.json` cases in `testdata/regression-project/tests` run on all four engines in CI ([format](test-cases.md)): expected bodies/headers/properties, `expect.ignore`, mapping-function arguments, JUnit XML (`test --junit`) | Not a user feature (2026-11-17). The JUnit report follows Maven Surefire's layout and has not been tried with a CI reporter. |
-| MCP | Eleven tools, project files, iFlow import, where-used search, source-derived reference, `develop_step` prompt, run chaining by `runId` | Separate process from the UI. Same code-execution privileges as the engines; result handles are bounded and process-local. A run over the 64 MiB run cache gets no `runId`; a result over the 1 MiB preview has its longest lists cut. |
+| MCP | Thirteen tools, one project or a workspace of projects (`--workspace`, `open_project`), project files, iFlow import, where-used search and overview as in the app, the iFlow diagram as text, script function lists read from the text, source-derived reference, `develop_step` prompt, run chaining by `runId` with `brief` results | Separate process from the UI. Same code-execution privileges as the engines; result handles are bounded and process-local. A run over the 64 MiB run cache gets no `runId`; a result over the 1 MiB preview has its longest lists cut. |
 | Distribution | All-in-one Windows x64 and macOS Apple Silicon installers, engine jars, manual update check | No code signing/notarization or automatic update installation. No current Linux installer or Intel Mac build. |
 
 ## Evidence and automated coverage
@@ -57,10 +57,11 @@ limits in [Fidelity](fidelity.md), and research evidence and future work in the 
   Browser and MCP smoke tests chain GZIP Encoder → header-only Content Modifier → Decoder,
   checking the exact bytes and the headers passed on.
 * **Shell tests:** engine supervision over stdio, including the first desktop Groovy run after an idle
-  stop or abrupt worker exit, no-ready and blocked-pipe fixtures for deadlines and shutdown, a failed
-  start call, the frame limit on requests and responses, and MCP
-  protocol/file/result handling (including slow output, overload, immediate id reuse and
-  oversized runs and results), and the local receiver's origin, size,
+  stop or abrupt worker exit, no-ready and blocked-pipe fixtures for deadlines and shutdown,
+  the frame limit on requests and responses, and MCP
+  protocol/file/result handling (including slow output, overload, immediate id reuse,
+  oversized runs and results, and the workspace boundary), the app-parity fixtures (`testdata/*-parity`)
+  replayed by the UI's and the MCP server's tests, and the local receiver's origin, size,
   concurrency and deadline checks.
 * **CI:** engines on Linux, Windows and macOS; browser e2e on Windows; shell tests, native builds,
   installers and release-binary MCP smoke tests on Windows and macOS. Commands: [Building](building.md).

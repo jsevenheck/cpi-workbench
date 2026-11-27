@@ -158,7 +158,8 @@ plan). The differences that remain:
   SAP build (`3.14.7-sap-59`), Saxon-EE and IAIK visible to 1.x scripts, Camel 2's
   `org.apache.camel.Attachment`, SAP's v2 `Exchange` and `SimpleBuilder`, the classes behind `log` /
   `logger` (SAP's `ScriptLogger`; the simulator has its methods but no `LogMessage` overloads), `messageLogFactory` and the message, `getExtensionFunctions` (1.x) and
-  `setProxyHandler` (2.x), and the body class behind an HTTPS sender (`InputStreamCache`).
+  `setProxyHandler` (2.x), and the default body class (`String` in the baseline; body type `InputStream` gives
+  Camel's `InputStreamCache`, as behind the tenant's HTTPS sender).
 * Message Mapping: the classes behind `MappingContext` and `Output` (SAP's `MappingContextImpl` and
   `OutputImpl`; the simulator has their extra methods `invalidateCache()`, a no-op, and
   `getResultList()`, `UnsupportedInSimulator`), the Java build, `CamelHttpMethod`, which is the

@@ -134,8 +134,11 @@ public final class RpcServer {
                     .with("timeout", true));
         } catch (ExecutionException e) {
             Throwable cause = e.getCause() == null ? e : e.getCause();
+            // A missing file's exception message is the bare path; say what it means.
+            String message = cause instanceof java.nio.file.NoSuchFileException ? "No such file: " + cause.getMessage()
+                    : cause.getMessage() == null ? cause.toString() : cause.getMessage();
             return Json.o().with("id", id).with("error", Json.o()
-                    .with("message", cause.getMessage() == null ? cause.toString() : cause.getMessage())
+                    .with("message", message)
                     .with("type", cause.getClass().getSimpleName()));
         } catch (InterruptedException e) {
             retire(f);

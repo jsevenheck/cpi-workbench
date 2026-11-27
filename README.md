@@ -22,9 +22,9 @@ Around the steps:
   Each iFlow's steps open in their tabs with their settings and `{{parameters}}`.
 - **Diagram and Where used**: an imported iFlow drawn from its export's layout, and an offline overview of the
   hosts, credentials, queues, files and parameters the iFlows use, with a search across all of them.
-- **Checks while you work**: runtime comparison (Saxon 9.9 vs 12), run history, Groovy migration hints and a
-  fidelity indicator per step.
-- **Automation**: file-based CLI tests and a built-in [MCP server](docs/mcp.md) for coding agents.
+- **Checks while you work**: runtime comparison (Saxon 9.9 vs 12, Groovy 1.x vs 2.x), run history, Groovy
+  migration hints and a fidelity indicator per step.
+- **Automation**: command-line engine jars and a built-in [MCP server](docs/mcp.md) for coding agents.
 - **CPI Helper**: traced messages arrive by pasted links, browser-mode links or an opt-in desktop receiver with
   confirmation.
 
@@ -64,8 +64,8 @@ Release jars need Java 17+ (21 matches the app's runtime). From source:
 
 ```sh
 mvn -f engine/pom.xml package -DskipTests
-java -jar engine/xml-he99/target/cpiwb-xml-he99.jar test testdata/regression-project/tests
-java -jar engine/groovy-v1/target/cpiwb-groovy-v1.jar test testdata/regression-project/tests
+java -jar engine/xml-he99/target/cpiwb-xml-he99.jar xslt --xsl examples/demo-project/mappings/order-to-salesorder.xsl --in examples/demo-project/inputs/order.xml
+java -jar engine/groovy-v1/target/cpiwb-groovy-v1.jar run --script examples/demo-project/scripts/enrich-order.groovy --in examples/demo-project/inputs/order.xml
 ```
 
 ### Coding agents
@@ -77,7 +77,9 @@ For Claude Code on Windows, add `.mcp.json` to the project:
     "command": "${LOCALAPPDATA}\\CPI Workbench\\cpi-workbench.exe", "args": ["mcp"] } } }
 ```
 
-The app window need not be open. Other platforms/clients and server privileges: [MCP setup](docs/mcp.md#setup).
+The app window need not be open. Claude Desktop and Codex name a folder instead: `--project` for one project, or
+`--workspace` for a folder with one project per integration, which the agent opens and creates as needed.
+Configurations, other platforms and server privileges: [MCP setup](docs/mcp.md#setup).
 
 ## Documentation and contributing
 

@@ -169,7 +169,7 @@ fn legacy_handshake_negotiates_the_version() {
     assert_eq!(by_id(&msgs, 3)["result"], json!({}));
     let list = &by_id(&msgs, 4)["result"];
     assert!(list.get("resultType").is_none() && list.get("ttlMs").is_none(), "legacy results stay legacy: {list}");
-    assert_eq!(list["tools"].as_array().unwrap().len(), 11);
+    assert_eq!(list["tools"].as_array().unwrap().len(), 13);
 }
 
 #[test]
@@ -242,12 +242,12 @@ fn protocol_errors() {
 fn tool_definitions_follow_the_spec() {
     let tools = tools::definitions();
     let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
-    assert_eq!(names, ["project_info", "read_file", "run_xslt", "run_groovy", "validate_xsd", "evaluate_xpath", "run_flow_step",
-        "save_file", "import_iflow", "iflow_where_used", "reference"]);
+    assert_eq!(names, ["project_info", "open_project", "read_file", "run_xslt", "run_groovy", "validate_xsd", "evaluate_xpath", "run_flow_step",
+        "save_file", "import_iflow", "iflow_where_used", "iflow_diagram", "reference"]);
     // Only tools that cannot run code are read-only: XSLT's java: calls and Groovy can (JavaExtensions).
     let read_only: Vec<&str> = tools.iter().filter(|t| t["annotations"]["readOnlyHint"] == true)
         .map(|t| t["name"].as_str().unwrap()).collect();
-    assert_eq!(read_only, ["project_info", "read_file", "validate_xsd", "evaluate_xpath", "iflow_where_used", "reference"]);
+    assert_eq!(read_only, ["project_info", "read_file", "validate_xsd", "evaluate_xpath", "iflow_where_used", "iflow_diagram", "reference"]);
     // Writing tools say so, so that a client can ask before they run; tools that run code keep the defaults.
     for name in ["save_file", "import_iflow"] {
         let a = &tools.iter().find(|t| t["name"] == name).unwrap()["annotations"];
@@ -256,6 +256,9 @@ fn tool_definitions_follow_the_spec() {
     for name in ["run_xslt", "run_groovy", "run_flow_step"] {
         assert!(tools.iter().find(|t| t["name"] == name).unwrap().get("annotations").is_none(), "{name}");
     }
+    // Switching the project creates at most a folder and replaces nothing.
+    assert_eq!(tools.iter().find(|t| t["name"] == "open_project").unwrap()["annotations"],
+        json!({ "readOnlyHint": false, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false }));
     for t in &tools {
         let name = t["name"].as_str().unwrap();
         assert!(name.len() <= 128 && name.chars().all(|c| c.is_ascii_alphanumeric() || "_-.".contains(c)));
@@ -319,6 +322,12 @@ fn prompts_list_and_get() {
 /// The reference is generated from the sources; renaming a doc section or a Java class must not empty it.
 #[test]
 fn reference_topics_come_from_the_sources() {
+    // fidelity for one step: its rows with their headings and table headers, not the whole page.
+    let router = reference::fidelity_for("router").unwrap();
+    assert!(router.contains("| Router | router |") && router.contains("| Area | Applies to |") && !router.contains("| Groovy versions |"), "{router}");
+    let e = reference::fidelity_for("nope").unwrap_err();
+    assert!(e.contains("router") && e.contains("groovy") && !e.contains("Applies to"), "{e}");
+    assert!(Call(&bare()).err("reference", json!({ "topic": "platform", "step": "router" })).contains("topic fidelity"));
     let api = reference::topic("script-api").unwrap();
     for member in ["`Object getBody()`", "`void setHeader(String name, Object value)`", "`void resetBodyStream()`",
         "`MessageLog getMessageLog(Object message)`", "`void addValue(Object value)`: Appends a value.",
@@ -479,7 +488,6 @@ impl Call<'_> {
 fn tools_run_on_the_engines() {
     let Some(engines) = engines() else { return };
     let dir = project("tools");
-    *engines.on_start.lock().unwrap() = Some(("project.open".into(), json!({ "dir": dir.to_string_lossy() })));
     let server = Server::new(engines.clone(), Some(dir.clone()));
     let c = Call(&server);
 
@@ -487,6 +495,107 @@ fn tools_run_on_the_engines() {
     assert!(info["files"].as_array().unwrap().iter().any(|f| f == "mappings/order-to-salesorder.xsl"), "{info}");
     assert_eq!(info["runtimes"].as_array().unwrap().len(), 4);
     assert!(info["iflowSteps"].as_array().unwrap().iter().any(|s| s["name"] == "Gather items"));
+    // The Diagram as text: the processes in order, the Router's routes indented with their names, settings once.
+    let d = c.ok("iflow_diagram", json!({}));
+    let kinds: Vec<&str> = d["processes"].as_array().unwrap().iter().map(|p| p["kind"].as_str().unwrap()).collect();
+    assert_eq!(kinds, ["main", "exception", "local"], "{d}");
+    let main = d["processes"][0]["elements"].as_array().unwrap();
+    assert_eq!(main[0]["type"], "Start (message)", "{d}");
+    assert_eq!(d["processes"][0]["elements"].as_array().unwrap().iter().find(|e| e["type"] == "Process Call").unwrap()["calls"], "Archive order");
+    let erp = main.iter().find(|e| e["route"]["name"] == "ERP").expect("the ERP route");
+    assert_eq!(erp["depth"], 1, "{d}");
+    // Each element on a route names it, not only the route's first one.
+    let on = |name: &str| main.iter().find(|e| e["name"] == name && e["again"] != true).unwrap()["onRoute"].clone();
+    assert_eq!(on("Map order"), json!({ "router": "Check sender", "route": "ERP" }), "{d}");
+    assert_eq!(on("Log payload"), json!({ "router": "Check sender", "route": "Other" }), "{d}");
+    assert!(on("Set headers").is_null(), "{d}");
+    assert!(erp["route"]["condition"].as_str().unwrap().contains("SenderId"), "{d}");
+    let cm = main.iter().find(|e| e["type"] == "Content Modifier").expect("a Content Modifier");
+    assert!(cm["settings"].get("cmdVariantUri").is_none() && cm["settings"].as_object().is_some_and(|o| !o.is_empty()), "{cm}");
+    // A Content Modifier table comes as one object per row; a table whose cells have no ids stays text.
+    assert_eq!(cm["settings"]["headerTable"][0]["Name"], "OrderId", "{cm}");
+    assert_eq!(cm["settings"]["headerTable"][0]["Type"], "xpath", "{cm}");
+    let json_to_xml = main.iter().find(|e| e["name"] == "JSON to XML").unwrap();
+    assert!(json_to_xml["settings"]["jsonNamespaceMapping"].is_string(), "{json_to_xml}");
+    let bare = c.ok("iflow_diagram", json!({ "settings": false }));
+    assert!(!bare.to_string().contains("\"settings\""), "settings: false leaves them out: {bare}");
+    assert_eq!(bare["processes"][0]["elements"].as_array().unwrap().len(), main.len());
+    assert!(main.iter().any(|e| e["again"] == true && e.get("settings").is_none()), "a meeting point is listed again, without settings");
+    assert!(d["againNote"].as_str().is_some_and(|n| n.contains("first occurrence")), "{d}");
+    assert!(d["adapters"].as_array().is_some_and(|a| !a.is_empty()), "{d}");
+    assert!(c.err("iflow_diagram", json!({ "iflow": "Nope" })).contains("Order_Replication"));
+    // A script step's function is checked against the script's text: the fixture's step calls enrich, which
+    // enrich.groovy does not declare; Log payload calls processData, which it does.
+    let step = |name: &str| info["iflowSteps"].as_array().unwrap().iter().find(|s| s["name"] == name).unwrap().clone();
+    assert_eq!(step("Enrich order")["functionFound"], false, "{info}");
+    assert_eq!(step("Log payload")["functionFound"], true, "{info}");
+    // brief: of the output's headers and properties only what the step added or changed; the run keeps the rest.
+    let full = c.ok("run_groovy", json!({ "body": "<a/>", "headers": { "kept": "1" }, "properties": { "p": "1" },
+        "script": "def processData(m) { m.setHeader('added', 'x'); m }" }));
+    let short = c.ok("run_groovy", json!({ "body": "<a/>", "headers": { "kept": "1" }, "properties": { "p": "1" }, "brief": true,
+        "script": "def processData(m) { m.setHeader('added', 'x'); m }" }));
+    assert!(full["output"]["headers"].as_array().unwrap().len() == 2 && full.get("engine").is_some(), "{full}");
+    assert_eq!(short["output"]["headers"], json!([{ "name": "added", "type": "String", "value": "x" }]), "{short}");
+    assert_eq!(short["output"]["properties"], json!([]), "{short}");
+    assert!(short.get("engine").is_none() && short.get("timing").is_none() && short["brief"].is_string(), "{short}");
+    let next = c.ok("run_groovy", json!({ "messageFrom": short["runId"], "script": "def processData(m) { m.setBody(m.getHeaders()['kept'] + m.getProperty('p')); m }" }));
+    assert_eq!(next["output"]["body"], "11", "the run kept the whole message: {next}");
+    let both = c.ok("run_xslt", json!({ "runtime": "both", "body": "<a/>", "headers": { "h": "1" }, "brief": true,
+        "mapping": "<xsl:stylesheet version='2.0' xmlns:xsl='http://www.w3.org/1999/XSL/Transform'><xsl:template match='/'><b/></xsl:template></xsl:stylesheet>" }));
+    assert!(both["runs"][0]["result"].get("engine").is_none(), "{both}");
+    // The body's type travels with the message: a stream stays a stream through a Content Modifier that leaves the
+    // body as it is, and the next script gets it without bodyType; a script that sets a String ends it.
+    let read = "def processData(m) { m.setProperty('cls', m.getBody().getClass().getSimpleName()); m }";
+    let s1 = c.ok("run_groovy", json!({ "body": "{}", "bodyType": "InputStream", "runtime": "groovy-1.x", "script": read }));
+    let cm1 = c.ok("run_flow_step", json!({ "messageFrom": s1["runId"], "step": { "type": "contentModifier", "config": {
+        "properties": [{ "action": "Create", "name": "p", "type": "constant", "value": "1" }] } } }));
+    let s2 = c.ok("run_groovy", json!({ "messageFrom": cm1["runId"], "runtime": "groovy-1.x", "script": read }));
+    let cls = |r: &Value| r["output"]["properties"].as_array().unwrap().iter().find(|p| p["name"] == "cls").unwrap()["value"].clone();
+    assert_eq!(cls(&s2), "InputStreamCache", "{s2}");
+    assert_eq!(cm1["output"]["bodyType"], "org.apache.camel.converter.stream.InputStreamCache", "the class handed on is shown: {cm1}");
+    assert!(s2["bodyTypeFrom"].is_string(), "{s2}");
+    // A Content Modifier that sets a body hands on text, even when it is the same text.
+    let cm2 = c.ok("run_flow_step", json!({ "messageFrom": s1["runId"], "step": { "type": "contentModifier",
+        "config": { "bodyType": "constant", "body": "{}" } } }));
+    assert_eq!(cls(&c.ok("run_groovy", json!({ "messageFrom": cm2["runId"], "runtime": "groovy-1.x", "script": read }))), "String", "{cm2}");
+    let set = c.ok("run_groovy", json!({ "messageFrom": s2["runId"], "runtime": "groovy-1.x",
+        "script": "def processData(m) { m.setBody('{\"a\":1}'); m }" }));
+    let s3 = c.ok("run_groovy", json!({ "messageFrom": set["runId"], "runtime": "groovy-1.x", "script": read }));
+    assert!(cls(&s3) == "String" && s3.get("bodyTypeFrom").is_none(), "{s3}");
+    let own = c.ok("run_groovy", json!({ "messageFrom": cm1["runId"], "body": "x", "runtime": "groovy-1.x", "script": read }));
+    assert_eq!(cls(&own), "String", "a body given in the call is text: {own}");
+    // brief gives the message log's attachments by name and size: a logging script attaches the whole body.
+    let logged = c.ok("run_groovy", json!({ "body": "<a>payload</a>", "brief": true, "runtime": "groovy-1.x",
+        "script": "def processData(m) { messageLogFactory.getMessageLog(m).addAttachmentAsString('Payload', m.getBody(String), 'text/plain'); m }" }));
+    let att = &logged["mpl"]["attachments"][0];
+    assert!(att.get("content").is_none() && att["chars"] == 14 && att["name"] == "Payload", "{logged}");
+    assert!(logged["brief"].as_str().is_some_and(|t| t.contains("output.body")), "{logged}");
+    // brief leaves the step's configuration out of a flow step's result; type and name stay.
+    let routed = c.ok("run_flow_step", json!({ "body": "<a/>", "headers": { "SenderId": "ERP" }, "brief": true, "step": { "type": "router",
+        "config": { "routes": [{ "name": "ERP", "expressionType": "nonxml", "condition": "${header.SenderId} = 'ERP'" }, { "name": "Other", "default": true }] } } }));
+    assert!(routed["step"].get("config").is_none() && routed["step"]["type"] == "router" && routed["taken"] == "ERP", "{routed}");
+    // A script written for a stream body, run on a String one: a hint names bodyType InputStream.
+    let json_script = "import groovy.json.JsonSlurper\ndef processData(m) { m.setProperty('t', new JsonSlurper().parse(m.getBody()).type); m }";
+    let as_string = c.ok("run_groovy", json!({ "body": "{\"type\":\"a\"}", "script": json_script }));
+    assert!(as_string["ok"] == false && as_string["diagnostics"].to_string().contains("bodyType: InputStream"), "{as_string}");
+    let as_stream = c.ok("run_groovy", json!({ "body": "{\"type\":\"a\"}", "bodyType": "InputStream", "script": json_script }));
+    assert_eq!(as_stream["ok"], true, "{as_stream}");
+    // Reading a script lists its functions, as the Groovy tab does when it opens one.
+    let script = c.ok("read_file", json!({ "path": "scripts/mapping-functions.groovy" }));
+    // The file's text comes as its own content block, as written; the rest as JSON beside it.
+    let blocks = tool_result("read_file", script.clone())["content"].clone();
+    assert_eq!(blocks[0]["text"], script["content"], "{blocks}");
+    assert!(blocks[1]["text"].as_str().is_some_and(|m| m.contains("\"functions\"") && !m.contains("\"content\"")), "{blocks}");
+    let fns: Vec<&str> = script["functions"].as_array().unwrap().iter().map(|f| f["signature"].as_str().unwrap()).collect();
+    assert!(fns.contains(&"getHeader(String, MappingContext)"), "{script}");
+    assert!(c.ok("read_file", json!({ "path": "tests/standard-order/input.xml" })).get("functions").is_none());
+    // A run of the missing function names the ones the script has (ScriptRunner).
+    let missing = c.ok("run_groovy", json!({ "scriptPath": "scripts/enrich-order.groovy", "function": "enrich", "body": "<a/>" }));
+    assert!(missing.to_string().contains("The script's functions with one parameter: processData."), "{missing}");
+    // The engine's list of Message Mapping functions keeps a name that says so.
+    assert!(missing.get("functions").is_none() && missing["mappingFunctions"] == json!([]), "{missing}");
+    let both = c.ok("run_groovy", json!({ "runtime": "both", "scriptPath": "scripts/mapping-functions.groovy", "function": "getHeader", "args": ["h"] }));
+    assert!(both["runs"][0]["result"]["mappingFunctions"].as_array().is_some_and(|f| !f.is_empty()), "{both}");
 
     // XSLT: header as xsl:param, on both Saxon lines.
     let x = c.ok("run_xslt", json!({ "runtime": "both", "body": "<a/>", "headers": { "h": "hello" },
@@ -548,6 +657,7 @@ fn tools_run_on_the_engines() {
     assert!(c.err("run_flow_step", json!({ "iflowStep": "Check sender", "iflow": "Other_Flow" })).contains("No iFlow step"));
     let other = c.ok("run_flow_step", json!({ "iflowStep": "Check sender", "headers": { "SenderId": "Shop" } }));
     assert_eq!(other["taken"], "Other (default route)", "{other}");
+    assert!(other["statusNote"].as_str().is_some_and(|n| n.contains("not evaluated")), "the statuses are explained: {other}");
 
     let split = c.ok("run_flow_step", json!({ "iflowStep": "Split items", "body": order }));
     let parts: Vec<Value> = split["messages"].as_array().unwrap().iter().map(|m| m["body"].clone()).collect();
@@ -618,7 +728,6 @@ fn where_used_searches_the_imported_iflows() {
     let dir = project("whereused");
     let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     copy_dir(&repo.join("engine/core/src/test/resources/iflow-index/iflows"), &dir.join("iflows"));
-    *engines.on_start.lock().unwrap() = Some(("project.open".into(), json!({ "dir": dir.to_string_lossy() })));
     let server = Server::new(engines.clone(), Some(dir.clone()));
     let c = Call(&server);
 
@@ -639,8 +748,145 @@ fn where_used_searches_the_imported_iflows() {
     assert_eq!(host["required"], true);
 
     assert!(c.err("iflow_where_used", json!({ "parameters": true, "query": "x" })).contains("parameters lists"));
-    assert!(c.err("iflow_where_used", json!({})).contains("query"));
+    assert!(c.err("iflow_diagram", json!({})).contains("several iFlows"));
+    let out = c.ok("iflow_diagram", json!({ "iflow": "Outbound_Orders" }));
+    let http = out["adapters"].as_array().unwrap().iter().find(|a| a["adapter"] == "HTTP").unwrap();
+    assert_eq!((http["direction"].as_str(), http["element"].as_str(), http["system"].as_str()), (Some("outbound"), Some("Send order"), Some("Backend")), "{out}");
+    assert_eq!(http["settings"]["credentialName"], "partner_sftp", "{out}");
+    // Several iFlows: project_info lists the steps without configuration and leaves the iFlows' files out;
+    // iflow gives one iFlow's steps in full and its files.
+    let sum = c.ok("project_info", json!({}));
+    assert_eq!(sum["iflows"].as_array().unwrap().len(), 3, "{sum}");
+    assert!(sum["summary"].is_string() && sum.get("iflowSteps").is_none(), "{sum}");
+    let order = sum["iflows"].as_array().unwrap().iter().find(|i| i["iflow"] == "Order_Replication").unwrap();
+    assert!(order["steps"].as_array().unwrap().iter().any(|s| *s == json!({ "name": "Set headers", "type": "contentModifier" })), "{sum}");
+    let outbound = sum["iflows"].as_array().unwrap().iter().find(|i| i["iflow"] == "Outbound_Orders").unwrap();
+    assert_eq!(outbound["steps"], json!([]), "an iFlow with only adapter calls is listed: {sum}");
+    assert!(sum["files"].as_array().unwrap().iter().all(|f| !f.as_str().unwrap().starts_with("iflows/")), "{sum}");
+    let one = c.ok("project_info", json!({ "iflow": "Order_Replication" }));
+    assert!(one.get("summary").is_none(), "{one}");
+    let steps = one["iflowSteps"].as_array().unwrap();
+    assert!(steps.iter().all(|s| s["iflow"] == "Order_Replication") && steps.iter().any(|s| s.get("config").is_some()), "{one}");
+    assert_eq!(steps.iter().find(|s| s["name"] == "Enrich order").unwrap()["functionFound"], false, "{one}");
+    assert_eq!(one["senders"], json!([{ "adapter": "HTTPS", "system": "Shop" }]), "{one}");
+    let files = one["files"].as_array().unwrap();
+    assert!(files.iter().any(|f| f.as_str().unwrap().starts_with("iflows/Order_Replication/")), "{one}");
+    assert!(files.iter().all(|f| f.as_str().unwrap().starts_with("iflows/Order_Replication/")), "only the iFlow's own files: {one}");
+    assert!(c.err("project_info", json!({ "iflow": "Nope" })).contains("Outbound_Orders"));
+    // Without query or kind: the tab's overview, with each iFlow's parameters.
+    let o = c.ok("iflow_where_used", json!({}));
+    let queue = o["uses"].as_array().unwrap().iter().find(|g| g["kind"] == "queue").expect("queues");
+    assert_eq!(queue["values"][0], json!({ "value": "ORDERS_IN", "count": 2, "resolved": [] }), "{o}");
+    assert_eq!(o["iflows"].as_array().unwrap().len(), 3, "{o}");
+    // A {{parameter}} resolves from parameters.prop; a table hit is its matching rows; parameters match by name.
+    let sftp = c.ok("iflow_where_used", json!({ "query": "{{SftpHost}}" }));
+    assert!(sftp["hits"].as_array().unwrap().iter().any(|h| h["resolved"].as_str().is_some_and(|r| r.contains("sftp.partner.example.com"))), "{sftp}");
+    let auth = c.ok("iflow_where_used", json!({ "query": "Token" }));
+    let table = auth["hits"].as_array().unwrap().iter().find(|h| h.get("rows").is_some()).expect("a table hit");
+    assert!(table.get("value").is_none(), "{table}");
+    let cell = table["rows"][0].as_array().unwrap().iter().find(|c| c["text"].as_str().unwrap().contains("{{Token 'Auth'}}")).expect("the cell");
+    assert_eq!(cell["resolved"], "secret-token-alias", "{auth}");
+    assert_eq!(auth["parameters"][0]["parameters"][0]["name"], "Token 'Auth'", "{auth}");
+    assert!(c.ok("iflow_where_used", json!({ "query": "Token", "kind": "queue" })).get("parameters").is_none());
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn the_server_takes_a_project_or_a_workspace() {
+    let dir = std::env::temp_dir().join(format!("cpiwb-mcp-args-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let d = dir.to_string_lossy().to_string();
+    let args = |a: &[&str]| parse_args(&a.iter().map(|s| s.to_string()).collect::<Vec<_>>());
+    let real = existing_folder(&dir, "x").unwrap();
+    assert_eq!(args(&["--workspace", &d]), Ok(Folder::Workspace(real.clone())));
+    assert_eq!(args(&["--project", &d]), Ok(Folder::Project(real)));
+    assert!(args(&["--project", &d, "--workspace", &d]).unwrap_err().contains("not both"));
+    assert!(args(&["--workspace"]).unwrap_err().contains("needs a folder"));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// open_project opens folders directly inside the workspace only; checked before any engine runs.
+#[test]
+fn open_project_stays_inside_the_workspace() {
+    let c = Call(&bare());
+    assert!(c.err("open_project", json!({ "name": "a" })).contains("needs a workspace"));
+    let root = std::env::temp_dir().join(format!("cpiwb-mcp-ws-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    for f in ["Order", "billing", ".git"] {
+        std::fs::create_dir_all(root.join(f)).unwrap();
+    }
+    std::fs::write(root.join("notes.txt"), "x").unwrap();
+    let ws = existing_folder(&root, "workspace").unwrap();
+    let server = Server::in_workspace(Arc::new(Engines::default()), ws.clone());
+    let c = Call(&server);
+    let info = c.ok("project_info", json!({}));
+    assert_eq!(info["projects"], json!(["billing", "Order"]), "{info}");
+    assert!(info["project"].is_null(), "{info}");
+    assert!(c.err("read_file", json!({ "path": "a.xml" })).contains("open_project opens"));
+    for bad in ["", "..", ".", ".git", "a/b", "a\\b", "C:x", "trailing.", "../Order"] {
+        assert!(c.err("open_project", json!({ "name": bad })).contains("not a folder name"), "{bad}");
+    }
+    assert!(c.err("open_project", json!({ "name": "missing" })).contains("No folder 'missing'"));
+    assert!(c.err("open_project", json!({ "name": "notes.txt" })).contains("No folder"));
+    {
+        let outside = std::env::temp_dir().join(format!("cpiwb-mcp-ws-out-{}", std::process::id()));
+        std::fs::create_dir_all(&outside).unwrap();
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(&outside, root.join("link")).unwrap();
+        #[cfg(windows)]
+        junction::create(&outside, root.join("link")).unwrap();
+        assert!(c.err("open_project", json!({ "name": "link" })).contains("outside the workspace"));
+        let _ = std::fs::remove_dir_all(&outside);
+    }
+    assert!(server.project().is_none(), "a refused call opens nothing");
+    files::open_project(&server, json!({ "name": "Order" }).as_object().unwrap()).unwrap();
+    assert_eq!(server.project(), Some(ws.join("Order")));
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// A workspace's projects are opened and created on the engines; each call reads the project open at the time.
+#[test]
+fn a_workspace_switches_and_creates_projects() {
+    let Some(engines) = engines() else { return };
+    let root = std::env::temp_dir().join(format!("cpiwb-mcp-wsrun-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).unwrap();
+    std::fs::rename(project("ws"), root.join("Orders")).unwrap();
+    let server = Server::in_workspace(engines.clone(), existing_folder(&root, "workspace").unwrap());
+    let c = Call(&server);
+    let info = c.ok("open_project", json!({ "name": "Orders" }));
+    assert_eq!(info["created"], false, "{info}");
+    assert!(info.get("runtimes").is_none(), "{info}");
+    assert!(info["iflowSteps"].as_array().is_some_and(|s| !s.is_empty()), "{info}");
+    let r = c.ok("run_xslt", json!({ "mappingPath": "mappings/order-to-salesorder.xsl", "bodyPath": "tests/standard-order/input.xml" }));
+    assert_eq!(r["ok"], true, "{r}");
+    let run = r["runId"].as_str().unwrap().to_string();
+
+    let info = c.ok("open_project", json!({ "name": "Billing", "create": true }));
+    assert_eq!(info["created"], true, "{info}");
+    assert_eq!(info["projects"], json!(["Billing", "Orders"]), "{info}");
+    assert!(root.join("Billing/cpi-workbench.json").is_file() && root.join("Billing/platform/credentials.json").is_file());
+    let gone = c.err("read_file", json!({ "path": "tests/standard-order/input.xml" }));
+    assert!(gone.contains("Billing"), "the other project's files are gone: {gone}");
+    // A run of the first project still passes its message on.
+    c.ok("save_file", json!({ "path": "inputs/from-orders.xml", "contentFrom": run }));
+    assert!(root.join("Billing/inputs/from-orders.xml").is_file());
+    assert!(c.err("open_project", json!({ "name": "Billing", "create": true })).contains("exists already"));
+    c.ok("open_project", json!({ "name": "Orders" }));
+    assert!(c.ok("read_file", json!({ "path": "tests/standard-order/input.xml" }))["content"].is_string());
+    // A package: open_project gives each iFlow's number of steps only; project_info names them.
+    let pkg = root.join("Package");
+    std::fs::rename(project("ws-pkg"), &pkg).unwrap();
+    copy_dir(&Path::new(env!("CARGO_MANIFEST_DIR")).join("../../engine/core/src/test/resources/iflow-index/iflows"), &pkg.join("iflows"));
+    let opened = c.ok("open_project", json!({ "name": "Package" }));
+    let counts: Vec<(String, u64)> = opened["iflows"].as_array().unwrap().iter()
+        .map(|i| (i["iflow"].as_str().unwrap().to_string(), i["stepCount"].as_u64().unwrap())).collect();
+    assert!(counts.contains(&("Outbound_Orders".into(), 0)) && counts.iter().any(|(i, n)| i == "Order_Replication" && *n > 5), "{opened}");
+    assert!(opened["iflows"][0].get("steps").is_none() && opened.get("iflowSteps").is_none(), "{opened}");
+    assert!(opened["summary"].as_str().is_some_and(|t| t.contains("not events, Process Calls or adapter calls")), "{opened}");
+    assert!(c.ok("project_info", json!({}))["iflows"][0]["steps"].is_array());
+    engines.shutdown();
+    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// After a timeout the engine restarts; it must have the project open again.
@@ -648,7 +894,6 @@ fn where_used_searches_the_imported_iflows() {
 fn a_restarted_engine_reopens_the_project() {
     let Some(engines) = engines() else { return };
     let dir = project("restart");
-    *engines.on_start.lock().unwrap() = Some(("project.open".into(), json!({ "dir": dir.to_string_lossy() })));
     let server = Server::new(engines.clone(), Some(dir.clone()));
     let timeout = engines.call("groovy-1.x", "groovy.run", json!({ "timeoutMs": 300,
         "script": { "content": "def processData(m) { Thread.sleep(3000); m }" }, "input": { "body": "" } }));
@@ -656,7 +901,7 @@ fn a_restarted_engine_reopens_the_project() {
     // A script given by path is read from the project by the restarted engine.
     let r = Call(&server).ok("run_groovy", json!({ "runtime": "groovy-1.x", "scriptPath": "scripts/enrich-order.groovy", "body": "<a/>" }));
     assert!(r["ok"].is_boolean(), "{r}");
-    assert!(!r.to_string().contains("NoSuchFile"), "{r}");
+    assert!(!r.to_string().contains("NoSuchFile") && !r.to_string().contains("No such file"), "{r}");
     engines.shutdown();
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -668,7 +913,6 @@ fn iflow_picks_among_equal_step_names() {
     let dir = project("dup");
     let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     copy_dir(&repo.join("engine/core/src/test/resources/iflow"), &dir.join("iflows").join("Order_Copy"));
-    *engines.on_start.lock().unwrap() = Some(("project.open".into(), json!({ "dir": dir.to_string_lossy() })));
     let server = Server::new(engines.clone(), Some(dir.clone()));
     let c = Call(&server);
     let e = c.err("run_flow_step", json!({ "iflowStep": "CallActivity_9", "body": "<Order/>" }));
@@ -749,7 +993,6 @@ fn stored_zip(entries: &[(&str, &str)]) -> Vec<u8> {
 fn files_are_read_saved_and_imported_inside_the_project() {
     let Some(engines) = engines() else { return };
     let dir = project("files");
-    *engines.on_start.lock().unwrap() = Some(("project.open".into(), json!({ "dir": dir.to_string_lossy() })));
     let server = Server::new(engines.clone(), Some(dir.clone()));
     let c = Call(&server);
 
@@ -800,11 +1043,16 @@ fn files_are_read_saved_and_imported_inside_the_project() {
     let iflow = std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../engine/core/src/test/resources/iflow/src/main/resources/scenarioflows/integrationflow/Order_Replication.iflw")).unwrap();
     let zip = std::env::temp_dir().join(format!("cpiwb-mcp-export-{}.zip", std::process::id()));
-    std::fs::write(&zip, stored_zip(&[("src/main/resources/scenarioflows/integrationflow/Order Sync.iflw", &iflow)])).unwrap();
+    let enrich = std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../engine/core/src/test/resources/iflow/src/main/resources/script/enrich.groovy")).unwrap();
+    std::fs::write(&zip, stored_zip(&[("src/main/resources/scenarioflows/integrationflow/Order Sync.iflw", &iflow),
+        ("src/main/resources/script/enrich.groovy", &enrich)])).unwrap();
     let imp = c.ok("import_iflow", json!({ "zip": zip.to_string_lossy(), "name": "Order Sync" }));
     assert_eq!(imp["imported"], "iflows/Order_Sync", "{imp}");
     let steps = imp["steps"].as_array().unwrap();
     assert!(!steps.is_empty() && steps.iter().all(|s| s["iflow"] == "Order_Sync"), "only the imported iFlow's steps: {imp}");
+    // As in project_info: the imported step calls enrich, which its script does not declare.
+    assert_eq!(steps.iter().find(|s| s["name"] == "Enrich order").unwrap()["functionFound"], false, "{imp}");
     assert!(c.err("import_iflow", json!({ "zip": zip.to_string_lossy(), "name": "Order Sync" })).contains("exists already"));
     c.ok("import_iflow", json!({ "zip": zip.to_string_lossy(), "name": "Order Sync", "overwrite": true }));
     assert!(c.err("import_iflow", json!({ "zip": "missing.zip" })).contains("No file"));
@@ -820,7 +1068,7 @@ fn files_are_read_saved_and_imported_inside_the_project() {
     assert!(std::fs::read_to_string(dir.join("platform/value-mappings.json")).unwrap().contains("\"targetValue\":\"R1\""));
     let _ = std::fs::remove_file(&vm_zip);
     let info = c.ok("project_info", json!({}));
-    assert!(info["iflowSteps"].as_array().unwrap().iter().any(|s| s["iflow"] == "Order_Sync"));
+    assert!(info["iflows"].as_array().unwrap().iter().any(|i| i["iflow"] == "Order_Sync"), "{info}");
 
     engines.shutdown();
     let _ = std::fs::remove_file(&zip);
@@ -832,7 +1080,6 @@ fn files_are_read_saved_and_imported_inside_the_project() {
 fn runs_chain_by_id() {
     let Some(engines) = engines() else { return };
     let dir = project("chain");
-    *engines.on_start.lock().unwrap() = Some(("project.open".into(), json!({ "dir": dir.to_string_lossy() })));
     let server = Server::new(engines.clone(), Some(dir.clone()));
     let c = Call(&server);
     let id = |v: &Value| v["runId"].as_str().unwrap_or_else(|| panic!("no runId: {v}")).to_string();
@@ -862,6 +1109,7 @@ fn runs_chain_by_id() {
     // Splitter, then Gather all its messages; one part on its own.
     let split = c.ok("run_flow_step", json!({ "messageFrom": id(&cm), "step": { "type": "splitter", "config": { "expression": "/Order/Item" } } }));
     let rs = id(&split);
+    assert_eq!(split["messages"][1]["runId"], format!("{rs}/2"), "each part names its id: {split}");
     let part = c.ok("evaluate_xpath", json!({ "messageFrom": format!("{rs}/2"), "expression": "string(//Item)" }));
     assert_eq!(part["items"][0]["value"], "b", "{part}");
     assert!(part.get("runId").is_none(), "XPath produces no message");
@@ -874,6 +1122,7 @@ fn runs_chain_by_id() {
         "mapping": "<xsl:stylesheet version='2.0' xmlns:xsl='http://www.w3.org/1999/XSL/Transform'><xsl:output method='text'/>\
             <xsl:template match='/'><xsl:value-of select='system-property(\"xsl:product-version\")'/></xsl:template></xsl:stylesheet>" }));
     let rb = id(&both);
+    assert_eq!(both["runs"][1]["runId"], format!("{rb}/{}", both["runs"][1]["runtime"].as_str().unwrap()), "{both}");
     assert_eq!(c.ok("read_file", json!({ "runId": format!("{rb}/saxon-he-12") }))["content"], "HE 12.9", "{both}");
 
     // A long body comes back shortened; read_file and save_file take it whole by id.

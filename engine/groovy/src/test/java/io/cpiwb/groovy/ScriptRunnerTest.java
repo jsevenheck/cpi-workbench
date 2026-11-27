@@ -178,6 +178,8 @@ class ScriptRunnerTest {
         Map<String, Object> r = run(s, in("", List.of(), List.of()), null);
         assertFalse(Json.bool(r, "ok", true));
         assertTrue(Json.write(r).contains("Function 'processData'"));
+        // The functions it could have called are named; the script class's own (main, run) are not.
+        assertTrue(Json.write(r).contains("The script's functions with one parameter: other."), () -> Json.write(r));
         Map<String, Object> custom = run(s, in("", List.of(), List.of()), Json.o().with("function", "other"));
         assertTrue(Json.bool(custom, "ok", false), () -> Json.write(custom));
     }
@@ -541,6 +543,38 @@ class ScriptRunnerTest {
         assertEquals("hallo", entry(r, "properties", "text").get("value"));
         assertEquals("image/png", entry(r, "properties", "type").get("value"));
         assertEquals("8", entry(r, "properties", "size").get("value"));
+    }
+
+    /** Another Java than a tenant's 21 is named in a warning; the test JVM may be either. */
+    @Test
+    void anotherJavaThanATenantsIsNamed() {
+        assertEquals(null, ScriptRunner.javaVersion(21));
+        assertTrue(ScriptRunner.javaVersion(25).getMessage().contains("Java 25"));
+    }
+
+    /** A property with the value null: Camel keeps none (Exchange.setProperty removes it), so it is left out with a warning. */
+    @Test
+    void aNullPropertyIsLeftOutAsCamelDoes() throws Exception {
+        Map<String, Object> r = run("def processData(m) { m.setProperty('seen', String.valueOf(m.getProperties().containsKey('gone'))); m }",
+                in("x", List.of(), List.of(hv("gone", "", "null"), hv("kept", "1", "String"))), null);
+        assertTrue(Json.bool(r, "ok", false), () -> Json.write(r));
+        assertEquals("false", entry(r, "properties", "seen").get("value"));
+        assertEquals("1", entry(r, "properties", "kept").get("value"));
+        assertTrue(Json.write(r).contains("Properties with the value null are left out: gone."), () -> Json.write(r));
+    }
+
+    /**
+     * An InputStream body is Camel's InputStreamCache, as behind a tenant's HTTPS sender (F49), and is reset after
+     * the step as Camel's stream caching does: a script that only reads it passes the whole body on.
+     */
+    @Test
+    void aStreamBodyReadByTheScriptIsPassedOnWhole() throws Exception {
+        Map<String, Object> r = run("def processData(m) { m.setProperty('read', m.getBody(java.io.InputStream).text); m }",
+                Json.o().with("body", "{\"type\":\"a\"}"), Json.o().with("options", Json.o().with("bodyType", "InputStream")));
+        Map<?, ?> out = (Map<?, ?>) r.get("output");
+        assertEquals("{\"type\":\"a\"}", out.get("body"), Json.write(r));
+        assertEquals("org.apache.camel.converter.stream.InputStreamCache", out.get("bodyType"), Json.write(r));
+        assertEquals("{\"type\":\"a\"}", entry(r, "properties", "read").get("value"));
     }
 
     /** A body with a declared encoding reaches a script's stream in that encoding (review 2026-11-10). */

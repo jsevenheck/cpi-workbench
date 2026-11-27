@@ -32,6 +32,9 @@ pub struct Message {
     /// Rows as the engines take and give them: [{name, value, type}].
     pub headers: Value,
     pub properties: Value,
+    /// The Java class a Groovy step handed the body on as (its output's `bodyType`), kept while later steps leave the
+    /// body as it is; `run_groovy` takes it as the default body type. Not sent to the engines.
+    pub body_class: Option<String>,
 }
 
 impl Message {
@@ -45,15 +48,16 @@ impl Message {
             body_base64,
             headers: o.get("headers").filter(|v| v.is_array()).cloned().unwrap_or(json!([])),
             properties: o.get("properties").filter(|v| v.is_array()).cloned().unwrap_or(json!([])),
+            body_class: None,
         })
     }
 
     pub fn text(body: &str, headers: Value, properties: Value) -> Message {
-        Message { body: body.to_string(), body_base64: None, headers, properties }
+        Message { body: body.to_string(), body_base64: None, headers, properties, body_class: None }
     }
 
     pub fn with_body(&self, body: &str) -> Message {
-        Message { body: body.to_string(), body_base64: None, ..self.clone() }
+        Message { body: body.to_string(), body_base64: None, body_class: None, ..self.clone() }
     }
 
     /// The message as the engines take it: `body`, or `bodyBase64` for bytes.
@@ -162,7 +166,10 @@ pub fn produced(tool: &str, input: &Message, result: &Value) -> Produced {
     if let Some(runs) = result.get("runs").and_then(Value::as_array) {
         // runtime: both. Each runtime's output by name; the first is the run's message.
         for r in runs.iter().filter(|r| r["result"]["ok"] != false) {
-            if let (Some(rt), Some(m)) = (r["runtime"].as_str(), Message::from_output(&r["result"]["output"])) {
+            if let (Some(rt), Some(mut m)) = (r["runtime"].as_str(), Message::from_output(&r["result"]["output"])) {
+                if tool == "run_groovy" {
+                    m.body_class = r["result"]["output"]["bodyType"].as_str().map(str::to_string);
+                }
                 p.main.get_or_insert_with(|| m.clone());
                 p.parts.push((rt.to_string(), m));
             }
@@ -172,14 +179,28 @@ pub fn produced(tool: &str, input: &Message, result: &Value) -> Produced {
         }
         return p;
     }
+    // A step that leaves the body as it is hands it on as the same object, so its class stays. An assumption, as
+    // for a Content Modifier with an empty body (fidelity.md, Content Modifier rows, F38); one that sets a body,
+    // even the same text, hands on that text.
+    let sets_body = !result["step"]["config"]["body"].as_str().unwrap_or_default().is_empty();
+    let keep_class = |mut m: Message| {
+        if !sets_body && m.body == input.body && m.body_base64 == input.body_base64 {
+            m.body_class = input.body_class.clone();
+        }
+        m
+    };
     match tool {
-        "run_xslt" | "run_groovy" => p.main = Message::from_output(&result["output"]),
+        "run_xslt" => p.main = Message::from_output(&result["output"]),
+        "run_groovy" => p.main = Message::from_output(&result["output"]).map(|mut m| {
+            m.body_class = result["output"]["bodyType"].as_str().map(str::to_string);
+            m
+        }),
         // The XML Validator and the Router pass the message on unchanged.
         "validate_xsd" => p.main = Some(input.clone()),
         "run_flow_step" => match result["step"]["type"].as_str().unwrap_or_default() {
             // The Message Digest's output is the input with its header; the Encoder's and Decoder's may be bytes,
             // and ZIP sets CamelFileName.
-            "contentModifier" | "messageDigest" | "encoder" | "decoder" => p.main = Message::from_output(&result["output"]),
+            "contentModifier" | "messageDigest" | "encoder" | "decoder" => p.main = Message::from_output(&result["output"]).map(keep_class),
             "router" => p.main = Some(input.clone()),
             "splitter" => {
                 for (i, m) in result["messages"].as_array().into_iter().flatten().enumerate() {
@@ -239,6 +260,10 @@ pub fn shorten(result: &mut Value, id: Option<&str>, input_body: &str) {
     if let Some(runs) = result.get_mut("runs").and_then(Value::as_array_mut) {
         for r in runs {
             let rt = r["runtime"].as_str().unwrap_or_default().to_string();
+            // Each runtime's message under its own id, as `produced` kept it, so the agent need not build the name.
+            if let Some(part) = sub(&rt).filter(|_| r["result"]["ok"] != false && Message::from_output(&r["result"]["output"]).is_some()) {
+                r["runId"] = json!(part);
+            }
             cut(&mut r["result"]["output"], sub(&rt).as_deref(), PREVIEW_CHARS, input_body);
         }
         return;
@@ -249,9 +274,67 @@ pub fn shorten(result: &mut Value, id: Option<&str>, input_body: &str) {
     cut(result, id, PREVIEW_CHARS, input_body);
     if let Some(ms) = result.get_mut("messages").and_then(Value::as_array_mut) {
         for (i, m) in ms.iter_mut().enumerate() {
+            if let Some(part) = sub(&(i + 1).to_string()).filter(|_| m["body"].is_string()) {
+                m["runId"] = json!(part);
+            }
             cut(m, sub(&(i + 1).to_string()).as_deref(), PART_PREVIEW_CHARS, "");
         }
     }
+}
+
+/// `brief`: a result for steps run one after another. The output keeps only the headers and properties that differ
+/// from the step's input (added or changed; a result's `changes` also names removed ones); engine, timing and trace go,
+/// and so do empty lists and an empty message log. The run itself keeps the whole message.
+pub fn brief(result: &mut Value, input: &Value) {
+    if let Some(runs) = result.get_mut("runs").and_then(Value::as_array_mut) {
+        for r in runs {
+            brief(&mut r["result"], input);
+        }
+        return;
+    }
+    let Some(o) = result.as_object_mut() else { return };
+    for key in ["engine", "timing", "runMs", "transformMs", "trace"] {
+        o.remove(key);
+    }
+    let empty = |v: &Value| v.as_array().is_some_and(Vec::is_empty) || v.as_str() == Some("")
+        || v.as_object().is_some_and(|m| m.values().all(|x| x.as_array().is_some_and(Vec::is_empty) || x.is_boolean()));
+    o.retain(|k, v| !(matches!(k.as_str(), "apiCalls" | "attachments" | "console" | "soapHeaders" | "mappingFunctions" | "mpl" | "cpiCalls" | "messages") && empty(v)));
+    if let Some(out) = o.get_mut("output").and_then(Value::as_object_mut) {
+        for list in ["headers", "properties"] {
+            let before = input[list].as_array().cloned().unwrap_or_default();
+            if let Some(rows) = out.get_mut(list).and_then(Value::as_array_mut) {
+                rows.retain(|r| !before.contains(r));
+            }
+        }
+        out.remove("encoding");
+    }
+    // Attachments by name and size: a logging script often attaches the whole body, which the output holds already.
+    let attachments = |list: Option<&mut Value>| {
+        for a in list.and_then(Value::as_array_mut).into_iter().flatten().filter_map(Value::as_object_mut) {
+            for key in ["content", "contentBase64"] {
+                if let Some(c) = a.remove(key) {
+                    let size = c.as_str().map_or(0, |t| if key == "content" { t.chars().count() } else { (t.len() / 4 * 3).saturating_sub(t.bytes().rev().take_while(|&b| b == b'=').count()) });
+                    a.insert(if key == "content" { "chars" } else { "bytes" }.into(), json!(size));
+                }
+            }
+        }
+    };
+    attachments(o.get_mut("mpl").and_then(|m| m.get_mut("attachments")));
+    attachments(o.get_mut("attachments"));
+    // The step's configuration as it ran: the agent gave it or read it in project_info.
+    if let Some(step) = o.get_mut("step").and_then(Value::as_object_mut) {
+        step.remove("config");
+    }
+    // A Splitter's messages carry the input's headers and properties unchanged.
+    if let Some(ms) = o.get_mut("messages").and_then(Value::as_array_mut) {
+        for m in ms.iter_mut().filter_map(Value::as_object_mut) {
+            m.remove("headers");
+            m.remove("properties");
+        }
+    }
+    o.insert("brief".into(), json!("Shortened (brief): only headers and properties that differ from the input are shown; \
+        the body is in output.body (bodyUnchanged when the step left it as it was), attachments by name and size. Run \
+        without brief for everything."));
 }
 
 /// Rows of `over` replace the rows of `base` with the same name; the others are added.
@@ -292,7 +375,7 @@ mod tests {
     fn oversized_run_does_not_get_a_handle_or_evict_a_previous_run() {
         let runs = Runs::default();
         let id = runs.keep(Produced { main: Some(msg("keep me")), parts: vec![] }).unwrap().unwrap();
-        let large = Message { body: "x".repeat(MAX_BYTES), body_base64: None, headers: json!([]), properties: json!([]) };
+        let large = Message { body: "x".repeat(MAX_BYTES), body_base64: None, headers: json!([]), properties: json!([]), body_class: None };
         assert!(runs.keep(Produced { main: Some(large), parts: vec![] }).unwrap_err().contains("64 MiB"));
         assert_eq!(runs.message(&id).unwrap().body, "keep me");
     }

@@ -314,8 +314,14 @@ fn router(ctx: &Ctx, config: &Value) -> Result<Value, String> {
             "No route matched and there is no default route.".into()
         };
     }
-    Ok(json!({ "ok": !raised, "routes": out, "taken": taken, "diagnostics": [] }))
+    Ok(json!({ "ok": !raised, "routes": out, "taken": taken, "diagnostics": [], "statusNote": ROUTER_STATUS }))
 }
+
+/// What the route statuses mean, for an agent (the Flow Steps tab shows them as labels; fidelity.md, Router row).
+const ROUTER_STATUS: &str = "Exactly one route is taken: taken names it. A route's status is true or false when its \
+condition was evaluated; not evaluated when an earlier route's condition was already true (conditions run in the \
+iFlow's route order and the first true one wins: an assumption, see reference fidelity); default for the default \
+route, which is taken only when no condition is true.";
 
 /// XPath and grouping may refer to a header or property (SAP); Camel Simple resolves the reference first.
 fn splitter(ctx: &Ctx, config: &Value) -> Result<Value, String> {

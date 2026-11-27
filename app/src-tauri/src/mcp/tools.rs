@@ -4,7 +4,8 @@
 //! runId and the reference come on top (`files.rs`, `runs.rs`, `reference.rs`). A wrong argument is an
 //! error message the model can act on.
 
-use super::{files, flow, reference, runs, Server};
+use super::{files, flow, iflowmodel, reference, runs, whereused, Server};
+use std::collections::HashMap;
 use serde_json::{json, Map, Value};
 
 pub type Args = Map<String, Value>;
@@ -26,7 +27,8 @@ const RUNTIME_LABELS: &[(&str, &str)] = &[
 fn values_schema(what: &str) -> Value {
     json!({
         "type": "object",
-        "description": format!("{what} by name: a string value, or {{\"value\": \"...\", \"type\": \"Integer\"}} for another Java type."),
+        "description": format!("{what} by name: a string value, or {{\"value\": \"...\", \"type\": \"Integer\"}} for another Java type. \
+A property of type null is left out with a warning: Camel keeps no property with a null value."),
         "additionalProperties": {
             "anyOf": [
                 { "type": "string" },
@@ -47,6 +49,10 @@ fn message_properties(props: &mut Map<String, Value>, headers: bool) {
     if headers {
         props.insert("headers".into(), values_schema("Message headers"));
         props.insert("properties".into(), values_schema("Exchange properties"));
+        props.insert("brief".into(), json!({ "type": "boolean", "default": false, "description": "A shorter result for \
+running steps one after another: of the output's headers and properties only those that differ from the input \
+(added or changed; changes, where a step reports it, also names removed ones), and no engine, timing, trace, empty lists or the step's configuration; attachments (also the message log's) by name and size. The run keeps the whole message for \
+messageFrom; run without brief to see all headers and properties." }));
     }
 }
 
@@ -73,6 +79,8 @@ enum Effect {
     WritesProject,
     /// Runs code: no hints, so clients take the protocol's defaults and assume the worst.
     RunsCode,
+    /// Changes which project the other tools use and may create a folder; replaces nothing.
+    OpensProject,
 }
 
 fn tool(name: &str, title: &str, description: &str, props: Map<String, Value>, required: &[&str], effect: Effect) -> Value {
@@ -85,6 +93,8 @@ fn tool(name: &str, title: &str, description: &str, props: Map<String, Value>, r
     match effect {
         Effect::ReadOnly => t["annotations"] = json!({ "readOnlyHint": true, "openWorldHint": false }),
         Effect::WritesProject => t["annotations"] = json!({ "readOnlyHint": false, "destructiveHint": true,
+            "idempotentHint": true, "openWorldHint": false }),
+        Effect::OpensProject => t["annotations"] = json!({ "readOnlyHint": false, "destructiveHint": false,
             "idempotentHint": true, "openWorldHint": false }),
         Effect::RunsCode => {}
     }
@@ -113,17 +123,22 @@ pub fn definitions() -> Vec<Value> {
         ("script", json!({ "type": "string", "description": "The script source, if it is not in a file." })),
         ("function", json!({ "type": "string", "default": "processData", "description": "The function the step calls (Script Function), \
 or a custom function of a Message Mapping script: f(String, MappingContext) (single values) or f(String[], Output, MappingContext) \
-(all values of a context: called once per context))." })),
+(all values of a context: called once per context). read_file on the script lists its functions." })),
         ("args", json!({ "type": "array", "description": "Message Mapping functions only: the String and String[] arguments in order \
 (Output and MappingContext are passed by the simulator). A String argument is a string; a String[] argument is a list of contexts, \
 e.g. [[\"A\", \"B\"], [\"C\"]], whose entries are strings, {\"suppress\": true} or {\"xsiNil\": true}. The result's mapping \
 holds the returned value or the output queue in the same form." })),
     ]);
     message_properties(&mut groovy, true);
-    groovy.insert("bodyType".into(), json!({ "type": "string", "enum": ["String", "byte[]", "InputStream"], "default": "String",
-        "description": "The Java type of the incoming body, as the Groovy tab's Body type." }));
+    groovy.insert("bodyType".into(), json!({ "type": "string", "enum": ["String", "byte[]", "InputStream"],
+        "description": "The Java type of the incoming body, what message.getBody() without a class returns: String, \
+byte[] or InputStream. InputStream gives Camel's InputStreamCache, the type a tenant's HTTPS sender handed on (reference \
+fidelity, Stream body; project_info with iflow lists an iFlow's senders); after the step it is reset, so the body passes on whole. \
+Default: String; with messageFrom, the type a script handed the body on as when the steps after it left the body as it was \
+(a Content Modifier without a body, say; an assumption), as bodyTypeFrom in the result says." }));
     groovy.insert("runtime".into(), runtime(GROOVY_RUNTIMES, true, None,
-        "groovy-1.x (Script API v1) or groovy-2.x (v2). Default: from the script's imports (com.sap.it.script.v2.api → 2.x), else 1.x. both runs the two."));
+        "groovy-1.x (Script API v1) or groovy-2.x (v2). Default: from the script's imports (com.sap.it.script.v2.api → 2.x), else 1.x. both runs the two. \
+For an iFlow's script step, give the runtime project_info lists for it."));
 
     let mut xsd = obj(vec![
         ("schemaPath", json!({ "type": "string", "description": "Project-relative .xsd file. Use schemaPath or schema." })),
@@ -135,23 +150,25 @@ holds the returned value or the output queue in the same form." })),
 
     let mut xpath = obj(vec![
         ("expression", json!({ "type": "string", "description": "The XPath." })),
-        ("version", json!({ "type": "string", "enum": ["1.0", "3.1"], "default": "3.1" })),
+        ("version", json!({ "type": "string", "enum": ["1.0", "3.1"], "default": "3.1", "description": "The XPath version: 3.1 \
+(default) or 1.0, e.g. to check a Message Digest's filter, which the simulator evaluates as XPath 1.0 (not verified on a tenant)." })),
         ("namespaces", ns.clone()),
     ]);
     message_properties(&mut xpath, false);
-    xpath.insert("runtime".into(), runtime(XSLT_RUNTIMES, false, Some("saxon-he-9.9"), "The XML engine."));
+    xpath.insert("runtime".into(), runtime(XSLT_RUNTIMES, false, Some("saxon-he-9.9"), "The Saxon version that evaluates it."));
 
     let mut step = obj(vec![
         ("iflowStep", json!({ "type": "string", "description": "Name or id of a step that project_info lists under iflowSteps. Use iflowStep or step." })),
         ("iflow", json!({ "type": "string", "description": "The iFlow of iflowStep, when several iFlows have a step with that name or id." })),
-        ("step", json!({ "type": "object", "description": "A step given directly (as edited in the Flow Steps tab): {\"type\": \"contentModifier\"|\"filter\"|\"router\"|\"splitter\"|\"gather\"|\"converter\"|\"encoder\"|\"decoder\"|\"messageDigest\", \"config\": {...}}, config shaped as project_info shows it for iFlow steps.",
+        ("step", json!({ "type": "object", "description": "A step given directly: {\"type\": \"contentModifier\"|\"filter\"|\"router\"|\"splitter\"|\"gather\"|\"converter\"|\"encoder\"|\"decoder\"|\"messageDigest\", \"config\": {...}}, config shaped as project_info shows it for iFlow steps. To try another configuration of an iFlow's step (how a Content Modifier or Router should be set up), copy its type and config from project_info, change it, and run it here with the same input.",
             "properties": {
                 "type": { "type": "string", "enum": ["contentModifier", "filter", "router", "splitter", "gather", "converter", "encoder", "decoder", "messageDigest"] },
-                "config": { "type": "object", "description": "The tab's settings for the type (keys left out take the tab's defaults). \
+                "config": { "type": "object", "description": "The step's settings (keys left out take the defaults of a new step). \
 contentModifier: {headers: [row], properties: [row], bodyType: \"constant\"|\"expression\", body}, row = {action: \"Create\"|\"Delete\", name, \
-type: \"constant\"|\"header\"|\"property\"|\"xpath\"|\"expression\", value, datatype (e.g. \"java.lang.String\"), default}. \
+type: \"constant\"|\"header\"|\"property\"|\"xpath\"|\"expression\", value, datatype (e.g. \"java.lang.String\"), default} (row keys left out are empty). \
 filter: {expression (XPath), valueType: \"string\"|\"integer\"|\"boolean\"|\"node\"|\"nodelist\"}. \
-router: {routes: [{name, expressionType: \"xml\"|\"nonxml\", condition, default: bool}], throwException: bool}. \
+router: {routes: [{name, expressionType: \"xml\" (condition is an XPath)|\"nonxml\" (condition is Camel Simple, e.g. ${header.SenderId} = 'ERP'), condition, default: bool}], throwException: bool}; SAP's =, and, or in a Simple condition run as Camel's ==, &&, || \
+(the result's camel field; reference fidelity says what is assumed). \
 splitter: {splitter: \"general\"|\"iterating\", expressionType: \"xpath\"|\"lineBreak\"|\"token\", expression, grouping, streaming: bool}. \
 gather: {messageType: \"sameXml\"|\"differentXml\"|\"plainText\", algorithm: \"combine\"|\"combineAtXPath\"|\"concatenate\", sourceXPath, targetXPath}. \
 converter: {conversion: \"jsonToXml\"|\"xmlToJson\"|\"xmlToCsv\"|\"csvToXml\"; JSON/XML: useNamespaces, separator, \
@@ -200,32 +217,58 @@ schemas/*.xsd, inputs/*.xml|json|csv, platform/*.json. Folders are created.")),
         ("query", json!({ "type": "string", "description": "A value to find (a host, credential alias, queue, file, {{parameter}} or any text; ignoring case), or a property key (address) to list it everywhere." })),
         ("kind", json!({ "type": "string", "enum": ["address", "credential", "queue", "key", "file", "parameter"], "description": "Only properties that hold this, where the key says so (address, credential, queue, key: a keystore alias), the files steps use, or values with {{parameters}}." })),
         ("iflow", json!({ "type": "string", "description": "Only this iFlow (its folder under iflows/, as project_info lists it)." })),
-        ("parameters", json!({ "type": "boolean", "default": false, "description": "Instead of a search: each iFlow's externalized parameters with their values from parameters.prop, where they are used, and which are unused or have no value." })),
+        ("parameters", json!({ "type": "boolean", "default": false, "description": "Only each iFlow's externalized parameters with their values from parameters.prop, where they are used, and which are unused or have no value." })),
+    ]);
+    let open = obj(vec![
+        ("name", json!({ "type": "string", "description": "A folder directly inside the workspace, as project_info lists it under projects (one folder name, no path; hidden folders such as .git are refused)." })),
+        ("create", json!({ "type": "boolean", "default": false, "description": "Create the folder as a new project (the standard layout with example platform/ data, as the app's Import iFlow without a project does). A folder that exists is an error." })),
+    ]);
+    let diagram = obj(vec![
+        ("iflow", json!({ "type": "string", "description": "The iFlow: its folder under iflows/, as project_info lists it with each step. Needed when the project has more than one." })),
+        ("settings", json!({ "type": "boolean", "default": true, "description": "false leaves out the elements' and adapters' settings, for the order of the steps and routes alone." })),
     ]);
     let reference = obj(vec![
         ("topic", json!({ "type": "string", "enum": reference::TOPICS, "description": "script-api: the Script API, \
 Message Mapping and platform service methods the Groovy engines offer. platform: the formats of the mocked platform/ files \
 (value mappings, secure store, partner directory, keystore, number ranges). fidelity: what is simulated and verified against \
 CPI, per step type, and what is not." })),
+        ("step", json!({ "type": "string", "description": "With topic fidelity: only the rows for this step (e.g. router, contentModifier, groovy, xslt, splitter), not the whole page." })),
     ]);
 
     vec![
         tool("project_info", "Project, runtimes and iFlow steps",
-            "The open project: its files, the steps of the iFlows under iflows/ (with each flow step's configuration, and \
-             each script, XSLT and XML Validator step's file, function and runtime), and the installed runtimes. Call this first.",
-            Map::new(), &[], Effect::ReadOnly),
+            "The open project: its files, the steps of the iFlows under iflows/ and the installed runtimes. A flow step \
+             comes with its type and config (run_flow_step runs it by name, or a changed copy as step); a script, XSLT or \
+             XML Validator step with its file, function and runtime for run_groovy, run_xslt or validate_xsd \
+             (functionFound: false when its script does not declare the function). iflow_diagram shows the order of the \
+             steps. With several iFlows (a package), iflows lists each iFlow's steps by name and type, without \
+             configuration, and the iFlows' files are left out: give iflow for one iFlow's steps and files. With a workspace, also its project folders \
+             (projects). Call this first.",
+            obj(vec![("iflow", json!({ "type": "string", "description": "Only this iFlow (its folder under iflows/, as listed in iflows or with each step): its steps with configuration and functionFound, and only its own files plus the script collection files its steps use (the project's other files come without iflow), and its sender adapters (senders). The steps are in the order the export lists them; iflow_diagram gives the flow order." }))]),
+            &[], Effect::ReadOnly),
+        tool("open_project", "Open or create a project in the workspace",
+            "Only when the server was started with --workspace: opens one of the workspace's folders as the project the \
+             other tools work in (create: true makes a new one), and returns its project_info without the runtimes; \
+             for several iFlows only each iFlow's number of steps (stepCount: the steps the simulator runs, i.e. flow \
+             steps, scripts, mappings and validators; not events, Process Calls or adapter calls, so an iFlow of only \
+             those has 0). \
+             Earlier runIds stay usable.",
+            open, &["name"], Effect::OpensProject),
         tool("read_file", "Read a project file",
             "Reads a file of the project (a file that is no text with binary: true): an input message, a mapping, a script, a schema, an iFlow's files or the \
-             platform/ data. Long files come in parts (startLine, maxLines).",
+             platform/ data. Long files come in parts (startLine, maxLines). A Groovy script also lists the functions it \
+             declares (functions, read from its text; nothing runs).",
             read, &[], Effect::ReadOnly),
         tool("run_xslt", "Run an XSLT mapping",
             "Runs an XSLT mapping like CPI's XSLT Mapping step: headers and properties are xsl:param values, the result \
-             is the new body. Returns the output message, xsl:message output and diagnostics.",
+             is the new body. Returns the output message, xsl:message output and diagnostics. An unchanged body comes back \
+             as bodyUnchanged, a long one shortened (bodyShortened); read_file with the runId gives it whole.",
             xslt, &[], Effect::RunsCode),
         tool("run_groovy", "Run a Groovy script",
             "Runs a Groovy script like CPI's Groovy Script step with the clean-room Script API (Message, MessageLog, \
              ITApiFactory with the project's platform/ files), or one custom function of a Message Mapping's script \
              (the graphical mapping itself is not simulated). Returns the output message, log entries and diagnostics. \
+             An unchanged body comes back as bodyUnchanged, a long one shortened (bodyShortened). \
              The script runs without a sandbox. reference script-api lists the API.",
             groovy, &[], Effect::RunsCode),
         tool("validate_xsd", "Validate XML against an XSD",
@@ -238,12 +281,16 @@ CPI, per step type, and what is not." })),
             "Runs a Content Modifier, Filter, Router, General or Iterating Splitter, Gather, converter (JSON/XML/CSV), Encoder or Decoder \
              (Base64, GZIP, ZIP) or Message Digest step on a message, like the \
              Flow Steps tab, from an iFlow of the project or from a config given here. Returns the output message(s), or \
-             for a Router each route's result and the route taken. For an iFlow's script, XSLT or XML Validator step, \
-             use run_groovy, run_xslt or validate_xsd with the step's file, function and profile from project_info.",
+             for a Router each route's result and the route taken: its runId passes the input on unchanged, as the \
+             message goes to that route's first step; run that route's steps next yourself, with messageFrom. \
+             statusNote explains the route statuses (true, false, not evaluated, default). For an iFlow's script, XSLT or XML Validator step, \
+             use run_groovy, run_xslt or validate_xsd with the step's file, function and profile from project_info. \
+             An unchanged body comes back as bodyUnchanged (a Content Modifier that sets only headers, for instance), a \
+             long one shortened (bodyShortened).",
             step, &[], Effect::RunsCode),
         tool("save_file", "Save a file to the project",
             "Writes a file into the project (text, or bytes with contentBase64 or a binary run result), e.g. a mapping, script, schema, input message or platform/ data the user \
-             wants to keep; the app shows it after ↻ in its file tree. Save only what the user asked for. An existing file \
+             wants to keep; the desktop app shows it once its file tree is refreshed. Save only what the user asked for. An existing file \
              is replaced only with overwrite: true.",
             save, &["path"], Effect::WritesProject),
         tool("import_iflow", "Import an iFlow, Value Mapping or package",
@@ -253,11 +300,32 @@ CPI, per step type, and what is not." })),
              imported iFlows' steps; their files open with read_file and run with the tools above.",
             import, &["zip"], Effect::WritesProject),
         tool("iflow_where_used", "Where used in the imported iFlows",
-            "Searches the iFlows under iflows/ (read-only, nothing connects to a tenant): which adapters, steps and routes use a \n             value (a host, credential alias, queue, file or {{parameter}}), with the iFlow, element and property key of each \n             place. With parameters: true, lists each iFlow's externalized parameters, their values, uses, and those unused \n             or without a value. Give query, kind, or both; or parameters.",
+            "The Where used tab for the iFlows under iflows/ (read-only, nothing connects to a tenant). Without query or \
+             kind: an overview of the addresses, credentials, queues, key aliases and files they use, with the number of \
+             places and what {{parameters}} resolve to, and each iFlow's externalized parameters. With query and/or kind: \
+             which adapters, steps and routes use a value (iFlow, element, property key), a {{parameter}} resolved from \
+             parameters.prop, a Content Modifier table as its matching rows, and the parameters whose name or value \
+             contains the query. With parameters: true, only the parameters.",
             where_used, &[], Effect::ReadOnly),
+        tool("iflow_diagram", "How an imported iFlow flows",
+            "The Diagram tab as text (read-only): an imported iFlow's processes (the integration process, exception \
+             subprocesses, local processes), each with its elements in flow order from the start event. A Router's \
+             routes are indented under it (depth + 1): a route's first element carries route (name, condition, \
+             default), and the route's further elements follow it until the next element with a route at that depth; \
+             each element on a route also names it (onRoute: router and route). \
+             Where branches meet, the element is listed again (again: true) without what follows it: the elements after \
+             it are listed once, at its first occurrence. A Process Call names the local process it \
+             calls (calls). Each element has its type as in the editor and its settings as written in the iFlow, a Content \
+             Modifier table as one object per row (cell id to text) \
+             ({{parameters}} unresolved; project_info's configs, which run_flow_step runs, and iflow_where_used resolve \
+             them); adapters name \
+             their system, direction and settings (settings: false leaves all settings out). Use it to follow \
+             a message through the iFlow, then run the steps in that order with run_flow_step, run_groovy, run_xslt and \
+             validate_xsd, passing each result on with messageFrom.",
+            diagram, &[], Effect::ReadOnly),
         tool("reference", "Simulator reference",
             "What the simulator offers, generated from its sources: the Script API (script-api), the platform/ data formats \
-             (platform) and what is verified against CPI (fidelity). Read it before writing a script that uses \
+             (platform) and what is verified against CPI (fidelity; with step only that step's rows). Read it before writing a script that uses \
              services or mapping functions.",
             reference, &["topic"], Effect::ReadOnly),
     ]
@@ -290,9 +358,20 @@ pub fn call(server: &Server, name: &str, args: &Args) -> Result<Value, String> {
     let mut result = dispatch(server, name, &args)?;
     // A run that produced a message keeps it under a runId; long bodies come back shortened.
     if runs_step && result["ok"] != false && result["valid"] != false {
-        let input = runs::Message::from_output(&args[RESOLVED_INPUT])
+        let mut input = runs::Message::from_output(&args[RESOLVED_INPUT])
             .unwrap_or_else(|| runs::Message::text("", json!([]), json!([])));
+        input.body_class = input_class(server, &args);
         keep_run(server, name, &input, &mut result);
+    }
+    // The class the run hands the body on as, where it kept the input's (a Content Modifier that left a stream body
+    // as it was): the engine reports the text it worked on.
+    if let Some(class) = result["runId"].as_str().and_then(|id| server.runs().message(id).ok()?.body_class) {
+        if let Some(out) = result.get_mut("output").filter(|o| o.get("bodyType").is_some()) {
+            out["bodyType"] = json!(class);
+        }
+    }
+    if args.get("brief").and_then(Value::as_bool) == Some(true) {
+        runs::brief(&mut result, args.get(RESOLVED_INPUT).unwrap_or(&Value::Null));
     }
     Ok(result)
 }
@@ -315,7 +394,25 @@ pub(super) fn keep_run(server: &Server, name: &str, input: &runs::Message, resul
 
 fn dispatch(server: &Server, name: &str, args: &Args) -> Result<Value, String> {
     match name {
-        "project_info" => project_info(server),
+        "project_info" => project_info(server, args),
+        "open_project" => files::open_project(server, args).and_then(|created| {
+            let mut info = project_info(server, &Args::new())?;
+            info.as_object_mut().unwrap().remove("runtimes"); // the server's, the same in every project
+            // A package: only each iFlow's number of steps; project_info names them, with iflow in full.
+            if let Some(iflows) = info.get_mut("iflows").and_then(Value::as_array_mut) {
+                for i in iflows.iter_mut() {
+                    let n = i["steps"].as_array().map_or(0, Vec::len);
+                    i.as_object_mut().unwrap().remove("steps");
+                    i["stepCount"] = json!(n);
+                }
+                info["summary"] = json!("Several iFlows, each with stepCount: the steps the simulator runs (flow steps, \
+                    scripts, mappings, validators), not events, Process Calls or adapter calls, so an iFlow of only those \
+                    has 0; iflow_diagram shows all its elements. project_info lists each iFlow's steps by name and type; \
+                    project_info with iflow gives one iFlow's steps in full and its files.");
+            }
+            info["created"] = json!(created);
+            Ok(info)
+        }),
         "run_xslt" => run_xslt(server, args),
         "run_groovy" => run_groovy(server, args),
         "validate_xsd" => validate_xsd(server, args),
@@ -325,7 +422,16 @@ fn dispatch(server: &Server, name: &str, args: &Args) -> Result<Value, String> {
         "save_file" => files::save_file(server, args),
         "import_iflow" => files::import_iflow(server, args),
         "iflow_where_used" => where_used(server, args),
-        "reference" => Ok(json!({ "topic": str_arg(args, "topic"), "text": reference::topic(str_arg(args, "topic").unwrap_or_default())? })),
+        "iflow_diagram" => iflow_diagram(server, args),
+        "reference" => {
+            let topic = str_arg(args, "topic").unwrap_or_default();
+            let text = match str_arg(args, "step") {
+                Some(step) if topic == "fidelity" => reference::fidelity_for(step)?,
+                Some(_) => return Err("step goes with topic fidelity.".into()),
+                None => reference::topic(topic)?,
+            };
+            Ok(json!({ "topic": topic, "text": text }))
+        }
         _ => Err(format!("Unknown tool: {name}")),
     }
 }
@@ -398,14 +504,18 @@ pub fn file_runtime(server: &Server) -> Result<&'static str, String> {
         .ok_or_else(|| "No engine is installed.".to_string())
 }
 
+/// An engine call on the open project: every call carries it (`project.request`), as the desktop app's do, so a
+/// restarted engine and a project opened with open_project need no separate `project.open`.
 pub fn engine_call(server: &Server, runtime: &str, method: &str, params: Value) -> Result<Value, String> {
-    server.engines().call(runtime, method, params)
+    let root = server.project().map(|p| p.to_string_lossy().into_owned());
+    server.engines().call_desktop(runtime, method, params, root)
 }
 
 pub fn require_project(server: &Server) -> Result<(), String> {
-    match server.project() {
-        Some(_) => Ok(()),
-        None => Err("No project is open; start the server with --project <folder>.".into()),
+    match (server.project(), server.workspace()) {
+        (Some(_), _) => Ok(()),
+        (None, Some(_)) => Err("No project is open: open_project opens one of the workspace's folders (project_info lists them under projects).".into()),
+        (None, None) => Err("No project is open; start the server with --project <folder>.".into()),
     }
 }
 
@@ -492,7 +602,16 @@ fn read_body(server: &Server, path: &str) -> Result<runs::Message, String> {
 fn read_bytes(server: &Server, path: &str) -> Result<runs::Message, String> {
     let r = engine_call(server, file_runtime(server)?, "file.read", json!({ "path": path, "binary": true }))?;
     Ok(runs::Message { body: String::new(), body_base64: Some(r["contentBase64"].as_str().unwrap_or_default().to_string()),
-        headers: json!([]), properties: json!([]) })
+        headers: json!([]), properties: json!([]), body_class: None })
+}
+
+/// The class the input's body has after the step `messageFrom` names, when this call keeps that body (no body or
+/// bodyPath of its own): a Groovy step's InputStreamCache stays one through steps that leave the body as it is.
+fn input_class(server: &Server, args: &Args) -> Option<String> {
+    if args.contains_key("body") || args.contains_key("bodyPath") {
+        return None;
+    }
+    server.runs().message(str_arg(args, "messageFrom")?).ok()?.body_class
 }
 
 /// The messages of `messagesFrom`, as the call resolved them before the step (`call`), or now.
@@ -547,52 +666,159 @@ fn pick<'a>(args: &'a Args, key: &str, choices: &'a [&'a str], default: &'a str)
     }
 }
 
-fn project_info(server: &Server) -> Result<Value, String> {
+fn project_info(server: &Server, args: &Args) -> Result<Value, String> {
     let runtimes: Vec<Value> = RUNTIME_LABELS.iter()
         .map(|(id, label)| json!({ "id": id, "label": label, "installed": server.engines().locate(id).is_some() }))
         .collect();
     let mut info = json!({ "project": server.project().map(|p| p.to_string_lossy().to_string()), "runtimes": runtimes });
+    let only = str_arg(args, "iflow");
+    if let Some(w) = server.workspace() {
+        info["workspace"] = json!(w.to_string_lossy());
+        info["projects"] = json!(files::workspace_projects(w)?);
+    }
     if server.project().is_none() {
         return Ok(info);
     }
     let rt = file_runtime(server)?;
     let listing = engine_call(server, rt, "project.list", json!({}))?;
     const MAX_FILES: usize = 1000;
-    let files: Vec<Value> = listing["files"].as_array().into_iter().flatten()
+    let mut files: Vec<Value> = listing["files"].as_array().into_iter().flatten()
         .filter(|f| f["dir"] != true).map(|f| f["path"].clone()).collect();
+    let mut steps: Vec<Value> = engine_call(server, rt, "iflow.steps", json!({}))?["steps"].as_array().cloned().unwrap_or_default();
+    // Every folder with an iFlow model, also one without runnable steps (only adapter calls).
+    let mut iflows: Vec<String> = Vec::new();
+    let models = files.iter().filter_map(|f| f.as_str()?.strip_prefix("iflows/")?.split_once("/src/main/resources/scenarioflows/integrationflow/"));
+    for i in models.map(|(i, _)| i).chain(steps.iter().filter_map(|s| s["iflow"].as_str())) {
+        if !iflows.iter().any(|x| x == i) { iflows.push(i.to_string()); }
+    }
+    let under = |f: &Value, i: &str| f.as_str().is_some_and(|f| f.starts_with(&format!("iflows/{i}/")));
+    if let Some(i) = only {
+        if !iflows.iter().any(|x| x == i) {
+            return Err(format!("No iFlow '{i}' under iflows/. The iFlows: {iflows:?}."));
+        }
+        steps.retain(|s| s["iflow"] == i);
+        // Who sends to the iFlow, as the Diagram tab shows it: a script's body type follows from it (an HTTPS
+        // sender hands on a stream, fidelity.md, Stream body).
+        let models = engine_call(server, rt, "iflow.models", json!({}))?;
+        if let Some(model) = models["models"].as_array().into_iter().flatten().find(|m| m["iflow"] == i) {
+            info["senders"] = Value::Array(iflowmodel::adapters(model).into_iter().filter(|(_, _, inbound)| *inbound)
+                .map(|(f, system, _)| json!({ "adapter": f["adapter"], "system": system.map(|n| n["name"].clone()) }))
+                .collect());
+        }
+        // Only the iFlow's own files and those its steps use (a package's script collection lies beside it); the
+        // project's other files are in project_info without iflow, which an agent has usually called already.
+        let used: Vec<&Value> = steps.iter().map(|s| &s["file"]).filter(|f| f.is_string()).collect();
+        files.retain(|f| under(f, i) || used.contains(&f));
+    } else if iflows.len() > 1 {
+        // A package: the steps of all its iFlows with their configuration overflow a model's context.
+        // Grouped by iFlow, each step by name and type: ids such as CallActivity_1 repeat in every iFlow.
+        files.retain(|f| !f.as_str().unwrap_or_default().starts_with("iflows/"));
+        info["iflows"] = Value::Array(iflows.iter().map(|i| json!({ "iflow": i, "steps": steps.iter()
+            .filter(|s| s["iflow"] == i.as_str()).map(|s| json!({ "name": s["name"], "type": s["type"] })).collect::<Vec<_>>() }))
+            .collect());
+        steps.clear();
+        info["summary"] = json!("Several iFlows: each iFlow's steps by name and type, without configuration, and the \
+            files under iflows/ left out. Call project_info with iflow for one iFlow's steps (config, file, function, \
+            functionFound) and files.");
+    }
     if files.len() > MAX_FILES {
         info["filesTruncated"] = json!(files.len());
     }
     info["files"] = Value::Array(files.into_iter().take(MAX_FILES).collect());
-    info["iflowSteps"] = engine_call(server, rt, "iflow.steps", json!({}))?["steps"].clone();
+    if info.get("summary").is_none() {
+        info["iflowSteps"] = Value::Array(steps);
+        mark_functions(server, &mut info["iflowSteps"]);
+    }
     Ok(info)
 }
 
-/// `iflow.search`, or with `parameters` the parameters of `iflow.index` (IflowIndex.java, which the Where used tab calls too).
-fn where_used(server: &Server, args: &Args) -> Result<Value, String> {
-    if server.project().is_none() {
-        return Err("No project is open: start the server with a project folder.".into());
+/// A script step whose function the script does not declare fails only when it runs: `functionFound` says so up
+/// front, from the script's text as the Groovy tab reads it (nothing runs). For project_info and import_iflow.
+pub fn mark_functions(server: &Server, steps: &mut Value) {
+    for step in steps.as_array_mut().into_iter().flatten() {
+        let (Some(file), Some(function)) = (step["file"].as_str(), step["function"].as_str()) else { continue };
+        if step["fileFound"] != true || !(file.ends_with(".groovy") || file.ends_with(".gsh")) { continue; }
+        if let Ok(script) = read_file(server, file) {
+            let found = super::functions::script_functions(&script).iter().any(|f| f["name"] == function);
+            step["functionFound"] = json!(found);
+        }
     }
+}
+
+/// The Where used tab: without query or kind its overview (what the iFlows use, and their parameters); with them
+/// `iflow.search`'s hits, each with its `{{parameters}}` resolved and a Content Modifier table's matching rows,
+/// plus the parameters whose name or value contains the query; with `parameters` only the parameters. All from
+/// `iflow.index` and `iflow.search` (IflowIndex.java), viewed as the tab does (whereused.rs).
+fn where_used(server: &Server, args: &Args) -> Result<Value, String> {
+    require_project(server)?;
     let rt = file_runtime(server)?;
     let iflow = str_arg(args, "iflow");
-    if args.get("parameters").and_then(Value::as_bool) == Some(true) {
-        if args.contains_key("query") || args.contains_key("kind") {
-            return Err("parameters lists the parameters; give query or kind without it.".into());
-        }
-        let r = engine_call(server, rt, "iflow.index", json!({}))?;
-        let iflows: Vec<Value> = r["iflows"].as_array().cloned().unwrap_or_default().into_iter()
-            .filter(|i| iflow.is_none_or(|f| i["iflow"] == f))
-            .map(|i| json!({ "iflow": i["iflow"], "name": i["name"], "error": i["error"], "parameters": i["parameters"] }))
-            .collect();
-        return Ok(json!({ "iflows": iflows }));
+    let only_parameters = args.get("parameters").and_then(Value::as_bool) == Some(true);
+    if only_parameters && (args.contains_key("query") || args.contains_key("kind")) {
+        return Err("parameters lists the parameters; give query or kind without it.".into());
     }
-    let mut params = json!({});
-    for key in ["query", "kind", "iflow"] {
+    let index: Vec<Value> = engine_call(server, rt, "iflow.index", json!({}))?["iflows"].as_array().cloned().unwrap_or_default()
+        .into_iter().filter(|i| iflow.is_none_or(|f| i["iflow"] == f)).collect();
+    let parameters = |index: &[Value]| -> Vec<Value> { index.iter()
+        .map(|i| json!({ "iflow": i["iflow"], "name": i["name"], "error": i["error"], "parameters": i["parameters"] })).collect() };
+    if only_parameters {
+        return Ok(json!({ "iflows": parameters(&index) }));
+    }
+    let query = str_arg(args, "query").unwrap_or_default().trim();
+    let kind = str_arg(args, "kind");
+    if query.is_empty() && kind.is_none() {
+        return Ok(json!({ "uses": whereused::inventory(&index), "iflows": parameters(&index) }));
+    }
+    let mut params = json!({ "query": query });
+    for key in ["kind", "iflow"] {
         if let Some(v) = args.get(key) {
             params[key] = v.clone();
         }
     }
-    engine_call(server, rt, "iflow.search", params)
+    let mut r = engine_call(server, rt, "iflow.search", params)?;
+    let values: HashMap<String, HashMap<String, String>> = index.iter()
+        .map(|i| (i["iflow"].as_str().unwrap_or_default().to_string(), whereused::parameter_values(i))).collect();
+    let none = HashMap::new();
+    for h in r["hits"].as_array_mut().into_iter().flatten() {
+        let p = values.get(h["iflow"].as_str().unwrap_or_default()).unwrap_or(&none);
+        let value = h["value"].as_str().unwrap_or_default().to_string();
+        if let Some(mut t) = whereused::table_hit(&value, query) {
+            // The tab shows the matching rows as cells instead of the table's XML text.
+            for c in t["rows"].as_array_mut().into_iter().flatten().flat_map(|row| row.as_array_mut().into_iter().flatten()) {
+                if let Some(v) = whereused::resolve(c["text"].as_str().unwrap_or_default(), p) {
+                    c["resolved"] = json!(v);
+                }
+            }
+            h.as_object_mut().unwrap().remove("value");
+            h["rows"] = t["rows"].take();
+            h["hiddenRows"] = t["hidden"].take();
+        } else if let Some(v) = whereused::resolve(&value, p) {
+            h["resolved"] = json!(v);
+        }
+    }
+    // Parameters by name or value, unless the kind asks for another kind of setting (as the tab does).
+    if kind.is_none_or(|k| k == "parameter") {
+        r["parameters"] = json!(parameters(&whereused::matching_parameters(&index, query)));
+    }
+    Ok(r)
+}
+
+/// `iflow.models` (IflowModel.java, which the Diagram tab draws), read as the tab's outline (iflowmodel.rs).
+fn iflow_diagram(server: &Server, args: &Args) -> Result<Value, String> {
+    require_project(server)?;
+    let models = engine_call(server, file_runtime(server)?, "iflow.models", json!({}))?["models"].as_array().cloned().unwrap_or_default();
+    let folders: Vec<&str> = models.iter().filter_map(|m| m["iflow"].as_str()).collect();
+    let model = match str_arg(args, "iflow") {
+        Some(f) => models.iter().find(|m| m["iflow"] == f)
+            .ok_or_else(|| format!("No iFlow '{f}' under iflows/. The iFlows: {folders:?}."))?,
+        None if models.len() == 1 => &models[0],
+        None if models.is_empty() => return Err("The project has no iFlows under iflows/; import_iflow imports one.".into()),
+        None => return Err(format!("The project has several iFlows; give iflow, one of {folders:?}.")),
+    };
+    if let Some(e) = model["error"].as_str() {
+        return Err(format!("The iFlow {} could not be read: {e}", model["iflow"]));
+    }
+    Ok(iflowmodel::diagram(model, args.get("settings").and_then(Value::as_bool) != Some(false)))
 }
 
 fn run_xslt(server: &Server, args: &Args) -> Result<Value, String> {
@@ -611,16 +837,49 @@ fn run_groovy(server: &Server, args: &Args) -> Result<Value, String> {
         (None, Some(text)) => installed_or(server, api_runtime(text), GROOVY_RUNTIMES),
         (None, None) => installed_or(server, api_runtime(&read_file(server, str_arg(args, "scriptPath").unwrap_or_default())?), GROOVY_RUNTIMES),
     };
+    // Without bodyType, the body keeps the type the step before handed it on as (a stream after a script that read
+    // one from a tenant's HTTPS sender, through a Content Modifier that left the body as it was).
+    let inherited = input_class(server, args).and_then(|c| match c.as_str() {
+        c if c.contains("InputStream") => Some("InputStream"),
+        "[B" => Some("byte[]"),
+        _ => None,
+    });
+    let body_type = str_arg(args, "bodyType").or(inherited).unwrap_or("String");
     let params = json!({
         "script": script,
         "function": str_arg(args, "function").unwrap_or("processData"),
         "input": message(server, args)?,
-        "options": { "bodyType": str_arg(args, "bodyType").unwrap_or("String") },
+        "options": { "bodyType": body_type },
         "args": args.get("args").cloned().unwrap_or(json!([])),
     });
     let mut r = on_runtimes(server, &pick(args, "runtime", GROOVY_RUNTIMES, detected), "groovy.run", params)?;
+    // The engine's `functions` lists only Message Mapping functions; by that name an agent took it for all of them.
+    let runs = match r.get_mut("runs").and_then(Value::as_array_mut) {
+        Some(rs) => rs.iter_mut().map(|x| &mut x["result"]).collect::<Vec<_>>(),
+        None => vec![&mut r],
+    };
+    let as_string = body_type == "String";
+    for one in runs {
+        if let Some(f) = one.as_object_mut().and_then(|o| o.remove("functions")) {
+            one["mappingFunctions"] = f;
+        }
+        // A script written for a stream body fails on a String one (JsonSlurper.parse(String), for instance).
+        let string_call = one["diagnostics"].as_array().is_some_and(|ds| ds.iter().any(|d| d["message"].as_str()
+            .is_some_and(|m| m.contains("No signature of method") && (m.contains("(java.lang.String") || m.contains("(String")))));
+        if as_string && one["ok"] == false && string_call {
+            if let Some(ds) = one["diagnostics"].as_array_mut() {
+                ds.push(json!({ "severity": "info", "message": "The body reached the script as a String (bodyType String). \
+If the step follows one that hands on a stream, run it with bodyType: InputStream: a tenant's HTTPS sender hands on an \
+InputStreamCache (reference fidelity, Stream body)." }));
+            }
+        }
+    }
     if str_arg(args, "runtime").is_none() {
         r["runtime"] = json!(detected);
+    }
+    if str_arg(args, "bodyType").is_none() && inherited.is_some() {
+        r["bodyTypeFrom"] = json!(format!("bodyType {body_type}: the step that messageFrom names handed the body on as \
+            a stream or bytes, and the steps since left it as it was. Give bodyType to choose another."));
     }
     Ok(r)
 }

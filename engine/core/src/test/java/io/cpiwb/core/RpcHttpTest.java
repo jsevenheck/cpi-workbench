@@ -56,6 +56,22 @@ class RpcHttpTest {
 
     /** A file save during a long run must wait for it, as on the desktop (engine.rs DEADLINES). */
     @Test
+    @SuppressWarnings("unchecked")
+    void aMissingFileIsNamedAsSuch() {
+        RpcHandler missing = new RpcHandler() {
+            public Object call(String method, Map<String, Object> args) throws Exception {
+                throw new java.nio.file.NoSuchFileException("/p/inputs/order.xml");
+            }
+
+            public Map<String, Object> describe() {
+                return Json.o();
+            }
+        };
+        Map<String, Object> r = new RpcServer(missing, 10_000).handle(Json.o().with("id", 1).with("method", "file.read"));
+        assertEquals("No such file: /p/inputs/order.xml", ((Map<String, Object>) r.get("error")).get("message"));
+    }
+
+    @Test
     void aWaitingRequestOutlivesTheCallAhead() {
         RpcHandler none = new RpcHandler() {
             public Object call(String method, Map<String, Object> args) {

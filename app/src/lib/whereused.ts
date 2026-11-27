@@ -145,6 +145,12 @@ export interface InventoryGroup {
   values: { value: string; count: number; resolved: string[] }[];
 }
 
+/** Ignoring case, then by code point: the same order on every machine, and in the MCP server (mcp/whereused.rs). */
+function byText(a: string, b: string): number {
+  const x = a.toLowerCase(), y = b.toLowerCase();
+  return x < y ? -1 : x > y ? 1 : a < b ? -1 : a > b ? 1 : 0;
+}
+
 /** The overview of an empty search: the distinct addresses, credentials, queues, key aliases and files the iFlows use. */
 export function inventory(index: IndexedIflow[]): InventoryGroup[] {
   const kinds = KINDS.filter(([id]) => id && id !== 'parameter');
@@ -163,7 +169,7 @@ export function inventory(index: IndexedIflow[]): InventoryGroup[] {
   }
   return kinds.map(([kind, label]) => ({ kind, label,
     values: [...counts.get(kind)!].map(([value, v]) => ({ value, count: v.count, resolved: [...v.resolved].sort() }))
-      .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value)) }))
+      .sort((a, b) => b.count - a.count || byText(a.value, b.value)) }))
     .filter((g) => g.values.length);
 }
 

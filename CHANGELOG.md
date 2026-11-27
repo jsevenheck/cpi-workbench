@@ -6,6 +6,69 @@ of its version.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-26
+
+### Added
+
+- **MCP: a workspace of projects.** `cpi-workbench mcp --workspace <folder>` serves the folders inside that folder,
+  one per integration, from one entry in Claude Desktop or Codex: `project_info` lists them, and the new tool
+  `open_project` opens one or creates a new project there. Before, each project needed its own `--project` entry.
+- **MCP: an iFlow's diagram as text.** The new tool `iflow_diagram` lists an imported iFlow's processes with their
+  elements in flow order, a Router's routes with their conditions, Process Calls, each element's settings and the
+  adapters with their systems, as the Diagram tab and its outline show them; each element on a route names it
+  (`onRoute`), so an agent can follow a message through the iFlow. A Content Modifier table comes as one object
+  per row instead of XML text, and `settings: false` gives the order alone.
+
+### Changed
+
+- **MCP: Where used as in the app.** `iflow_where_used` without a query returns the tab's overview (what the
+  iFlows use, with counts, and their parameters); a search resolves `{{parameters}}` from `parameters.prop`, shows
+  a Content Modifier table as its matching rows and lists the parameters whose name or value contains the query.
+  The app's overview now sorts values of equal count ignoring case on every machine, rather than by the system
+  language, so that both give the same order.
+- **MCP: descriptions for agents that do not know the app.** The tools, their parameters and the server's
+  instructions explain what they referred to the app's tabs for (the Groovy body type, the XPath version, a
+  Router's condition types), how to try another configuration of an iFlow's step on the same input, how a
+  Router's result passes the message on, and when to use `iflow_diagram` and `iflow_where_used`.
+- **MCP: packages stay readable.** For a project with several iFlows, `project_info` lists each iFlow's steps by
+  name and type, without configuration, and leaves the iFlows' files out; `project_info` with `iflow` gives one
+  iFlow in full, with only its own files and the script collection files its steps use. `open_project` gives
+  only each iFlow's number of steps (`stepCount`, the steps the simulator runs).
+- **MCP: `brief` results.** `run_xslt`, `run_groovy` and `run_flow_step` take `brief: true`: of the output's
+  headers and properties only those that differ from the input, and no engine, timing, trace or step
+  configuration, and attachments (also the message log's) by name and size, for steps run one after another. A script that fails on a String body calling a method with it
+  gets a hint to try `bodyType: InputStream`. The tool descriptions also explain `bodyUnchanged`, and a Router's result explains its route
+  statuses (`statusNote`).
+- **MCP: the body's type travels with the message.** Without `bodyType`, `run_groovy` gives a message from
+  `messageFrom` the type a script handed it on as, while later steps left the body as it was: a stream stays a
+  stream through a Content Modifier with an empty body (an assumption, F38; `bodyTypeFrom` says so, and that
+  step's `output.bodyType` shows the class it hands on). `project_info` with `iflow` lists the iFlow's sender adapters (`senders`).
+- **MCP: smaller answers.** `reference` with `topic: fidelity` takes `step` for that step's rows only, and
+  `read_file` returns a file's text as its own content block, as written, instead of inside escaped JSON.
+- **A Groovy run on another Java than 21 warns.** A development build starts the engines on the system's Java; a
+  tenant runs Groovy scripts on Java 21 (F48), and JDK-dependent output can differ.
+- **MCP: a script's functions.** `read_file` on a Groovy script lists the functions it declares, read from its
+  text as the Groovy tab does (nothing runs), and `project_info` marks a script step whose function the script
+  does not declare (`functionFound: false`), as does `import_iflow`. A run's list of Message Mapping functions is
+  called `mappingFunctions` in `run_groovy`, so it is not taken for all of the script's functions. `open_project`
+  no longer repeats the runtimes.
+- **A missing script function names the others.** When a Groovy Script step's function is not in the script, the
+  error lists the script's functions with one parameter, in the app and over MCP.
+- **A missing file is named as such.** Reading a file that does not exist (a body, script or mapping by path, in
+  the app and over MCP) said only its path; it now says `No such file: <path>`.
+- **MCP: every result message names its `runId`.** A Splitter's messages and each runtime of `runtime: both` carry
+  their own `runId` (`run-…/2`, `run-…/saxon-he-12`), so an agent no longer builds it from the convention.
+
+### Fixed
+
+- **A Groovy script that reads a stream body no longer empties it.** With the body type `InputStream`, a script
+  gets Camel's `InputStreamCache`, the type a tenant's HTTPS sender hands on (F49), and the body is reset after the
+  step as Camel's stream caching does. Before, a script that only read the body (to parse JSON, say) passed on an
+  empty body to the next step, in the app and over MCP.
+- **A property with the value null no longer fails a step.** Groovy scripts and Content Modifiers stopped with a
+  bare `NullPointerException`; the property is now left out with a warning, as Camel keeps no property with a null
+  value (`Exchange.setProperty` removes it).
+
 ## [0.7.0] - 2026-11-24
 
 ### Added
@@ -506,7 +569,8 @@ First public release.
   supported.
 - The installers and engine jars include the licence texts and notices of the bundled components.
 
-[Unreleased]: https://github.com/jsevenheck/cpi-workbench/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/jsevenheck/cpi-workbench/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/jsevenheck/cpi-workbench/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/jsevenheck/cpi-workbench/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/jsevenheck/cpi-workbench/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/jsevenheck/cpi-workbench/compare/v0.4.0...v0.5.0

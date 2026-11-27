@@ -42,7 +42,8 @@ project-relative paths); delete the ones you no longer need, or import into a ne
 A header or property is a string unless it names one of these types: `String`, `Integer`, `Long`,
 `Boolean`, `Double`, `Float`, `BigDecimal`, `Date` (ISO-8601), `byte[]` (Base64), `null`. The app's
 Headers and Properties tables offer them, the command line takes them as `-H name=value:Type`, and the
-MCP server as `{"value": "…", "type": "Integer"}`.
+MCP server as `{"value": "…", "type": "Integer"}`. A property of type `null` is left out with a warning:
+Camel keeps no property with a null value (`Exchange.setProperty` removes it). A header can be `null`.
 
 ## Script inputs
 
@@ -60,7 +61,7 @@ MCP server as `{"value": "…", "type": "Integer"}`.
   signature decides how the function is called: with `String` arguments once (*Single values*), with
   `String[]` arguments once per context (*All values of a context*), which needs the same number of
   contexts in every `String[]` argument. `MappingContext` reads and sets the input's headers and
-  properties. How to enter the arguments: [User guide](user-guide.md#groovy-xslt-and-platform-data).
+  properties. How to enter the arguments: [User guide](user-guide.md#groovy-completions-and-message-mapping-functions).
 
 ## Mocked platform data (`platform/`)
 

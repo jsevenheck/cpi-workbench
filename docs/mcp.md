@@ -37,31 +37,42 @@ Code asks once before it starts the servers of a project's `.mcp.json`. Instead 
 command adds the server for you alone: `claude mcp add cpi-workbench -- <executable> mcp`.
 
 **Claude Desktop** (*Settings → Developer → Edit Config*, `claude_desktop_config.json`) and other
-clients without a project folder need `--project`:
+clients without a project folder name the folder the server works in. For several integrations, give a
+**workspace**: a folder that holds one project folder per integration (`C:\work\cpi\Orders`,
+`C:\work\cpi\Billing`, …), with one entry for all of them:
 
 ```json
 {
   "mcpServers": {
     "cpi-workbench": {
       "command": "C:\\Users\\<user>\\AppData\\Local\\CPI Workbench\\cpi-workbench.exe",
-      "args": ["mcp", "--project", "C:\\work\\my-cpi-project"]
+      "args": ["mcp", "--workspace", "C:\\work\\cpi"]
     }
   }
 }
 ```
+
+The server then starts without a project. `project_info` lists the workspace's folders under `projects`, and
+`open_project` opens one of them, or creates a new one with `create: true` (the layout of the app's
+*Import iFlow…* without a project). The agent works in one project at a time and never outside the workspace (hidden folders such as `.git` are
+neither listed nor opened);
+ask it, for example, *"Open the project Orders"* or *"Create a project Billing and import C:\Downloads\Billing.zip"*.
+For a single project, give `"--project", "C:\\work\\my-cpi-project"` instead of `--workspace` (not both).
 
 **Codex** (`~/.codex/config.toml`):
 
 ```toml
 [mcp_servers.cpi-workbench]
 command = 'C:\Users\<user>\AppData\Local\CPI Workbench\cpi-workbench.exe'
-args = ["mcp", "--project", 'C:\work\my-cpi-project']
+args = ["mcp", "--workspace", 'C:\work\cpi']   # or "--project", 'C:\work\my-cpi-project'
 ```
 
-In both, replace `<user>` with your Windows user name (the folder under `C:\Users`) and the project
-path with yours, then restart the client.
+In both, replace `<user>` with your Windows user name (the folder under `C:\Users`) and the folder with yours,
+then restart the client. With the `.msi`, the executable is `C:\Program Files\CPI Workbench\cpi-workbench.exe`.
+The folder must exist; a workspace may start empty.
 
-The project folder is `--project`, else `CLAUDE_PROJECT_DIR`, else the server's working directory.
+The project folder is `--project`, else `CLAUDE_PROJECT_DIR`, else the server's working directory; with
+`--workspace`, the folder `open_project` opened.
 From a repository checkout, a debug build works too (`app/src-tauri/target/debug/cpi-workbench mcp`);
 it finds the checkout's engine jars.
 
@@ -75,6 +86,17 @@ iFlow's files (`read_file`), writes the mapping and runs it (`run_xslt`) until t
 you the result; for a Content Modifier or Router it shows the settings as you enter them in the iFlow. It saves
 a file (`save_file`) when you want to keep it; the app shows it after **↻** in its file tree.
 
+Other requests that work this way:
+
+* *"How does a message go through Order_Replication?"*: `iflow_diagram` gives the steps in order, the
+  Router's routes with their conditions and the connected systems.
+* *"How must the Content Modifier 'Set headers' be set up to also set the header OrderType from the order's
+  type attribute?"*: the agent takes the step's configuration from `project_info`, runs changed copies with
+  `run_flow_step` on a sample message until the headers are right, and shows the rows as you enter them.
+* *"Which hosts and credentials do the iFlows use?"*: `iflow_where_used` without a query.
+* *"Run the iFlow's steps in order on this message"*: each step with the matching tool, the message passed on
+  by `runId`.
+
 The prompt **develop_step** (in Claude Desktop under **+**) starts this with a task, an iFlow and an input.
 
 ## Tools
@@ -84,17 +106,19 @@ agent without file access of its own what the app's file tree and **Import iFlow
 
 | Tool | Tab in the app |
 |---|---|
-| `project_info` | The project: its files, the steps of the iFlows under `iflows/` (flow steps with their configuration; script, XSLT and XML Validator steps with file, function and runtime) and the installed runtimes. |
-| `read_file` | Opening a file: the text of a project file, long files in parts (`startLine`, `maxLines`), text in one long line by characters (`startChar`); a file that is no text with `binary: true` (as `contentBase64`); with `runId`, the whole output body of a run (a binary one as `contentBase64`). |
+| `project_info` | The project: its files, the steps of the iFlows under `iflows/` (flow steps with their configuration; script, XSLT and XML Validator steps with file, function and runtime; a script step's `functionFound` says whether its script declares that function). With several iFlows (a package), `iflows` lists each iFlow's steps by name and type, without configuration, and the files under `iflows/` are left out, so the answer stays small; `iflow` gives one iFlow's steps in full (in the export's order; `iflow_diagram` gives the flow order) with only its own files and the script collection files its steps use, and its sender adapters (`senders`, e.g. HTTPS from a system). Also the installed runtimes; with `--workspace`, also the workspace's folders (`projects`). |
+| `open_project` | **Open folder…** / **Import iFlow…** without a project, within the workspace (`--workspace` only): opens a folder directly inside it (`name`), or creates a new project there (`create: true`), and returns its `project_info` (without the runtimes, which do not change; for several iFlows only each iFlow's number of steps, `stepCount`: the steps the simulator runs, not events, Process Calls or adapter calls, so an iFlow of only those has 0). Calls that are running finish on the project they started on; earlier `runId`s stay usable. |
+| `read_file` | Opening a file: the text of a project file (a Groovy script's also with the `functions` it declares, read from its text as the Groovy tab does; nothing runs), long files in parts (`startLine`, `maxLines`), text in one long line by characters (`startChar`); a file that is no text with `binary: true` (as `contentBase64`); with `runId`, the whole output body of a run (a binary one as `contentBase64`). The text comes as its own content block, as written, with the rest of the result as JSON beside it. |
 | `run_xslt` | XSLT (`mappingPath` or `mapping`). `runtime: "both"` runs Saxon-HE 9.9 and 12, as the runtime comparison does. |
-| `run_groovy` | Groovy, with the Script API and the project's `platform/` mocks, and the body type (`bodyType`). The runtime (1.x or 2.x) follows the script's imports unless given; `both` runs both. A custom function of a Message Mapping script takes `args` instead, as the Groovy tab's *Arguments*; the result's `mapping` holds the returned value or the output queue. |
+| `run_groovy` | Groovy, with the Script API and the project's `platform/` mocks, and the body type (`bodyType`; `InputStream` gives Camel's `InputStreamCache`, as behind a tenant's HTTPS sender, reset after the step so the body passes on whole: [Fidelity](fidelity.md), *Stream body*; when a script run on a String body fails calling a method with that String, a diagnostic suggests `InputStream`. Without `bodyType`, a message from `messageFrom` keeps the type a script handed it on as while later steps left the body as it was, e.g. a stream through a Content Modifier with an empty body (an assumption, as for F38 in [Fidelity](fidelity.md); a Content Modifier that sets a body hands on that text), and `bodyTypeFrom` says so; such a step's result shows the class it hands on as `output.bodyType`). The runtime (1.x or 2.x) follows the script's imports unless given; `both` runs both. A custom function of a Message Mapping script takes `args` instead, as the Groovy tab's *Arguments*; the result's `mapping` holds the returned value or the output queue, and `mappingFunctions` the script's Message Mapping functions. |
 | `validate_xsd` | XSD. |
 | `evaluate_xpath` | XPath (1.0 or 3.1, with namespaces). A node of the body also says where it is (`at`: the element positions from the root, its name, an attribute's name). |
-| `run_flow_step` | Flow Steps: a Content Modifier, Filter, Router, Splitter, Gather, converter (JSON ↔ XML, XML ↔ CSV), Encoder, Decoder (Base64, GZIP, ZIP) or Message Digest step from an iFlow (`iflowStep`: name or id, with `iflow` when several iFlows share it) or from a configuration (`step`). For an iFlow step, `step.defaulted` names the choices the iFlow leaves out, which ran with the default (an assumption). |
+| `run_flow_step` | Flow Steps: a Content Modifier, Filter, Router, Splitter, Gather, converter (JSON ↔ XML, XML ↔ CSV), Encoder, Decoder (Base64, GZIP, ZIP) or Message Digest step from an iFlow (`iflowStep`: name or id, with `iflow` when several iFlows share it) or from a configuration (`step`). For an iFlow step, `step.defaulted` names the choices the iFlow leaves out, which ran with the default (an assumption). A Router's result names the route `taken` and each route's status (`true`, `false`, `not evaluated` after an earlier match, `default`), explained in `statusNote`; the first true condition wins, in the iFlow's route order (an assumption, [Fidelity](fidelity.md), *Router*). |
 | `save_file` | **Save as…**: writes a file (`content`, bytes as `contentBase64`, or a run's output with `contentFrom`, binary or not) into the project, creating folders. An existing file is replaced only with `overwrite: true`. |
-| `import_iflow` | **Import iFlow**: an iFlow, Value Mapping or integration package exported from the tenant (`.zip`, any path): iFlows into `iflows/<name>/`, value mappings into `platform/value-mappings.json`; returns `kind`, the imported iFlows' steps, `valueMappings`, `skipped` and `kept` (with `overwrite: true`, files of the earlier version that the export does not contain; they are not deleted). An existing folder or value mapping is replaced only with `overwrite: true`. |
-| `iflow_where_used` | **Where used**: which adapters, steps and routes of the imported iFlows use a value (`query`: a host, credential alias, queue, file or `{{parameter}}`), optionally only of a `kind` (`address`, `credential`, `queue`, `key`, `file`, `parameter`) or one `iflow`; with `parameters: true` each iFlow's externalized parameters, their values and uses, and those unused or without a value. A receiver adapter's hit is labelled with the step that calls it (`SOAP receiver from Call S4`). Read-only. |
-| `reference` | No tab: what the simulator offers, generated from its sources. `script-api`: the Script API, Message Mapping and platform service methods; `platform`: the formats of the `platform/` files; `fidelity`: [Fidelity](fidelity.md). |
+| `import_iflow` | **Import iFlow**: an iFlow, Value Mapping or integration package exported from the tenant (`.zip`, any path): iFlows into `iflows/<name>/`, value mappings into `platform/value-mappings.json`; returns `kind`, the imported iFlows' steps (with `functionFound` as in `project_info`), `valueMappings`, `skipped` and `kept` (with `overwrite: true`, files of the earlier version that the export does not contain; they are not deleted). An existing folder or value mapping is replaced only with `overwrite: true`. |
+| `iflow_where_used` | **Where used**: without `query` or `kind`, the tab's overview (`uses`: the addresses, credentials, queues, key aliases and files the iFlows use, with the number of places and what their `{{parameters}}` resolve to; `iflows`: each iFlow's externalized parameters, their values and uses, and those unused or without a value). With `query` (a host, credential alias, queue, file, `{{parameter}}` or any text) and/or a `kind` (`address`, `credential`, `queue`, `key`, `file`, `parameter`): the adapters, steps and routes that use it, each with a `{{parameter}}` resolved from `parameters.prop` (`resolved`) and a Content Modifier table as its matching `rows` instead of its XML text, plus the `parameters` whose name or value contains the query. `iflow` limits it to one iFlow; `parameters: true` returns only the parameters. A receiver adapter's hit is labelled with the step that calls it (`SOAP receiver from Call S4`). Read-only. |
+| `iflow_diagram` | **Diagram**, as text: an imported iFlow's processes (integration process, exception subprocesses, local processes), each with its elements in flow order from the start event, as the sidebar's outline lists them: a Router's routes indented (`depth`) with their name and condition, each element on a route naming it (`onRoute`: router and route), an element where branches meet listed again (`again`) without what follows it, which is listed once at its first occurrence (the result's `againNote` says so), a Process Call with the process it calls. Each element has its type as in the editor and its `settings` as written in the iFlow (a Content Modifier table as one object per row, cell id to text, as Where used shows its rows; `settings: false` leaves all settings out) (`{{parameters}}` unresolved; `project_info` and `iflow_where_used` resolve them); the `adapters` have their system, direction and settings. `iflow` picks the iFlow when there are several. Read-only; the drawing's geometry is left out. |
+| `reference` | No tab: what the simulator offers, generated from its sources. `script-api`: the Script API, Message Mapping and platform service methods; `platform`: the formats of the `platform/` files; `fidelity`: [Fidelity](fidelity.md), with `step` only that step's rows (e.g. `router`, `groovy`). |
 
 Without `runtime`, a tool uses the app's default (Saxon-HE 9.9; Groovy from the script's imports), or the
 other runtime of that kind when the default is not installed, as the app does. Flow steps run Camel Simple
@@ -102,7 +126,8 @@ on Camel 3.14.7 with any installed Groovy engine.
 
 A message is `body` (or `bodyPath`, a project file) and, where the tab has them, `headers` and `properties`. A header or
 property is a string, or `{"value": "…", "type": "Integer"}` for another type (the types in
-[Project files](project-files.md#header-and-property-types)). Results are the engines' JSON, the same data the app shows: the output
+[Project files](project-files.md#header-and-property-types)). A property of type `null` is left out with a warning, as
+Camel keeps no property with a null value. Results are the engines' JSON, the same data the app shows: the output
 message, diagnostics with lines, `xsl:message` output, the message log, timings.
 
 ### Passing results on (`runId`)
@@ -111,10 +136,18 @@ A run that produces a message returns a `runId`: `run_xslt`, `run_groovy`, `vali
 passes on, as the XML Validator lets it), `run_flow_step` (the Router passes the message on, unless it raises an
 exception: then `ok` is false; a Splitter's
 messages are `runId/1`, `runId/2`, …; with `runtime: both`, `runId/saxon-he-12` and so on). A failed run and an
-invalid message get none. The input (with a Gather's `messagesFrom`) is read once, before the step runs, so the
+invalid message get none. Each of these messages also carries its own id as `runId` in the result (a
+Splitter's `messages[]`, the entries of `runs[]`). The input (with a Gather's `messagesFrom`) is read once, before the step runs, so the
 kept message is the one the step got. `messageFrom: "<runId>"` makes that message (body, headers, properties) the input of
 the next call, as it flows to the next step in an iFlow; `body`, `headers` and `properties` given in the same call
 replace the body or the rows of the same name. A Gather takes `messagesFrom` (a Splitter's `runId`, or a list).
+
+When steps run one after another, `brief: true` on `run_xslt`, `run_groovy` and `run_flow_step` shortens each
+result to what changed: of the output's headers and properties only those that differ from the input (a result's
+`changes` also names removed ones), without engine, timing, trace, empty lists and the step's configuration, and
+attachments (also the message log's) by name and size. The body stays in `output.body` (`bodyUnchanged` when the step
+left it as it was). The run keeps the whole message
+for `messageFrom`.
 
 To keep results small, a body the step left as it was (from 200 characters) is left out, with
 `bodyUnchanged` saying so; bodies longer than 20,000 characters, and a Splitter's messages longer than 2,000,
@@ -143,19 +176,23 @@ lists what is verified against CPI.
 
 ## What the server can access
 
-* **Files:** only the project folder. Bodies, mappings, scripts and schemas are read through the
+* **Files:** only the project folder (with `--workspace`, the project `open_project` opened; it opens or
+  creates only folders directly inside the workspace, and refuses hidden folders such as `.git` and any link
+  that leads outside it). Bodies, mappings, scripts and schemas are read through the
   engines, which refuse paths outside the project, as in the app ([What a run can access](user-guide.md#what-a-run-can-access)).
   The check follows symbolic links: a link inside the project that leads outside it is refused.
   Paths that are absolute or contain `..` are refused before the engine sees them.
   Only `save_file` and `import_iflow` write into the project, and they replace nothing without
-  `overwrite: true`; `import_iflow` reads the zip from the path it is given, also outside the project.
+  `overwrite: true` (`open_project` with `create: true` creates a new project folder inside the workspace and
+  refuses one that already exists); `import_iflow` reads the zip from the path it is given, also outside the project.
   The engines keep caches in the temp folder and the user's cache folder, as in the app. Groovy
   scripts can write files (next point).
 * **Code:** Groovy scripts execute as ordinary Java code with your user's rights, without a sandbox;
   Camel Simple in flow steps and reflexive `java:` calls in XSLT can call methods too. An agent that can
   call `run_groovy` or `run_xslt` can run any code. The MCP annotations say so: only `project_info`,
-  `read_file`, `validate_xsd`, `evaluate_xpath` and `reference` are marked read-only and closed-world;
-  `save_file` and `import_iflow` are marked as writing (destructive, idempotent, closed-world). A client that
+  `read_file`, `validate_xsd`, `evaluate_xpath`, `iflow_where_used`, `iflow_diagram` and `reference` are marked read-only and closed-world;
+  `save_file` and `import_iflow` are marked as writing (destructive, idempotent, closed-world); `open_project` as
+  not read-only but not destructive (it creates a folder at most). A client that
   uses these hints can ask before the others run.
 * **Network:** MCP opens no port, starts no CPI Helper receiver and makes no external requests.
   XML runs resolve includes, documents
@@ -177,10 +214,11 @@ lists what is verified against CPI.
   describes it. Requests that carry `_meta["io.modelcontextprotocol/protocolVersion"]` are served
   statelessly under 2026-07-28 (`server/discover`, `resultType`, caching hints on lists). A client
   that opens with `initialize` gets 2025-11-25, 2025-06-18, 2025-03-26 or 2024-11-05.
-* Features: tools, with `structuredContent` and the same JSON as text; one prompt (`develop_step`);
+* Features: tools, with `structuredContent` and the same JSON as text (`read_file`: the file's text as its own block,
+  the rest as JSON); one prompt (`develop_step`);
   `instructions` that tell the agent how to work with the tools. No resources, logging, sampling or roots. `notifications/cancelled` drops the answer; the engine finishes the run.
 * Engines start on first use and stop after 10 idle minutes (Groovy); an engine that hits the
-  30-second execution timeout restarts with the project open again. The supervisor also bounds queue
+  30-second execution timeout restarts; every call carries its project, as the desktop app's calls do. The supervisor also bounds queue
   wait, startup and pipe I/O independently (see [Architecture](architecture.md#engines-and-protocol)).
   The server stops when its stdin closes.
 * Tested with the official TypeScript SDK 1.32.2 and Python SDK 2.3.0 clients (both negotiate
@@ -191,4 +229,7 @@ The code is in `app/src-tauri/src/mcp/`. `flow.rs` repeats the Flow Steps tab's 
 (`app/src/lib/flowcalls.ts`); the fixtures in `testdata/flow-parity` hold the calls both must make for a
 step's settings and message, and a test on each side replays them without engines. Content Modifier
 fixtures also check results and early failures. They do not cover how the
-tab's editors or the MCP tool's arguments become those settings and that message.
+tab's editors or the MCP tool's arguments become those settings and that message. In the same way,
+`whereused.rs`, `functions.rs` and `iflowmodel.rs` repeat what the Where used tab, the Groovy tab's function list
+and the Diagram tab compute in TypeScript (`whereused.ts`, `functions.ts`, `iflowmodel.ts`), checked by
+`testdata/whereused-parity`, `testdata/functions-parity` and `testdata/iflowmodel-parity`.

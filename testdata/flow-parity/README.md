@@ -13,5 +13,6 @@ engine and must make exactly these calls, so the two cannot drift apart. No engi
 | `messages` | a Gather's messages |
 | `answers` | per method, the engine's answers in call order; a call without one gets `{ "ok": true }` |
 | `calls` | the expected calls in order: `engine` (`xml` or `camel`), `method`, `params` |
+| `result`, `diagnostics` | optional: the whole expected result, or only its `diagnostics` |
 
-Result shapes are not compared: the MCP server may add fields the tab does not need.
+Results are compared only where a fixture gives `result` or `diagnostics`: the MCP server may add fields the tab does not need.

@@ -1,0 +1,116 @@
+{
+  "name": "router-null-property",
+  "from": "iflow",
+  "step": {
+    "type": "router",
+    "config": {
+      "routes": [
+        {
+          "name": "Z",
+          "expressionType": "nonxml",
+          "condition": "${header.h0} = 'z'",
+          "default": false
+        },
+        {
+          "name": "",
+          "expressionType": "nonxml",
+          "condition": "${header.h0} = 'x'",
+          "default": false
+        },
+        {
+          "name": "Never",
+          "expressionType": "nonxml",
+          "condition": "${header.h0} = 'n'",
+          "default": false
+        },
+        {
+          "name": "Other",
+          "expressionType": "nonxml",
+          "condition": "",
+          "default": true
+        }
+      ]
+    }
+  },
+  "input": {
+    "body": "<a><b>1</b></a>",
+    "headers": {
+      "h0": "x"
+    },
+    "properties": {
+      "p0": "y",
+      "p1": null
+    }
+  },
+  "namespaces": {
+    "o": "urn:example:order"
+  },
+  "answers": {
+    "simple.eval": [
+      {
+        "ok": true,
+        "value": "false",
+        "diagnostics": [
+          {
+            "severity": "warning",
+            "message": "Properties with the value null are left out: p1. Camel keeps no property with a null value (Exchange.setProperty removes it)."
+          }
+        ]
+      },
+      {
+        "ok": true,
+        "value": "true",
+        "diagnostics": [
+          {
+            "severity": "warning",
+            "message": "Properties with the value null are left out: p1. Camel keeps no property with a null value (Exchange.setProperty removes it)."
+          }
+        ]
+      }
+    ]
+  },
+  "calls": [
+    {
+      "engine": "camel",
+      "method": "simple.eval",
+      "params": {
+        "expression": "${header.h0} = 'z'",
+        "mode": "condition",
+        "input": {
+          "body": "<a><b>1</b></a>",
+          "headers": {
+            "h0": "x"
+          },
+          "properties": {
+            "p0": "y",
+            "p1": null
+          }
+        }
+      }
+    },
+    {
+      "engine": "camel",
+      "method": "simple.eval",
+      "params": {
+        "expression": "${header.h0} = 'x'",
+        "mode": "condition",
+        "input": {
+          "body": "<a><b>1</b></a>",
+          "headers": {
+            "h0": "x"
+          },
+          "properties": {
+            "p0": "y",
+            "p1": null
+          }
+        }
+      }
+    }
+  ],
+  "diagnostics": [
+    {
+      "severity": "warning",
+      "message": "Properties with the value null are left out: p1. Camel keeps no property with a null value (Exchange.setProperty removes it)."
+    }
+  ]
+}

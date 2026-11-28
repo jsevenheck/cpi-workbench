@@ -31,7 +31,7 @@ public final class Main {
             "  cpiwb-xml serve --http <port> [--ui <dir>]   JSON-RPC + UI on http://127.0.0.1:<port>",
             "  cpiwb-xml info",
             "",
-            "Header/property types: String (default), Integer, Long, Boolean, Double, Float, BigDecimal, Date, byte[]");
+            "Header/property types: String (default), Integer, Long, Boolean, Double, Float, BigDecimal, Date, byte[], null");
 
     private Main() {
     }

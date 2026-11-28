@@ -203,8 +203,26 @@ async function simpleEval(run: FlowRun, expression: string, mode: 'condition' | 
   return r as { value: string | null; evaluated?: string };
 }
 
-/** Runs a step with the tab's settings for it; a Gather's settings carry its `messages`. */
+/**
+ * Runs a step with the tab's settings for it; a Gather's settings carry its `messages`. The warnings of a successful
+ * Camel Simple evaluation (e.g. a null property left out) go into the step's diagnostics, each once; an evaluation
+ * that fails reports its error instead. `run_step` in `mcp/flow.rs` does the same.
+ */
 export async function runStep(run: FlowRun, step: FlowStep, config: any): Promise<any> {
+  const notes: any[] = [];
+  const call: EngineCall = async (method, params, profile) => {
+    const r = await run.call(method, params, profile);
+    if (method === 'simple.eval' && r?.ok) notes.push(...(r.diagnostics ?? []));
+    return r;
+  };
+  const r = await runStepWith({ ...run, call }, step, config);
+  for (const d of notes) {
+    if (!r.diagnostics?.some((e: any) => e.message === d.message)) (r.diagnostics ??= []).push(d);
+  }
+  return r;
+}
+
+async function runStepWith(run: FlowRun, step: FlowStep, config: any): Promise<any> {
   switch (step) {
     case 'contentModifier': return runContentModifier(run, config);
     case 'filter': return runFilter(run, config);

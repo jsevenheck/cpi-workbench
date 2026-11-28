@@ -59,8 +59,15 @@ pub fn read_file(server: &Server, args: &Args) -> Result<Value, String> {
             ("path", path, content)
         }
     };
+    // As the Groovy tab lists a script's functions when it opens: read from the whole text, nothing runs.
+    let functions = (key == "path" && (path.ends_with(".groovy") || path.ends_with(".gsh")))
+        .then(|| json!(super::functions::script_functions(&content)));
     if let Some(from) = args.get("startChar").and_then(Value::as_u64) {
-        return Ok(read_chars(key, path, &content, from as usize));
+        let mut r = read_chars(key, path, &content, from as usize);
+        if let Some(f) = functions {
+            r["functions"] = f;
+        }
+        return Ok(r);
     }
     let start = args.get("startLine").and_then(Value::as_u64).unwrap_or(1).max(1) as usize;
     let max = args.get("maxLines").and_then(Value::as_u64).map_or(DEFAULT_LINES, |n| n.max(1) as usize);
@@ -87,9 +94,8 @@ pub fn read_file(server: &Server, args: &Args) -> Result<Value, String> {
         end += 1;
     }
     let mut r = json!({ key: path, "content": text, "totalLines": total });
-    // As the Groovy tab lists a script's functions when it opens: read from the whole text, nothing runs.
-    if key == "path" && (path.ends_with(".groovy") || path.ends_with(".gsh")) {
-        r["functions"] = json!(super::functions::script_functions(&content));
+    if let Some(f) = functions {
+        r["functions"] = f;
     }
     if cut_line {
         // The shown text is the cut line's beginning: the next character's offset in the whole content.

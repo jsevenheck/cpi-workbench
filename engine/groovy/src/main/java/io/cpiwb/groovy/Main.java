@@ -26,7 +26,9 @@ public final class Main {
                 "                 [-H name=value[:Type]]... [-P name=value[:Type]]... [--project <dir>] [--json]",
                 "  " + name + " test <path> [--json] [--fail-if-none] [--junit <file>]   --junit: also a JUnit XML report",
                 "  " + name + " serve --stdio | --http <port> [--ui <dir>]",
-                "  " + name + " info");
+                "  " + name + " info",
+                "",
+                "Header/property types: String (default), Integer, Long, Boolean, Double, Float, BigDecimal, Date, byte[], null");
         if (args.length == 0 || args[0].equals("-h") || args[0].equals("--help")) {
             System.out.println(help);
             return;

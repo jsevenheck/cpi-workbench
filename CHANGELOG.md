@@ -6,6 +6,18 @@ of its version.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Groovy: `setProperties` with a `null` value.** `message.setProperties(map)` failed with a
+  `NullPointerException` when the map held a `null` value; it now leaves that entry out, as `setProperty(name, null)`
+  does (an assumption: what a tenant does is not verified).
+- **Flow Steps: the null-property warning of Router, Filter, Splitter and Converter.** When one of their expressions
+  is evaluated with Camel Simple and an input property is `null`, the warning that it is left out now shows in the
+  result, in the app and through MCP's `run_flow_step`, as it already did for a Content Modifier and a script. The
+  Router's result in the app now shows diagnostics.
+- **MCP: `read_file` with `startChar`** now lists a Groovy script's `functions` too.
+- The engines' `--help` lists the header and property type `null`; the Groovy engines' help lists the types at all.
+
 ## [0.8.0] - 2026-11-26
 
 ### Added

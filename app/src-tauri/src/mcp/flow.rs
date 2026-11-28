@@ -93,7 +93,32 @@ pub(super) fn defaulted(kind: &str, config: &Value) -> Vec<&'static str> {
 }
 
 /// Runs a step with its config; a Gather gets its messages. No engine is reached except through `ctx.call`.
+/// The warnings of a successful Camel Simple evaluation go into the step's diagnostics, each once (`runStep` in
+/// `flowcalls.ts`).
 pub(super) fn run_step(ctx: &Ctx, kind: &str, config: &Value, messages: Option<Value>) -> Result<Value, String> {
+    let notes = std::cell::RefCell::new(Vec::<Value>::new());
+    let call = |engine: &str, method: &str, params: Value| -> Result<Value, String> {
+        let r = (ctx.call)(engine, method, params)?;
+        if method == "simple.eval" && r["ok"] == true {
+            notes.borrow_mut().extend(r["diagnostics"].as_array().cloned().unwrap_or_default());
+        }
+        Ok(r)
+    };
+    let inner = Ctx { call: &call, xml: ctx.xml, camel: ctx.camel, namespaces: ctx.namespaces.clone(), input: ctx.input.clone() };
+    let mut r = run_step_with(&inner, kind, config, messages)?;
+    for d in notes.into_inner() {
+        if !r["diagnostics"].is_array() {
+            r["diagnostics"] = json!([]);
+        }
+        let list = r["diagnostics"].as_array_mut().unwrap();
+        if !list.iter().any(|e| e["message"] == d["message"]) {
+            list.push(d);
+        }
+    }
+    Ok(r)
+}
+
+fn run_step_with(ctx: &Ctx, kind: &str, config: &Value, messages: Option<Value>) -> Result<Value, String> {
     match kind {
         "contentModifier" => content_modifier(ctx, config),
         "filter" => filter(ctx, config),

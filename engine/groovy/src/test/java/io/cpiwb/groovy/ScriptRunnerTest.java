@@ -563,6 +563,17 @@ class ScriptRunnerTest {
         assertTrue(Json.write(r).contains("Properties with the value null are left out: gone."), () -> Json.write(r));
     }
 
+    /** setProperties with a null value leaves that entry out, as setProperty(name, null) does, instead of throwing an NPE. */
+    @Test
+    void setPropertiesLeavesANullValueOut() throws Exception {
+        Map<String, Object> r = run("def processData(m) { m.setProperties([a: '1', gone: null]); m }",
+                in("x", List.of(), List.of(hv("old", "1", "String"))), null);
+        assertTrue(Json.bool(r, "ok", false), () -> Json.write(r));
+        assertEquals("1", entry(r, "properties", "a").get("value"));
+        assertNull(entry(r, "properties", "gone"));
+        assertNull(entry(r, "properties", "old"), "setProperties replaces the properties");
+    }
+
     /**
      * An InputStream body is Camel's InputStreamCache, as behind a tenant's HTTPS sender (F49), and is reset after
      * the step as Camel's stream caching does: a script that only reads it passes the whole body on.

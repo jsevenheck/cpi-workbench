@@ -304,7 +304,7 @@ export const flow = $state({
   /** The messages to gather: a splitter's result or bodies added by hand. */
   gather: { ...flowStepDefaults().gather, messages: [] as string[] },
   cmResult: null as any,
-  routerResult: null as null | { routes: RouteResult[]; taken: string; diagnostics: string[] },
+  routerResult: null as null | { routes: RouteResult[]; taken: string; diagnostics: Diagnostic[] },
   splitResult: null as any,
   filterResult: null as any,
   gatherResult: null as any,

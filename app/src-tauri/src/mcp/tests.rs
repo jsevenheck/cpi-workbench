@@ -400,6 +400,9 @@ fn flow_parity() {
             if let Some(expected) = f.get("result") {
                 assert_eq!(&result, expected, "{}", file.display());
             }
+            if let Some(expected) = f.get("diagnostics") {
+                assert_eq!(&result["diagnostics"], expected, "{}", file.display());
+            }
         }
         assert_eq!(Value::Array(calls.into_inner()), f["calls"], "{}", file.display());
     }
@@ -589,6 +592,9 @@ fn tools_run_on_the_engines() {
     let fns: Vec<&str> = script["functions"].as_array().unwrap().iter().map(|f| f["signature"].as_str().unwrap()).collect();
     assert!(fns.contains(&"getHeader(String, MappingContext)"), "{script}");
     assert!(c.ok("read_file", json!({ "path": "tests/standard-order/input.xml" })).get("functions").is_none());
+    // By characters too: the list comes from the whole text, not the part shown.
+    let by_chars = c.ok("read_file", json!({ "path": "scripts/mapping-functions.groovy", "startChar": 0 }));
+    assert_eq!(by_chars["functions"], script["functions"], "{by_chars}");
     // A run of the missing function names the ones the script has (ScriptRunner).
     let missing = c.ok("run_groovy", json!({ "scriptPath": "scripts/enrich-order.groovy", "function": "enrich", "body": "<a/>" }));
     assert!(missing.to_string().contains("The script's functions with one parameter: processData."), "{missing}");

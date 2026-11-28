@@ -116,7 +116,9 @@ public abstract class MessageSupport<A> {
     public void setProperties(Map<String, Object> properties) {
         exchange.getProperties().clear();
         if (properties != null) {
-            exchange.getProperties().putAll(properties);
+            // Assumption: each entry as setProperty, so a null value is left out as Camel's setProperty does;
+            // putAll threw an NPE (ConcurrentHashMap). What a tenant does with a null value is not verified.
+            properties.forEach(exchange::setProperty);
         }
     }
 

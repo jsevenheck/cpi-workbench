@@ -402,6 +402,7 @@
           <KeyValueTable rows={cm.output.properties} readOnly added={cm.changes.properties.added} changed={cm.changes.properties.changed} removed={cm.changes.properties.removed} emptyText="No properties" />
         {/if}
       {:else if flow.step === 'router' && flow.routerResult}
+        {#each flow.routerResult.diagnostics as d}<div class="d {d.severity}">{d.message}</div>{/each}
         <p class="taken-line">→ <b>{flow.routerResult.taken}</b></p>
         {#each flow.router.routes as r, i}
           {@const s = flow.routerResult.routes[i]}

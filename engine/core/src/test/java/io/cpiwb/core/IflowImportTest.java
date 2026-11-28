@@ -302,6 +302,7 @@ class IflowImportTest {
 
     /** Temporary files another process holds (a virus scanner on Windows) do not fail the import. */
     @Test
+    @SuppressWarnings("try") // the open stream is the point: it holds the file
     void stagingCleanupIsBestEffort() throws Exception {
         var staging = new IflowImport.Staging();
         Path sub = Files.createDirectory(staging.dir.resolve("held"));

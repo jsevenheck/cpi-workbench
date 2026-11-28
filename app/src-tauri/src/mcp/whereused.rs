@@ -72,10 +72,13 @@ pub fn resolve(value: &str, params: &HashMap<String, String>) -> Option<String> 
     replaced.then(|| out + &value[at..])
 }
 
+/// The values of one kind: each value's text, number of places and what its parameters resolve to.
+type Values = Vec<(String, usize, BTreeSet<String>)>;
+
 /// The overview: each distinct address, credential, queue, key alias and file the iFlows use, with the number of
 /// places, most used first, and what its parameters resolve to.
 pub fn inventory(index: &[Value]) -> Value {
-    let mut groups: Vec<(&str, &str, Vec<(String, usize, BTreeSet<String>)>)> =
+    let mut groups: Vec<(&str, &str, Values)> =
         KINDS.iter().map(|(k, l)| (*k, *l, Vec::new())).collect();
     for i in index {
         let params = parameter_values(i);

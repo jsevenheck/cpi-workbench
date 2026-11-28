@@ -2,6 +2,7 @@
 //! newline-delimited JSON-RPC over stdin/stdout:
 //!   * XSLT profiles: native executables (no JVM),
 //!   * Groovy profiles: jars on a JRE (bundled `jre/`, Java 21 like a tenant, or the system Java 17+).
+//!
 //! Engines start lazily on first use, restart transparently after they exit (e.g. after a timed-out
 //! call) and JVM engines stop after a period of inactivity to give memory back.
 
@@ -295,7 +296,7 @@ fn pipe_loop(mut stdin: ChildStdin, stdout: ChildStdout, requests: Receiver<(u64
 }
 
 fn frame_size(max: usize) -> String {
-    if max % (1024 * 1024) == 0 { format!("{} MiB", max / (1024 * 1024)) } else { format!("{max}-byte") }
+    if max.is_multiple_of(1024 * 1024) { format!("{} MiB", max / (1024 * 1024)) } else { format!("{max}-byte") }
 }
 
 fn read_frame(input: &mut impl BufRead, max: usize, matches: impl Fn(&Value) -> bool) -> Reply {

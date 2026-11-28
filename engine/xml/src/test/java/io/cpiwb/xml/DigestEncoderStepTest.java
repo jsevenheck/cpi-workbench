@@ -261,6 +261,7 @@ class DigestEncoderStepTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked") // engine.call returns Object; the result is a JSON object
     void theEngineKnowsBothSteps() throws Exception {
         XmlEngine engine = new XmlEngine();
         assertTrue(Json.write(engine.describe().get("methods")).contains("\"encode.run\",\"decode.run\",\"digest.run\""));
